@@ -216,6 +216,7 @@ func (repository *Repository) AdvanceBackupRetentionSweep(
 		}
 		prune := backupruntime.BackupRecoveryPointPruneRecord{
 			Point: point.BackupRecoveryPointSnapshot, PointRevision: pointValue.ModRevision,
+			PolicyRevision: next.Revision, PolicySHA256: next.PolicySHA256,
 			OperationID: next.PruneOperationID,
 			State:       backupruntime.BackupPrunePending, CreatedAt: advancedAt, UpdatedAt: advancedAt,
 		}
@@ -280,7 +281,8 @@ func BackupRetentionSweepMatchesRun(
 	run backupruntime.BackupRunRecord,
 	sweep backupruntime.BackupRetentionSweepRecord,
 ) bool {
-	if sweep.Revision != run.PolicyRevision || sweep.Keep != run.RetentionKeep {
+	if sweep.Revision != run.PolicyRevision || sweep.PolicySHA256 != run.PolicySHA256 ||
+		sweep.Keep != run.RetentionKeep {
 		return false
 	}
 	for index := range run.Sources {

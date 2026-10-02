@@ -6,6 +6,7 @@ import (
 
 func TaskResultsEqual(left, right TaskResultRecord) bool {
 	if left.Kind != right.Kind || left.ExitCode != right.ExitCode || left.ExecutionEpoch != right.ExecutionEpoch ||
+		left.AssignmentGeneration != right.AssignmentGeneration ||
 		left.ReleaseRecoveryRecordSHA256 != right.ReleaseRecoveryRecordSHA256 ||
 		left.FailedStepID != right.FailedStepID || left.Diagnostic != right.Diagnostic ||
 		left.ReconciliationRequired != right.ReconciliationRequired || len(left.Projects) != len(right.Projects) ||

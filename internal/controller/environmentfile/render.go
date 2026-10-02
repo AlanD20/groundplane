@@ -3,11 +3,8 @@
 package environmentfile
 
 import (
-	"bytes"
+	"github.com/AlanD20/groundplane/internal/common/dotenvfile"
 	"sort"
-	"strings"
-
-	"github.com/compose-spec/compose-go/v2/dotenv"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -69,17 +66,15 @@ func renderEnvFile(
 		return selected[i].Key < selected[j].Key
 	})
 
-	var output []byte
-	for i, entry := range selected {
-		if i > 0 && selected[i-1].Key == entry.Key {
-			return nil, errs.Newf(
-				errs.KindValidationFailed,
-				"renderer: duplicate env key %q in one exposure scope",
-				entry.Key,
-			)
+	values := make([]dotenvfile.Value, 0, len(selected))
+	defer func() {
+		for _, value := range values {
+			clear(value.Content)
 		}
-		value, ok := resolved[entry.ID]
-		if !ok {
+	}()
+	for _, entry := range selected {
+		value, found := resolved[entry.ID]
+		if !found {
 			return nil, errs.Newf(
 				errs.KindInternal,
 				"renderer: no resolved value for entry %s (%s)",
@@ -87,72 +82,9 @@ func renderEnvFile(
 				entry.Key,
 			)
 		}
-		if strings.IndexByte(value, 0) >= 0 {
-			return nil, errs.Newf(
-				errs.KindValidationFailed,
-				"renderer: env entry %s (%s) contains NUL",
-				entry.ID,
-				entry.Key,
-			)
-		}
-		output = append(output, entry.Key...)
-		output = append(output, '=', '"')
-		output = appendComposeDotEnvValue(output, value)
-		output = append(output, '"', '\n')
+		values = append(values, dotenvfile.Value{Name: entry.Key, Content: []byte(value)})
 	}
-
-	parsed, err := dotenv.ParseWithLookup(bytes.NewReader(output), func(string) (string, bool) {
-		return "", false
-	})
-	if err != nil {
-		return nil, errs.New(errs.KindInternal, "renderer: generated env file is not valid Compose dotenv")
-	}
-	if len(parsed) != len(selected) {
-		return nil, errs.New(errs.KindInternal, "renderer: generated env file changed entry membership")
-	}
-	for _, entry := range selected {
-		value := resolved[entry.ID]
-		parsedValue, ok := parsed[entry.Key]
-		if !ok || parsedValue != value {
-			return nil, errs.Newf(
-				errs.KindInternal,
-				"renderer: generated env file changed entry %s (%s)",
-				entry.ID,
-				entry.Key,
-			)
-		}
-	}
-	return output, nil
-}
-
-func appendComposeDotEnvValue(output []byte, value string) []byte {
-	for i := 0; i < len(value); i++ {
-		switch value[i] {
-		case '\\':
-			output = append(output, '\\', '\\')
-		case '"':
-			output = append(output, '\\', '"')
-		case '$':
-			output = append(output, '$', '$')
-		case '\n':
-			output = append(output, '\\', 'n')
-		case '\r':
-			output = append(output, '\\', 'r')
-		case '\t':
-			output = append(output, '\\', 't')
-		case '\a':
-			output = append(output, '\\', 'a')
-		case '\b':
-			output = append(output, '\\', 'b')
-		case '\f':
-			output = append(output, '\\', 'f')
-		case '\v':
-			output = append(output, '\\', 'v')
-		default:
-			output = append(output, value[i])
-		}
-	}
-	return output
+	return dotenvfile.Render(values)
 }
 
 func containsString(list []string, s string) bool {

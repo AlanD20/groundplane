@@ -3,7 +3,10 @@ package etcd
 import (
 	bytes "bytes"
 	age "filippo.io/age"
+	fmt "fmt"
+	backupobject "github.com/AlanD20/groundplane/internal/common/backupobject"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	postgres16protocol "github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testing "testing"
 	time "time"
@@ -53,11 +56,12 @@ func assertBackupCodecRoundTrip[T any](
 
 func testBackupRun(createdAt time.Time, updatedAt time.Time, recipient string) testbackupruntime.BackupRunRecord {
 	pointID := ids.NewAt(ids.KindRecoveryPoint, createdAt, 300)
-	return testbackupruntime.BackupRunRecord{
+	run := testbackupruntime.BackupRunRecord{
 		TaskID: testBackupTaskID, OperationID: testBackupOperationID,
-		EnvironmentID: testBackupEnvironmentID, PolicyRevision: 7, RetentionKeep: 3,
+		EnvironmentID: testBackupEnvironmentID, PolicyRevision: 7, PolicySHA256: testBackupDigest, RetentionKeep: 3,
 		Initiator: testbackupruntime.BackupRunInitiatorOperator, ConnectorID: testBackupConnectorID,
 		ConnectorPrefix:   "production/",
+		ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "backups", ConnectorRegion: "auto",
 		ConnectorRevision: 8, ConnectorHasDirectCredentials: true, ConnectorCredentialsRevision: 9,
 		Encryption: testbackupruntime.BackupRuntimeEncryptionAge, BackupKeyRecordRevision: 10,
 		BackupKeyValueRevision: 11, KeyEra: 2, Recipient: recipient,
@@ -76,9 +80,11 @@ func testBackupRun(createdAt time.Time, updatedAt time.Time, recipient string) t
 					BackingEnvironmentRevision: 15,
 					BackingServiceID:           testBackupServiceID,
 					BackingServiceRevision:     16,
+					ConsumerServiceID:          testBackupServiceID,
 					AttachFactsRevision:        17,
-					Database:                   "app_db",
-					Role:                       "app_role",
+					Database:                   "app_000001",
+					Role:                       "app_000001",
+					ManagedReleaseIndex:        testBackupManagedRelease(),
 				},
 			},
 			Format: testbackupruntime.BackupRuntimeFormatPostgres, RecoveryPointID: pointID,
@@ -86,10 +92,16 @@ func testBackupRun(createdAt time.Time, updatedAt time.Time, recipient string) t
 			ObjectKey: "production/" + testBackupEnvironmentID + "/" + testBackupSourceID + "/" +
 				pointID + "/artifact.bin",
 			State: testbackupruntime.BackupSourceAttemptSucceeded, Phase: testbackupruntime.BackupSourcePhaseCleanup,
-			SizeBytes: 123, SHA256: testBackupDigest,
+			Evidence: testBackupArtifact(),
 		}},
 		CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}
+	run.Sources[0].Object = testBackupObject(run.Sources[0].ObjectKey)
+	run.Sources[0].Upload = testbackupruntime.BackupUploadOutcome{
+		Kind:   testbackupruntime.BackupUploadReturned,
+		Target: run.Sources[0].Object.Target, ReturnedObject: run.Sources[0].Object,
+	}
+	return run
 }
 
 func testBackupLaterSource(
@@ -121,9 +133,11 @@ func testBackupLaterSource(
 			BackingEnvironmentRevision: 15,
 			BackingServiceID:           testBackupServiceID,
 			BackingServiceRevision:     16,
+			ConsumerServiceID:          testBackupServiceID,
 			AttachFactsRevision:        17,
-			Database:                   "app_db",
-			Role:                       "app_role",
+			Database:                   "app_000001",
+			Role:                       "app_000001",
+			ManagedReleaseIndex:        testBackupManagedRelease(),
 		}},
 		Format:                 testbackupruntime.BackupRuntimeFormatPostgres,
 		RecoveryPointID:        pointID,
@@ -133,25 +147,44 @@ func testBackupLaterSource(
 		Phase:                  phase,
 	}
 	if state == testbackupruntime.BackupSourceAttemptSucceeded {
-		record.SizeBytes = 123
-		record.SHA256 = testBackupDigest
+		record.Evidence = testBackupArtifact()
+		record.Object = testBackupObject(record.ObjectKey)
+		record.Upload = testbackupruntime.BackupUploadOutcome{
+			Kind: testbackupruntime.BackupUploadReturned, Target: record.Object.Target, ReturnedObject: record.Object,
+		}
 	}
 	return record
 }
 
 func testBackupVolumePoint(createdAt time.Time, recipient string) testbackupruntime.BackupRecoveryPointSnapshot {
 	pointID := ids.NewAt(ids.KindRecoveryPoint, createdAt, 301)
-	return testbackupruntime.BackupRecoveryPointSnapshot{
-		ID: pointID, EnvironmentID: testBackupEnvironmentID,
-		SourceID: testBackupSourceID, SourceKind: testbackupruntime.BackupRuntimeSourceVolume,
-		TargetID: testBackupVolumeID, ConnectorID: testBackupConnectorID,
-		ConnectorPrefix: "production/",
-		ObjectKey: "production/" + testBackupEnvironmentID + "/" + testBackupSourceID + "/" +
-			pointID + "/artifact.bin",
-		SourceFormat: testbackupruntime.BackupRuntimeFormatVolume, Encryption: testbackupruntime.BackupRuntimeEncryptionAge,
-		KeyEra: 2, Recipient: recipient, SizeBytes: 123, SHA256: testBackupDigest,
-		CreatedAt: createdAt,
+	point := testbackupruntime.BackupRecoveryPointSnapshot{
+		BackupRecoveryPointTargetSnapshot: testbackupruntime.BackupRecoveryPointTargetSnapshot{
+			ID: pointID, EnvironmentID: testBackupEnvironmentID,
+			SourceID: testBackupSourceID, SourceKind: testbackupruntime.BackupRuntimeSourceVolume,
+			TargetID: testBackupVolumeID, ConnectorID: testBackupConnectorID,
+			ConnectorPrefix:   "production/",
+			ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "backups", ConnectorRegion: "auto",
+			ObjectKey: "production/" + testBackupEnvironmentID + "/" + testBackupSourceID + "/" +
+				pointID + "/artifact.bin",
+			SourceFormat: testbackupruntime.BackupRuntimeFormatVolume,
+			Encryption:   testbackupruntime.BackupRuntimeEncryptionAge,
+			KeyEra:       2, Recipient: recipient, CreatedAt: createdAt,
+		},
+		Evidence: testBackupArtifact(),
+		VolumeArchive: testbackupruntime.BackupVolumeArchiveEvidence{
+			EntryCount: 1, ContentManifestSHA256: testBackupDigest, FullTreeSHA256: testBackupDigest,
+			SourceSizeBytes: 4096,
+			Manifest: testbackupruntime.BackupVolumeManifestReference{
+				TaskID: testBackupTaskID, AssignmentID: ids.NewAt(ids.KindAssignment, createdAt, 302),
+				StepID: ids.NewAt(ids.KindStep, createdAt, 303), TransferID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				AuthoritySHA256: testBackupDigest, AgentID: ids.NewAt(ids.KindAgent, createdAt, 304),
+				AgentGeneration: 1, AssignmentGeneration: 1, CursorRevision: 40,
+			},
+		},
 	}
+	point.Object = testBackupObject(point.ObjectKey)
+	return point
 }
 
 func newTestBackupRecipient(t *testing.T) string {
@@ -172,9 +205,8 @@ func testBackupRestore(
 		TaskID:                testBackupTaskID,
 		OperationID:           testBackupOperationID,
 		EnvironmentID:         testBackupEnvironmentID,
-		RecoveryPointRevision: 20,
-		Point:                 point,
-		SourceRevision:        21,
+		RestoreGenerationID:   "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		RecoveryPointRevision: 20, Point: point, SourceRevision: 21,
 		CurrentTarget: testbackupruntime.BackupRestoreTargetSnapshot{
 			Volume: ptrTestBackupVolumeSourceSnapshot(22),
 		},
@@ -183,9 +215,12 @@ func testBackupRestore(
 		ConnectorCredentialsRevision:  24,
 		ExpectedKeyRecordRevision:     25,
 		ExpectedKeyValueRevision:      26,
-		Artifact: &testbackupruntime.BackupArtifactEvidence{
-			SizeBytes: point.SizeBytes,
-			SHA256:    point.SHA256,
+		Artifact:                      &point.Evidence,
+		VolumeProgress: &testbackupruntime.BackupRestoreVolumeProgress{
+			OldEntryCount: 1, OldContentManifestSHA256: testBackupDigest, OldFullTreeSHA256: testBackupDigest,
+			ConstructionCursor: 1, FinalizationCursor: 1, DeletionCursor: 1,
+			ExchangeIntent: true, Exchanged: true, OldRemoved: true,
+			ServiceMutationStarted: true, ConsumersStopped: true, ServiceCursor: 1, ServicesRecovered: true,
 		},
 		StagedTreeManifestSHA256: testBackupDigest,
 		State:                    testbackupruntime.BackupRestoreCompleted,
@@ -201,6 +236,7 @@ func testBackupVolumeSourceSnapshot(revision int64) testbackupruntime.BackupVolu
 	return testbackupruntime.BackupVolumeSourceSnapshot{
 		EnvironmentID: testBackupEnvironmentID, EnvironmentRevision: revision,
 		VolumeID: testBackupVolumeID, DesiredRevisionID: testBackupTaskID,
+		HeadRevision: revision, HeadSHA256: testBackupDigest,
 		ProjectionRoot: revision + 1, DependencyDigest: testBackupDigest, RenderGeneration: 1,
 		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + testBackupVolumeID,
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
@@ -209,6 +245,34 @@ func testBackupVolumeSourceSnapshot(revision int64) testbackupruntime.BackupVolu
 			ComposeKey: "database", MountPaths: []string{"/data"}, PriorIntent: testbackupruntime.BackupServiceIntentRunning,
 		}},
 	}
+}
+
+func testBackupArtifact() testbackupruntime.BackupArtifactEvidence {
+	return testbackupruntime.BackupArtifactEvidence{
+		SourceSizeBytes: 4096, SourceSHA256: testBackupDigest,
+		StoredSizeBytes: 4296, StoredSHA256: testBackupDigest,
+	}
+}
+
+func testBackupObject(key string) testbackupruntime.BackupObjectIdentity {
+	return testbackupruntime.BackupObjectIdentity{
+		Target: testbackupruntime.BackupObjectTarget{
+			ConnectorID: testBackupConnectorID, ConnectorPrefix: "production/",
+			ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "backups",
+			ConnectorRegion: "auto", ObjectKey: key,
+		},
+		Discriminator: testbackupruntime.BackupObjectDiscriminator{
+			Kind: backupobject.DiscriminatorVersionID, Value: "version-1",
+		},
+	}
+}
+
+func testBackupManagedRelease() string {
+	return fmt.Sprintf(
+		`{"schema":1,"image":"registry.example.test/postgres@sha256:%[1]s","images":[{"repository_digest":"registry.example.test/postgres@sha256:%[1]s","image_id":"sha256:%[1]s","manifest":{"schema":1,"os":"linux","architecture":"amd64","postgresql_major":16,"helper_sha256":"%[1]s","gate_sha256":"%[1]s","pg_dump_sha256":"%[1]s","pg_restore_sha256":"%[1]s","psql_sha256":"%[1]s","launch_profile_sha256":"%[2]s","gate_seccomp_sha256":"%[1]s"}}]}`,
+		testBackupDigest,
+		postgres16protocol.ManagedLaunchProfileSHA256().String(),
+	)
 }
 
 func ptrTestBackupVolumeSourceSnapshot(revision int64) *testbackupruntime.BackupVolumeSourceSnapshot {

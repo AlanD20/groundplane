@@ -32,8 +32,8 @@ type SecretValueEvidence struct {
 }
 
 // BackupSecretResolutionEvidence contains only the durable proof and
-// encrypted values required by the Controller resolver. No plaintext,
-// Connector object locator, or age identity is returned.
+// encrypted values required by the Controller resolver. No plaintext is
+// returned; the current age identity remains Controller-key-wrapped.
 type Evidence struct {
 	ReadRevision        int64
 	Task                base.TaskRecord
@@ -44,7 +44,9 @@ type Evidence struct {
 	ProjectRevision     int64
 	Connector           connectorrecord.Record
 	ConnectorRevision   int64
+	ConnectorAuthority  *agentpb.BackupConnectorAuthority
 	Run                 *backupruntime.BackupRunRecord
+	Restore             *backupruntime.BackupRestoreRecord
 	Dispatch            *backupruntime.BackupRecoveryPointPruneDispatchRecord
 	DispatchRevision    int64
 	Point               *backupruntime.BackupRecoveryPointRecord
@@ -54,6 +56,7 @@ type Evidence struct {
 	Credentials         connectorrecord.EncryptedCredentials
 	HasCredentials      bool
 	SecretValues        []SecretValueEvidence
+	CurrentAgeIdentity  *CurrentAgeIdentityEvidence
 }
 
 // Clear releases every encrypted buffer returned by the reader. It is safe
@@ -70,6 +73,11 @@ func (e *Evidence) Clear() {
 		e.SecretValues[index].Value.Ciphertext = nil
 	}
 	e.SecretValues = nil
+	if e.CurrentAgeIdentity != nil {
+		clear(e.CurrentAgeIdentity.Encrypted.Ciphertext)
+		e.CurrentAgeIdentity.Encrypted.Ciphertext = nil
+		e.CurrentAgeIdentity = nil
+	}
 }
 
 // BackupSecretResolutionReader reads the exact durable evidence needed by a
@@ -141,6 +149,7 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 		taskjournal.TaskTimeoutIndexKey(request.TaskID, assignmentForKey.Deadline),
 		backupruntime.BackupRunKey(request.TaskID),
 		backupruntime.BackupRecoveryPointPruneDispatchKey(request.TaskID),
+		backupruntime.BackupRestoreKey(request.TaskID),
 	}
 	read, err := reader.readFixed(ctx, baseKeys, fixedRevision)
 	if err != nil {
@@ -228,7 +237,7 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 		ReadRevision: fixedRevision, Task: task, Assignment: assignment,
 	}
 	if task.Type == taskjournal.TaskBackup {
-		if read.Values[4] == nil || read.Values[5] != nil {
+		if read.Values[4] == nil || read.Values[5] != nil || read.Values[6] != nil {
 			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup run evidence is unavailable",
@@ -260,8 +269,23 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 			return Evidence{}, err
 		}
 		evidence.Run = &run
+	} else if task.Type == taskjournal.TaskRestore {
+		if read.Values[4] != nil || read.Values[5] != nil || read.Values[6] == nil {
+			return Evidence{}, errs.New(errs.KindStateConflict, "backup Restore evidence is unavailable")
+		}
+		restored, err := backupruntime.DecodeBackupRestoreRecord(read.Values[6].Value)
+		if err != nil || restored.TaskID != task.ID || restored.OperationID != task.OperationID ||
+			restored.EnvironmentID != task.Target || restored.EnvironmentID != task.Owner.EnvironmentID ||
+			restored.State == backupruntime.BackupRestoreFailedSafe || restored.State == backupruntime.BackupRestoreCompleted ||
+			restored.State == backupruntime.BackupRestoreRecoveryRequired {
+			return Evidence{}, errs.New(errs.KindStateConflict, "backup Restore is not active")
+		}
+		if err := backupruntime.ValidateConfigRestoreExecutionPlan(restored, plan); err != nil {
+			return Evidence{}, err
+		}
+		evidence.Restore = &restored
 	} else {
-		if read.Values[4] != nil || read.Values[5] == nil {
+		if read.Values[4] != nil || read.Values[5] == nil || read.Values[6] != nil {
 			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup prune dispatch evidence is unavailable",
@@ -289,7 +313,7 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 
 	dynamic := newBackupSecretDynamicRead()
 	environmentID, connectorIDs, sourceIDs, err := reader.planDynamicKeys(
-		dynamic, evidence, plan, stepIndex,
+		ctx, dynamic, evidence, plan, stepIndex,
 	)
 	if err != nil {
 		return Evidence{}, err
@@ -302,8 +326,10 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 	selectedConnectorID := ""
 	if evidence.Run != nil {
 		selectedConnectorID = evidence.Run.ConnectorID
+	} else if evidence.Restore != nil {
+		selectedConnectorID = evidence.Restore.Point.ConnectorID
 	} else if evidence.Dispatch != nil {
-		selectedConnectorID = plan.Steps[stepIndex].GetBackupArtifactPrune().ConnectorId
+		selectedConnectorID = plan.Steps[stepIndex].GetBackupStep().GetPrune().Objects[0].Object.Connector.ConnectorId
 	}
 	if err := reader.decodeCommonDynamicEvidence(
 		firstDynamic, dynamic, &evidence, environmentID, connectorIDs, selectedConnectorID,
@@ -324,6 +350,10 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 			evidence.Clear()
 			return Evidence{}, err
 		}
+	}
+	if err := decodeCurrentAgeIdentityEvidence(firstDynamic, dynamic, &evidence, plan.Steps[stepIndex]); err != nil {
+		evidence.Clear()
+		return Evidence{}, err
 	}
 
 	secondDynamic, err := reader.readFixed(ctx, dynamic.keys, fixedRevision)

@@ -34,6 +34,10 @@ type RecoveryPointPageItem = NonNullable<
 >[number];
 type BackupRunTaskAccepted =
   operations["backup.run"]["responses"][202]["content"]["application/json"];
+type BackupRestoreRequest =
+  operations["backup.restore"]["requestBody"]["content"]["application/json"];
+type BackupRestoreTaskAccepted =
+  operations["backup.restore"]["responses"][202]["content"]["application/json"];
 type BackupKeyRotateResponse =
   operations["backup.key.rotate"]["responses"][202]["content"]["application/json"];
 type AttachPageResponse =
@@ -534,6 +538,19 @@ export function useBackupStore({
     [assertEnvironmentMutable, request],
   );
 
+  const restoreBackup = useCallback(
+    async (environmentId: string, body: BackupRestoreRequest, idempotencyKey: string): Promise<string> => {
+      assertEnvironmentMutable(environmentId, "Restore");
+      const response = await request<BackupRestoreTaskAccepted>(
+        `/environments/${encodeURIComponent(environmentId)}/restore`,
+        202,
+        { method: "POST", body, idempotencyKey },
+      );
+      return requiredTaskId(response, "Restore");
+    },
+    [assertEnvironmentMutable, request],
+  );
+
   const rotateBackupKey = useCallback(
     async (environmentId: string): Promise<string> => {
       assertEnvironmentMutable(environmentId, "Backup key rotation");
@@ -565,6 +582,7 @@ export function useBackupStore({
       loadRecoveryPoints,
       replaceBackupPolicy,
       runBackup,
+      restoreBackup,
       rotateBackupKey,
       exportBackupKey,
     }),
@@ -575,6 +593,7 @@ export function useBackupStore({
       loadRecoveryPoints,
       replaceBackupPolicy,
       runBackup,
+      restoreBackup,
       rotateBackupKey,
     ],
   );

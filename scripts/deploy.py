@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import io
 import ipaddress
@@ -23,6 +24,7 @@ from pathlib import Path
 from image_transfer import prepare_images, transfer_images
 from deployment_capacity import require_capacity, TRANSFER_HEADROOM
 from private_registry import setup_script as registry_setup_script
+from release_postgres16 import load_catalog
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -262,6 +264,7 @@ class Deployment:
     expose_port: int | None
     known_hosts: Path | None
     stage_only: bool
+    postgres16_release: Path
 
     @property
     def ssh_target(self) -> str:
@@ -330,6 +333,8 @@ def parse_arguments() -> Deployment:
         help="Controller and Agent release version; defaults to development identity 'dev'",
     )
     parser.add_argument("--stage-only", action="store_true", help="stage a release on a guarded host without activating it")
+    parser.add_argument("--postgres16-release", required=True, type=Path,
+                        help="authenticated managed PostgreSQL catalog from native or published packaging")
     parser.add_argument(
         "--known-hosts",
         type=Path,
@@ -367,6 +372,7 @@ def parse_arguments() -> Deployment:
         expose_port=arguments.expose,
         known_hosts=known_hosts,
         stage_only=arguments.stage_only,
+        postgres16_release=arguments.postgres16_release.expanduser().resolve(),
     )
 
 
@@ -576,12 +582,14 @@ def local_image_id(image: str) -> str | None:
 
 def build_artifacts(deployment: Deployment, invocation_id: str, *, include_runner: bool = True) -> tuple[str, str]:
     require_capacity(REPOSITORY_ROOT)
+    postgres_catalog, _ = load_catalog(deployment.postgres16_release)
     source_agent_image = f"groundplane-agent:deploy-{invocation_id}"
     source_runner_image = f"groundplane-runner:deploy-{invocation_id}"
     run(
         ["make", "controller", "cli", f"VERSION={deployment.version}"],
         cwd=REPOSITORY_ROOT,
-        environment=build_environment() | {"GOMAXPROCS": "2"},
+        environment=build_environment() | {"GOMAXPROCS": "2",
+            "POSTGRES16_RELEASE_BASE64": base64.b64encode(postgres_catalog).decode("ascii")},
     )
     for kind in (("agent", "runner") if include_runner else ("agent",)):
         cache = f"groundplane-{kind}:cache-{image_input_digest(kind, deployment.version)}"
@@ -665,6 +673,23 @@ def prepare_target(deployment: Deployment) -> None:
     run([*deployment.ssh_base, "sh", "-s"], input_text=REMOTE_SETUP)
 
 
+def preload_postgres_release(deployment: Deployment, catalog: dict) -> None:
+    architecture = normalize_architecture(platform.machine())
+    native = next((image for image in catalog["images"]
+                   if image["manifest"]["architecture"] == architecture), None)
+    if native is None:
+        raise ValueError("managed PostgreSQL catalog does not contain the target architecture")
+    # Use the deployment reference retained by Backing creation, not a mutable
+    # tag. This only loads content; it never replaces a running database.
+    run([*deployment.ssh_base, shlex.join([
+        "docker", "--config", "/etc/groundplane/registry/client", "pull", catalog["image"]])])
+    result = run([*deployment.ssh_base, shlex.join([
+        "docker", "image", "inspect", "--format", "{{.Id}} {{.Os}} {{.Architecture}}",
+        catalog["image"]])], capture=True)
+    if result.stdout.strip() != f"{native['image_id']} linux {architecture}":
+        raise ValueError("target PostgreSQL image differs from the Controller's managed catalog")
+
+
 def cleanup_temporary_images(images: tuple[str, ...]) -> None:
     temporary_pattern = re.compile(r"^groundplane-(?:agent|runner):deploy-[0-9a-f]{32}$")
     for image in images:
@@ -681,10 +706,12 @@ def cleanup_temporary_images(images: tuple[str, ...]) -> None:
 
 
 def deploy(deployment: Deployment) -> None:
+    _, postgres_catalog = load_catalog(deployment.postgres16_release)
     require_local_tools()
     require_capacity(REPOSITORY_ROOT)
     verify_architecture(deployment)
     prepare_target(deployment)
+    preload_postgres_release(deployment, postgres_catalog)
     include_runner = runner_required(deployment)
 
     invocation_id = secrets.token_hex(16)
@@ -719,6 +746,7 @@ def deploy(deployment: Deployment) -> None:
                     expose_port=deployment.expose_port,
                     known_hosts=deployment.known_hosts,
                     stage_only=deployment.stage_only,
+                    postgres16_release=deployment.postgres16_release,
                 ),
                 remote_directory,
                 source_agent_image,

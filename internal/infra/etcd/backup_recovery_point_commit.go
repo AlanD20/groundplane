@@ -10,7 +10,7 @@ import (
 
 func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	ctx context.Context,
-	authority backupruntime.BackupAssignmentInput,
+	checkpoint backupruntime.BackupCheckpointInput,
 	currentRun etcdstore.Versioned[backupruntime.BackupRunRecord],
 	nextRun backupruntime.BackupRunRecord,
 	ordinal uint32,
@@ -19,15 +19,21 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	sweep backupruntime.BackupRetentionSweepRecord,
 ) (etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord], etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
 	changedOrdinal, changed := backupruntime.ChangedBackupSourceOrdinal(currentRun.Record, nextRun)
-	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
+	if checkpoint.TaskID != currentRun.Record.TaskID || int(ordinal) >= len(currentRun.Record.Sources) || !changed ||
+		changedOrdinal != ordinal ||
 		backupruntime.ValidateBackupRunTransition(
 			currentRun.Record,
 			nextRun,
 			backupruntime.BackupRunTransitionPointCommit,
 		) != nil ||
+		!backupruntime.BackupRunCheckpointMatchesTransition(checkpoint.Request,
+			currentRun.Record.Sources[ordinal], nextRun.Sources[ordinal]) ||
 		!backupruntime.BackupPointMatchesRunSource(point.BackupRecoveryPointSnapshot, nextRun, ordinal) ||
-		sweep.SourceID != point.SourceID || sweep.TriggerRecoveryPointID != point.ID ||
-		sweep.Revision != nextRun.PolicyRevision || sweep.Keep != nextRun.RetentionKeep ||
+		sweep.SourceID != point.SourceID ||
+		sweep.TriggerRecoveryPointID != point.ID ||
+		sweep.Revision != nextRun.PolicyRevision ||
+		sweep.Keep != nextRun.RetentionKeep ||
+		sweep.PolicySHA256 != nextRun.PolicySHA256 ||
 		sweep.State != backupruntime.BackupRetentionPending {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
@@ -37,7 +43,7 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	if currentRun.Record.Sources[ordinal].State == backupruntime.BackupSourceAttemptOrphaned {
 		if orphan == nil || orphan.Revision <= 0 ||
 			!backupruntime.BackupOrphanMatchesRunSource(orphan.Record, currentRun.Record, ordinal) ||
-			orphan.Record.Point != point.BackupRecoveryPointSnapshot ||
+			!backupruntime.BackupOrphanMatchesRecoveryPoint(orphan.Record, point.BackupRecoveryPointSnapshot) ||
 			orphan.Record.State != backupruntime.BackupOrphanInspect ||
 			orphan.Record.TaskID != currentRun.Record.TaskID {
 			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
@@ -139,8 +145,8 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 		conditions,
 		mutations,
 		validateCompanions,
-		&authority,
 		nil,
+		&checkpoint,
 	)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err

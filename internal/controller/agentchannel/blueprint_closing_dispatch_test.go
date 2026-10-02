@@ -50,9 +50,11 @@ func TestDispatchReadySkipsControllerCompletedReconnect(t *testing.T) {
 	server.now = func() time.Time { return at }
 	stream := &scriptedStream{ctx: context.Background()}
 	delivered, quarantined := make(map[string]string), make(map[string]string)
+	payloads := newAssignmentPayloadDelivery(stream.Context(), 1)
+	defer payloads.close()
 	err = server.dispatchReady(stream, session, agentID,
 		Authorization{Generation: 7, Config: &agentpb.AgentConfig{MaxConcurrentTasks: 1}},
-		1, delivered, quarantined)
+		1, delivered, quarantined, payloads)
 	if err != nil {
 		t.Fatal(err)
 	}

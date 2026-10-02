@@ -2,6 +2,7 @@ package hierarchydeletionfinalization
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -67,6 +68,8 @@ func (repository *Preparer) prepareHierarchyDeletionServiceFinalizer(
 	effects.mutations = append(
 		effects.mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: serviceruntimerecord.Key(record.ServiceID)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete,
+			Key: backingpostgresrelease.Key(record.EnvironmentID, record.ServiceID)},
 	)
 	return effects, nil
 }

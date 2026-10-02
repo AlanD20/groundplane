@@ -16,6 +16,7 @@ def main():
     flags.add_argument("--controller-only", action="store_true")
     parser.add_argument("--image", help="Agent repository:tag for the native build")
     parser.add_argument("--runner-image", help="published Runner repository@sha256:digest for bundles")
+    parser.add_argument("--postgres16-release", help="managed PostgreSQL two-platform release catalog for bundles")
     parser.add_argument("--push", action="store_true", help="push the built Agent image")
     parser.add_argument("--output", default=".tmp/releases")
     args = parser.parse_args()
@@ -25,6 +26,8 @@ def main():
         parser.error("Agent builds require --image REPOSITORY:TAG")
     if not args.agent_only and not args.runner_image:
         parser.error("Controller bundles require a published --runner-image digest")
+    if not args.agent_only and not args.postgres16_release:
+        parser.error("Controller bundles require --postgres16-release")
     if not args.agent_only and not args.controller_only and not args.push:
         parser.error("a combined bundle requires --push to pin its built Agent's published digest")
     root = Path(__file__).resolve().parents[1]
@@ -39,7 +42,8 @@ def main():
                             "--image", image, "--output", args.output], cwd=root, check=True)
     if not args.agent_only:
         command = ["python3", "scripts/release_bundle.py", "--version", args.version,
-                   "--runner-image", args.runner_image, "--output", args.output]
+                   "--runner-image", args.runner_image, "--postgres16-release", args.postgres16_release,
+                   "--output", args.output]
         command += ["--controller-only"] if args.controller_only else ["--agent-image", image]
         subprocess.run(command, cwd=root, check=True)
 

@@ -50,7 +50,7 @@ func TestVerifiedRecoveryPointPageScansHiddenRawPageBeforeVisiblePoint(t *testin
 		{
 			Items: []testkeyvalue.Versioned[BackupRecoveryPointRecord]{{
 				Record: BackupRecoveryPointRecord{BackupRecoveryPointSnapshot: BackupRecoveryPointSnapshot{
-					ID: visibleID,
+					BackupRecoveryPointTargetSnapshot: BackupRecoveryPointTargetSnapshot{ID: visibleID},
 				}},
 				Revision: 40, ReadRevision: 41,
 			}},

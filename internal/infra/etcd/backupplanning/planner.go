@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type readStore interface {
@@ -29,4 +30,7 @@ type ManualRunSources struct {
 	Owner        taskjournal.TaskOwner
 	Lock         backupruntime.BackupOperationLockRecord
 	ReadRevision int64
+	Scope        *agentpb.BackupPlanScope
+	Authority    []*agentpb.BackupStepAuthority
+	Artifacts    []*agentpb.ComposeArtifact
 }

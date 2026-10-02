@@ -106,8 +106,14 @@ func (service *BackupRunService) RetryBackupTask(
 	}
 	defer prepared.Publication.Clear()
 	steps := make([]taskjournal.TaskStepRecord, len(prepared.Run.Sources))
+	if len(prepared.Authority) != len(steps) {
+		return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "backup retry authority is incomplete")
+	}
 	for index := range steps {
-		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
+		steps[index] = taskjournal.TaskStepRecord{
+			Kind: taskjournal.TaskStepOperation,
+			ID:   prepared.Authority[index].StepId,
+		}
 	}
 	task := etcd.TaskRecord{
 		ID:                retryTaskID,
@@ -128,9 +134,9 @@ func (service *BackupRunService) RetryBackupTask(
 		UpdatedAt:         marker.CreatedAt,
 	}
 	sealed, err := service.plans.BuildBackupRunPlan(BackupRunPlanInput{
-		Task:   task,
-		Run:    prepared.Run,
-		Upload: BackupRunUploadAuthorities(prepared.Run),
+		Task:  task,
+		Run:   prepared.Run,
+		Scope: prepared.Scope, Authority: prepared.Authority, Artifacts: prepared.Artifacts,
 	})
 	if err != nil {
 		return etcd.IdempotencyTransactionResult{}, err
@@ -208,8 +214,17 @@ func (service *BackupRunService) runBackup(
 	defer prepared.Publication.Clear()
 
 	steps := make([]taskjournal.TaskStepRecord, len(prepared.Run.Sources))
+	if len(prepared.Authority) != len(steps) {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"backup publication authority is incomplete",
+		)
+	}
 	for index := range steps {
-		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
+		steps[index] = taskjournal.TaskStepRecord{
+			Kind: taskjournal.TaskStepOperation,
+			ID:   prepared.Authority[index].StepId,
+		}
 	}
 	task := etcd.TaskRecord{
 		ID:                taskID,
@@ -231,7 +246,8 @@ func (service *BackupRunService) runBackup(
 		task.Actor = taskjournal.TaskActorSystem
 	}
 	sealed, err := service.plans.BuildBackupRunPlan(BackupRunPlanInput{
-		Task: task, Run: prepared.Run, Upload: BackupRunUploadAuthorities(prepared.Run),
+		Task: task, Run: prepared.Run, Scope: prepared.Scope, Authority: prepared.Authority,
+		Artifacts: prepared.Artifacts,
 	})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

@@ -45,33 +45,18 @@ func BuildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 			return EnvironmentBlueprintStreams{}, err
 		}
 	}
-	projection, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(request.DesiredInput)
+	projection, resources, err := encodeDesiredRevisionInput(request.DesiredInput)
 	if err != nil {
 		clear(audit)
 		return EnvironmentBlueprintStreams{}, err
 	}
-	if len(projection) > projectionrecord.EnvironmentBlueprintProjectionMaxBytes {
-		clear(audit)
-		clear(projection)
-		return EnvironmentBlueprintStreams{}, errs.New(
-			errs.KindValidationFailed,
-			"Blueprint normalized desired input exceeds the 2 MiB ceiling",
-		)
-	}
 	auditDigest := sha256.Sum256(audit)
 	projectionDigest := sha256.Sum256(projection)
-	input := request.DesiredInput.Input
-	projectionResources := len(input.RuntimeFiles) + len(input.ServiceExtensions) + len(input.Requires) +
-		len(input.Attachments) + len(input.Entries) + len(input.Routes) + len(input.Scripts) +
-		len(input.Components) + len(input.ReleaseGroups)
-	if input.Backup != nil {
-		projectionResources++
-	}
 	descriptor := EnvironmentBlueprintStageDescriptor{
 		Claim: claim, State: EnvironmentBlueprintStageOpen, Bound: true,
 		AuditChunks: ChunkCount32(len(audit)), AuditBytes: uint64(len(audit)), AuditSHA256: auditDigest,
 		ProjectionChunks: ChunkCount32(len(projection)), ProjectionBytes: uint64(len(projection)),
-		ProjectionSHA256: projectionDigest, ProjectionResources: uint32(projectionResources),
+		ProjectionSHA256: projectionDigest, ProjectionResources: resources,
 		DependencyDigest: request.DependencyDigest, UpdatedAt: claim.CreatedAt,
 	}
 	if err := validateEnvironmentBlueprintStageDescriptor(descriptor); err != nil {
@@ -80,4 +65,19 @@ func BuildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 		return EnvironmentBlueprintStreams{}, err
 	}
 	return EnvironmentBlueprintStreams{Audit: audit, Projection: projection, Descriptor: descriptor}, nil
+}
+
+func encodeDesiredRevisionInput(value projectionrecord.EnvironmentDesiredInput) ([]byte, uint32, error) {
+	encoded, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(value)
+	if err != nil {
+		return nil, 0, err
+	}
+	input := value.Input
+	resources := len(input.RuntimeFiles) + len(input.ServiceExtensions) + len(input.Requires) +
+		len(input.Attachments) + len(input.Entries) + len(input.Routes) + len(input.Scripts) +
+		len(input.Components) + len(input.ReleaseGroups)
+	if input.Backup != nil {
+		resources++
+	}
+	return encoded, uint32(resources), nil
 }

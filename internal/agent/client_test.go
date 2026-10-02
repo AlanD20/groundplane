@@ -19,6 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/internal/infra/agentstagingjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc"
@@ -49,8 +50,8 @@ func TestClientSendsAuthenticationFirstAndCopiesToken(t *testing.T) {
 	}
 
 	sent := stream.sentMessages()
-	if len(sent) != 2 {
-		t.Fatalf("sent message count = %d, want Authenticate and Ready", len(sent))
+	if len(sent) != 3 {
+		t.Fatalf("sent message count = %d, want Authenticate, Ready and staging inventory", len(sent))
 	}
 	authenticate := sent[0].GetAuthenticate()
 	if authenticate == nil || authenticate.AgentId != clientTestAgentID || !bytes.Equal(authenticate.Token, wantToken) {
@@ -219,7 +220,8 @@ func TestClientRequiresConfigUpdateBeforeReadyOrWork(t *testing.T) {
 func TestClientRejectsZeroExecutionEpoch(t *testing.T) {
 	t.Parallel()
 	assignment := workerAssignment(workerTestTaskID, "zero-event-attempt")
-	client := &Client{pool: NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())}
+	client := &Client{pool: NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger()),
+		staging: &backupStagingState{ready: true, plan: &agentpb.BackupStagingRecoveryPlan{}}}
 	_, err := client.handleControllerMessage(context.Background(), &agentpb.ControllerMessage{
 		Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
 			TaskId: assignment.TaskID, AssignmentId: assignment.AssignmentID,
@@ -245,7 +247,14 @@ func TestClientCancellationClosesStreamGracefully(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
 	go func() { result <- client.Run(ctx) }()
-	<-stream.readySent
+	select {
+	case <-stream.readySent:
+	case err := <-result:
+		t.Fatalf("client stopped before Ready: %v", err)
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("client did not become ready")
+	}
 	cancel()
 	if err := <-result; err != nil {
 		t.Fatalf("Run() error = %v, want graceful cancellation", err)
@@ -631,12 +640,12 @@ func sizedControllerMessage(t *testing.T, target int) *agentpb.ControllerMessage
 		ConfigUpdate: &agentpb.ConfigUpdate{AgentConfig: &agentpb.AgentConfig{
 			PullIntervalSeconds: 1,
 			MaxConcurrentTasks:  1,
-			Labels:              map[string]string{"payload": payload},
+			Labels:              []*agentpb.AgentLabel{{Key: "payload", Value: payload}},
 		}},
 	}}
 	for proto.Size(message) > target {
 		payload = payload[:len(payload)-(proto.Size(message)-target)]
-		message.GetConfigUpdate().GetAgentConfig().Labels["payload"] = payload
+		message.GetConfigUpdate().GetAgentConfig().Labels[0].Value = payload
 	}
 	if proto.Size(message) != target {
 		t.Fatalf("cannot construct %d-byte Controller message; got %d", target, proto.Size(message))
@@ -667,6 +676,14 @@ func newTestClient(t *testing.T, token []byte, stream *fakeStream) *Client {
 	)
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
+	}
+	client.statePath = t.TempDir()
+	client.openStagingJournal = func(string) (*agentstagingjournal.Journal, error) { return nil, nil }
+	// Channel tests start with already-reconciled empty staging and no staging journal. Actual physical
+	// recovery and its handshake are qualified separately, not bypassed in production.
+	client.openStaging = func(_ context.Context, journal *agentstagingjournal.Journal) (*backupStagingState, error) {
+		return &backupStagingState{journal: journal, ready: true, inventory: &agentpb.BackupStagingInventory{},
+			plan: &agentpb.BackupStagingRecoveryPlan{}}, nil
 	}
 	client.connect = func(ctx context.Context, _ string) (agentStream, io.Closer, error) {
 		stream.ctx = ctx
@@ -715,6 +732,11 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 		return s.sendErr
 	}
 	copyMessage := &agentpb.AgentMessage{}
+	if inventory := message.GetBackupStagingInventory(); inventory != nil {
+		copyMessage.Payload = &agentpb.AgentMessage_BackupStagingInventory{
+			BackupStagingInventory: proto.CloneOf(inventory),
+		}
+	}
 	if authenticate := message.GetAuthenticate(); authenticate != nil {
 		copyMessage.Payload = &agentpb.AgentMessage_Authenticate{Authenticate: &agentpb.Authenticate{
 			AgentId: authenticate.AgentId,

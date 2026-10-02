@@ -3,6 +3,9 @@ package backup
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"filippo.io/age"
 	backupsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -26,21 +29,28 @@ type backupSecretEvidenceReader interface {
 }
 
 // BackupSecretResolver converts one fixed-revision durable evidence snapshot
-// into the two transient S3 credential slots accepted by the Agent. It never
-// resolves or decrypts an age identity.
+// into the exact transient slots required by the sealed step. Private age
+// identity plaintext exists only in owned buffers handed to slot delivery.
 type BackupSecretResolver struct {
-	reader    backupSecretEvidenceReader
-	protector *secretvalue.Protector
+	reader     backupSecretEvidenceReader
+	protector  *secretvalue.Protector
+	identities *restoreIdentitySessions
 }
 
 func NewBackupSecretResolver(
+	ctx context.Context,
 	reader backupSecretEvidenceReader,
 	protector *secretvalue.Protector,
 ) (*BackupSecretResolver, error) {
-	if reader == nil || protector == nil {
+	if ctx == nil || reader == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "backup secret resolver dependencies are required")
 	}
-	return &BackupSecretResolver{reader: reader, protector: protector}, nil
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	identities := &restoreIdentitySessions{lifetime: ctx, sessions: make(map[string]*restoreIdentitySession)}
+	context.AfterFunc(ctx, identities.close)
+	return &BackupSecretResolver{reader: reader, protector: protector, identities: identities}, nil
 }
 
 // ResolveBackupSecretSlots is the composition seam for an authenticated Agent
@@ -59,13 +69,17 @@ func (resolver *BackupSecretResolver) ResolveBackupSecretSlots(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	purposes, err := backupsecret.Purposes(request.Step)
+	if err != nil {
+		return nil, err
+	}
 	evidence, err := resolver.reader.ResolveBackupSecretEvidence(ctx, request)
 	defer evidence.Clear()
 	if err != nil {
 		return nil, err
 	}
 
-	slots := make(map[agentpb.BackupSecretSlotPurpose][]byte, 2)
+	slots := make(map[agentpb.BackupSecretSlotPurpose][]byte, len(purposes))
 	ok := false
 	defer func() {
 		if !ok {
@@ -138,7 +152,27 @@ func (resolver *BackupSecretResolver) ResolveBackupSecretSlots(
 			return nil, errs.New(errs.KindStateConflict, "backup Secret credential evidence is missing")
 		}
 	}
-	if len(slots) != 2 {
+	for _, purpose := range purposes {
+		if purpose == agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_OPERATOR_OLD_AGE_IDENTITY {
+			identity, resolveErr := resolver.identities.copy(ctx, request, evidence)
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			slots[purpose] = identity
+		}
+		if purpose == agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY {
+			identity, openErr := resolver.openCurrentAgeIdentity(ctx, evidence.CurrentAgeIdentity)
+			if openErr != nil {
+				clear(identity)
+				return nil, openErr
+			}
+			slots[purpose] = identity
+		}
+		if len(slots[purpose]) == 0 {
+			return nil, errs.New(errs.KindStateConflict, "backup required secret slot is missing")
+		}
+	}
+	if len(slots) != len(purposes) {
 		return nil, errs.New(errs.KindInternal, "backup credential slots are incomplete")
 	}
 	ok = true
@@ -210,6 +244,47 @@ func (resolver *BackupSecretResolver) openDirectCredentials(
 		return nil, err
 	}
 	return result, nil
+}
+
+func (resolver *BackupSecretResolver) openCurrentAgeIdentity(
+	ctx context.Context,
+	value *backupsecrets.CurrentAgeIdentityEvidence,
+) ([]byte, error) {
+	if value == nil || value.RecordRevision <= 0 || value.EncryptedRevision <= 0 ||
+		value.Record.EnvironmentID != value.Encrypted.EnvironmentID || value.Record.KeyEra != value.Encrypted.KeyEra {
+		return nil, errs.New(errs.KindStateConflict, "backup current age identity evidence is missing or inconsistent")
+	}
+	ciphertext := value.Encrypted.Ciphertext
+	value.Encrypted.Ciphertext = nil
+	digest := sha256.Sum256(ciphertext)
+	envelope, err := secretvalue.RestoreOwned(secretvalue.Metadata{
+		Version: secretvalue.EnvelopeVersion1, Cipher: secretvalue.CipherSuiteAgeX25519,
+		Digest: secretvalue.Digest{Algorithm: secretvalue.DigestAlgorithmSHA256, Value: hex.EncodeToString(digest[:])},
+	}, ciphertext)
+	if err != nil {
+		return nil, err
+	}
+	defer envelope.Clear()
+	var identity []byte
+	err = resolver.protector.OpenOwned(ctx, &envelope, func(plaintext []byte) error {
+		if len(plaintext) == 0 || len(plaintext) > int(executionplan.MaximumBackupSecretIdentityBytes) {
+			return errs.New(errs.KindValidationFailed, "backup current age identity size is invalid")
+		}
+		// The age parser requires a string. Do not propagate parser errors,
+		// which may contain private input, across the secret-value boundary.
+		private := bytes.TrimSpace(plaintext)
+		parsed, parseErr := age.ParseX25519Identity(string(private))
+		if parseErr != nil || parsed.Recipient().String() != value.Record.Recipient {
+			return errs.New(errs.KindStateConflict, "backup current age identity does not match its sealed recipient")
+		}
+		identity = append([]byte(nil), private...)
+		return nil
+	})
+	if err != nil {
+		clear(identity)
+		return nil, err
+	}
+	return identity, nil
 }
 
 func (resolver *BackupSecretResolver) openSecretValue(

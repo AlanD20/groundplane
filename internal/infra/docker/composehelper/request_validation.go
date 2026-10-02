@@ -39,6 +39,12 @@ func validateRequest(
 	if selected == nil || request.TimeoutSeconds > selected.TimeoutSeconds {
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step selection is invalid")
 	}
+	if request.GetBackupVolumeConsumer() != nil {
+		return validateBackupVolumeConsumerRequest(request, plan, selected)
+	}
+	if request.GetBackupPostgresConsumer() != nil {
+		return validateBackupPostgresConsumerRequest(request, plan, selected)
+	}
 	artifactID := ""
 	var artifact *agentpb.ComposeArtifact
 	switch payload := selected.Payload.(type) {

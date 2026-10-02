@@ -18,7 +18,7 @@ type adapter struct{}
 
 func (a *adapter) Key() string                       { return "valkey:9" }
 func (a *adapter) Label() string                     { return "Valkey 9" }
-func (a *adapter) DefaultImage() string              { return "valkey/valkey:9-alpine" }
+func (a *adapter) DefaultImage() (string, error)     { return "valkey/valkey:9-alpine", nil }
 func (a *adapter) FactsPrefix() string               { return "valkey9_" }
 func (a *adapter) URLScheme() string                 { return "redis://" }
 func (a *adapter) Port() string                      { return "6379" }

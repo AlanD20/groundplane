@@ -54,7 +54,7 @@ func (repository *BackupRuntimeRepository) CheckpointBackupRun(
 	}
 	ordinal, changed := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 	if !changed || !backupruntime.BackupRunCheckpointMatchesTransition(
-		checkpoint.Payload,
+		checkpoint.Request,
 		current.Record.Sources[ordinal],
 		next.Sources[ordinal],
 	) {

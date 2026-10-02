@@ -14,7 +14,14 @@ func (repository *Writer) TransitionReconciledBackupOrphan(
 	next BackupOrphanRecord,
 ) (etcdstore.Versioned[BackupOrphanRecord], error) {
 	if current.Revision <= 0 || current.Record.State != BackupOrphanInspect ||
-		next.State != BackupOrphanDelete || current.Record.Point != next.Point ||
+		current.Record.CleanupProof == (BackupOrphanCleanupProof{}) ||
+		next.State != BackupOrphanDelete || current.Record.Target != next.Target || current.Record.Evidence != next.Evidence ||
+		current.Record.ConfigArchive != next.ConfigArchive ||
+		current.Record.VolumeArchive != next.VolumeArchive ||
+		current.Record.Postgres != next.Postgres ||
+		current.Record.CleanupProof != next.CleanupProof ||
+		current.Record.UnknownResolvedByReconciler != next.UnknownResolvedByReconciler ||
+		current.Record.Upload != next.Upload || current.Record.Object != next.Object || current.Record.Phase != next.Phase ||
 		current.Record.TaskID != next.TaskID ||
 		current.Record.Reconciliation != next.Reconciliation ||
 		!next.UpdatedAt.After(current.Record.UpdatedAt) || next.CreatedAt != current.Record.CreatedAt {
@@ -28,15 +35,15 @@ func (repository *Writer) TransitionReconciledBackupOrphan(
 		return etcdstore.Versioned[BackupOrphanRecord]{}, err
 	}
 	defer clear(value)
-	connectorIndex, err := BackupOrphanConnectorIndexKey(next.Point.ConnectorID, next.Point.ID)
+	connectorIndex, err := BackupOrphanConnectorIndexKey(next.Target.ConnectorID, next.Target.ID)
 	if err != nil {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, err
 	}
-	environmentIndex, err := BackupOrphanEnvironmentIndexKey(next.Point.EnvironmentID, next.Point.ID)
+	environmentIndex, err := BackupOrphanEnvironmentIndexKey(next.Target.EnvironmentID, next.Target.ID)
 	if err != nil {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, err
 	}
-	keys := []string{BackupOrphanKey(next.Point.ID), connectorIndex, environmentIndex}
+	keys := []string{BackupOrphanKey(next.Target.ID), connectorIndex, environmentIndex}
 	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, err
@@ -68,8 +75,8 @@ func (repository *Writer) TransitionReconciledBackupOrphan(
 	}
 	result, err := repository.TransactRuntime(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: keys[0], Value: value},
-		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(next.Point.ID)},
-		{Type: etcdstore.MutationPut, Key: keys[2], Value: []byte(next.Point.ID)},
+		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(next.Target.ID)},
+		{Type: etcdstore.MutationPut, Key: keys[2], Value: []byte(next.Target.ID)},
 	})
 	if err != nil {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, err
@@ -95,20 +102,20 @@ func (repository *Writer) DeleteReconciledBackupOrphan(
 		return errs.New(errs.KindValidationFailed, "backup orphan reconciliation deletion is invalid")
 	}
 	connectorIndex, err := BackupOrphanConnectorIndexKey(
-		current.Record.Point.ConnectorID,
-		current.Record.Point.ID,
+		current.Record.Target.ConnectorID,
+		current.Record.Target.ID,
 	)
 	if err != nil {
 		return err
 	}
 	environmentIndex, err := BackupOrphanEnvironmentIndexKey(
-		current.Record.Point.EnvironmentID,
-		current.Record.Point.ID,
+		current.Record.Target.EnvironmentID,
+		current.Record.Target.ID,
 	)
 	if err != nil {
 		return err
 	}
-	keys := []string{BackupOrphanKey(current.Record.Point.ID), connectorIndex, environmentIndex}
+	keys := []string{BackupOrphanKey(current.Record.Target.ID), connectorIndex, environmentIndex}
 	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return err
@@ -151,9 +158,11 @@ func (repository *Writer) AdoptReconciledBackupOrphan(
 	sweep BackupRetentionSweepRecord,
 ) (etcdstore.Versioned[BackupRecoveryPointRecord], error) {
 	if current.Revision <= 0 || current.Record.State != BackupOrphanInspect ||
-		point.BackupRecoveryPointSnapshot != current.Record.Point ||
+		current.Record.CleanupProof == (BackupOrphanCleanupProof{}) ||
+		!BackupOrphanMatchesRecoveryPoint(current.Record, point.BackupRecoveryPointSnapshot) ||
 		sweep.SourceID != point.SourceID || sweep.TriggerRecoveryPointID != point.ID ||
 		sweep.Revision != current.Record.Reconciliation.PolicyRevision ||
+		sweep.PolicySHA256 != current.Record.Reconciliation.PolicySHA256 ||
 		sweep.Keep != current.Record.Reconciliation.RetentionKeep ||
 		sweep.State != BackupRetentionPending || sweep.CreatedAt != point.VerifiedAt ||
 		sweep.UpdatedAt != point.VerifiedAt {

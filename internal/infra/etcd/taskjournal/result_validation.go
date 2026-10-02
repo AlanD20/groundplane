@@ -11,7 +11,8 @@ import (
 )
 
 func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
-	if result.Kind != TaskResultCompose && result.Kind != TaskResultEnvironmentDirectory {
+	if result.Kind != TaskResultCompose && result.Kind != TaskResultEnvironmentDirectory &&
+		result.Kind != TaskResultBackup {
 		return errs.New(errs.KindValidationFailed, "task result kind is invalid")
 	}
 	switch result.Diagnostic {
@@ -39,6 +40,20 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 	if result.Kind == TaskResultEnvironmentDirectory &&
 		(len(result.Projects) != 0 || result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired) {
 		return errs.New(errs.KindValidationFailed, "environment directory task result is inconsistent")
+	}
+	if result.Kind == TaskResultBackup {
+		if result.AssignmentGeneration == 0 || result.ExecutionEpoch == 0 ||
+			result.ReleaseRecoveryRecordSHA256 != "" || result.Diagnostic != TaskResultDiagnosticNone ||
+			len(result.Projects) != 0 || len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 ||
+			result.CandidateAbsenceEvidence != nil || result.DNSResolverCandidateObservation != nil ||
+			result.DNSResolverRollbackObservation != nil {
+			return errs.New(
+				errs.KindValidationFailed,
+				"backup task result carries invalid or unrelated execution evidence",
+			)
+		}
+	} else if result.AssignmentGeneration != 0 {
+		return errs.New(errs.KindValidationFailed, "ordinary task result carries backup assignment generation")
 	}
 	if len(result.Projects) > 64 {
 		return errs.New(errs.KindValidationFailed, "task result has too many project summaries")

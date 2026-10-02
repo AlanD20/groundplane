@@ -93,7 +93,7 @@ type RecoveryPointPage struct {
 }
 
 type RestoreRequest struct {
-	SourceID        string `json:"source_id"`
-	RecoveryPointID string `json:"recovery_point_id,omitempty"` // empty = latest
-	AgeIdentity     string `json:"age_identity,omitempty"`
+	SourceID        string `json:"source_id" pattern:"^spt_[0-9A-HJKMNP-TV-Z]{26}$"`
+	RecoveryPointID string `json:"recovery_point_id,omitempty" pattern:"^rp_[0-9A-HJKMNP-TV-Z]{26}$"` // empty = latest
+	AgeIdentity     string `json:"age_identity,omitempty" maxLength:"4096" writeOnly:"true"`
 }

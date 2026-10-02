@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backingpostgresrelease "github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -28,24 +29,25 @@ const maximumBackingServiceTransactionRequestOperations = 128
 // facade. The repository publishes every public member and its first desired
 // revision in one transaction so readers can never observe a partial facade.
 type BackingServiceCreation struct {
-	VolumeRoot   string
-	Stage        etcdstore.Versioned[BackingServiceCreationStage]
-	PoolRegistry etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry]
-	Project      hierarchyrecord.ProjectRecord
-	Environment  hierarchyrecord.EnvironmentRecord
-	Components   []componentrecord.Record
-	Zone         zonerecord.Record
-	Service      servicerecord.ServiceRecord
-	Secrets      []secretrecord.Record
-	SecretValues []secretrecord.EncryptedValue
-	Entries      []entryrecord.Record
-	EntryValues  []entryrecord.EntryValueGeneration
-	Claim        blueprints.EnvironmentBlueprintStageClaim
-	Revision     blueprints.EnvironmentDesiredRevisionIdentity
-	Projection   projectionrecord.EnvironmentComposeProjection
-	Task         TaskRecord
-	HookInputs   *taskconfiguration.BackingHookEncryptedInputs
-	Marker       idempotencyrecord.IdempotencyMarker
+	VolumeRoot      string
+	Stage           etcdstore.Versioned[BackingServiceCreationStage]
+	PoolRegistry    etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry]
+	Project         hierarchyrecord.ProjectRecord
+	Environment     hierarchyrecord.EnvironmentRecord
+	Components      []componentrecord.Record
+	Zone            zonerecord.Record
+	Service         servicerecord.ServiceRecord
+	Secrets         []secretrecord.Record
+	SecretValues    []secretrecord.EncryptedValue
+	Entries         []entryrecord.Record
+	EntryValues     []entryrecord.EntryValueGeneration
+	Claim           blueprints.EnvironmentBlueprintStageClaim
+	Revision        blueprints.EnvironmentDesiredRevisionIdentity
+	Projection      projectionrecord.EnvironmentComposeProjection
+	Task            TaskRecord
+	HookInputs      *taskconfiguration.BackingHookEncryptedInputs
+	PostgresRelease *backingpostgresrelease.Record
+	Marker          idempotencyrecord.IdempotencyMarker
 }
 
 // PublishBackingServiceWithTask atomically creates one backing facade and
@@ -155,6 +157,14 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(serviceValue)
+	var postgresReleaseValue []byte
+	if creation.PostgresRelease != nil {
+		postgresReleaseValue, err = backingpostgresrelease.Encode(*creation.PostgresRelease)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clear(postgresReleaseValue)
+	}
 	epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(backupruntime.EnvironmentMutationEpochRecord{
 		EnvironmentID: creation.Environment.ID,
 	})
@@ -307,6 +317,11 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			Key:   servicerecord.ServiceRuntimeKey(creation.Service.Desired.ID),
 			Value: serviceValue,
 		},
+	}
+	if creation.PostgresRelease != nil {
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut,
+			Key:   backingpostgresrelease.Key(creation.Environment.ID, creation.Service.Desired.ID),
+			Value: postgresReleaseValue})
 	}
 	for index, component := range creation.Components {
 		mutations = append(

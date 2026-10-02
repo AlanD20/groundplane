@@ -547,7 +547,7 @@ func TestTaskBackupPruneIsInClosedDurableCatalog(t *testing.T) {
 	task.RenderGeneration = 0
 	task.Params = nil
 	task.Materializations = nil
-	task.TimeoutSeconds = backupTaskTimeoutSeconds
+	task.TimeoutSeconds = backupTaskTimeout(task.Type)
 	if err := ValidateTaskRecord(task); !errors.Is(
 		err,
 		errs.New(errs.KindValidationFailed, ""),
@@ -575,7 +575,7 @@ func TestBackupTaskDurableShapeIsClosed(t *testing.T) {
 		base.RenderGeneration = 0
 		base.Params = nil
 		base.Materializations = nil
-		base.TimeoutSeconds = backupTaskTimeoutSeconds
+		base.TimeoutSeconds = backupTaskTimeout(base.Type)
 		if err := ValidateTaskRecord(base); err != nil {
 			t.Fatalf("validateTaskRecord(%s) error = %v", taskType, err)
 		}

@@ -26,6 +26,8 @@ import {
   adapterSteps,
 } from "@/features/backup/environment-backup-projection";
 import { BackupPolicyDialog } from "@/features/backup/backup-policy-dialog";
+import { RestoreDialog } from "@/features/backup/restore-dialog";
+import type { RecoveryPoint } from "@/features/backup/types";
 import { TaskLink } from '@/components/common/task-link';
 import { TablePagination, TableSortHead, useTableView } from '@/components/common/table-controls';
 
@@ -38,6 +40,7 @@ export function BackupsCard({ env }: { env: Environment }) {
   const points = policyState.recoveryPoints;
   const table = useTableView(points.items, { id: point => point.id, source: point => `${point.sourceKind}/${point.sourceId}`, target: point => point.targetId, created: point => Date.parse(point.createdAt), size: point => point.sizeBytes, status: point => point.status }, 'created', 'desc', env.id);
   const [policyOpen, setPolicyOpen] = useState(false);
+  const [restorePoint, setRestorePoint] = useState<RecoveryPoint | null>(null);
   const [runTaskId, setRunTaskId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   useEffect(() => {
@@ -327,6 +330,7 @@ export function BackupsCard({ env }: { env: Environment }) {
                     <TableHead className="px-3 py-2 font-medium">
                       Status
                     </TableHead>
+                    <TableHead className="px-3 py-2"><span className="sr-only">Actions</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-border">
@@ -352,6 +356,9 @@ export function BackupsCard({ env }: { env: Environment }) {
                       </TableCell>
                       <TableCell className="px-3 py-2 text-success">
                         {point.status}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right">
+                        <Button variant="outline" size="sm" onClick={() => setRestorePoint(point)}>Restore</Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -385,6 +392,8 @@ export function BackupsCard({ env }: { env: Environment }) {
         open={policyOpen}
         onOpenChange={setPolicyOpen}
       />
+      {restorePoint && <RestoreDialog key={`${env.id}/${restorePoint.id}`} env={env} point={restorePoint}
+        onClose={() => setRestorePoint(null)} onTask={setRunTaskId} />}
     </>
   );
 }

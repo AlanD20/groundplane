@@ -25,9 +25,10 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		return PreparedManualBackupRun{}, err
 	}
 	publication := &PreparedBackupRunPublication{
-		state: &preparedBackupRunState{repository: repository, plan: plan},
+		state: prepareBackupRunPublicationState(repository, plan, sources.Scope, sources.Authority, sources.Artifacts),
 	}
 	return PreparedManualBackupRun{
+		Scope: sources.Scope, Authority: sources.Authority, Artifacts: sources.Artifacts,
 		Run: backupruntime.CloneBackupRunPublicationRecord(sources.Run), Owner: sources.Owner, Publication: publication,
 	}, nil
 }

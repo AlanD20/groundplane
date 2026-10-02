@@ -6,6 +6,10 @@ import (
 )
 
 type Assignment struct {
+	BackupAuthority             *agentpb.BackupTaskAuthority
+	BackupResume                *agentpb.BackupTaskResume
+	BackupAuthoritySHA256       []byte
+	AssignmentGeneration        uint64
 	AssignmentID                string
 	TaskID                      string
 	OperationID                 string

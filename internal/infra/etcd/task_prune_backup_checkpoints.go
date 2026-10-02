@@ -75,7 +75,7 @@ func validateTaskBackupCheckpointPruneEntry(
 		record, err := backupruntime.DecodeBackupCheckpointCursorRecord(entry.Value)
 		if err != nil || record.TaskID != taskID ||
 			backupruntime.BackupCheckpointCursorKey(backupruntime.BackupCheckpointInput{
-				TaskID: record.TaskID, AssignmentID: record.AssignmentID, StepID: record.StepID,
+				TaskID: record.TaskID, AssignmentID: record.AssignmentID, StepID: record.StepID, ExecutionID: record.ExecutionID,
 			}) != entry.Key {
 			return taskjournal.CorruptPruneIntent()
 		}
@@ -85,7 +85,7 @@ func validateTaskBackupCheckpointPruneEntry(
 	if err != nil || record.TaskID != taskID ||
 		backupruntime.BackupCheckpointDedupKey(backupruntime.BackupCheckpointInput{
 			TaskID: record.TaskID, AssignmentID: record.AssignmentID,
-			StepID: record.StepID, Sequence: record.Sequence,
+			StepID: record.StepID, Sequence: record.Sequence, ExecutionID: record.ExecutionID,
 		}) != entry.Key {
 		return taskjournal.CorruptPruneIntent()
 	}

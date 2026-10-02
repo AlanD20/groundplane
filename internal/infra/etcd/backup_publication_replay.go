@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresbackingguard"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
@@ -72,6 +73,28 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		lock.EnvironmentID != run.EnvironmentID || lock.Kind != backupruntime.BackupOperationBackup ||
 		!lock.CreatedAt.Equal(run.CreatedAt) || !lock.UpdatedAt.Equal(lock.CreatedAt) {
 		return backupruntime.CorruptBackupRuntimeRecord()
+	}
+	backingEnvironmentIDs, err := backupruntime.PostgresBackingEnvironmentIDs(run)
+	if err != nil {
+		return backupruntime.CorruptBackupRuntimeRecord()
+	}
+	backingGuards, err := postgresbackingguard.PrepareOwnership(
+		ctx,
+		repository.store,
+		backingEnvironmentIDs,
+		run.EnvironmentID,
+		postgresbackingguard.Owner(backupruntime.BackupOperationBackup, run.OperationID, run.TaskID),
+		readRevision,
+		false,
+	)
+	if err != nil {
+		return backupruntime.CorruptBackupRuntimeRecord()
+	}
+	defer backingGuards.Clear()
+	for _, condition := range backingGuards.Conditions {
+		if condition.ModRevision != commitRevision {
+			return backupruntime.CorruptBackupRuntimeRecord()
+		}
 	}
 	switch task.Status {
 	case taskjournal.TaskStatusPending:

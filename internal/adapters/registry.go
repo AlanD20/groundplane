@@ -109,12 +109,12 @@ type FactDefinition struct {
 
 // Adapter is the contract every backing-service kind implements.
 type Adapter interface {
-	Key() string          // e.g. "postgres:16" — looked up by core.Service.Adapter
-	Label() string        // display only
-	DefaultImage() string // e.g. "postgres:16-alpine"
-	FactsPrefix() string  // e.g. "pg16_" — empty for Custom()
-	URLScheme() string    // e.g. "pgsql://" — empty for Custom()
-	Port() string         // e.g. "5432" — empty for Custom()
+	Key() string                   // e.g. "postgres:16" — looked up by core.Service.Adapter
+	Label() string                 // display only
+	DefaultImage() (string, error) // release-owned image selection; no operator fallback
+	FactsPrefix() string           // e.g. "pg16_" — empty for Custom()
+	URLScheme() string             // e.g. "pgsql://" — empty for Custom()
+	Port() string                  // e.g. "5432" — empty for Custom()
 	FactSchema(core.BackingAuthentication) []FactDefinition
 	SupportsAuthenticationModes() bool
 	Custom() bool // true => network-only attach, no facts, no backups (see mvp.md, "The custom adapter")

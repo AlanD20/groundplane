@@ -37,13 +37,18 @@ func TestRecoveryPointRouteProjectsVerifiedRedactedItems(t *testing.T) {
 		Items: []testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointRecord]{{
 			Record: testbackupruntime.BackupRecoveryPointRecord{
 				BackupRecoveryPointSnapshot: testbackupruntime.BackupRecoveryPointSnapshot{
-					ID: "rp_01J00000000000000000000000", EnvironmentID: testBackupPointsRouteEnvironmentID,
-					SourceID: "spt_01J00000000000000000000000", SourceKind: testbackupruntime.BackupRuntimeSourceVolume,
-					TargetID: "vol_01J00000000000000000000000", ConnectorID: "con_01J00000000000000000000000",
-					ObjectKey: "private-object-key", SourceFormat: testbackupruntime.BackupRuntimeFormatVolume,
-					Encryption: testbackupruntime.BackupRuntimeEncryptionAge, KeyEra: 3, Recipient: "private-recipient",
-					SizeBytes: 123, SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-					CreatedAt: createdAt,
+					BackupRecoveryPointTargetSnapshot: testbackupruntime.BackupRecoveryPointTargetSnapshot{
+						ID: "rp_01J00000000000000000000000", EnvironmentID: testBackupPointsRouteEnvironmentID,
+						SourceID: "spt_01J00000000000000000000000", SourceKind: testbackupruntime.BackupRuntimeSourceVolume,
+						TargetID: "vol_01J00000000000000000000000", ConnectorID: "con_01J00000000000000000000000",
+						ObjectKey: "private-object-key", SourceFormat: testbackupruntime.BackupRuntimeFormatVolume,
+						Encryption: testbackupruntime.BackupRuntimeEncryptionAge, KeyEra: 3, Recipient: "private-recipient",
+						CreatedAt: createdAt,
+					},
+					Evidence: testbackupruntime.BackupArtifactEvidence{
+						SourceSizeBytes: 123, SourceSHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+						StoredSizeBytes: 123, StoredSHA256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+					},
 				},
 				VerifiedAt: createdAt.Add(time.Second),
 			}, Revision: 9, ReadRevision: 9,

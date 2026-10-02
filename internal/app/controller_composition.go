@@ -170,6 +170,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		authority.idempotency,
 		authority.intentProtector,
 		authority.controllerKey,
+		execution.backupSecrets, cfg.Storage.VolumeRoot,
 	)
 	if err != nil {
 		return nil, err

@@ -2,10 +2,15 @@ package backupplanning
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -29,6 +34,27 @@ func (repository *Planner) prepareManualVolumeSource(
 			"backup Volume projection is unavailable",
 		)
 	}
+	head, err := repository.reader.ReadFixedKeys(ctx,
+		[]string{blueprints.EnvironmentBlueprintHeadKey(environmentID)}, fixedRevision)
+	if err != nil {
+		return backupruntime.BackupRunSourceAttemptRecord{}, err
+	}
+	defer etcdstore.ClearValues(head.Values)
+	if len(head.Values) != 1 || head.Values[0] == nil ||
+		head.Values[0].ModRevision != evidence.Projection.Revision {
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
+			errs.KindStateConflict,
+			"Volume desired head changed",
+		)
+	}
+	headedRevision, err := idempotencyrecord.DecodeTaskReference(head.Values[0].Value)
+	if err != nil || headedRevision != evidence.Projection.Record.RevisionID {
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
+			errs.KindStateConflict,
+			"Volume desired head changed",
+		)
+	}
+	headDigest := sha256.Sum256(head.Values[0].Value)
 	services, err := repository.manualBackupVolumeConsumers(
 		ctx, environmentID, attempt.TargetID, evidence.Projection.Record, fixedRevision,
 	)
@@ -42,6 +68,8 @@ func (repository *Planner) prepareManualVolumeSource(
 		EnvironmentRevision: evidence.Environment.Revision,
 		VolumeID:            evidence.Volume.ID,
 		DesiredRevisionID:   evidence.Projection.Record.RevisionID,
+		HeadRevision:        evidence.Projection.Revision,
+		HeadSHA256:          hex.EncodeToString(headDigest[:]),
 		ProjectionRoot:      evidence.ProjectionRoot,
 		DependencyDigest:    evidence.DependencyDigest,
 		RenderGeneration:    evidence.Projection.Record.RenderGeneration,

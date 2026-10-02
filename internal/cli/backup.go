@@ -170,13 +170,17 @@ func newBackupCmd() *cobra.Command {
 	points.Flags().StringVar(&pointCursor, "cursor", "", "opaque continuation cursor from a previous page")
 	cmd.AddCommand(points)
 
-	var point, ageIdentityPath string
+	var point, ageIdentityPath, restoreKey string
 	restore := &cobra.Command{
 		Use:   "restore <source>",
 		Short: "Restore a source from a recovery point (defaults to the latest)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
+			environmentID, err := backupPolicyEnvironmentID(cmd)
+			if err != nil {
+				return err
+			}
 			ageIdentity := ""
 			if ageIdentityPath != "" {
 				var err error
@@ -185,13 +189,17 @@ func newBackupCmd() *cobra.Command {
 					return err
 				}
 			}
-			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/restore"
-			return runAction(cmd, path, map[string]string{
-				"source_id": args[0], "recovery_point_id": point, "age_identity": ageIdentity,
-			})
+			accepted, err := app.Client.RestoreBackup(cmd.Context(), environmentID, restoreKey,
+				apiTypes.RestoreRequest{SourceID: args[0], RecoveryPointID: point, AgeIdentity: ageIdentity})
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	}
 	restore.Flags().StringVar(&point, "point", "", "recovery point id (default: latest)")
+	restore.Flags().
+		StringVar(&restoreKey, "idempotency-key", "", "reuse for an uncertain request with exactly the same inputs")
 	restore.Flags().StringVar(
 		&ageIdentityPath,
 		"age-identity",

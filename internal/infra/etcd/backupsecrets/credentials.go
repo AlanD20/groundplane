@@ -34,12 +34,20 @@ func (reader *Reader) resolveEncryptedCredentialValues(
 	}
 	evidence.Project = project
 	evidence.ProjectRevision = projectValue.ModRevision
+	if project.ID != dynamic.scope.GetProjectId() ||
+		!backupSecretRecordMatches(projectValue, dynamic.scope.GetProject()) {
+		return errs.New(errs.KindStateConflict, "backup sealed Project authority changed")
+	}
 	dynamic.last = second
 	connector := evidence.Connector.Connector
 	if evidence.Run != nil {
 		if connectorrecord.HasDirectCredentials(evidence.Connector) != evidence.Run.ConnectorHasDirectCredentials {
 			return errs.New(errs.KindStateConflict, "backup connector credential mode changed")
 		}
+	}
+	if evidence.Restore != nil &&
+		connectorrecord.HasDirectCredentials(evidence.Connector) != evidence.Restore.ConnectorHasDirectCredentials {
+		return errs.New(errs.KindStateConflict, "backup Restore connector credential mode changed")
 	}
 	if connectorrecord.HasDirectCredentials(evidence.Connector) {
 		position, ok := dynamic.credentials[connector.ID]
@@ -54,8 +62,17 @@ func (reader *Reader) resolveEncryptedCredentialValues(
 			}
 			expectedRevision = evidence.Run.ConnectorCredentialsRevision
 		}
+		if evidence.Restore != nil {
+			expectedRevision = evidence.Restore.ConnectorCredentialsRevision
+		}
 		if value == nil || value.ModRevision != expectedRevision {
 			return errs.New(errs.KindStateConflict, "backup connector credential snapshot changed")
+		}
+		for _, name := range []backupsecret.CredentialName{backupsecret.CredentialAccessKey, backupsecret.CredentialSecretKey} {
+			if connector.Credentials[name].Kind == backupsecret.CredentialSourceDirect &&
+				!backupSecretRecordMatches(value, backupCredentialSlot(evidence.ConnectorAuthority, name)) {
+				return errs.New(errs.KindStateConflict, "backup sealed direct credential slot changed")
+			}
 		}
 		credentials, err := connectorrecord.DecodeEncryptedCredentials(value.Value)
 		if err != nil || credentials.ConnectorID != connector.ID {
@@ -105,6 +122,9 @@ func (reader *Reader) resolveEncryptedCredentialValues(
 		value := final.Values[dynamic.secretValues[selected.id]]
 		if value == nil {
 			return errs.New(errs.KindInternal, "backup Secret encrypted value is unavailable")
+		}
+		if !backupSecretRecordMatches(value, backupCredentialSlot(evidence.ConnectorAuthority, reference.name)) {
+			return errs.New(errs.KindStateConflict, "backup sealed Secret credential slot changed")
 		}
 		encrypted, decodeErr := secretrecord.DecodeEncryptedValue(value.Value)
 		if decodeErr != nil || encrypted.SecretID != selected.id {

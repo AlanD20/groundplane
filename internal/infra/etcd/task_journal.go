@@ -89,7 +89,10 @@ func TransitionTaskStatus(
 			record.Status,
 		)
 	}
-	if expected == next || !taskjournal.ValidTaskTransition(expected, next) {
+	backupQueueTimeout := expected == taskjournal.TaskStatusPending && next == taskjournal.TaskStatusTimedOut &&
+		(record.Type == taskjournal.TaskBackup || record.Type == taskjournal.TaskBackupPrune || record.Type == taskjournal.TaskRestore) &&
+		!at.Before(record.CreatedAt.Add(time.Duration(record.TimeoutSeconds)*time.Second))
+	if expected == next || (!taskjournal.ValidTaskTransition(expected, next) && !backupQueueTimeout) {
 		return TaskRecord{}, errs.Newf(
 			errs.KindStateConflict,
 			"task %s cannot transition from %s to %s",

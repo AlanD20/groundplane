@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -186,8 +188,10 @@ func TestAgentChannelRuntimeEnforcesExactSendMessageLimit(t *testing.T) {
 			}
 			if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Authenticate{
 				Authenticate: &agentpb.Authenticate{
-					AgentId: agentChannelTransportTestAgentID,
-					Token:   make([]byte, 32),
+					AgentId:             agentChannelTransportTestAgentID,
+					Token:               make([]byte, 32),
+					ExecutionPlanSchema: executionplan.SchemaVersion,
+					ProcessGeneration:   bytes.Repeat([]byte{1}, 16),
 				},
 			}}); err != nil {
 				t.Fatalf("send Authenticate: %v", err)
@@ -305,13 +309,13 @@ func sizedAgentConfig(t *testing.T, target int) *agentpb.AgentConfig {
 	t.Helper()
 	payload := strings.Repeat("x", target)
 	config := transportTestAgentConfig()
-	config.Labels = map[string]string{"payload": payload}
+	config.Labels = []*agentpb.AgentLabel{{Key: "payload", Value: payload}}
 	message := &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ConfigUpdate{
 		ConfigUpdate: &agentpb.ConfigUpdate{AgentConfig: config},
 	}}
 	for proto.Size(message) > target {
 		payload = payload[:len(payload)-(proto.Size(message)-target)]
-		config.Labels["payload"] = payload
+		config.Labels[0].Value = payload
 	}
 	if proto.Size(message) != target {
 		t.Fatalf("cannot construct %d-byte Controller message; got %d", target, proto.Size(message))

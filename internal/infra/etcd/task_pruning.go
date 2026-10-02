@@ -95,6 +95,12 @@ func (repository *TaskRepository) drainTaskPruneIntent(
 			return err
 		}
 	}
+	for !current.Record.BackupConfigTransfersComplete {
+		current, err = repository.pruneTaskConfigTransferBatch(ctx, current)
+		if err != nil {
+			return err
+		}
+	}
 	if !current.Record.TaskPrimaryDeleted {
 		current, err = repository.deleteTaskPrunePrimary(ctx, current)
 		if err != nil {

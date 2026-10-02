@@ -2,9 +2,11 @@ package etcd
 
 import (
 	context "context"
+	hex "encoding/hex"
 	testing "testing"
 	time "time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -12,8 +14,70 @@ import (
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
+
+func retireBackupTestTerminalDelivery(t *testing.T, tasks *TaskRepository, task testkeyvalue.Versioned[TaskRecord]) {
+	t.Helper()
+	assignment := task.Record.TerminalAssignment
+	planHash, err := hex.DecodeString(task.Record.PlanHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoveryRequired := task.Record.Result.ReconciliationRequired
+	report := &agentpb.TaskAck{
+		TaskId: task.Record.ID, AssignmentId: assignment.AssignmentID,
+		AssignmentGeneration: assignment.AssignmentGeneration, PlanHash: planHash,
+		ExecutionEpoch: task.Record.Result.ExecutionEpoch, Terminal: taskjournal.TaskTerminalWire(task.Record.Status),
+		ExitCode: task.Record.Result.ExitCode,
+		Result: &agentpb.TaskAck_BackupResult{
+			BackupResult: &agentpb.BackupTaskResult{RecoveryRequired: &recoveryRequired},
+		},
+	}
+	ackDigest, err := executionplan.TaskAcknowledgementSHA256(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := taskTerminalDeliveryReceipt(task.Record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, err := taskjournal.TaskTerminalReceiptSHA256(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptDigest, err := hex.DecodeString(digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	process := [16]byte{1}
+	receipt := &agentpb.TaskTerminalReceiptAck{
+		ProcessGeneration: process[:], TaskId: report.TaskId, AssignmentId: report.AssignmentId,
+		AssignmentGeneration: report.AssignmentGeneration, PlanHash: planHash, Terminal: report.Terminal,
+		TaskAckSha256: ackDigest, TerminalReceiptSha256: receiptDigest, DurableTaskModRevision: task.Revision,
+	}
+	if err := tasks.BeginTaskTerminalDelivery(context.Background(), assignment.AgentID, assignment.AgentGeneration,
+		receipt, report); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := executionplan.TaskTerminalReceiptApplied(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tasks.ApplyTaskTerminalReceipt(context.Background(), assignment.AgentID, assignment.AgentGeneration,
+		applied); err != nil {
+		t.Fatal(err)
+	}
+	if err := tasks.RetireTaskTerminalAssignment(context.Background(), assignment.AgentID, assignment.AgentGeneration,
+		&agentpb.TaskTerminalAssignmentRetired{ProcessGeneration: process[:], TaskId: report.TaskId,
+			AssignmentId: report.AssignmentId, AssignmentGeneration: report.AssignmentGeneration,
+			PlanHash: planHash, Terminal: report.Terminal}); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func seedBackupRuntimePointAuthority(
 	t *testing.T,
@@ -159,18 +223,194 @@ func backupRuntimeTestPoint(
 	source testbackupruntime.BackupRunSourceAttemptRecord,
 	verifiedAt time.Time,
 ) testbackupruntime.BackupRecoveryPointRecord {
-	return testbackupruntime.BackupRecoveryPointRecord{
+	point := testbackupruntime.BackupRecoveryPointRecord{
 		BackupRecoveryPointSnapshot: testbackupruntime.BackupRecoveryPointSnapshot{
-			ID: source.RecoveryPointID, EnvironmentID: run.EnvironmentID,
-			SourceID: source.SourceID, SourceKind: source.Kind, TargetID: source.TargetID,
-			ConnectorID: run.ConnectorID, ConnectorPrefix: run.ConnectorPrefix,
-			ObjectKey: source.ObjectKey, SourceFormat: source.Format,
-			Encryption: run.Encryption, KeyEra: run.KeyEra, Recipient: run.Recipient,
-			SizeBytes: source.SizeBytes, SHA256: source.SHA256,
-			CreatedAt: source.RecoveryPointCreatedAt,
+			BackupRecoveryPointTargetSnapshot: testbackupruntime.BackupRecoveryPointTargetSnapshot{
+				ID: source.RecoveryPointID, EnvironmentID: run.EnvironmentID,
+				SourceID: source.SourceID, SourceKind: source.Kind, TargetID: source.TargetID,
+				ConnectorID: run.ConnectorID, ConnectorPrefix: run.ConnectorPrefix,
+				ConnectorEndpoint: run.ConnectorEndpoint, ConnectorBucket: run.ConnectorBucket,
+				ConnectorRegion: run.ConnectorRegion, ConnectorPathStyle: run.ConnectorPathStyle,
+				ObjectKey: source.ObjectKey, SourceFormat: source.Format,
+				Encryption: run.Encryption, KeyEra: run.KeyEra, Recipient: run.Recipient,
+				CreatedAt: source.RecoveryPointCreatedAt,
+			},
+			Evidence: source.Evidence, Object: source.Object,
+			ConfigArchive: source.ConfigArchive, VolumeArchive: source.VolumeArchive,
 		},
 		VerifiedAt: verifiedAt,
 	}
+	if source.Snapshot.Postgres != nil {
+		point.Postgres = testbackupruntime.BackupPostgresPointIdentity{
+			Database: source.Snapshot.Postgres.Database, Role: source.Snapshot.Postgres.Role,
+			BackingEnvironmentID: source.Snapshot.Postgres.BackingEnvironmentID,
+			BackingServiceID:     source.Snapshot.Postgres.BackingServiceID,
+			ConsumerServiceID:    source.Snapshot.Postgres.ConsumerServiceID,
+		}
+	}
+	return point
+}
+
+func backupRuntimeCompleteSourceArtifact(
+	run testbackupruntime.BackupRunRecord,
+	source *testbackupruntime.BackupRunSourceAttemptRecord,
+) {
+	source.Evidence = testBackupArtifact()
+	source.Object = testbackupruntime.BackupObjectIdentity{
+		Target: testbackupruntime.BackupObjectTarget{
+			ConnectorID: run.ConnectorID, ConnectorPrefix: run.ConnectorPrefix,
+			ConnectorEndpoint: run.ConnectorEndpoint, ConnectorBucket: run.ConnectorBucket,
+			ConnectorRegion: run.ConnectorRegion, ConnectorPathStyle: run.ConnectorPathStyle,
+			ObjectKey: source.ObjectKey,
+		},
+		Discriminator: testBackupObject(source.ObjectKey).Discriminator,
+	}
+	source.Upload = testbackupruntime.BackupUploadOutcome{
+		Kind:   testbackupruntime.BackupUploadReturned,
+		Target: source.Object.Target, ReturnedObject: source.Object,
+	}
+}
+
+func backupRuntimeSetSourceArtifact(
+	run testbackupruntime.BackupRunRecord,
+	source *testbackupruntime.BackupRunSourceAttemptRecord,
+) {
+	backupRuntimeCompleteSourceArtifact(run, source)
+	switch source.Phase {
+	case testbackupruntime.BackupSourcePhaseStaging, testbackupruntime.BackupSourcePhaseUpload:
+		source.Upload = testbackupruntime.BackupUploadOutcome{
+			Kind: testbackupruntime.BackupUploadPrepared, Target: source.Object.Target,
+		}
+		source.Object = testbackupruntime.BackupObjectIdentity{}
+	case testbackupruntime.BackupSourcePhaseHeadVerification:
+		source.Object = testbackupruntime.BackupObjectIdentity{}
+	}
+}
+
+func backupRuntimeOrphanPoint(
+	orphan testbackupruntime.BackupOrphanRecord,
+) testbackupruntime.BackupRecoveryPointSnapshot {
+	return testbackupruntime.BackupRecoveryPointSnapshot{
+		BackupRecoveryPointTargetSnapshot: orphan.Target,
+		Evidence:                          orphan.Evidence, Object: orphan.Object, Postgres: orphan.Postgres,
+		ConfigArchive: orphan.ConfigArchive, VolumeArchive: orphan.VolumeArchive,
+	}
+}
+
+func backupCheckpointEvidence(
+	t *testing.T,
+	evidence testbackupruntime.BackupArtifactEvidence,
+) *agentpb.BackupArtifactEvidence {
+	t.Helper()
+	source, err := hex.DecodeString(evidence.SourceSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := hex.DecodeString(evidence.StoredSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &agentpb.BackupArtifactEvidence{
+		SourceSizeBytes: evidence.SourceSizeBytes, SourceSha256: source,
+		StoredSizeBytes: evidence.StoredSizeBytes, StoredSha256: stored,
+	}
+}
+
+func backupSourceCleanupCheckpoint(
+	t *testing.T,
+	input testbackupruntime.BackupCheckpointInput,
+	pointID string,
+	evidence testbackupruntime.BackupArtifactEvidence,
+) testbackupruntime.BackupCheckpointInput {
+	t.Helper()
+	request := proto.CloneOf(input.Request)
+	request.CheckpointSequence = input.Sequence
+	request.Checkpoint = &agentpb.BackupCheckpointRequest_SourceCleanupCompleted{
+		SourceCleanupCompleted: &agentpb.BackupSourceCleanupCompleted{
+			PointId: pointID, Evidence: backupCheckpointEvidence(t, evidence),
+		},
+	}
+	input.Request = request
+	return input
+}
+
+func backupPruneObjectDeletedCheckpoint(
+	input testbackupruntime.BackupCheckpointInput,
+	sequence uint64,
+	ordinal uint32,
+	pointID string,
+	object *agentpb.BackupObjectIdentity,
+) testbackupruntime.BackupCheckpointInput {
+	request := proto.CloneOf(input.Request)
+	request.CheckpointSequence = sequence
+	request.Checkpoint = &agentpb.BackupCheckpointRequest_PruneObjectDeleted{
+		PruneObjectDeleted: &agentpb.BackupPruneObjectDeleted{
+			Ordinal: ordinal, PointId: pointID, Object: object,
+		},
+	}
+	input.Sequence = sequence
+	input.Request = request
+	return input
+}
+
+func backupUploadCompletedCheckpoint(
+	t *testing.T,
+	input testbackupruntime.BackupCheckpointInput,
+	sequence uint64,
+	precedingRevision int64,
+	run testbackupruntime.BackupRunRecord,
+	source testbackupruntime.BackupRunSourceAttemptRecord,
+) testbackupruntime.BackupCheckpointInput {
+	t.Helper()
+	object := backupCheckpointPruneObject(run, source.RecoveryPointID)
+	request := proto.CloneOf(input.Request)
+	request.CheckpointSequence = sequence
+	request.PrecedingCheckpoint = &agentpb.CheckpointFence{
+		AuthorityDigest:      append([]byte(nil), request.AuthorityDigest...),
+		DedupeKeyModRevision: precedingRevision,
+	}
+	request.Checkpoint = &agentpb.BackupCheckpointRequest_UploadCompleted{
+		UploadCompleted: &agentpb.BackupUploadCompleted{
+			PointId: source.RecoveryPointID, Evidence: backupCheckpointEvidence(t, source.Evidence),
+			MetadataCount: 11, MetadataSha256: append([]byte(nil), request.AuthorityDigest...),
+			Target: &agentpb.BackupObjectTarget{
+				Connector: object.Connector, Bucket: object.Bucket, ObjectKey: object.ObjectKey,
+			},
+			Outcome: &agentpb.BackupUploadCompleted_ReturnedObject{ReturnedObject: object},
+		},
+	}
+	input.Sequence = sequence
+	input.PrecedingCheckpointRevision = precedingRevision
+	input.Request = request
+	return input
+}
+
+func backupUploadVerifiedCheckpoint(
+	t *testing.T,
+	input testbackupruntime.BackupCheckpointInput,
+	sequence uint64,
+	precedingRevision int64,
+	run testbackupruntime.BackupRunRecord,
+	source testbackupruntime.BackupRunSourceAttemptRecord,
+) testbackupruntime.BackupCheckpointInput {
+	t.Helper()
+	request := proto.CloneOf(input.Request)
+	request.CheckpointSequence = sequence
+	request.PrecedingCheckpoint = &agentpb.CheckpointFence{
+		AuthorityDigest:      append([]byte(nil), request.AuthorityDigest...),
+		DedupeKeyModRevision: precedingRevision,
+	}
+	request.Checkpoint = &agentpb.BackupCheckpointRequest_UploadVerified{
+		UploadVerified: &agentpb.BackupUploadVerified{
+			PointId: source.RecoveryPointID, Evidence: backupCheckpointEvidence(t, source.Evidence),
+			MetadataCount: 11, MetadataSha256: append([]byte(nil), request.AuthorityDigest...),
+			Object: backupCheckpointPruneObject(run, source.RecoveryPointID),
+		},
+	}
+	input.Sequence = sequence
+	input.PrecedingCheckpointRevision = precedingRevision
+	input.Request = request
+	return input
 }
 
 func createBackupRuntimeOrphanForReadTest(
@@ -184,13 +424,8 @@ func createBackupRuntimeOrphanForReadTest(
 	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 	orphaned.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
-	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := testbackupruntime.BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
-		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
-	}
+	orphan := testbackupruntime.BackupOrphanRecordFromRun(orphaned, 0)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	if _, err := repository.CreateBackupOrphan(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint),
 		stagedVersion, orphaned, 0, orphan,
@@ -198,6 +433,55 @@ func createBackupRuntimeOrphanForReadTest(
 		t.Fatalf("CreateBackupOrphan() error = %v", err)
 	}
 	return repository, store, orphan
+}
+
+// These reconciliation tests start after acknowledged stage cleanup. This fixture
+// seeds that durable boundary; it does not exercise the Agent cleanup handshake.
+func seedBackupOrphanAcknowledgedCleanup(t *testing.T, store *memoryHierarchyStore,
+	current testkeyvalue.Versioned[testbackupruntime.BackupOrphanRecord],
+) testkeyvalue.Versioned[testbackupruntime.BackupOrphanRecord] {
+	t.Helper()
+	next := current.Record
+	next.CleanupProof = testbackupruntime.BackupOrphanCleanupProof{
+		TaskID: next.TaskID, TaskRevision: current.Revision,
+		StepID:            ids.NewAt(ids.KindStep, next.CreatedAt, 303),
+		RecoveryKeySHA256: testBackupDigest,
+		AgentID:           ids.NewAt(ids.KindAgent, next.CreatedAt, 304), AgentGeneration: 1,
+		DeliveryRevision: current.Revision + 1, DeliverySHA256: testBackupDigest, Disposition: "absent",
+	}
+	next.UpdatedAt = next.UpdatedAt.Add(time.Millisecond)
+	value, err := testbackupruntime.EncodeBackupOrphanRecord(next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(value)
+	connectorIndex, err := testbackupruntime.BackupOrphanConnectorIndexKey(next.Target.ConnectorID, next.Target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environmentIndex, err := testbackupruntime.BackupOrphanEnvironmentIndexKey(
+		next.Target.EnvironmentID,
+		next.Target.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := []string{testbackupruntime.BackupOrphanKey(next.Target.ID), connectorIndex, environmentIndex}
+	conditions := make([]testkeyvalue.Condition, len(keys))
+	for i, key := range keys {
+		conditions[i] = testkeyvalue.Condition{Key: key, ModRevision: current.Revision}
+	}
+	result, err := store.Transact(context.Background(), conditions, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: keys[0], Value: value},
+		{Type: testkeyvalue.MutationPut, Key: keys[1], Value: []byte(next.Target.ID)},
+		{Type: testkeyvalue.MutationPut, Key: keys[2], Value: []byte(next.Target.ID)},
+	})
+	if err != nil || !result.Succeeded {
+		t.Fatalf("seed acknowledged orphan cleanup = %#v, %v", result, err)
+	}
+	return testkeyvalue.Versioned[testbackupruntime.BackupOrphanRecord]{
+		Record: next, Revision: result.Revision, ReadRevision: result.Revision,
+	}
 }
 
 func (repository *BackupRuntimeRepository) replaceBackupRunForTest(

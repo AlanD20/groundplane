@@ -15,8 +15,11 @@ func ChangedBackupSourceOrdinal(current BackupRunRecord, next BackupRunRecord) (
 			if TerminalBackupRunState(next.State) && index > changed &&
 				current.Sources[index].State == BackupSourceAttemptPending &&
 				next.Sources[index].State == BackupSourceAttemptUnstarted &&
-				current.Sources[index].SizeBytes == next.Sources[index].SizeBytes &&
-				current.Sources[index].SHA256 == next.Sources[index].SHA256 &&
+				current.Sources[index].Evidence == next.Sources[index].Evidence &&
+				current.Sources[index].ConfigArchive == next.Sources[index].ConfigArchive &&
+				current.Sources[index].VolumeArchive == next.Sources[index].VolumeArchive &&
+				current.Sources[index].Upload == next.Sources[index].Upload &&
+				current.Sources[index].Object == next.Sources[index].Object &&
 				current.Sources[index].FailureCode == "" && next.Sources[index].FailureCode == "" {
 				continue
 			}

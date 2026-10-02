@@ -2451,6 +2451,17 @@ type ReleaseTaskAccepted struct {
 	TaskId      string  `json:"task_id"`
 }
 
+// RestoreRequest defines model for RestoreRequest.
+type RestoreRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RestoreRequest.json
+	Schema          *string `json:"$schema,omitempty"`
+	AgeIdentity     *string `json:"age_identity,omitempty"`
+	RecoveryPointId *string `json:"recovery_point_id,omitempty"`
+	SourceId        string  `json:"source_id"`
+}
+
 // RollbackRequest defines model for RollbackRequest.
 type RollbackRequest struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -3415,6 +3426,11 @@ type EnvironmentRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// BackupRestoreParams defines parameters for BackupRestore.
+type BackupRestoreParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // BackupKeyRotateParams defines parameters for BackupKeyRotate.
 type BackupKeyRotateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -3823,6 +3839,9 @@ type BlueprintValidateMultipartRequestBody = BlueprintValidateMultipartBody
 
 // EnvironmentRenameJSONRequestBody defines body for EnvironmentRename for application/json ContentType.
 type EnvironmentRenameJSONRequestBody = EnvironmentRename
+
+// BackupRestoreJSONRequestBody defines body for BackupRestore for application/json ContentType.
+type BackupRestoreJSONRequestBody = RestoreRequest
 
 // EtcdConfigSetJSONRequestBody defines body for EtcdConfigSet for application/json ContentType.
 type EtcdConfigSetJSONRequestBody = EtcdConfigReplacement
@@ -5545,6 +5564,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
 	EnvironmentRename(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupRestoreWithBody Restore the selected Recovery Point to its original target
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
+	BackupRestoreWithBody(ctx context.Context, id string, params *BackupRestoreParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupRestore Restore the selected Recovery Point to its original target
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
+	BackupRestore(ctx context.Context, id string, params *BackupRestoreParams, body BackupRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackupKeyRotate Rotate the Environment backup age key
 	//
@@ -7343,6 +7376,40 @@ func (c *Client) EnvironmentRenameWithBody(ctx context.Context, id string, param
 // Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
 func (c *Client) EnvironmentRename(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEnvironmentRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupRestoreWithBody Restore the selected Recovery Point to its original target
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
+func (c *Client) BackupRestoreWithBody(ctx context.Context, id string, params *BackupRestoreParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupRestoreRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupRestore Restore the selected Recovery Point to its original target
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
+func (c *Client) BackupRestore(ctx context.Context, id string, params *BackupRestoreParams, body BackupRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupRestoreRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12011,6 +12078,66 @@ func NewEnvironmentRenameRequestWithBody(server string, id string, params *Envir
 	}
 
 	operationPath := fmt.Sprintf("/environments/%s/rename", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewBackupRestoreRequest calls the generic BackupRestore builder with application/json body
+func NewBackupRestoreRequest(server string, id string, params *BackupRestoreParams, body BackupRestoreJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackupRestoreRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewBackupRestoreRequestWithBody constructs an http.Request for the BackupRestore method, with any body, and a specified content type
+func NewBackupRestoreRequestWithBody(server string, id string, params *BackupRestoreParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/restore", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -16947,6 +17074,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
 	EnvironmentRenameWithResponse(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentRenameResponse, error)
 
+	// BackupRestoreWithBodyWithResponse Restore the selected Recovery Point to its original target
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
+	BackupRestoreWithBodyWithResponse(ctx context.Context, id string, params *BackupRestoreParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupRestoreResponse, error)
+
+	// BackupRestoreWithResponse Restore the selected Recovery Point to its original target
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
+	BackupRestoreWithResponse(ctx context.Context, id string, params *BackupRestoreParams, body BackupRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupRestoreResponse, error)
+
 	// BackupKeyRotateWithResponse Rotate the Environment backup age key
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -20531,6 +20672,61 @@ func (r EnvironmentRenameResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EnvironmentRenameResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackupRestoreResponse202Headers the declared response headers of an HTTP 202 response for BackupRestore
+type BackupRestoreResponse202Headers struct {
+	ContentType *string
+}
+
+type BackupRestoreResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BackupRestoreResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackupRestoreResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupRestoreResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupRestoreResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupRestoreResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupRestoreResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupRestoreResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -25616,6 +25812,32 @@ func (c *ClientWithResponses) EnvironmentRenameWithResponse(ctx context.Context,
 	return ParseEnvironmentRenameResponse(rsp)
 }
 
+// BackupRestoreWithBodyWithResponse Restore the selected Recovery Point to its original target
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
+func (c *ClientWithResponses) BackupRestoreWithBodyWithResponse(ctx context.Context, id string, params *BackupRestoreParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupRestoreResponse, error) {
+	rsp, err := c.BackupRestoreWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupRestoreResponse(rsp)
+}
+
+// BackupRestoreWithResponse Restore the selected Recovery Point to its original target
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
+func (c *ClientWithResponses) BackupRestoreWithResponse(ctx context.Context, id string, params *BackupRestoreParams, body BackupRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupRestoreResponse, error) {
+	rsp, err := c.BackupRestore(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupRestoreResponse(rsp)
+}
+
 // BackupKeyRotateWithResponse Rotate the Environment backup age key
 //
 // Returns a wrapper object for the known response body format(s).
@@ -29209,6 +29431,52 @@ func ParseEnvironmentRenameResponse(rsp *http.Response) (*EnvironmentRenameRespo
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackupRestoreResponse parses an HTTP response from a BackupRestoreWithResponse call
+func ParseBackupRestoreResponse(rsp *http.Response) (*BackupRestoreResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupRestoreResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers BackupRestoreResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

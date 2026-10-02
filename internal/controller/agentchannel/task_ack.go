@@ -38,6 +38,15 @@ func (s *Server) acknowledge(
 	if err != nil {
 		return taskReportRejected, err
 	}
+	backupTask := task.Record.Type == taskjournal.TaskBackup || task.Record.Type == taskjournal.TaskBackupPrune ||
+		task.Record.Type == taskjournal.TaskRestore
+	if backupTask != (acknowledgement.GetBackupResult() != nil) ||
+		backupTask != (acknowledgement.AssignmentGeneration > 0) {
+		return taskReportRejected, errs.New(
+			errs.KindValidationFailed,
+			"Agent Task result does not match its execution family",
+		)
+	}
 	if assignments, ok := s.tasks.(interface {
 		GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
 	}); ok {
@@ -53,6 +62,14 @@ func (s *Server) acknowledge(
 			)
 		}
 		if terminalReplay {
+			if backupTask &&
+				(task.Record.TerminalAssignment.AssignmentGeneration != acknowledgement.AssignmentGeneration ||
+					task.Record.Result.AssignmentGeneration != acknowledgement.AssignmentGeneration) {
+				return taskReportRejected, errs.New(
+					errs.KindStateConflict,
+					"Agent terminal backup assignment generation changed",
+				)
+			}
 			if task.Record.Result.ExecutionEpoch != acknowledgement.GetExecutionEpoch() ||
 				task.Record.Result.ReleaseRecoveryRecordSHA256 != hex.EncodeToString(
 					acknowledgement.GetReleaseRecoveryRecordSha256(),
@@ -63,6 +80,10 @@ func (s *Server) acknowledge(
 				)
 			}
 		} else {
+			if backupTask && (assignment.Assignment.Record.BackupAuthorityFence == nil ||
+				assignment.Assignment.Record.BackupAuthorityFence.AssignmentGeneration != acknowledgement.AssignmentGeneration) {
+				return taskReportRejected, errs.New(errs.KindStateConflict, "Agent backup assignment generation changed")
+			}
 			recoveryDigest, decodeErr := hex.DecodeString(assignment.Assignment.Record.ReleaseRecoveryRecordSHA256)
 			oldPrimaryReplay := assignment.Assignment.Record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly &&
 				acknowledgement.GetExecutionEpoch() < assignment.Assignment.Record.ExecutionEpoch &&
@@ -91,7 +112,11 @@ func (s *Server) acknowledge(
 		return taskReportRejected, err
 	}
 	environmentDirectory := executionplan.UsesEnvironmentDirectoryResult(plan)
-	if environmentDirectory {
+	if backupTask {
+		if err := validateBackupTaskResult(acknowledgement); err != nil {
+			return taskReportRejected, err
+		}
+	} else if environmentDirectory {
 		if err := validateEnvironmentDirectoryTaskResult(acknowledgement); err != nil {
 			return taskReportRejected, err
 		}
@@ -145,6 +170,9 @@ func (s *Server) acknowledge(
 		)
 	} else {
 		result := durableComposeTaskResult(acknowledgement)
+		if backupTask {
+			result = durableBackupTaskResult(acknowledgement)
+		}
 		result.ExecutionEpoch = acknowledgement.GetExecutionEpoch()
 		result.ReleaseRecoveryRecordSHA256 = hex.EncodeToString(acknowledgement.GetReleaseRecoveryRecordSha256())
 		if environmentDirectory {

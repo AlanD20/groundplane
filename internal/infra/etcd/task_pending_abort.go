@@ -36,8 +36,9 @@ func (repository *TaskRepository) AbortPendingTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		if current.Record.Type == taskjournal.TaskBackup || current.Record.Type == taskjournal.TaskBackupPrune {
-			return repository.abortPendingBackupTask(ctx, taskID, terminalAt)
+		if current.Record.Type == taskjournal.TaskBackup || current.Record.Type == taskjournal.TaskBackupPrune ||
+			current.Record.Type == taskjournal.TaskRestore {
+			return repository.terminalizePendingBackupTask(ctx, taskID, taskjournal.TaskStatusAborted, terminalAt)
 		}
 		environmentCreation := current.Record.Executor == taskjournal.TaskExecutorAgent &&
 			current.Record.Type == taskjournal.TaskCreate &&

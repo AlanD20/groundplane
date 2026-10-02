@@ -28,11 +28,11 @@ func TestBackupSecretResolverResolvesMixedDirectAndReferencedCredentials(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver, err := NewBackupSecretResolver(reader, protector)
+	resolver, err := NewBackupSecretResolver(t.Context(), reader, protector)
 	if err != nil {
 		t.Fatal(err)
 	}
-	slots, err := resolver.ResolveBackupSecretSlots(context.Background(), backupsecret.Request{})
+	slots, err := resolver.ResolveBackupSecretSlots(context.Background(), mixedBackupSecretRequest())
 	if err != nil {
 		t.Fatalf("resolve backup secret slots: %v", err)
 	}
@@ -69,12 +69,12 @@ func TestBackupSecretResolverClearsPartialMixedResolution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver, err := NewBackupSecretResolver(reader, protector)
+	resolver, err := NewBackupSecretResolver(t.Context(), reader, protector)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if slots, err := resolver.ResolveBackupSecretSlots(
-		context.Background(), backupsecret.Request{},
+		context.Background(), mixedBackupSecretRequest(),
 	); err == nil || slots != nil {
 		t.Fatalf("resolve backup secret slots = %#v, %v", slots, err)
 	}
@@ -117,6 +117,16 @@ func (crypt *observingBackupSecretCrypt) Open(_ context.Context, value []byte) (
 		return plaintext, errors.New("injected open failure")
 	}
 	return plaintext, nil
+}
+
+func mixedBackupSecretRequest() backupsecret.Request {
+	return backupsecret.Request{Step: &agentpb.ExecutionStep{
+		Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: &agentpb.BackupStepAuthority{
+			Operation: &agentpb.BackupStepAuthority_Capture{Capture: &agentpb.BackupCaptureAuthority{
+				Encryption: &agentpb.BackupEncryptionAuthority{Kind: agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE},
+			}},
+		}},
+	}}
 }
 
 func mixedBackupSecretEvidence() testbackupsecrets.Evidence {

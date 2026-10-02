@@ -29,6 +29,7 @@ func TestBackupTerminalReceiptWorstPruneRecordFitsDurableBound(t *testing.T) {
 		point.CreatedAt = assigned.Record.Point.CreatedAt.Add(time.Duration(index) * time.Millisecond)
 		point.ObjectKey = "production/" + point.EnvironmentID + "/" + point.SourceID + "/" +
 			point.ID + "/artifact.bin"
+		point.Object.Target.ObjectKey = point.ObjectKey
 		dispatch.RecoveryPointIDs[index] = point.ID
 		prune := assigned.Record
 		prune.Point = point

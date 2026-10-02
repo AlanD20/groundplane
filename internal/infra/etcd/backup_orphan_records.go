@@ -15,6 +15,12 @@ func (repository *BackupRuntimeRepository) CreateBackupOrphan(
 	ordinal uint32,
 	orphan backupruntime.BackupOrphanRecord,
 ) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
+	orphan.Reconciliation = backupruntime.BackupOrphanReconciliationAuthority{
+		OperationID:    next.OperationID,
+		PolicyRevision: next.PolicyRevision,
+		PolicySHA256:   next.PolicySHA256,
+		RetentionKeep:  next.RetentionKeep,
+	}
 	changedOrdinal, changed := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 	if int(ordinal) >= len(current.Record.Sources) || !changed || changedOrdinal != ordinal ||
 		backupruntime.ValidateBackupRunTransition(
@@ -22,47 +28,42 @@ func (repository *BackupRuntimeRepository) CreateBackupOrphan(
 			next,
 			backupruntime.BackupRunTransitionOrphanCreate,
 		) != nil ||
-		!backupruntime.BackupPointMatchesRunSource(orphan.Point, next, ordinal) || orphan.TaskID != next.TaskID ||
+		!backupruntime.BackupOrphanMatchesRunSource(orphan, next, ordinal) || orphan.TaskID != next.TaskID ||
 		orphan.State != backupruntime.BackupOrphanInspect {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan creation is invalid",
 		)
 	}
-	orphan.Reconciliation = backupruntime.BackupOrphanReconciliationAuthority{
-		OperationID:    next.OperationID,
-		PolicyRevision: next.PolicyRevision,
-		RetentionKeep:  next.RetentionKeep,
-	}
 	value, err := backupruntime.EncodeBackupOrphanRecord(orphan)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	defer clear(value)
-	connectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(orphan.Point.ConnectorID, orphan.Point.ID)
+	connectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(orphan.Target.ConnectorID, orphan.Target.ID)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	environmentIndex, err := backupruntime.BackupOrphanEnvironmentIndexKey(
-		orphan.Point.EnvironmentID,
-		orphan.Point.ID,
+		orphan.Target.EnvironmentID,
+		orphan.Target.ID,
 	)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: backupruntime.BackupOrphanKey(orphan.Point.ID)},
+		{Key: backupruntime.BackupOrphanKey(orphan.Target.ID)},
 		{Key: connectorIndex},
 		{Key: environmentIndex},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: backupruntime.BackupOrphanKey(orphan.Point.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupOrphanKey(orphan.Target.ID), Value: value},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   connectorIndex,
-			Value: []byte(orphan.Point.ID),
+			Value: []byte(orphan.Target.ID),
 		},
-		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(orphan.Point.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(orphan.Target.ID)},
 	}
 	return repository.replaceBackupRun(
 		ctx,

@@ -71,7 +71,13 @@ func TestBackupSecretResolutionRejectsConnectorPlanMismatch(t *testing.T) {
 	fixture := newBackupSecretFixture(t, false)
 	mutated := proto.Clone(fixture.Request.Plan).(*agentpb.ExecutionPlan)
 	mutated.PlanHash = nil
-	mutated.Steps[0].GetBackupSourceCapture().ConnectorRevision++
+	mutated.Steps[0].GetBackupStep().GetCapture().Target.Connector.Connector.ModRevision++
+	mutated.Steps[0].GetBackupStep().StepDigest = nil
+	step, err := executionplan.SealBackupStepAuthority(mutated.Steps[0].GetBackupStep())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutated.Steps[0].Payload = &agentpb.ExecutionStep_BackupStep{BackupStep: step}
 	sealed, err := executionplan.Seal(mutated)
 	if err != nil {
 		t.Fatal(err)
@@ -158,9 +164,9 @@ func TestBackupSecretResolutionRejectsDirectEnvelopeRevisionMutation(t *testing.
 	}
 }
 
-// Rationale: ADR0045 defines project-first lookup with platform fallback, so a
-// finalizing project candidate is hidden and the valid platform value wins.
-func TestBackupSecretResolutionSkipsDeletingProjectSecretForPlatformFallback(t *testing.T) {
+// Rationale: after publication, deletion of the sealed project credential must
+// fail closed rather than silently substituting a different platform value.
+func TestBackupSecretResolutionRejectsFallbackAfterPinnedSecretDeletion(t *testing.T) {
 	fixture := base.NewBackupSecretDeletingProjectFallbackFixture(t)
 	reader, err := testbackupsecrets.NewReader(fixture.Store)
 	if err != nil {
@@ -168,23 +174,9 @@ func TestBackupSecretResolutionSkipsDeletingProjectSecretForPlatformFallback(t *
 	}
 	evidence, err := reader.ResolveBackupSecretEvidence(context.Background(), fixture.Request)
 	defer evidence.Clear()
-	if err != nil {
-		t.Fatalf("deleting project Secret blocked valid platform fallback: %v", err)
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("pinned credential deletion = %v, want state conflict", err)
 	}
-	for _, value := range evidence.SecretValues {
-		if value.Name != backupsecret.CredentialAccessKey {
-			continue
-		}
-		if value.Value.SecretID != fixture.PlatformAccessSecretID {
-			t.Fatalf(
-				"access Secret = %q, want platform %q",
-				value.Value.SecretID,
-				fixture.PlatformAccessSecretID,
-			)
-		}
-		return
-	}
-	t.Fatal("platform access Secret was not resolved")
 }
 
 // Rationale: prune resolution must revalidate the historical pending authority,

@@ -349,6 +349,23 @@ func writeCheckpointBool(target *bytes.Buffer, value bool) {
 	target.WriteByte(0)
 }
 
+func writeCheckpointString(target *bytes.Buffer, value string) {
+	writeCheckpointUint32(target, uint32(len(value)))
+	target.WriteString(value)
+}
+
+func writeCheckpointUint32(target *bytes.Buffer, value uint32) {
+	var encoded [4]byte
+	binary.BigEndian.PutUint32(encoded[:], value)
+	target.Write(encoded[:])
+}
+
+func writeCheckpointUint64(target *bytes.Buffer, value uint64) {
+	var encoded [8]byte
+	binary.BigEndian.PutUint64(encoded[:], value)
+	target.Write(encoded[:])
+}
+
 func writeCheckpointInt32(target *bytes.Buffer, value int32) {
 	var encoded [4]byte
 	binary.BigEndian.PutUint32(encoded[:], uint32(value))

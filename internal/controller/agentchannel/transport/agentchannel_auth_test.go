@@ -63,7 +63,8 @@ func TestAgentChannelAuthenticatorTranslatesDurableAuthorization(t *testing.T) {
 	}
 	if authorization.Generation != 7 || authorization.Config.PullIntervalSeconds != 3 ||
 		authorization.Config.MaxConcurrentTasks != 2 ||
-		authorization.Config.Labels["role"] != "local" {
+		len(authorization.Config.Labels) != 1 || authorization.Config.Labels[0].Key != "role" ||
+		authorization.Config.Labels[0].Value != "local" {
 		t.Fatalf("Authenticate() = %#v", authorization)
 	}
 	if resolver.agentID != resolver.authorization.AgentID ||

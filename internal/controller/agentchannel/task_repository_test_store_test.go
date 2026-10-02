@@ -20,6 +20,7 @@ import (
 )
 
 type blockingClaimTaskStore struct {
+	channelStartupStore
 	repository *etcd.TaskRepository
 	entered    chan<- struct{}
 	release    <-chan struct{}
@@ -150,7 +151,7 @@ type channelMemoryStore struct {
 }
 
 func newChannelMemoryStore() *channelMemoryStore {
-	return &channelMemoryStore{values: make(map[string]testkeyvalue.KeyValue)}
+	return &channelMemoryStore{revision: 1, values: make(map[string]testkeyvalue.KeyValue)}
 }
 
 func (store *channelMemoryStore) Health(context.Context) error { return nil }

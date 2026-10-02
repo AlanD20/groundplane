@@ -43,12 +43,14 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	if current.Task.Revision <= 0 || current.Assignment.Revision <= 0 ||
 		current.Task.ReadRevision <= 0 || current.Assignment.ReadRevision <= 0 ||
 		current.Task.ReadRevision != current.Assignment.ReadRevision ||
-		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune) ||
+		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune && task.Type != taskjournal.TaskRestore) ||
 		task.Owner.EnvironmentID == "" || task.Target != task.Owner.EnvironmentID ||
 		task.Executor != taskjournal.TaskExecutorAgent || task.Status != taskjournal.TaskStatusRunning ||
 		assignment.Executor != taskjournal.TaskExecutorAgent || assignment.TaskID != task.ID ||
 		assignment.TaskID != current.Task.Record.ID ||
 		assignment.ClaimedTaskRevision >= current.Assignment.Revision ||
+		assignment.BackupAuthorityFence == nil || result.Kind != taskjournal.TaskResultBackup ||
+		result.AssignmentGeneration != assignment.BackupAuthorityFence.AssignmentGeneration ||
 		!taskjournal.IsTerminalTaskStatus(terminalStatus) ||
 		taskjournal.ValidateTaskResult(result, task.Steps, terminalStatus) != nil {
 		return backupTaskTerminalPlan{}, errs.New(
@@ -68,6 +70,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	terminal.TerminalAssignment = &taskjournal.TaskTerminalAssignmentRecord{
 		AssignmentID: assignment.AssignmentID,
 		AgentID:      assignment.AgentID, AgentGeneration: assignment.AgentGeneration,
+		AssignmentGeneration: assignment.BackupAuthorityFence.AssignmentGeneration,
 	}
 	if err := ValidateTaskRecord(terminal); err != nil {
 		return backupTaskTerminalPlan{}, err
@@ -122,9 +125,15 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	}
 	storedTask, taskErr := DecodeTaskRecord(anchor.Values[0].Value)
 	storedAssignment, assignmentErr := taskassignments.DecodeTaskAssignment(anchor.Values[1].Value)
+	expectedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
+	if encodeErr != nil {
+		return backupTaskTerminalPlan{}, encodeErr
+	}
+	defer clear(expectedAssignmentValue)
 	if taskErr != nil || assignmentErr != nil || !bytes.Equal(anchor.Values[0].Value, currentTaskValue) ||
 		storedTask.ID != task.ID ||
-		storedAssignment != assignment ||
+		storedAssignment.AssignmentID != assignment.AssignmentID ||
+		!bytes.Equal(anchor.Values[1].Value, expectedAssignmentValue) ||
 		!bytes.Equal(anchor.Values[1].Value, anchor.Values[2].Value) ||
 		!bytes.Equal(anchor.Values[1].Value, anchor.Values[8].Value) {
 		return backupTaskTerminalPlan{}, errs.New(
@@ -173,5 +182,24 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 		{Type: etcdstore.MutationPut, Key: keys[7], Value: append([]byte(nil), taskRetentionValue...)},
 		{Type: etcdstore.MutationDelete, Key: keys[8]},
 	}
+	deliveryReceipt, err := taskTerminalDeliveryReceipt(terminal)
+	if err != nil {
+		etcdstore.ClearMutationValues(mutations)
+		return backupTaskTerminalPlan{}, err
+	}
+	deliveryValue, err := taskjournal.EncodeTaskTerminalReceipt(deliveryReceipt)
+	if err != nil {
+		etcdstore.ClearMutationValues(mutations)
+		return backupTaskTerminalPlan{}, err
+	}
+	// The existing running Task compare serializes this immutable receipt writer.
+	mutations = append(
+		mutations,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskTerminalReceiptKey(task.ID),
+			Value: deliveryValue,
+		},
+	)
 	return backupTaskTerminalPlan{conditions: conditions, mutations: mutations, record: terminal}, nil
 }

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backingpostgresrelease "github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -112,6 +113,20 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		return errs.New(errs.KindValidationFailed, "Backing-service adapter Service is invalid")
 	}
 	customCreation := creation.Service.Desired.Adapter == "custom"
+	if creation.Service.Desired.Adapter == "postgres:16" {
+		if creation.PostgresRelease == nil ||
+			backingpostgresrelease.Validate(*creation.PostgresRelease) != nil ||
+			creation.PostgresRelease.EnvironmentID != creation.Environment.ID ||
+			creation.PostgresRelease.ServiceID != creation.Service.Desired.ID ||
+			creation.PostgresRelease.Release.Image != creation.Service.Desired.Image {
+			return errs.New(
+				errs.KindValidationFailed,
+				"managed PostgreSQL creation release does not match Backing Service",
+			)
+		}
+	} else if creation.PostgresRelease != nil {
+		return errs.New(errs.KindValidationFailed, "non-PostgreSQL Backing cannot publish a managed release")
+	}
 	if err := validateBackingServiceAdapterCreationShape(creation.Service.Desired, customCreation); err != nil {
 		return err
 	}

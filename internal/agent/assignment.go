@@ -26,6 +26,8 @@ type TaskResult struct {
 	ReleaseRecoveryRecordSHA256 []byte
 	Compose                     *agentpb.ComposeTaskResult
 	EnvironmentDirectory        *agentpb.EnvironmentDirectoryTaskResult
+	Backup                      *agentpb.BackupTaskResult
+	AssignmentGeneration        uint64
 }
 
 type TaskProgressState uint8

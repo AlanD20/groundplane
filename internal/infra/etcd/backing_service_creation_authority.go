@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	backingpostgresrelease "github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -96,6 +97,11 @@ func backingServiceCreationConditions(
 			etcdstore.Condition{Key: secretrecord.ValueKey(secret.Secret.ID)},
 			etcdstore.Condition{Key: deletions.TombstoneKey("secret", secret.Secret.ID)},
 		)
+	}
+	if creation.PostgresRelease != nil {
+		conditions = append(conditions, etcdstore.Condition{
+			Key: backingpostgresrelease.Key(creation.Environment.ID, creation.Service.Desired.ID),
+		})
 	}
 	return conditions
 }

@@ -40,6 +40,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 		if !assigned {
 			expectedAssignment := taskjournal.TaskTerminalAssignmentRecord{
 				AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
+				AssignmentGeneration: result.AssignmentGeneration,
 			}
 			if err := repository.validateBackupTaskTerminalReplay(
 				ctx, current.Task, terminalStatus, &result, &expectedAssignment,
@@ -57,6 +58,14 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 		var mutations []etcdstore.Mutation
 		var terminal TaskRecord
 		switch current.Task.Record.Type {
+		case taskjournal.TaskRestore:
+			if terminalStatus == taskjournal.TaskStatusCompleted {
+				terminal, conditions, mutations, err = repository.prepareConfigRestoreSuccessfulTerminal(
+					ctx, runtime, current, result, effectiveAt)
+			} else {
+				terminal, conditions, mutations, err = repository.prepareConfigRestoreFailure(
+					ctx, runtime, current, terminalStatus, result, effectiveAt)
+			}
 		case taskjournal.TaskBackup:
 			run, getErr := runtime.GetBackupRun(ctx, taskID)
 			if getErr != nil {
@@ -64,6 +73,15 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			}
 			if err := ValidateBackupRunTaskBinding(current.Task.Record, run.Record); err != nil {
 				return etcdstore.Versioned[TaskRecord]{}, err
+			}
+			if terminalStatus == taskjournal.TaskStatusCompleted {
+				if err := taskjournal.ValidateTaskResult(result, current.Task.Record.Steps, terminalStatus); err != nil {
+					return etcdstore.Versioned[TaskRecord]{}, err
+				}
+				run, err = runtime.finalizeBackupCaptures(ctx, current, run)
+				if err != nil {
+					return etcdstore.Versioned[TaskRecord]{}, err
+				}
 			}
 			effectiveAt = backupTerminalTimestamp(effectiveAt, run.Record.UpdatedAt)
 			next, transitionErr := backupRunForTaskTerminal(run.Record, terminalStatus, effectiveAt)
@@ -188,7 +206,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 	defer etcdstore.ClearValues(read.Values)
 	task, err := DecodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorAgent ||
-		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune) {
+		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune && task.Type != taskjournal.TaskRestore) {
 		return TaskAssignment{}, false, errs.New(errs.KindInternal, "backup Task assignment is corrupt")
 	}
 	current := TaskAssignment{Task: etcdstore.Versioned[TaskRecord]{
@@ -213,7 +231,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 		assignment.AgentGeneration != agentGeneration || assignment.ClaimedTaskRevision >= read.Values[1].ModRevision ||
 		task.Status != taskjournal.TaskStatusRunning || task.StartedAt == nil ||
 		!task.StartedAt.Equal(assignment.AssignedAt) ||
-		!assignment.Deadline.Equal(assignment.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
+		!assignment.Deadline.Equal(TaskForwardDeadline(task, assignment.AssignedAt)) ||
 		read.Values[0].ModRevision < read.Values[1].ModRevision || task.idempotencyMarker == nil {
 		return TaskAssignment{}, false, errs.New(
 			errs.KindStateConflict,
@@ -355,8 +373,9 @@ func backupRunForTaskTerminal(
 	for index := boundary + 1; index < len(next.Sources); index++ {
 		next.Sources[index].State = backupruntime.BackupSourceAttemptUnstarted
 		next.Sources[index].Phase = backupruntime.BackupSourcePhaseCapture
-		next.Sources[index].SizeBytes = 0
-		next.Sources[index].SHA256 = ""
+		next.Sources[index].Evidence = backupruntime.BackupArtifactEvidence{}
+		next.Sources[index].Upload = backupruntime.BackupUploadOutcome{}
+		next.Sources[index].Object = backupruntime.BackupObjectIdentity{}
 		next.Sources[index].FailureCode = ""
 	}
 	return next, nil

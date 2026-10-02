@@ -46,6 +46,42 @@ generation. Publication replaces the whole set. Once the first publication
 mutation is acknowledged, recovery rolls forward from the durable generation
 and never restarts the restore from scratch.
 
+The Restore Task seals the Recovery Point's complete archive evidence and one
+Controller-allocated Entry/render generation. Download cannot select a newer
+object, and reconnect cannot invent another generation. The Task also pins the
+predecessor desired revision and head revision: restored configuration must not
+be rebuilt against later Environment edits. Selected values first enter immutable
+Entry generations with native receipts; replay verifies the retained ciphertext,
+not a freshly sealed replacement. The extra private
+validation copy uses an unlinked file charged to the same bounded staging lease;
+it must not bypass capacity admission through an ambient temporary directory.
+Capture and Restore share one Config transfer owner. Restore grants credit at
+completed Entries so authenticated readers can advance only after durable
+acceptance, without waiting on a window that requires the next Entry to fill it.
+Controller restore staging protects every received frame, including metadata
+and value hashes, with its existing key. A batch and its native credit commit
+together; an uncertain write cannot grant more input or select new ciphertext.
+The final grant follows a durable complete-generation seal. Live publication
+uses that sealed input, not an acknowledged prefix or current Secret values.
+
+The sealed predecessor also identifies managed file destinations and surviving
+Services. The archive selects the replacement content; the predecessor authorizes
+removal of files no longer selected. Both sides use the same dotenv encoder and
+file-plan owner. Before live publication, the Controller computes the expected
+file proof from the staged immutable values. The Agent writes those files through
+the ordinary descriptor-confined helper, then independently verifies every output
+and removal before reporting the matching proof. This updates managed files, not
+the environment already loaded by running processes.
+
+File verification and source cleanup are separate acknowledgements. The Agent
+closes its private validation spool and removes the exact source stage before
+acknowledging cleanup; only then can it retire the transfer journal. Startup may
+discard an interrupted download before archive validation, resume the exact full
+representations after validation, or finish cleanup after acknowledged file
+verification. None of these dispositions permits selecting a newer object or
+reapplying files after cleanup. Admission and terminal recovery must be connected
+before this path is operationally available.
+
 Volume archives represent a descriptor-confined tree containing only
 directories and regular files. Mount crossings, links, devices, sockets,
 special files, unsafe paths, metadata outside the supported set, and tree
@@ -63,6 +99,17 @@ ACLs. Once restore-apply start is acknowledged, the attempt is spent: exact
 input, terminal, reap, Exec inspection, and post-restore proof are required;
 missing or contradictory proof is recovery-required and never authorizes a
 second apply.
+
+Capture resume retains the original prepared archive alongside later upload
+progress. Otherwise an acknowledged upload would erase the metadata needed to
+authenticate the retained source. Unknown-size capture reserves storage as it
+writes; a format maximum is not a prediction of the required disk space.
+
+An interrupted PostgreSQL dump before preparation may resume only its original
+retained bytes. The worker must match them to the original Docker Exec and
+helper output evidence, then validate the archive. Incomplete bytes fail the
+attempt rather than launching another dump. Before preparation, derived
+ciphertext may be discarded and regenerated; after preparation it is fixed.
 
 ## Agent restart and delivery fail closed
 
@@ -92,6 +139,17 @@ acknowledging it and becoming Ready. Silence is not discard authority. Any
 stage that may contain an unclassified irreversible mutation blocks Ready
 until it is resumed, safely retired, or declared recovery-required.
 
+An unacknowledged plan may be superseded when native Task state changes, such
+as a timeout during inspection. The replacement names the previous plan's digest
+and covers the same inventory. The Agent journals the replacement; an old
+acknowledgement cannot acknowledge the new decision.
+
+A declared recovery-required disposition pins the failed Restore's immutable
+native outcome and exact retained files. The Agent verifies and holds those files
+with no growth, cleanup or worker authority. Unrelated work may become Ready;
+the failed Environment's operation lock and recovery evidence remain protected.
+Declaration is not successful recovery or permission to repeat the destructive step.
+
 Upload intent is checkpointed before `Put`; completion is checkpointed before
 the verifying `Head`; only the Controller publishes the Recovery Point.
 Terminal Task results also use a durable receipt and explicit assignment
@@ -100,16 +158,27 @@ or time passage as proof that terminal delivery is complete.
 
 ## Managed PostgreSQL uses a closed helper and private gate
 
-The supported PostgreSQL source is one release-authenticated, dual-platform
-PostgreSQL 16 image index. The helper, private client gate, rootfs and runtime
-security evidence are part of that release; operators and desired state cannot
-override them. Container and mount attestation prevents any workload mount
+Published releases carry one authenticated, dual-platform PostgreSQL 16 image
+index. A consumer building `--ref` builds only its native architecture and
+publishes that image to the host's managed registry. Both use the same catalog,
+embedded in the Controller, binding the deployment reference to measured native
+image and helper identities. Native source builds do not fabricate an unbuilt
+platform or depend on an earlier published release.
+
+The helper, private client gate, rootfs and runtime security evidence are part
+of that build; operators and desired state cannot override them. Installer
+updates preload the next image without replacing an existing database container.
+Backing creation stores that selected catalog with its immutable native authority.
+Capture and Restore use this retained catalog, so a Controller update cannot
+substitute new helper measurements for an existing database image.
+Container and mount attestation prevents any workload mount
 from shadowing the helper, gate, state directory, clients, socket, or runtime
 identity. Container and host root are trusted boundary actors; database uid 70
 is not trusted with supervisor state.
 
 The shared protocol permits only the fixed probe, dump, restore-list,
-connection-termination, restore-apply, verification, and stop operations. It
+connection-termination, restore-apply, verification, stop, execution-evidence,
+recovery-inventory and evidence-retirement operations. It
 has no shell, arbitrary executable or argument vector, arbitrary SQL,
 password, TCP, filename, ambient environment, or diagnostic mode. A root
 Docker Exec helper validates the request and launches the fixed client through
@@ -126,10 +195,43 @@ release consumption, exec, stream, termination, or reap state retains the
 record and blocks container replacement, upgrade, ordinary Backup work, and
 positive Agent readiness.
 
-This security contract is accepted but not delivered by the presence of shared
-types alone. In particular,
-[`internal/postgres16helper/main.go`](../../internal/postgres16helper/main.go)
-currently fails closed until the supervisor and private-gate runtime exists.
+Execution evidence is selected by the original nonce and canonical request
+digest. It exposes only complete terminal, parent-reap and stream evidence.
+Recovery also requires successful inspection of the original Docker Exec and
+the selected container; reading helper state alone is not completion proof.
+The resumed Restore then verifies the database and continues Service recovery,
+without invoking restore-apply again.
+
+Successful dump and restore evidence is retired after the Controller acknowledges
+source cleanup. A durable retirement marker precedes deletion and survives an
+interrupted cleanup. Fully reaped, stream-complete failed non-RestoreApply
+operations can also be retired without being called successful. Failed RestoreApply
+and ambiguous or unreaped attempts cannot be retired through that path. Absence
+is not execution proof.
+
+The Agent records a private execution marker before invoking a source's helper.
+It survives source-file cleanup and successful individual sources until the
+whole Task is classified. Startup inventories every helper record, including
+probes and archive-list passes. A completed Task only retires its Agent marker:
+its old database may already serve a newer operation. A failed Task's cleanup
+must prove the retained helper namespace safe before releasing its backing lock.
+
+Backup and Restore atomically lock the selected Backing Environments as well as
+the consumer Environment. Lock acquisition advances each backing mutation epoch,
+so competing publications and planners prepared before acquisition cannot cross
+that boundary. Exact lock deletion releases it. Failed Tasks retain every started
+PostgreSQL source's guard, including sources whose file cleanup already succeeded;
+their staging acknowledgement releases those guards atomically after inspection.
+This separates file cleanup from proof that no helper remains active.
+
+The [helper runtime](../../internal/postgres16helper/main.go), private gate and
+Agent execution path are implemented but unqualified. Restart reconciliation and
+successful-evidence retirement are connected for retained running assignments.
+Startup inventory, backing locks and execution-marker retirement are connected
+in source; generated integration and runtime qualification remain outstanding.
+Source implementation does not establish the security contract at runtime.
+Terminal Restore uncertainty remains explicitly recovery-required,
+with no automatic second attempt or new post-terminal assignment.
 
 ## Unimplemented schema-one protocol reference
 
@@ -190,11 +292,11 @@ RevisionDigest {1 mod_revision; 2 sha256}
 CheckpointFence {1 authority_digest; 2 dedupe_key_mod_revision}
 BackupResourceIdentity {1 kind; 2 resource_id; 3 resource}
 BackupEncryptionAuthority {1 kind; 2 secret_slot_id; 3 recipient_sha256;
-  4 secret_slot}
+  4 secret_slot; 5 optional key_era}
 BackupPriorRuntimeIntent {1 kind; 2 intent}
 BackupServiceFact {1 service_id; 2 current_name; 3 service; 4 compose;
   5 prior_runtime_intent; 6 required_label_count;
-  7 required_labels_sha256; 8 repository_digest}
+  7 required_labels_sha256; 8 local_image_id_sha256}
 BackupConnectorAuthority {1 connector_id; 2 connector; 3 canonical_endpoint_url;
   4 region; 5 path_style; 6 prefix; 7 access_key_slot_id;
   8 secret_key_slot_id; 9 access_key_slot; 10 secret_key_slot}
@@ -281,11 +383,21 @@ BackupStagingRecoveryPlan {1 inventory_sha256; 2 dispositions}
 BackupStagingDisposition {1 recovery_key_sha256;
   oneof 2 resume_prepared,3 discard_recovered}
 BackupResumePrepared {1 assignment_resume_sha256; 2 remaining_growth;
-  3 required_growth_bytes; 4 expected_files}
+  3 required_growth_bytes; 4 expected_files; 5 restart_config_encryption}
+BackupRestartConfigEncryption {}
 BackupDiscardRecovered {}
 BackupStagingRecoveryAck {1 inventory_sha256; 2 applied_plan_sha256;
   3 applied_disposition_count}
 ```
+
+Config encryption may restart only before the durable ArtifactPrepared receipt
+has selected ciphertext and authorized upload. The Controller must independently
+verify the complete retained source against the sealed snapshot and confirm
+completed transfer with no Prepared receipt. Its persisted startup disposition
+then retires only the exact derived ciphertext; the source and transfer journal
+remain. Replaying that same disposition accepts already-removed ciphertext,
+not missing source or changed files. After Prepared, reuse and authenticate the
+selected ciphertext; never generate replacement bytes or issue a second Put.
 
 Inventory is bounded to 32 stages in recovery-key order, each with one or two
 unique role-ordered files. The plan contains each key exactly once and repeats
@@ -355,9 +467,6 @@ BackupRestoreArtifactValidated {1 point_id; 2 object; 3 evidence; 4 finals;
 
 BackupConfigCheckpoint {oneof 1 value_progress,2 transfer_completed,
   3 materialization_verified}
-BackupConfigProgress {1 metadata_accepted; 2 metadata_transcript_sha256;
-  3 next_value_ordinal; 4 value_chain_sha256;
-  oneof 10 transfer,11 materialization}
 BackupConfigValueProgress {1 next_ordinal; 2 chain_sha256}
 BackupConfigTransferCompleted {1 restore_generation_id; 2 content;
   3 committed_record_count; 4 value_chain_sha256;
@@ -380,6 +489,11 @@ BackupVolumeProgress {1 construction_cursor; 2 construction_chain_sha256;
 The remaining missing leaf layouts are also fixed. They must be introduced as
 typed protobuf messages in the same cutover, not reconstructed from host state
 or encoded as generic maps.
+
+Config capture omits the restore generation and render generation: it writes an
+archive, not a new live Entry generation. Config restore supplies both from its
+sealed publication authority. Completed transfer proves the sealed content and
+the exact final durable transfer credit in either direction.
 
 ```text
 BackupStagingFinals {1 source_relative_name; 2 stored_relative_name;
@@ -415,8 +529,6 @@ BackupConfigCaptureAuthority {1 environment_id; reserved 2 environment;
   3 content; 4 metadata_snapshot_revision;
   reserved 5 metadata_snapshot_sha256; 6 metadata_entry_count;
   7 metadata_proto_bytes}
-BackupConfigRestoreAuthority {1 destination_environment_id;
-  reserved 2 destination; 3 expected_content}
 BackupConfigMetadataRow {1 authority_digest; 2 metadata_snapshot_sha256;
   3 ordinal; oneof 4 capture_entry,5 restore_entry;
   6 preceding_transfer_chain_sha256; 7 resulting_transfer_chain_sha256}
@@ -541,6 +653,12 @@ and [`internal/infra/etcd/backupplanning`](../../internal/infra/etcd/backupplann
 Durable run, checkpoint, retention, and point state live in
 [`internal/infra/etcd/backupruntime`](../../internal/infra/etcd/backupruntime/types.go)
 and [`internal/infra/etcd/backupretention`](../../internal/infra/etcd/backupretention/repository.go).
+
+Config Restore file planning and its aggregate proof are owned by
+[`backupconfigmaterialization`](../../internal/common/backupconfigmaterialization/plan.go).
+Ordinary and restored environment-file content share
+[`dotenvfile`](../../internal/common/dotenvfile/render.go); host writes use the
+existing [`materialization runtime`](../../internal/agent/materialization/runtime.go).
 
 Canonical format code is owned by
 [`internal/common/backupconfig`](../../internal/common/backupconfig/config.go),

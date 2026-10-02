@@ -147,11 +147,17 @@ func prepareBackupTaskIdempotencyPlan(
 		return nil, err
 	}
 	defer clear(reference)
+	procedure, err := backupruntime.EncodeBackupExecutionPlan(sealed)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(procedure)
 	taskConditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(record.ID)},
 		{Key: taskjournal.TaskOperationIndexKey(record.OperationID, record.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(record.OperationID)},
 		{Key: taskjournal.TaskQueueKey(record.Executor, record.ID)},
+		{Key: backupruntime.BackupExecutionPlanKey(record.ID)},
 	}
 	taskMutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(record.ID), Value: taskValue},
@@ -162,6 +168,7 @@ func prepareBackupTaskIdempotencyPlan(
 		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(record.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(record.Executor, record.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupExecutionPlanKey(record.ID), Value: procedure},
 	}
 	domain := backupRunPublicationPlan{conditions: domainConditions, mutations: domainMutations}
 	conditions, mutations, err := domain.composeTransaction(taskConditions, taskMutations)

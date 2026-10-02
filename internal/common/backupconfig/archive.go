@@ -35,7 +35,7 @@ const (
 // cursor is retained here.
 type ValidatedArtifact struct {
 	mu           sync.Mutex
-	spool        ownedSpool
+	spool        ValidationSpool
 	layout       Layout
 	metadata     []MetadataFrame
 	sourceSHA256 [32]byte
@@ -43,7 +43,10 @@ type ValidatedArtifact struct {
 	closeErr     error
 }
 
-type ownedSpool interface {
+// ValidationSpool is an owned, private, unlinked file. The factory must charge
+// its writes to admitted staging capacity on the same filesystem.
+// ValidateArtifact takes ownership, including cleanup after every failure.
+type ValidationSpool interface {
 	io.ReaderAt
 	io.Writer
 	io.WriterAt
@@ -52,6 +55,8 @@ type ownedSpool interface {
 	Truncate(int64) error
 	Close() error
 }
+
+type SpoolFactory func(context.Context) (ValidationSpool, error)
 
 type SourceEvidence struct {
 	SizeBytes uint64
@@ -65,13 +70,13 @@ func ValidateArtifact(
 	ctx context.Context,
 	source io.ReaderAt,
 	evidence SourceEvidence,
-	spoolDirectory string,
+	createSpool SpoolFactory,
 	encoder MetadataEncoder,
 ) (artifact *ValidatedArtifact, resultErr error) {
 	if err := checkContext(ctx); err != nil {
 		return nil, err
 	}
-	if source == nil || evidence.SizeBytes < 2*TarBlockBytes ||
+	if source == nil || createSpool == nil || evidence.SizeBytes < 2*TarBlockBytes ||
 		evidence.SizeBytes > MaxSourceBytes ||
 		evidence.SHA256 == ([32]byte{}) {
 		return nil, archiveError("artifact source or exact size is invalid")
@@ -79,20 +84,19 @@ func ValidateArtifact(
 	if err := probeExactEOF(ctx, source, evidence.SizeBytes); err != nil {
 		return nil, err
 	}
-	spool, err := os.CreateTemp(spoolDirectory, ".groundplane-config-validated-*")
+	spool, err := createSpool(ctx)
 	if err != nil {
 		return nil, archiveCause("private validated spool creation failed", err)
 	}
-	name := spool.Name()
+	if spool == nil {
+		return nil, archiveError("private validated spool is required")
+	}
 	keep := false
 	defer func() {
 		if !keep {
 			resultErr = cleanupOwnedSpool(resultErr, spool)
 		}
 	}()
-	if err := os.Remove(name); err != nil {
-		return nil, archiveCause("private validated spool unlink failed", err)
-	}
 	if err := copyOwnedSource(ctx, spool, source, evidence); err != nil {
 		return nil, err
 	}
@@ -164,7 +168,7 @@ func (artifact *ValidatedArtifact) Close(ctx context.Context) error {
 	return artifact.closeErr
 }
 
-func cleanupOwnedSpool(primary error, spool ownedSpool) error {
+func cleanupOwnedSpool(primary error, spool ValidationSpool) error {
 	if spool == nil {
 		return primary
 	}

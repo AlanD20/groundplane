@@ -15,6 +15,12 @@ type ownedMaterializationSource struct {
 	closed  bool
 }
 
+// OwnContent transfers a prepared private buffer into the same clearing source
+// used by normal materialization. It must not be reused by its caller.
+func OwnContent(content []byte) io.ReadCloser {
+	return &ownedMaterializationSource{content: content, reader: bytes.NewReader(content)}
+}
+
 func (source *ownedMaterializationSource) Read(destination []byte) (int, error) {
 	source.mu.Lock()
 	defer source.mu.Unlock()

@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"errors"
 	"io"
 	"log/slog"
@@ -23,11 +24,14 @@ import (
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
-	"github.com/AlanD20/groundplane/internal/common/dnsproof"
+	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/internal/infra/agentstagingjournal"
+	"github.com/AlanD20/groundplane/internal/infra/agentterminaljournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc"
@@ -57,13 +61,17 @@ type reconnectWaiter func(context.Context, uint) error
 // Client owns one authenticated, single-use Controller stream. Identity and
 // credential material are deliberately private and are never logged.
 type Client struct {
-	socketPath string
-	agentID    string
-	token      [agentprotocol.RawTokenBytes]byte
-	volumeRoot string
-	logger     *slog.Logger
-	connect    streamConnector
-	reconnect  reconnectWaiter
+	socketPath         string
+	agentID            string
+	token              [agentprotocol.RawTokenBytes]byte
+	processGeneration  [16]byte
+	volumeRoot         string
+	statePath          string
+	openStaging        func(context.Context, *agentstagingjournal.Journal) (*backupStagingState, error)
+	openStagingJournal func(string) (*agentstagingjournal.Journal, error)
+	logger             *slog.Logger
+	connect            streamConnector
+	reconnect          reconnectWaiter
 
 	mu                     sync.Mutex
 	started                bool
@@ -79,6 +87,9 @@ type Client struct {
 	images                 WorkloadImageResolver
 	observer               ServiceObserver
 	logs                   *logstream.Subscriptions
+	terminalJournal        *agentterminaljournal.Journal
+	stagingJournal         *agentstagingjournal.Journal
+	staging                *backupStagingState
 }
 
 func NewClient(
@@ -109,13 +120,19 @@ func NewClient(
 	}
 
 	client := &Client{
-		socketPath: socketPath,
-		agentID:    agentID,
-		volumeRoot: volumeRoot,
-		logger:     logger,
-		connect:    connectGRPC,
-		reconnect:  waitForAgentChannelReconnect,
-		logs:       logstream.New(nil),
+		socketPath:         socketPath,
+		agentID:            agentID,
+		volumeRoot:         volumeRoot,
+		statePath:          agentprotocol.StatePath,
+		openStaging:        openBackupStaging,
+		openStagingJournal: agentstagingjournal.Open,
+		logger:             logger,
+		connect:            connectGRPC,
+		reconnect:          waitForAgentChannelReconnect,
+		logs:               logstream.New(nil),
+	}
+	if _, err := cryptorand.Read(client.processGeneration[:]); err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	copy(client.token[:], token)
 	return client, nil
@@ -189,6 +206,18 @@ func (c *Client) Run(ctx context.Context) error {
 	if c.reconnect == nil {
 		return errs.New(errs.KindInternal, "agent: reconnect waiter is not configured")
 	}
+	journal, err := agentterminaljournal.Open(c.statePath + "/terminal")
+	if err != nil {
+		return err
+	}
+	c.terminalJournal = journal
+	defer journal.Close()
+	stagingJournal, err := c.openStagingJournal(c.statePath + "/staging")
+	if err != nil {
+		return err
+	}
+	c.stagingJournal = stagingJournal
+	defer stagingJournal.Close()
 
 	var reconnectAttempt uint
 	for {
@@ -270,6 +299,8 @@ func (c *Client) startWorkerPool(ctx context.Context, size int) (context.CancelF
 		pool.SetScriptRuntime(c.scriptRuntime)
 	}
 	c.pool = pool
+	pool.persistBackupTerminal = c.persistBackupTerminal
+	pool.backupStaging = c.staging
 	done := make(chan struct{})
 	c.workersDone = done
 	go func() {
@@ -283,11 +314,20 @@ func validRuntimeConfig(config *agentpb.AgentConfig) bool {
 	if config == nil || config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
 		return false
 	}
-	for key, value := range config.Labels {
-		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||
-			!utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
+	seen := make(map[string]struct{}, len(config.Labels))
+	for index, label := range config.Labels {
+		if label == nil || executionplan.RejectUnknown(label) != nil ||
+			!utf8.ValidString(label.Key) || strings.IndexByte(label.Key, 0) >= 0 ||
+			!utf8.ValidString(label.Value) || strings.IndexByte(label.Value, 0) >= 0 {
 			return false
 		}
+		if _, duplicate := seen[label.Key]; duplicate {
+			return false
+		}
+		if index > 0 && config.Labels[index-1].Key >= label.Key {
+			return false
+		}
+		seen[label.Key] = struct{}{}
 	}
 	return true
 }
@@ -331,14 +371,24 @@ func (c *Client) takeToken() ([agentprotocol.RawTokenBytes]byte, error) {
 }
 
 func (c *Client) sendReady(stream agentStream) error {
+	clean, err := c.terminalDeliveryClean()
+	if err != nil {
+		return err
+	}
+	clean = clean && c.staging != nil && c.staging.ready && !c.staging.reinspect.Load()
+	capacity := c.pool.Capacity()
+	if !clean {
+		capacity = 0
+	}
 	variant := ""
 	if runtime.GOARCH == "arm64" {
 		variant = "v8"
 	}
 	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Ready{
 		Ready: &agentpb.Ready{
-			Capacity: int32(c.pool.Capacity()), Version: version.Value,
-			OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH,
+			Capacity: int32(capacity), Version: version.Value,
+			TerminalDeliveryClean: &clean,
+			OperatingSystem:       runtime.GOOS, Architecture: runtime.GOARCH,
 			ArchitectureVariant: variant,
 		},
 	}})
@@ -366,6 +416,12 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 		return false, c.logs.Grant(credit)
 	}
 	if assignment := message.GetTaskAssignment(); assignment != nil {
+		if c.staging == nil || !c.staging.ready {
+			return false, invalidAgentStaging()
+		}
+		if err := c.staging.verifyPreparedAssignment(assignment); err != nil {
+			return false, err
+		}
 		if assignment.ForwardDeadline == nil || assignment.ForwardDeadline.CheckValid() != nil ||
 			assignment.RecoveryDeadline == nil || assignment.RecoveryDeadline.CheckValid() != nil ||
 			assignment.ExecutionDeadline == nil || assignment.ExecutionDeadline.CheckValid() != nil {
@@ -387,6 +443,8 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 			return false, errs.New(errs.KindInternal, "agent: Controller sent mismatched execution deadline")
 		}
 		return false, c.pool.Submit(ctx, taskassignment.Assignment{
+			BackupAuthority: assignment.BackupAuthority, BackupResume: assignment.BackupResume,
+			BackupAuthoritySHA256: assignment.BackupAuthoritySha256, AssignmentGeneration: assignment.AssignmentGeneration,
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,
@@ -402,13 +460,26 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {
-		return false, c.pool.Abort(ctx, abort.TaskId, abort.AssignmentId)
+		return false, c.handleTaskAbort(ctx, abort)
 	}
 	if transfer := message.GetMaterializationTransfer(); transfer != nil {
 		return false, c.pool.AcceptMaterializationTransfer(ctx, transfer)
 	}
 	if transfer := message.GetManagedConfigTransfer(); transfer != nil {
 		return false, c.pool.AcceptManagedConfigTransfer(ctx, transfer)
+	}
+	if transfer := message.GetBackupConfigTransfer(); transfer != nil {
+		defer backupconfigtransfer.ClearFrame(transfer)
+		return false, c.pool.backupConfigs.AcceptFrame(ctx, transfer)
+	}
+	if credit := message.GetBackupConfigCredit(); credit != nil {
+		return false, c.pool.backupConfigs.AcceptCredit(ctx, credit)
+	}
+	if credit := message.GetBackupVolumeManifestAckCredit(); credit != nil {
+		return false, c.pool.AcceptBackupVolumeManifestCredit(credit)
+	}
+	if frame := message.GetBackupVolumeManifestTransfer(); frame != nil {
+		return false, c.pool.AcceptBackupVolumeManifestFrame(frame)
 	}
 	if transfer := message.GetBackupSecretSlotTransfer(); transfer != nil {
 		chunk := transfer.GetChunk()
@@ -424,51 +495,6 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 		return true, nil
 	}
 	return false, errs.New(errs.KindInternal, "agent: Controller sent an empty message")
-}
-
-func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
-	if (result.Compose == nil) == (result.EnvironmentDirectory == nil) {
-		return errs.New(errs.KindInternal, "agent: worker returned an invalid task result union")
-	}
-	terminal := agentpb.TaskTerminal_TASK_TERMINAL_UNSPECIFIED
-	switch result.Terminal {
-	case TaskTerminalCompleted:
-		terminal = agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED
-	case TaskTerminalFailed:
-		terminal = agentpb.TaskTerminal_TASK_TERMINAL_FAILED
-	case TaskTerminalTimedOut:
-		terminal = agentpb.TaskTerminal_TASK_TERMINAL_TIMED_OUT
-	case TaskTerminalAborted:
-		terminal = agentpb.TaskTerminal_TASK_TERMINAL_ABORTED
-	default:
-		return errs.New(errs.KindInternal, "agent: worker returned an invalid terminal state")
-	}
-	acknowledgement := &agentpb.TaskAck{
-		AssignmentId: result.AssignmentID,
-		TaskId:       result.TaskID, PlanHash: append([]byte(nil), result.PlanHash[:]...), Terminal: terminal,
-		ExitCode: result.ExitCode, ExecutionEpoch: result.ExecutionEpoch,
-		ReleaseRecoveryRecordSha256: append([]byte(nil), result.ReleaseRecoveryRecordSHA256...),
-	}
-	if result.Compose != nil {
-		for _, evidence := range []*agentpb.DNSResolverObservationEvidence{
-			result.Compose.GetDnsResolverCandidateObservation(),
-			result.Compose.GetDnsResolverRollbackObservation(),
-		} {
-			if evidence != nil {
-				if err := dnsproof.Verify(evidence); err != nil {
-					return errs.New(errs.KindInternal, "agent: worker returned a corrupt DNS resolver proof")
-				}
-			}
-		}
-		acknowledgement.Result = &agentpb.TaskAck_ComposeResult{
-			ComposeResult: proto.Clone(result.Compose).(*agentpb.ComposeTaskResult),
-		}
-	} else {
-		acknowledgement.Result = &agentpb.TaskAck_EnvironmentDirectoryResult{
-			EnvironmentDirectoryResult: proto.Clone(result.EnvironmentDirectory).(*agentpb.EnvironmentDirectoryTaskResult),
-		}
-	}
-	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: acknowledgement}})
 }
 
 type receiveResult struct {

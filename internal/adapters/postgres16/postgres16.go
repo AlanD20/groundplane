@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
@@ -24,9 +25,15 @@ func Register() {
 
 type adapter struct{}
 
-func (a *adapter) Key() string                       { return "postgres:16" }
-func (a *adapter) Label() string                     { return "PostgreSQL 16" }
-func (a *adapter) DefaultImage() string              { return "postgres:16-alpine" }
+func (a *adapter) Key() string   { return "postgres:16" }
+func (a *adapter) Label() string { return "PostgreSQL 16" }
+func (a *adapter) DefaultImage() (string, error) {
+	release, err := postgres16protocol.CompiledManagedRelease()
+	if err != nil {
+		return "", err
+	}
+	return release.Image, nil
+}
 func (a *adapter) FactsPrefix() string               { return "pg16_" }
 func (a *adapter) URLScheme() string                 { return "pgsql://" }
 func (a *adapter) Port() string                      { return "5432" }

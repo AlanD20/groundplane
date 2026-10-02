@@ -30,6 +30,14 @@ type BackupScheduleRunner interface {
 	RunBackupSchedules(context.Context, time.Time) error
 }
 
+type backupRetentionDispatcher interface {
+	Tick(context.Context, string) (string, bool, error)
+}
+
+type backupOrphanReconciler interface {
+	Tick(context.Context, string) (string, bool, error)
+}
+
 const dailyMaintenanceInterval = 24 * time.Hour
 
 type mutationAdmission interface {
@@ -48,6 +56,10 @@ type Scheduler struct {
 	idempotency     idempotencyPruning
 	agents          staleAgentExpiration
 	backupSchedules BackupScheduleRunner
+	backupRetention backupRetentionDispatcher
+	retentionCursor string
+	backupOrphans   backupOrphanReconciler
+	orphanCursor    string
 	now             func() time.Time
 	nextPrune       time.Time
 }
@@ -59,15 +71,13 @@ func New(
 	tasks *etcd.TaskRepository,
 	idempotency *etcd.IdempotencyRepository,
 	agents staleAgentExpiration,
-	backupSchedules ...BackupScheduleRunner,
+	backupSchedules BackupScheduleRunner,
+	backupRetention backupRetentionDispatcher,
+	backupOrphans backupOrphanReconciler,
 ) *Scheduler {
-	var schedules BackupScheduleRunner
-	if len(backupSchedules) > 0 {
-		schedules = backupSchedules[0]
-	}
 	return &Scheduler{
 		logger: logger, admission: admission, Interval: interval, tasks: tasks, idempotency: idempotency, agents: agents,
-		backupSchedules: schedules, now: time.Now,
+		backupSchedules: backupSchedules, backupRetention: backupRetention, backupOrphans: backupOrphans, now: time.Now,
 	}
 }
 
@@ -87,9 +97,8 @@ func (sch *Scheduler) Run(ctx context.Context) {
 	}
 }
 
-// tick first owns bounded runtime maintenance. BackupPolicy evaluation will
-// join this same pass once desired-state storage is wired; it must not prevent
-// overdue Task recovery from running today.
+// tick handles overdue execution before dispatching scheduled captures or
+// retained-object cleanup. Each retention pass advances a bounded cursor.
 func (sch *Scheduler) tick(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -118,6 +127,22 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	if sch.backupSchedules != nil {
 		if err := sch.backupSchedules.RunBackupSchedules(ctx, now); err != nil {
 			return err
+		}
+	}
+	if sch.backupRetention != nil {
+		next, _, err := sch.backupRetention.Tick(ctx, sch.retentionCursor)
+		if err != nil {
+			return err
+		}
+		sch.retentionCursor = next
+	}
+	if sch.backupOrphans != nil {
+		next, _, err := sch.backupOrphans.Tick(ctx, sch.orphanCursor)
+		sch.orphanCursor = next
+		if err != nil {
+			// A failing remote target must not indefinitely starve other
+			// orphans or independent local retention maintenance.
+			sch.logger.Error("scheduler: backup orphan reconciliation failed", slog.Any("error", err))
 		}
 	}
 	if !sch.nextPrune.IsZero() && now.Before(sch.nextPrune) {

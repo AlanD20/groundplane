@@ -41,7 +41,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 				"backup prune failure authority is invalid",
 			)
 		}
-		authorityKeys, err := backupPruneAuthorityKeys(prune.Record.Point)
+		authorityKeys, err := backupruntime.BackupPruneAuthorityKeys(prune.Record.Point)
 		if err != nil {
 			return backupPruneTransactionPlan{}, err
 		}
@@ -52,13 +52,13 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 		return backupPruneTransactionPlan{}, err
 	}
 	defer etcdstore.ClearValues(anchor.Values)
-	if err := validateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
+	if err := backupruntime.ValidateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
 	for index, prune := range prunes {
 		start := 1 + index*5
 		if prune.Record.State == backupruntime.BackupPruneAssigned {
-			if err := validatePendingBackupPruneAuthority(anchor.Values[start:start+5], prune); err != nil {
+			if err := backupruntime.ValidatePendingBackupPruneAuthority(anchor.Values[start:start+5], prune); err != nil {
 				return backupPruneTransactionPlan{}, err
 			}
 			continue

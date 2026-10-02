@@ -1,6 +1,7 @@
 package agentchannel
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -42,6 +43,9 @@ func validateAuthenticate(message *agentpb.AgentMessage) (*agentpb.Authenticate,
 			"Authenticate must be the first Agent message",
 		)
 	}
+	if err := executionplan.RejectUnknown(message); err != nil {
+		return nil, Token{}, err
+	}
 	authenticate := message.GetAuthenticate()
 	if err := ids.Validate(ids.KindAgent, authenticate.AgentId); err != nil {
 		return nil, Token{}, errs.New(errs.KindValidationFailed, "agent id is invalid")
@@ -51,6 +55,9 @@ func validateAuthenticate(message *agentpb.AgentMessage) (*agentpb.Authenticate,
 			errs.KindValidationFailed,
 			"agent token has an invalid length",
 		)
+	}
+	if _, err := processAuthenticationFromWire(authenticate); err != nil {
+		return nil, Token{}, err
 	}
 
 	var token Token

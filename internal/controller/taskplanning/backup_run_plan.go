@@ -2,21 +2,19 @@ package taskplanning
 
 import (
 	"context"
-	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type backupRunPlanReader interface {
-	GetBackupRun(context.Context, string) (etcdstore.Versioned[backupruntime.BackupRunRecord], error)
+	GetBackupExecutionPlan(context.Context, string) (etcdstore.Versioned[*agentpb.ExecutionPlan], error)
 }
 
 // EnableBackupPlans connects the task-plan resolver to the durable Backup run
-// records needed when the Agent claims or reconnects a task. The resolver
-// reconstructs the plan from the closed run snapshot, never from request input.
+// procedures needed when the Agent claims or reconnects a task. Progress and
+// current desired state cannot alter the procedure selected at publication.
 func (resolver *TaskPlanResolver) EnableBackupPlans(reader backupRunPlanReader) error {
 	if resolver == nil || reader == nil {
 		return errs.New(errs.KindInternal, "backup plan resolver requires a run reader")
@@ -32,13 +30,9 @@ func (resolver *TaskPlanResolver) resolveBackupRunPlan(
 	if resolver == nil || resolver.backupRuns == nil {
 		return nil, errs.New(errs.KindInternal, "backup plan resolver is not configured")
 	}
-	run, err := resolver.backupRuns.GetBackupRun(ctx, task.ID)
+	stored, err := resolver.backupRuns.GetBackupExecutionPlan(ctx, task.ID)
 	if err != nil {
 		return nil, err
 	}
-	return backupcapability.BuildBackupRunPlan(backupcapability.BackupRunPlanInput{
-		Task:   task,
-		Run:    run.Record,
-		Upload: backupcapability.BackupRunUploadAuthorities(run.Record),
-	})
+	return stored.Record, nil
 }

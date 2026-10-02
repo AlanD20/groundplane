@@ -111,7 +111,7 @@ func TestBackupRuntimeKeyConstructorsUseLockedV1Roots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backupOrphanEnvironmentIndexKey() error = %v", err)
 	}
-	restoreEnvironmentKey, err := backupRestoreEnvironmentIndexKey(environmentID, taskID)
+	restoreEnvironmentKey, err := BackupRestoreEnvironmentIndexKey(environmentID, taskID)
 	if err != nil {
 		t.Fatalf("backupRestoreEnvironmentIndexKey() error = %v", err)
 	}
@@ -135,7 +135,7 @@ func TestBackupRuntimeKeyConstructorsUseLockedV1Roots(t *testing.T) {
 		"prune":                BackupRecoveryPointPruneKey(pointID),
 		"prune dispatch":       BackupRecoveryPointPruneDispatchKey(taskID),
 		"terminal receipt":     BackupTerminalReceiptKey(taskID),
-		"restore":              backupRestoreKey(taskID),
+		"restore":              BackupRestoreKey(taskID),
 		"restore environment":  restoreEnvironmentKey,
 		"restore service":      backupRestoreServiceKey(taskID, 1),
 		"rotation":             BackupKeyRotationKey(taskID),

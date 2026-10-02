@@ -20,6 +20,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       repository: ${{ steps.version.outputs.repository }}
       scope: ${{ steps.version.outputs.scope }}
+      postgres_base: ${{ steps.version.outputs.postgres_base }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,6 +41,11 @@ jobs:
           git merge-base --is-ancestor HEAD origin/main
           python3 scripts/release_publish.py "$tag" --check
           if [[ "$scope" != agent ]]; then python3 scripts/bump_version.py "$version" --check; fi
+          if [[ "$scope" != agent ]]; then
+            digest=$(docker buildx imagetools inspect postgres:16-alpine --format '{{json .Manifest}}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            echo "postgres_base=postgres:16-alpine@$digest" >> "$GITHUB_OUTPUT"
+          fi
           {
             echo "version=$version"
             echo "scope=$scope"
@@ -70,6 +76,7 @@ jobs:
       IMAGE_ROOT: ghcr.io/${{ needs.version.outputs.repository }}
       ARCH: ${{ matrix.arch }}
       SCOPE: ${{ needs.version.outputs.scope }}
+      POSTGRES16_BASE: ${{ needs.version.outputs.postgres_base }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/login-action@v4
@@ -85,6 +92,8 @@ jobs:
               --image "$IMAGE_ROOT-agent:v$VERSION-$ARCH" --push > ".tmp/release-images/agent-$ARCH"
           fi
           if [[ "$SCOPE" != agent ]]; then
+            bash scripts/repo-env.sh python3 scripts/release_postgres16.py \
+              --base-image "$POSTGRES16_BASE" --image "$IMAGE_ROOT-postgres16:v$VERSION-$ARCH"
             make runner-image-smoke VERSION="$VERSION" RUNNER_IMAGE="$IMAGE_ROOT-runner:v$VERSION-$ARCH"
             docker push "$IMAGE_ROOT-runner:v$VERSION-$ARCH"
             docker image inspect "$IMAGE_ROOT-runner:v$VERSION-$ARCH" \
@@ -108,6 +117,7 @@ jobs:
     outputs:
       agent: ${{ steps.indexes.outputs.agent }}
       runner: ${{ steps.indexes.outputs.runner }}
+      postgres16: ${{ steps.indexes.outputs.postgres16 }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -131,10 +141,20 @@ jobs:
         env:
           AGENT_IMAGE: ${{ steps.indexes.outputs.agent }}
           RUNNER_IMAGE: ${{ steps.indexes.outputs.runner }}
+          POSTGRES16_IMAGE: ${{ steps.indexes.outputs.postgres16 }}
         run: |
           docker logout ghcr.io
           if [[ -n "$AGENT_IMAGE" ]]; then docker manifest inspect "$AGENT_IMAGE" > /dev/null; fi
           if [[ -n "$RUNNER_IMAGE" ]]; then docker manifest inspect "$RUNNER_IMAGE" > /dev/null; fi
+          if [[ -n "$POSTGRES16_IMAGE" ]]; then docker manifest inspect "$POSTGRES16_IMAGE" > /dev/null; fi
+      - uses: actions/upload-artifact@v7
+        if: needs.version.outputs.scope != 'agent'
+        with:
+          name: postgres16-release
+          path: .tmp/release-images/postgres16-release.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
       - name: Package Agent-only installation artifacts
         if: needs.version.outputs.scope != 'controller'
         env:
@@ -176,10 +196,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+      - uses: actions/download-artifact@v8
+        with:
+          name: postgres16-release
+          path: .tmp/release-images
       - name: Build native bundle with the pinned npm version
         run: |
           bash scripts/repo-env.sh npm install --global "$(node -p 'require("./console/package.json").packageManager')"
-          args=(--version "$VERSION" --runner-image "$RUNNER_IMAGE")
+          args=(--version "$VERSION" --runner-image "$RUNNER_IMAGE" --postgres16-release .tmp/release-images/postgres16-release.json)
           if [[ -n "$AGENT_IMAGE" ]]; then args+=(--agent-image "$AGENT_IMAGE"); else args+=(--controller-only); fi
           bash scripts/repo-env.sh python3 scripts/release_bundle.py "${args[@]}"
           cd .tmp/releases

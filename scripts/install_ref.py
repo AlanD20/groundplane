@@ -15,6 +15,7 @@ import subprocess
 
 import deploy
 import install_agent
+import install_postgres16
 import release_selection
 from controller_bootstrap import GUARD, UNIT, Layout
 from controller_release import RELEASE_ROOT
@@ -59,7 +60,9 @@ def build(source: Path, output: Path, version: str, identity: str,
         common = [*command, "build", "--builder", builder, "--provenance=false",
                   "--build-arg", f"SOURCE_DATE_EPOCH={source_epoch}"]
         if include_controller:
+            postgres_release = install_postgres16.build_release(source, common, command, identity)
             run(*common, "--file", "Dockerfile.build", "--build-arg", f"VERSION={version}",
+                "--build-arg", f"POSTGRES16_RELEASE_BASE64={postgres_release}",
                 "--output", f"type=local,dest={output}", ".", cwd=source)
         for kind, tag in zip(("agent", "runner"), tags):
             if kind == "runner" and not include_runner:
@@ -107,9 +110,15 @@ def install(source: Path, output: Path, version: str, identity: str,
     if config and (not Path(config).is_file() or Path(config).is_symlink()):
         raise ValueError("--config must be a regular startup YAML file")
     deploy.require_capacity(source)
-    tags = tuple(f"groundplane-{kind}:ref-{identity}" for kind in ("agent", "runner"))
+    tags = tuple(f"groundplane-{kind}:ref-{identity}" for kind in ("agent", "runner", "postgres16"))
     started_install = False
     try:
+        # Source builds publish their managed database image before compiling its
+        # exact identity into the Controller. Bootstrap is prerequisite setup;
+        # Controller activation still waits for the complete candidate build.
+        if mode != "native":
+            (output / "setup-host.sh").write_text(deploy.REMOTE_SETUP)
+            run("sh", str(output / "setup-host.sh"))
         build(source, output, version, identity, source_epoch=source_epoch,
               include_runner=mode != "native" and scope != "agent",
               include_agent=scope != "controller", include_controller=scope != "agent")
@@ -135,8 +144,6 @@ def install(source: Path, output: Path, version: str, identity: str,
             shutil.copyfile(config, output / deploy.CONFIG_EXAMPLE.name)
         (output / "setup-host.sh").write_text(deploy.REMOTE_SETUP)
         (output / "install-runtime.sh").write_text(deploy.REMOTE_INSTALL)
-        if mode != "native":
-            run("sh", str(output / "setup-host.sh"))
         started_install = True
         run("sh", str(output / "install-runtime.sh"), str(output), version.replace("/", "-"), selected_agent, tags[1],
             listen_ip, "1" if stage_only else "0", "0")
@@ -147,6 +154,9 @@ def install(source: Path, output: Path, version: str, identity: str,
         for tag in tags:
             if present(tag):
                 run("docker", "image", "rm", tag)
+        postgres_tag = f"{install_postgres16.REPOSITORY}:ref-{identity}"
+        if not started_install and scope != "agent" and present(postgres_tag):
+            run("docker", "image", "rm", postgres_tag)
         if not started_install and output.exists():
             shutil.rmtree(output)
 

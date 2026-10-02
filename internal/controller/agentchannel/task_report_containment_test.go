@@ -360,6 +360,8 @@ func TestDispatchReadyDoesNotClaimPastQuarantinedDurableAssignment(t *testing.T)
 	delivered := make(map[string]string)
 	quarantined := make(map[string]string)
 	stream := &scriptedStream{ctx: context.Background()}
+	payloads := newAssignmentPayloadDelivery(stream.Context(), 1)
+	defer payloads.close()
 
 	if err := server.dispatchReady(
 		stream,
@@ -369,6 +371,7 @@ func TestDispatchReadyDoesNotClaimPastQuarantinedDurableAssignment(t *testing.T)
 		1,
 		delivered,
 		quarantined,
+		payloads,
 	); err != nil {
 		t.Fatalf("dispatchReady() error = %v", err)
 	}

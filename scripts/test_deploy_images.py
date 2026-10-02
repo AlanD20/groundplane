@@ -7,14 +7,20 @@ import unittest
 from unittest.mock import patch
 
 import deploy
+from postgres16_test_fixture import postgres16_catalog
 
 
 def target():
     return deploy.Deployment(Path("/keys/qa"), ipaddress.ip_address("192.0.2.42"),
-                             "0.0.1", False, None, None, False)
+                             "0.0.1", False, None, None, False, Path("/srv/releases/postgres16-release.json"))
 
 
 class DeploymentImagesTest(unittest.TestCase):
+    def setUp(self):
+        loader = patch.object(deploy, "load_catalog", return_value=(postgres16_catalog(), {}))
+        loader.start()
+        self.addCleanup(loader.stop)
+
     # Delivery: build environment selection, not build or runtime performance.
     # Rationale: constrain this build without mutating the caller's environment.
     def test_native_compilation_has_bounded_parallelism_without_changing_parent_environment(self):

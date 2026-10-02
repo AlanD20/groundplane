@@ -324,17 +324,17 @@ func NewBackupSecretPublishedPruneFixture(t *testing.T) BackupSecretResolutionFi
 		source.RecoveryPointID + "/artifact.bin"
 	source.State = testbackupruntime.BackupSourceAttemptStaged
 	source.Phase = testbackupruntime.BackupSourcePhasePointCommit
-	source.SizeBytes = 123
-	source.SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(run, &source)
 	point := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
 	pointRevision := backupRuntimeCurrentRevision(t, store, run.EnvironmentID) + 1
 	prune := testbackupruntime.BackupRecoveryPointPruneRecord{
-		Point:         point.BackupRecoveryPointSnapshot,
-		PointRevision: pointRevision,
-		OperationID:   operationID,
-		State:         testbackupruntime.BackupPrunePending,
-		CreatedAt:     run.CreatedAt,
-		UpdatedAt:     run.CreatedAt,
+		Point:          point.BackupRecoveryPointSnapshot,
+		PointRevision:  pointRevision,
+		PolicyRevision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
+		OperationID: operationID,
+		State:       testbackupruntime.BackupPrunePending,
+		CreatedAt:   run.CreatedAt,
+		UpdatedAt:   run.CreatedAt,
 	}
 	pruneValue, err := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(prune)
 	if err != nil {

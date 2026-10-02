@@ -2,7 +2,9 @@ package backupplanning
 
 import (
 	"context"
+	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backingpostgresrelease "github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
@@ -49,13 +51,14 @@ func (repository *Planner) prepareManualPostgresSource(
 		hierarchyrecord.ProjectKey(attach.BackingProjectID),
 		hierarchyrecord.EnvironmentKey(attach.BackingEnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(attach.BackingEnvironmentID),
+		backingpostgresrelease.Key(attach.BackingEnvironmentID, attach.BackingServiceID),
 	}, fixedRevision)
 	if err != nil {
 		return backupruntime.BackupRunSourceAttemptRecord{}, err
 	}
 	defer etcdstore.ClearValues(backingRead.Values)
-	if backingRead.Values[0] == nil || backingRead.Values[1] == nil ||
-		backingRead.Values[2] == nil {
+	if len(backingRead.Values) != 4 || backingRead.Values[0] == nil || backingRead.Values[1] == nil ||
+		backingRead.Values[2] == nil || backingRead.Values[3] == nil {
 		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
 			"postgres backing evidence is unavailable",
@@ -63,19 +66,22 @@ func (repository *Planner) prepareManualPostgresSource(
 	}
 	project, projectErr := hierarchyrecord.DecodeProject(backingRead.Values[0].Value)
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(backingRead.Values[1].Value)
+	releaseRecord, releaseErr := backingpostgresrelease.Decode(backingRead.Values[3].Value)
 	service, serviceErr := environmentqueries.FindServiceAtRevision(
 		ctx,
 		repository.store,
 		attach.BackingServiceID,
 		fixedRevision,
 	)
-	if projectErr != nil || environmentErr != nil || serviceErr != nil ||
+	if projectErr != nil || environmentErr != nil || serviceErr != nil || releaseErr != nil ||
 		project.Kind != hierarchyrecord.ProjectKindBacking ||
 		environment.ProjectID != project.ID ||
 		environment.ID != attach.BackingEnvironmentID ||
 		service.Record.EnvironmentID != environment.ID ||
 		service.Record.Desired.Adapter != "postgres:16" ||
-		service.Record.Desired.Image != "postgres:16-alpine" ||
+		releaseRecord.EnvironmentID != environment.ID ||
+		releaseRecord.ServiceID != service.Record.Desired.ID ||
+		service.Record.Desired.Image != releaseRecord.Release.Image ||
 		service.Revision != backingRead.Values[2].ModRevision {
 		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
@@ -105,6 +111,10 @@ func (repository *Planner) prepareManualPostgresSource(
 			"postgres Attach identity is incomplete",
 		)
 	}
+	releaseData, err := json.Marshal(releaseRecord.Release)
+	if err != nil {
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.Wrap(errs.KindInternal, err)
+	}
 	attempt.TargetRevision = read.Values[0].ModRevision
 	attempt.Format = backupruntime.BackupRuntimeFormatPostgres
 	attempt.Snapshot.Postgres = &backupruntime.BackupPostgresSourceSnapshot{
@@ -117,9 +127,11 @@ func (repository *Planner) prepareManualPostgresSource(
 		BackingEnvironmentRevision: backingRead.Values[1].ModRevision,
 		BackingServiceID:           service.Record.Desired.ID,
 		BackingServiceRevision:     backingRead.Values[2].ModRevision,
+		ConsumerServiceID:          attach.ServiceID,
 		AttachFactsRevision:        read.Values[1].ModRevision,
 		Database:                   identity.Database,
 		Role:                       identity.Role,
+		ManagedReleaseIndex:        string(releaseData),
 	}
 	return attempt, nil
 }

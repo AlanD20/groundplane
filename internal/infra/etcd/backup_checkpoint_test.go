@@ -16,6 +16,7 @@ import (
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: only the exact active assignment can advance the contiguous
@@ -50,7 +51,8 @@ func TestBackupCheckpointPlanFencesAssignmentSequenceAndDigest(t *testing.T) {
 		t.Fatalf("loadBackupCheckpointPlan(replay) = %#v, %v", replay, err)
 	}
 	changed := input
-	changed.Payload.StoredSizeBytes++
+	changed.Request = proto.CloneOf(input.Request)
+	changed.Request.GetArtifactPrepared().Evidence.StoredSha256[0] ^= 1
 	if _, err := repository.loadBackupCheckpointPlan(
 		context.Background(), changed, result.Revision, binding,
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
@@ -58,9 +60,17 @@ func TestBackupCheckpointPlanFencesAssignmentSequenceAndDigest(t *testing.T) {
 	}
 	next := input
 	next.Sequence++
-	next.Payload.Kind = testbackupruntime.BackupCheckpointSourceCleanupCompleted
-	next.Payload.StoredSizeBytes = 0
-	next.Payload.StoredSHA256 = ""
+	next.Request = proto.CloneOf(input.Request)
+	next.Request.CheckpointSequence = next.Sequence
+	next.PrecedingCheckpointRevision = result.Revision
+	next.Request.PrecedingCheckpoint = &agentpb.CheckpointFence{
+		DedupeKeyModRevision: result.Revision, AuthorityDigest: append([]byte(nil), input.Request.AuthorityDigest...),
+	}
+	next.Request.Checkpoint = &agentpb.BackupCheckpointRequest_SourceCleanupCompleted{
+		SourceCleanupCompleted: &agentpb.BackupSourceCleanupCompleted{
+			PointId: binding.pointID, Evidence: proto.CloneOf(input.Request.GetArtifactPrepared().Evidence),
+		},
+	}
 	nextPlan, err := repository.loadBackupCheckpointPlan(
 		context.Background(), next, result.Revision, binding,
 	)
@@ -80,10 +90,10 @@ func TestBackupCheckpointPlanFencesAssignmentSequenceAndDigest(t *testing.T) {
 	if err != nil || !nextResult.Succeeded {
 		t.Fatalf("commit next checkpoint = %#v, %v", nextResult, err)
 	}
-	if _, err := repository.loadBackupCheckpointPlan(
+	if replay, err := repository.loadBackupCheckpointPlan(
 		context.Background(), input, nextResult.Revision, binding,
-	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-		t.Fatalf("loadBackupCheckpointPlan(old sequence) error = %v", err)
+	); err != nil || !replay.duplicate {
+		t.Fatalf("loadBackupCheckpointPlan(retained old sequence) = %#v, %v", replay, err)
 	}
 	dedupKey := testbackupruntime.BackupCheckpointDedupKey(next)
 	dedup := mustOptionalKey(t, store, dedupKey)
@@ -145,7 +155,7 @@ func TestBackupCheckpointPlanRejectsCrossStepSubstitution(t *testing.T) {
 			testBackupLaterSource(run.CreatedAt, 1, testbackupruntime.BackupSourceAttemptPending),
 		)
 		input, revision := seedBackupCheckpointAssignment(t, store, run)
-		input.Payload.PointID = run.Sources[1].RecoveryPointID
+		input.Request.GetArtifactPrepared().PointId = run.Sources[1].RecoveryPointID
 		if _, err := repository.loadBackupCheckpointPlan(
 			context.Background(), input, revision, backupRunCheckpointBinding(run, 1),
 		); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
@@ -160,8 +170,10 @@ func TestBackupCheckpointPlanRejectsCrossStepSubstitution(t *testing.T) {
 			ids.NewAt(ids.KindRecoveryPoint, run.CreatedAt.Add(time.Millisecond), 804),
 		}
 		input, revision := seedBackupPruneCheckpointAssignment(t, store, run, pointIDs)
-		input.Payload = testbackupruntime.BackupCheckpointPayload{
-			Kind: testbackupruntime.BackupCheckpointRemoteObjectAbsent, PointID: pointIDs[1],
+		input.Request.Checkpoint = &agentpb.BackupCheckpointRequest_PruneObjectDeleted{
+			PruneObjectDeleted: &agentpb.BackupPruneObjectDeleted{
+				Ordinal: 2, PointId: pointIDs[1], Object: backupCheckpointPruneObject(run, pointIDs[1]),
+			},
 		}
 		if _, err := repository.loadBackupCheckpointPlan(
 			context.Background(), input, revision,
@@ -170,231 +182,6 @@ func TestBackupCheckpointPlanRejectsCrossStepSubstitution(t *testing.T) {
 			t.Fatalf("loadBackupCheckpointPlan(cross-prune step) error = %v", err)
 		}
 	})
-}
-
-// Rationale: persistence deduplication and Agent delivery must share exactly
-// one canonical digest grammar for every current checkpoint kind, including
-// upload-completed orphan evidence.
-func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testing.T) {
-	t.Parallel()
-	pointID := "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	restoreGenerationID := "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	storedDigest := bytes.Repeat([]byte{0x11}, 32)
-	decodedDigest := bytes.Repeat([]byte{0x22}, 32)
-	stagedDigest := bytes.Repeat([]byte{0x33}, 32)
-	liveDigest := bytes.Repeat([]byte{0x44}, 32)
-	manifestDigest := bytes.Repeat([]byte{0x55}, 32)
-	tests := []struct {
-		name    string
-		payload testbackupruntime.BackupCheckpointPayload
-		request *agentpb.BackupCheckpointRequest
-	}{
-		{
-			name: "artifact prepared",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:            testbackupruntime.BackupCheckpointArtifactPrepared,
-				PointID:         pointID,
-				StoredSizeBytes: 101,
-				StoredSHA256:    hex.EncodeToString(storedDigest),
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_ARTIFACT_PREPARED,
-				Payload: &agentpb.BackupCheckpointRequest_ArtifactPrepared{
-					ArtifactPrepared: &agentpb.BackupArtifactPreparedCheckpoint{
-						PointId: pointID, StoredSizeBytes: 101, StoredSha256: storedDigest,
-					},
-				},
-			},
-		},
-		{
-			name: "upload verified",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:            testbackupruntime.BackupCheckpointUploadVerified,
-				PointID:         pointID,
-				StoredSizeBytes: 102,
-				StoredSHA256:    hex.EncodeToString(storedDigest),
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_VERIFIED,
-				Payload: &agentpb.BackupCheckpointRequest_UploadVerified{
-					UploadVerified: &agentpb.BackupUploadVerifiedCheckpoint{
-						PointId: pointID, StoredSizeBytes: 102, StoredSha256: storedDigest,
-					},
-				},
-			},
-		},
-		{
-			name: "source cleanup completed",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:    testbackupruntime.BackupCheckpointSourceCleanupCompleted,
-				PointID: pointID,
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_SOURCE_CLEANUP_COMPLETED,
-				Payload: &agentpb.BackupCheckpointRequest_SourceCleanupCompleted{
-					SourceCleanupCompleted: &agentpb.BackupSourceCleanupCompletedCheckpoint{PointId: pointID},
-				},
-			},
-		},
-		{
-			name: "restore artifact validated",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:          testbackupruntime.BackupCheckpointRestoreArtifactValidated,
-				PointID:       pointID,
-				StoredSHA256:  hex.EncodeToString(storedDigest),
-				DecodedSHA256: hex.EncodeToString(decodedDigest),
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_RESTORE_ARTIFACT_VALIDATED,
-				Payload: &agentpb.BackupCheckpointRequest_RestoreArtifactValidated{
-					RestoreArtifactValidated: &agentpb.BackupRestoreArtifactValidatedCheckpoint{
-						PointId: pointID, StoredSha256: storedDigest, DecodedSha256: decodedDigest,
-					},
-				},
-			},
-		},
-		{
-			name: "volume tree staged",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:                     testbackupruntime.BackupCheckpointVolumeTreeStaged,
-				PointID:                  pointID,
-				StagedTreeManifestSHA256: hex.EncodeToString(stagedDigest),
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_VOLUME_TREE_STAGED,
-				Payload: &agentpb.BackupCheckpointRequest_VolumeTreeStaged{
-					VolumeTreeStaged: &agentpb.BackupVolumeTreeStagedCheckpoint{
-						PointId: pointID, StagedTreeManifestSha256: stagedDigest,
-					},
-				},
-			},
-		},
-		{
-			name: "volume tree exchanged",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:                   testbackupruntime.BackupCheckpointVolumeTreeExchanged,
-				PointID:                pointID,
-				LiveTreeManifestSHA256: hex.EncodeToString(liveDigest),
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_VOLUME_TREE_EXCHANGED,
-				Payload: &agentpb.BackupCheckpointRequest_VolumeTreeExchanged{
-					VolumeTreeExchanged: &agentpb.BackupVolumeTreeExchangedCheckpoint{
-						PointId: pointID, LiveTreeManifestSha256: liveDigest,
-					},
-				},
-			},
-		},
-		{
-			name: "volume replaced tree cleaned",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:    testbackupruntime.BackupCheckpointVolumeReplacedTreeCleaned,
-				PointID: pointID,
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_VOLUME_REPLACED_TREE_CLEANED,
-				Payload: &agentpb.BackupCheckpointRequest_VolumeReplacedTreeCleaned{
-					VolumeReplacedTreeCleaned: &agentpb.BackupVolumeReplacedTreeCleanedCheckpoint{PointId: pointID},
-				},
-			},
-		},
-		{
-			name: "config generation staged",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:                          testbackupruntime.BackupCheckpointConfigGenerationStaged,
-				PointID:                       pointID,
-				RestoreGenerationID:           restoreGenerationID,
-				EntryGenerationManifestSHA256: hex.EncodeToString(manifestDigest),
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_STAGED,
-				Payload: &agentpb.BackupCheckpointRequest_ConfigGenerationStaged{
-					ConfigGenerationStaged: &agentpb.BackupConfigGenerationStagedCheckpoint{
-						PointId: pointID, RestoreGenerationId: restoreGenerationID,
-						EntryGenerationManifestSha256: manifestDigest,
-					},
-				},
-			},
-		},
-		{
-			name: "config generation activated",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:                testbackupruntime.BackupCheckpointConfigGenerationActivated,
-				PointID:             pointID,
-				RestoreGenerationID: restoreGenerationID,
-				RenderGeneration:    106,
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_ACTIVATED,
-				Payload: &agentpb.BackupCheckpointRequest_ConfigGenerationActivated{
-					ConfigGenerationActivated: &agentpb.BackupConfigGenerationActivatedCheckpoint{
-						PointId: pointID, RestoreGenerationId: restoreGenerationID, RenderGeneration: 106,
-					},
-				},
-			},
-		},
-		{
-			name: "postgres restore verified",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:    testbackupruntime.BackupCheckpointPostgresRestoreVerified,
-				PointID: pointID,
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_POSTGRES_RESTORE_VERIFIED,
-				Payload: &agentpb.BackupCheckpointRequest_PostgresRestoreVerified{
-					PostgresRestoreVerified: &agentpb.BackupPostgresRestoreVerifiedCheckpoint{PointId: pointID},
-				},
-			},
-		},
-		{
-			name: "remote object absent",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:    testbackupruntime.BackupCheckpointRemoteObjectAbsent,
-				PointID: pointID,
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_REMOTE_OBJECT_ABSENT,
-				Payload: &agentpb.BackupCheckpointRequest_RemoteObjectAbsent{
-					RemoteObjectAbsent: &agentpb.BackupRemoteObjectAbsentCheckpoint{PointId: pointID},
-				},
-			},
-		},
-		{
-			name: "upload completed",
-			payload: testbackupruntime.BackupCheckpointPayload{
-				Kind:            testbackupruntime.BackupCheckpointUploadCompleted,
-				PointID:         pointID,
-				StoredSizeBytes: 107,
-				StoredSHA256:    hex.EncodeToString(storedDigest),
-			},
-			request: &agentpb.BackupCheckpointRequest{
-				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_COMPLETED,
-				Payload: &agentpb.BackupCheckpointRequest_UploadCompleted{
-					UploadCompleted: &agentpb.BackupUploadCompletedCheckpoint{
-						PointId: pointID, StoredSizeBytes: 107, StoredSha256: storedDigest,
-					},
-				},
-			},
-		},
-	}
-	if got, want := len(tests), int(testbackupruntime.BackupCheckpointUploadCompleted); got != want {
-		t.Fatalf("checkpoint parity vectors = %d, want %d current kinds", got, want)
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := testbackupruntime.BackupCheckpointDigest(test.payload)
-			if err != nil {
-				t.Fatalf("backupCheckpointDigest() error = %v", err)
-			}
-			want, err := executionplan.ComputeBackupCheckpointPayloadDigest(test.request)
-			if err != nil {
-				t.Fatalf("ComputeBackupCheckpointPayloadDigest() error = %v", err)
-			}
-			if got != hex.EncodeToString(want) {
-				t.Fatalf("backup checkpoint digest = %s, want %x", got, want)
-			}
-		})
-	}
 }
 
 func seedBackupCheckpointAssignment(
@@ -426,7 +213,7 @@ func seedBackupCheckpointAssignmentForTask(
 	pointIDs []string,
 ) (testbackupruntime.BackupCheckpointInput, int64) {
 	t.Helper()
-	now := run.CreatedAt
+	now := time.Now().UTC().Truncate(time.Millisecond)
 	task := validTaskRecord(now)
 	task.ID = run.TaskID
 	task.OperationID = run.OperationID
@@ -438,7 +225,7 @@ func seedBackupCheckpointAssignmentForTask(
 	task.RenderGeneration = 0
 	task.Params = nil
 	task.Materializations = nil
-	task.TimeoutSeconds = backupTaskTimeoutSeconds
+	task.TimeoutSeconds = backupTaskTimeout(task.Type)
 	task.Steps = make([]testtaskjournal.TaskStepRecord, len(pointIDs))
 	for index := range pointIDs {
 		task.Steps[index] = testtaskjournal.TaskStepRecord{
@@ -471,6 +258,15 @@ func seedBackupCheckpointAssignmentForTask(
 		ClaimedTaskRevision: created.Revision, AssignedAt: now.Add(time.Second),
 		Deadline: now.Add(6*time.Hour + time.Second), RecoveryDeadline: now.Add(12*time.Hour + time.Second),
 		ExecutionMode: testtaskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
+		BackupAuthorityFence: &testtaskassignments.BackupAuthorityFence{
+			AssignmentGeneration: 1, AuthoritySHA256: testBackupDigest,
+		},
+	}
+	for _, step := range task.Steps {
+		assignment.BackupAuthorityFence.Steps = append(assignment.BackupAuthorityFence.Steps,
+			testtaskassignments.BackupStepAuthorityFence{
+				StepID: step.ID, ExecutionID: ids.NewULID(), AuthoritySHA256: testBackupDigest,
+			})
 	}
 	running := task
 	running.Status = testtaskjournal.TaskStatusRunning
@@ -516,12 +312,52 @@ func seedBackupCheckpointAssignmentForTask(
 	if err != nil || !claimed.Succeeded {
 		t.Fatalf("seed checkpoint assignment = %#v, %v", claimed, err)
 	}
+	digest, err := hex.DecodeString(testBackupDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sameInode := false
+	request := &agentpb.BackupCheckpointRequest{
+		TaskId: task.ID, AssignmentId: assignment.AssignmentID, StepId: task.Steps[0].ID,
+		ExecutionId:        assignment.BackupAuthorityFence.Steps[0].ExecutionID,
+		CheckpointSequence: 1, AuthorityDigest: digest,
+		Checkpoint: &agentpb.BackupCheckpointRequest_ArtifactPrepared{ArtifactPrepared: &agentpb.BackupArtifactPrepared{
+			PointId: pointIDs[0],
+			Evidence: &agentpb.BackupArtifactEvidence{
+				SourceSizeBytes: 4096, SourceSha256: append([]byte(nil), digest...),
+				StoredSizeBytes: 4296, StoredSha256: append([]byte(nil), digest...),
+			},
+			Finals: &agentpb.BackupStagingFinals{SameInode: &sameInode,
+				SourceRelativeName: executionplan.BackupSourceStagingFinal, StoredRelativeName: executionplan.BackupStoredStagingFinal},
+			Archive: &agentpb.BackupArtifactPrepared_Postgres{
+				Postgres: &agentpb.BackupPostgresArchiveEvidence{PgDumpMajor: 16, AdapterContractVersion: 1},
+			},
+		}},
+	}
 	return testbackupruntime.BackupCheckpointInput{
 		TaskID: task.ID, AssignmentID: assignment.AssignmentID, AgentID: agentID,
 		AgentGeneration: assignment.AgentGeneration, StepID: task.Steps[0].ID, Sequence: 1,
-		Payload: testbackupruntime.BackupCheckpointPayload{
-			Kind: testbackupruntime.BackupCheckpointArtifactPrepared, PointID: pointIDs[0],
-			StoredSizeBytes: 123, StoredSHA256: testBackupDigest,
-		},
+		ExecutionID: request.ExecutionId, AuthoritySHA256: testBackupDigest,
+		AssignmentGeneration: 1, Request: request,
 	}, claimed.Revision
+}
+
+func backupCheckpointPruneObject(run testbackupruntime.BackupRunRecord, pointID string) *agentpb.BackupObjectIdentity {
+	pathStyle := run.ConnectorPathStyle
+	revision := func(value int64) *agentpb.RevisionDigest {
+		return &agentpb.RevisionDigest{ModRevision: value, Sha256: bytes.Repeat([]byte{1}, 32)}
+	}
+	return &agentpb.BackupObjectIdentity{
+		Connector: &agentpb.BackupConnectorAuthority{
+			ConnectorId: run.ConnectorID, Connector: revision(run.ConnectorRevision),
+			CanonicalEndpointUrl: run.ConnectorEndpoint, Region: run.ConnectorRegion, Prefix: run.ConnectorPrefix,
+			PathStyle: &pathStyle, AccessKeySlotId: "access", SecretKeySlotId: "secret",
+			AccessKeySlot: revision(1), SecretKeySlot: revision(1),
+		},
+		Bucket:    run.ConnectorBucket,
+		ObjectKey: run.ConnectorPrefix + run.EnvironmentID + "/" + run.Sources[0].SourceID + "/" + pointID + "/artifact.bin",
+		Discriminator: &agentpb.BackupObjectIdentity_VersionId{
+			VersionId: &agentpb.BackupS3VersionId{Value: "version-1"},
+		},
+	}
 }

@@ -34,18 +34,18 @@ func (repository *Reader) GetBackupOrphan(
 	}
 	defer clear(initial.Entry.Value)
 	record, err := DecodeBackupOrphanRecord(initial.Entry.Value)
-	if err != nil || record.Point.ID != recoveryPointID {
+	if err != nil || record.Target.ID != recoveryPointID {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, false, CorruptBackupRuntimeRecord()
 	}
 	membershipKey, err := BackupOrphanEnvironmentIndexKey(
-		record.Point.EnvironmentID,
+		record.Target.EnvironmentID,
 		recoveryPointID,
 	)
 	if err != nil {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, false, CorruptBackupRuntimeRecord()
 	}
 	connectorMembershipKey, err := BackupOrphanConnectorIndexKey(
-		record.Point.ConnectorID,
+		record.Target.ConnectorID,
 		recoveryPointID,
 	)
 	if err != nil {
@@ -65,10 +65,7 @@ func (repository *Reader) GetBackupOrphan(
 	}
 	defer etcdstore.ClearValues(authority.Values)
 	stored, err := DecodeBackupOrphanRecord(authority.Values[0].Value)
-	expectedVersion := int64(1)
-	if stored.State == BackupOrphanDelete {
-		expectedVersion = 2
-	}
+	expectedVersion := backupOrphanRecordVersion(stored)
 	if err != nil || stored != record ||
 		authority.Values[0].ModRevision != initial.Entry.ModRevision ||
 		authority.Values[1].Key != membershipKey ||

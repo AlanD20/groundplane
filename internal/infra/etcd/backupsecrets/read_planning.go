@@ -14,27 +14,32 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type backupSecretDynamicRead struct {
 	keys  []string
 	index map[string]int
 
-	environment      int
-	project          int
-	environmentFence int
-	projectFence     int
-	connectors       map[string]int
-	connectorFences  map[string]int
-	credentials      map[string]int
-	sources          map[string]int
-	points           map[string]int
-	prunes           map[string]int
-	secretIndexes    []backupSecretIndexRead
-	secretRecords    map[string]int
-	secretFences     map[string]int
-	secretValues     map[string]int
-	last             *etcdstore.GetManyResult
+	environment          int
+	project              int
+	environmentFence     int
+	projectFence         int
+	connectors           map[string]int
+	connectorAuthorities map[string]*agentpb.BackupConnectorAuthority
+	scope                *agentpb.BackupPlanScope
+	connectorFences      map[string]int
+	credentials          map[string]int
+	sources              map[string]int
+	points               map[string]int
+	prunes               map[string]int
+	secretIndexes        []backupSecretIndexRead
+	secretRecords        map[string]int
+	secretFences         map[string]int
+	secretValues         map[string]int
+	last                 *etcdstore.GetManyResult
+	currentAgeKey        int
+	currentAgeValue      int
 }
 
 type backupSecretIndexRead struct {
@@ -47,10 +52,12 @@ type backupSecretIndexRead struct {
 func newBackupSecretDynamicRead() *backupSecretDynamicRead {
 	return &backupSecretDynamicRead{
 		index: make(map[string]int), connectors: make(map[string]int),
-		connectorFences: make(map[string]int), credentials: make(map[string]int),
+		connectorAuthorities: make(map[string]*agentpb.BackupConnectorAuthority),
+		connectorFences:      make(map[string]int), credentials: make(map[string]int),
 		sources: make(map[string]int), points: make(map[string]int),
 		prunes: make(map[string]int), secretRecords: make(map[string]int),
 		secretFences: make(map[string]int), secretValues: make(map[string]int),
+		currentAgeKey: -1, currentAgeValue: -1,
 	}
 }
 
@@ -65,6 +72,7 @@ func (dynamic *backupSecretDynamicRead) add(key string) int {
 }
 
 func (reader *Reader) planDynamicKeys(
+	ctx context.Context,
 	dynamic *backupSecretDynamicRead,
 	evidence Evidence,
 	plan *agentpb.ExecutionPlan,
@@ -73,6 +81,7 @@ func (reader *Reader) planDynamicKeys(
 	environmentID := ""
 	connectorIDs := make(map[string]int)
 	sourceIDs := make(map[string]int)
+	dynamic.scope = plan.GetBackupScope()
 	if evidence.Run != nil {
 		environmentID = evidence.Run.EnvironmentID
 		for _, source := range evidence.Run.Sources {
@@ -83,26 +92,67 @@ func (reader *Reader) planDynamicKeys(
 		position := dynamic.add(connectorrecord.RecordKey(evidence.Run.ConnectorID))
 		connectorIDs[evidence.Run.ConnectorID] = position
 		dynamic.connectors[evidence.Run.ConnectorID] = position
+		dynamic.connectorAuthorities[evidence.Run.ConnectorID] = plan.Steps[stepIndex].GetBackupStep().
+			GetCapture().
+			GetTarget().
+			GetConnector()
+	} else if evidence.Restore != nil {
+		restored := evidence.Restore
+		environmentID = restored.EnvironmentID
+		connectorID := restored.Point.ConnectorID
+		position := dynamic.add(connectorrecord.RecordKey(connectorID))
+		connectorIDs[connectorID], dynamic.connectors[connectorID] = position, position
+		dynamic.connectorAuthorities[connectorID] = plan.Steps[stepIndex].GetBackupStep().GetRestore().GetSourceObject().GetConnector()
+		position = dynamic.add(backuppolicy.BackupSourceKey(restored.Point.SourceID))
+		sourceIDs[restored.Point.SourceID], dynamic.sources[restored.Point.SourceID] = position, position
+		dynamic.points[restored.Point.ID] = dynamic.add(backupruntime.BackupRecoveryPointKey(restored.Point.ID))
 	} else if evidence.Dispatch != nil {
 		environmentID = evidence.Dispatch.EnvironmentID
+		if len(plan.Steps) != len(evidence.Dispatch.RecoveryPointIDs) {
+			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune sealed step count changed")
+		}
+		pointKeys := make([]string, len(evidence.Dispatch.RecoveryPointIDs))
+		for index, pointID := range evidence.Dispatch.RecoveryPointIDs {
+			pointKeys[index] = backupruntime.BackupRecoveryPointKey(pointID)
+		}
+		points, err := reader.readFixed(ctx, pointKeys, evidence.ReadRevision)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		defer etcdstore.ClearValues(points.Values)
 		for index, pointID := range evidence.Dispatch.RecoveryPointIDs {
 			dynamic.points[pointID] = dynamic.add(backupruntime.BackupRecoveryPointKey(pointID))
 			dynamic.prunes[pointID] = dynamic.add(backupruntime.BackupRecoveryPointPruneKey(pointID))
-			if index < len(plan.Steps) {
-				prune := plan.Steps[index].GetBackupArtifactPrune()
-				if prune != nil {
-					sourcePosition := dynamic.add(backuppolicy.BackupSourceKey(prune.SourceId))
-					sourceIDs[prune.SourceId] = sourcePosition
-					dynamic.sources[prune.SourceId] = sourcePosition
-					connectorPosition := dynamic.add(connectorrecord.RecordKey(prune.ConnectorId))
-					connectorIDs[prune.ConnectorId] = connectorPosition
-					dynamic.connectors[prune.ConnectorId] = connectorPosition
-				}
+			prune := plan.Steps[index].GetBackupStep().GetPrune()
+			if prune == nil || len(prune.Objects) != 1 || prune.Objects[0].Ordinal != uint32(index+1) ||
+				prune.Objects[0].PointId != pointID || points.Values[index] == nil {
+				return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune sealed point authority changed")
 			}
+			point, err := backupruntime.DecodeBackupRecoveryPointRecord(points.Values[index].Value)
+			if err != nil || point.ID != pointID || point.EnvironmentID != environmentID {
+				return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune point evidence changed")
+			}
+			authority := prune.Objects[0].GetObject().GetConnector()
+			if authority.GetConnectorId() != point.ConnectorID {
+				return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune Connector identity changed")
+			}
+			if previous := dynamic.connectorAuthorities[point.ConnectorID]; previous != nil && !proto.Equal(previous, authority) {
+				return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune Connector authorities disagree")
+			}
+			dynamic.connectorAuthorities[point.ConnectorID] = authority
+			sourcePosition := dynamic.add(backuppolicy.BackupSourceKey(point.SourceID))
+			sourceIDs[point.SourceID] = sourcePosition
+			dynamic.sources[point.SourceID] = sourcePosition
+			connectorPosition := dynamic.add(connectorrecord.RecordKey(point.ConnectorID))
+			connectorIDs[point.ConnectorID] = connectorPosition
+			dynamic.connectors[point.ConnectorID] = connectorPosition
 		}
 	}
 	if environmentID == "" || stepIndex < 0 || stepIndex >= len(plan.Steps) {
 		return "", nil, nil, errs.New(errs.KindInternal, "backup secret resolution scope is incomplete")
+	}
+	if err := planCurrentAgeIdentityKeys(dynamic, plan.Steps[stepIndex], environmentID); err != nil {
+		return "", nil, nil, err
 	}
 	dynamic.environment = dynamic.add(hierarchyrecord.EnvironmentKey(environmentID))
 	dynamic.environmentFence = dynamic.add(

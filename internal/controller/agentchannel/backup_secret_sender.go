@@ -124,21 +124,7 @@ func backupSecretControllerMessage(
 func expectedBackupSecretSlotPurposes(
 	step *agentpb.ExecutionStep,
 ) ([]agentpb.BackupSecretSlotPurpose, error) {
-	if step == nil {
-		return nil, errs.New(errs.KindInternal, "backup secret slot step is required")
-	}
-	if capture := step.GetBackupSourceCapture(); capture != nil {
-		if capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE &&
-			capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
-			return nil, errs.New(errs.KindInternal, "backup source encryption is invalid")
-		}
-	} else if step.GetBackupArtifactPrune() == nil {
-		return nil, errs.New(errs.KindInternal, "backup secret slot step is invalid")
-	}
-	return []agentpb.BackupSecretSlotPurpose{
-		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
-		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
-	}, nil
+	return backupsecret.Purposes(step)
 }
 
 func clearBackupSecretSlots(slots map[agentpb.BackupSecretSlotPurpose][]byte) {

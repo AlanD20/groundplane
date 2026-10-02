@@ -83,7 +83,7 @@ func recoveryPointResponse(record backupruntime.BackupRecoveryPointRecord) apiTy
 		SourceKind: apiTypes.BackupSourceKind(record.SourceKind),
 		TargetID:   record.TargetID,
 		CreatedAt:  record.CreatedAt.UTC().Format(time.RFC3339),
-		SizeBytes:  record.SizeBytes,
+		SizeBytes:  int64(record.Evidence.StoredSizeBytes),
 		Encrypted:  record.Encryption == backupruntime.BackupRuntimeEncryptionAge,
 		KeyEra:     record.KeyEra,
 		Status:     apiTypes.RecoveryPointVerified,

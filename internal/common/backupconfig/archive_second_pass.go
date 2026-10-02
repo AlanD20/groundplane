@@ -2,7 +2,6 @@ package backupconfig
 
 import (
 	"context"
-	"crypto/sha256"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"io"
 	"sync"
@@ -90,40 +89,10 @@ func (pass *PassTwo) OpenValue(ctx context.Context, index int) (Entry, io.ReadCl
 	artifact := pass.artifact
 	artifact.mu.Lock()
 	defer artifact.mu.Unlock()
-	if artifact.closed || artifact.spool == nil {
-		return Entry{}, nil, archiveError("validated artifact is closed")
-	}
-	entry := cloneEntries([]Entry{pass.layout.Entries[index]})[0]
-	value := make([]byte, int(entry.Value.SizeBytes))
-	keep := false
-	defer func() {
-		if !keep {
-			clearBytes(value)
-		}
-	}()
-	if err := readAtContext(
-		ctx,
-		artifact.spool,
-		value,
-		pass.layout.ValuePayloadOffsets[index],
-	); err != nil {
+	entry, value, err := artifact.readValidatedValue(ctx, pass.layout, index)
+	if err != nil {
 		return Entry{}, nil, err
 	}
-	validator := selectedValueValidator{
-		requireUTF8: entry.Source.Kind == SourceLiteral ||
-			entry.Metadata.Kind == MetadataEnvironment,
-		rejectNUL: entry.Metadata.Kind == MetadataEnvironment,
-	}
-	if !validator.consume(value) || !validator.finish() {
-		validator.clear()
-		return Entry{}, nil, archiveError("pass-two selected value violates its semantic policy")
-	}
-	validator.clear()
-	digest := sha256.Sum256(value)
-	if digest != entry.Value.SHA256 {
-		return Entry{}, nil, archiveError("pass-two selected value digest changed after validation")
-	}
-	keep = true
 	reserved = false
 	return entry, &authenticatedValueReader{
 		ctx:     ctx,

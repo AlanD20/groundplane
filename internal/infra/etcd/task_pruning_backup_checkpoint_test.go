@@ -2,15 +2,19 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const taskPruneCheckpointDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -201,7 +205,8 @@ func seedTaskPruneBackupCheckpoints(
 			TaskID:       taskID,
 			AssignmentID: ids.NewAt(ids.KindAssignment, now, int64(9200+index)),
 			StepID:       ids.NewAt(ids.KindStep, now, int64(9300+index)),
-			NextSequence: 2,
+			ExecutionID:  ids.NewULID(), AssignmentGeneration: 1,
+			AuthoritySHA256: taskPruneCheckpointDigest, NextSequence: 2,
 		}
 		value, err := testbackupruntime.EncodeBackupCheckpointCursorRecord(record)
 		if err != nil {
@@ -211,7 +216,8 @@ func seedTaskPruneBackupCheckpoints(
 			t,
 			store,
 			testbackupruntime.BackupCheckpointCursorKey(testbackupruntime.BackupCheckpointInput{
-				TaskID: record.TaskID, AssignmentID: record.AssignmentID, StepID: record.StepID,
+				TaskID: record.TaskID, AssignmentID: record.AssignmentID,
+				StepID: record.StepID, ExecutionID: record.ExecutionID,
 			}),
 			value,
 		)
@@ -219,11 +225,60 @@ func seedTaskPruneBackupCheckpoints(
 	}
 	assignmentID := ids.NewAt(ids.KindAssignment, now, 9400)
 	stepID := ids.NewAt(ids.KindStep, now, 9401)
+	executionID := ids.NewULID()
+	authorityDigest, err := hex.DecodeString(taskPruneCheckpointDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for index := 0; index < deduplications; index++ {
+		sequence := uint64(index + 1)
+		request := &agentpb.BackupCheckpointRequest{
+			TaskId: taskID, AssignmentId: assignmentID, StepId: stepID, ExecutionId: executionID,
+			CheckpointSequence: sequence, AuthorityDigest: append([]byte(nil), authorityDigest...),
+			Checkpoint: &agentpb.BackupCheckpointRequest_ArtifactPrepared{
+				ArtifactPrepared: &agentpb.BackupArtifactPrepared{
+					PointId: testBackupPointID,
+					Evidence: &agentpb.BackupArtifactEvidence{
+						SourceSizeBytes: 4096, SourceSha256: append([]byte(nil), authorityDigest...),
+						StoredSizeBytes: 4296, StoredSha256: append([]byte(nil), authorityDigest...),
+					},
+					Finals: &agentpb.BackupStagingFinals{
+						SourceRelativeName: executionplan.BackupSourceStagingFinal,
+						StoredRelativeName: executionplan.BackupStoredStagingFinal,
+						SameInode:          func() *bool { value := false; return &value }(),
+					},
+					Archive: &agentpb.BackupArtifactPrepared_Postgres{
+						Postgres: &agentpb.BackupPostgresArchiveEvidence{PgDumpMajor: 16, AdapterContractVersion: 1},
+					},
+				},
+			},
+		}
+		preceding := int64(0)
+		if sequence > 1 {
+			preceding = int64(index)
+			request.PrecedingCheckpoint = &agentpb.CheckpointFence{
+				AuthorityDigest: append([]byte(nil), authorityDigest...), DedupeKeyModRevision: preceding,
+			}
+		}
+		input := testbackupruntime.BackupCheckpointInput{
+			TaskID: taskID, AssignmentID: assignmentID, StepID: stepID, ExecutionID: executionID,
+			AssignmentGeneration: 1, AuthoritySHA256: taskPruneCheckpointDigest,
+			PrecedingCheckpointRevision: preceding, Sequence: sequence, Request: request,
+		}
+		payloadSHA256, err := testbackupruntime.BackupCheckpointDigest(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requestValue, err := proto.MarshalOptions{Deterministic: true}.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
 		record := testbackupruntime.BackupCheckpointDedupRecord{
-			TaskID: taskID, AssignmentID: assignmentID, StepID: stepID,
-			Sequence: uint64(index + 1), Kind: testbackupruntime.BackupCheckpointUploadCompleted,
-			PayloadSHA256: taskPruneCheckpointDigest,
+			TaskID: taskID, AssignmentID: assignmentID, StepID: stepID, ExecutionID: executionID,
+			AssignmentGeneration: 1, AuthoritySHA256: taskPruneCheckpointDigest,
+			PrecedingCheckpointRevision: preceding, Sequence: sequence,
+			CheckpointTag: testbackupruntime.BackupCheckpointTag(request),
+			PayloadSHA256: payloadSHA256, Request: requestValue,
 		}
 		value, err := testbackupruntime.EncodeBackupCheckpointDedupRecord(record)
 		if err != nil {
@@ -234,7 +289,7 @@ func seedTaskPruneBackupCheckpoints(
 			store,
 			testbackupruntime.BackupCheckpointDedupKey(testbackupruntime.BackupCheckpointInput{
 				TaskID: record.TaskID, AssignmentID: record.AssignmentID,
-				StepID: record.StepID, Sequence: record.Sequence,
+				StepID: record.StepID, ExecutionID: record.ExecutionID, Sequence: record.Sequence,
 			}),
 			value,
 		)

@@ -3,9 +3,7 @@ package etcd
 import (
 	"context"
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
-	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
-	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -57,7 +55,9 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		version := pending[index]
 		record := version.Record
 		if version.Revision <= 0 || record.State != backupruntime.BackupPrunePending || record.TaskID != "" ||
+			record.DispatchAttempts >= backupruntime.MaximumBackupPruneDispatchAttempts ||
 			record.OperationID != dispatch.OperationID ||
+			(index > 0 && (record.PolicyRevision != pending[0].Record.PolicyRevision || record.PolicySHA256 != pending[0].Record.PolicySHA256)) ||
 			record.Point.EnvironmentID != dispatch.EnvironmentID ||
 			record.Point.ID != dispatch.RecoveryPointIDs[index] ||
 			dispatch.CreatedAt.Before(record.UpdatedAt) {
@@ -68,7 +68,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 				"backup prune publication authority is invalid",
 			)
 		}
-		authorityKeys, keyErr := backupPruneAuthorityKeys(record.Point)
+		authorityKeys, keyErr := backupruntime.BackupPruneAuthorityKeys(record.Point)
 		if keyErr != nil {
 			clear(dispatchValue)
 			clear(lockValue)
@@ -77,6 +77,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		keys = append(keys, authorityKeys...)
 		assigned := record
 		assigned.State = backupruntime.BackupPruneAssigned
+		assigned.DispatchAttempts++
 		assigned.TaskID = dispatch.TaskID
 		assigned.UpdatedAt = dispatch.CreatedAt
 		assignedValues[index], err = backupruntime.EncodeBackupRecoveryPointPruneRecord(assigned)
@@ -103,7 +104,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 	}
 	for index := range pending {
 		start := 1 + index*5
-		if err := validatePendingBackupPruneAuthority(
+		if err := backupruntime.ValidatePendingBackupPruneAuthority(
 			anchor.Values[start:start+5],
 			pending[index],
 		); err != nil {
@@ -171,6 +172,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 	return backupPruneTransactionPlan{
 		conditions: conditions,
 		mutations:  mutations,
+		evidence:   planEvidence,
 		authority: &backupTaskPublicationAuthority{
 			taskID: dispatch.TaskID, operationID: dispatch.OperationID,
 			environmentID: dispatch.EnvironmentID, taskType: taskjournal.TaskBackupPrune,
@@ -181,59 +183,4 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		},
 		readRevision: anchor.ReadRevision,
 	}, nil
-}
-
-func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
-	ctx context.Context,
-	pending []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
-	authorityValues []*etcdstore.KeyValue,
-	readRevision int64,
-) ([]backupplanning.PruneExecutionEvidence, error) {
-	evidence := make([]backupplanning.PruneExecutionEvidence, len(pending))
-	for index, version := range pending {
-		start := 1 + index*5
-		if start+4 >= len(authorityValues) || authorityValues[start+1] == nil {
-			return nil, backupruntime.CorruptBackupRuntimeRecord()
-		}
-		point, err := backupruntime.DecodeBackupRecoveryPointRecord(authorityValues[start+1].Value)
-		if err != nil || point.BackupRecoveryPointSnapshot != version.Record.Point {
-			return nil, backupruntime.CorruptBackupRuntimeRecord()
-		}
-		fixed, err := repository.ReadFixedKeys(ctx, []string{
-			backuppolicy.BackupSourceKey(point.SourceID),
-			hierarchyrecord.EnvironmentKey(point.EnvironmentID),
-			connectorrecord.RecordKey(point.ConnectorID),
-		}, readRevision)
-		if err != nil {
-			return nil, err
-		}
-		if len(fixed.Values) != 3 || fixed.Values[0] == nil || fixed.Values[1] == nil || fixed.Values[2] == nil {
-			etcdstore.ClearValues(fixed.Values)
-			return nil, errs.New(errs.KindStateConflict, "backup prune plan evidence is missing")
-		}
-		source, sourceErr := backuppolicy.DecodeBackupSourceRecord(fixed.Values[0].Value)
-		environment, environmentErr := hierarchyrecord.DecodeEnvironment(fixed.Values[1].Value)
-		connector, connectorErr := connectorrecord.DecodeRecord(fixed.Values[2].Value)
-		if sourceErr != nil || environmentErr != nil || connectorErr != nil ||
-			source.ID != point.SourceID || source.EnvironmentID != point.EnvironmentID ||
-			environment.ID != point.EnvironmentID || connector.Connector.ID != point.ConnectorID ||
-			connector.Connector.EnvironmentID != point.EnvironmentID {
-			etcdstore.ClearValues(fixed.Values)
-			return nil, errs.New(errs.KindStateConflict, "backup prune plan evidence changed")
-		}
-		evidence[index] = backupplanning.PruneExecutionEvidence{
-			Prune: version.Record, PruneRevision: version.Revision,
-			PointRevision:       authorityValues[start+1].ModRevision,
-			SourceRevision:      fixed.Values[0].ModRevision,
-			EnvironmentRevision: fixed.Values[1].ModRevision,
-			ConnectorRevision:   fixed.Values[2].ModRevision,
-			ConnectorEndpoint:   connector.Connector.Endpoint,
-			ConnectorBucket:     connector.Connector.Bucket,
-			ConnectorPrefix:     connector.Connector.Prefix,
-			ConnectorRegion:     connector.Connector.Region,
-			ConnectorPathStyle:  connector.Connector.PathStyle,
-		}
-		etcdstore.ClearValues(fixed.Values)
-	}
-	return evidence, nil
 }

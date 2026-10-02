@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import install_ref
+from postgres16_test_fixture import postgres16_release_base64
 
 
 class RefBuildCleanupTests(unittest.TestCase):
@@ -39,6 +40,8 @@ class RefBuildCleanupTests(unittest.TestCase):
             with patch.object(install_ref, "run", side_effect=docker), \
                  patch.object(install_ref, "DOCKER_SOCKET", source), \
                  patch.object(install_ref, "present", side_effect=lambda image: image in images), \
+                 patch.object(install_ref.install_postgres16, "build_release",
+                              return_value=postgres16_release_base64()), \
                  patch.object(install_ref.subprocess, "run"):
                 if fail_at:
                     with self.assertRaises(subprocess.CalledProcessError):

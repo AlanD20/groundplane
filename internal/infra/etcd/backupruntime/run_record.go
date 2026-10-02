@@ -18,9 +18,11 @@ type BackupPostgresSourceSnapshot struct {
 	BackingEnvironmentRevision int64  `json:"backing_environment_revision"`
 	BackingServiceID           string `json:"backing_service_id"`
 	BackingServiceRevision     int64  `json:"backing_service_revision"`
+	ConsumerServiceID          string `json:"consumer_service_id"`
 	AttachFactsRevision        int64  `json:"attach_facts_revision"`
 	Database                   string `json:"database"`
 	Role                       string `json:"role"`
+	ManagedReleaseIndex        string `json:"managed_release_index"`
 }
 
 type BackupVolumeServiceSnapshot struct {
@@ -36,6 +38,8 @@ type BackupVolumeSourceSnapshot struct {
 	EnvironmentRevision int64                         `json:"environment_revision"`
 	VolumeID            string                        `json:"volume_id"`
 	DesiredRevisionID   string                        `json:"desired_revision_id"`
+	HeadRevision        int64                         `json:"head_revision"`
+	HeadSHA256          string                        `json:"head_sha256"`
 	ProjectionRoot      int64                         `json:"projection_root_revision"`
 	DependencyDigest    string                        `json:"dependency_digest"`
 	ArtifactID          string                        `json:"artifact_id,omitempty"`
@@ -60,22 +64,25 @@ type BackupRunSourceSnapshot struct {
 }
 
 type BackupRunSourceAttemptRecord struct {
-	Ordinal                uint32                   `json:"ordinal"`
-	SourceID               string                   `json:"source_id"`
-	Kind                   BackupRuntimeSourceKind  `json:"kind"`
-	TargetID               string                   `json:"target_id"`
-	SourceRevision         int64                    `json:"source_revision"`
-	TargetRevision         int64                    `json:"target_revision"`
-	Snapshot               BackupRunSourceSnapshot  `json:"snapshot"`
-	Format                 BackupRuntimeFormat      `json:"format"`
-	RecoveryPointID        string                   `json:"recovery_point_id"`
-	RecoveryPointCreatedAt time.Time                `json:"recovery_point_created_at"`
-	ObjectKey              string                   `json:"object_key"`
-	State                  BackupSourceAttemptState `json:"state"`
-	Phase                  BackupSourceAttemptPhase `json:"phase"`
-	SizeBytes              int64                    `json:"size_bytes,omitempty"`
-	SHA256                 string                   `json:"sha256,omitempty"`
-	FailureCode            BackupFailureCode        `json:"failure_code,omitempty"`
+	Ordinal                uint32                      `json:"ordinal"`
+	SourceID               string                      `json:"source_id"`
+	Kind                   BackupRuntimeSourceKind     `json:"kind"`
+	TargetID               string                      `json:"target_id"`
+	SourceRevision         int64                       `json:"source_revision"`
+	TargetRevision         int64                       `json:"target_revision"`
+	Snapshot               BackupRunSourceSnapshot     `json:"snapshot"`
+	Format                 BackupRuntimeFormat         `json:"format"`
+	RecoveryPointID        string                      `json:"recovery_point_id"`
+	RecoveryPointCreatedAt time.Time                   `json:"recovery_point_created_at"`
+	ObjectKey              string                      `json:"object_key"`
+	State                  BackupSourceAttemptState    `json:"state"`
+	Phase                  BackupSourceAttemptPhase    `json:"phase"`
+	Evidence               BackupArtifactEvidence      `json:"evidence"`
+	ConfigArchive          BackupConfigArchiveEvidence `json:"config_archive"`
+	VolumeArchive          BackupVolumeArchiveEvidence `json:"volume_archive"`
+	Upload                 BackupUploadOutcome         `json:"upload"`
+	Object                 BackupObjectIdentity        `json:"object"`
+	FailureCode            BackupFailureCode           `json:"failure_code,omitempty"`
 }
 
 type BackupRunRecord struct {
@@ -84,6 +91,7 @@ type BackupRunRecord struct {
 	RetryOfTaskID                 string                         `json:"retry_of_task_id,omitempty"`
 	EnvironmentID                 string                         `json:"environment_id"`
 	PolicyRevision                int64                          `json:"policy_revision"`
+	PolicySHA256                  string                         `json:"policy_sha256"`
 	RetentionKeep                 int64                          `json:"retention_keep"`
 	Initiator                     BackupRunInitiator             `json:"initiator"`
 	ScheduledAt                   *time.Time                     `json:"scheduled_at,omitempty"`
@@ -114,7 +122,7 @@ func ValidateBackupRunRecord(record BackupRunRecord) error {
 		recordcodec.ValidateID(
 			ids.KindConnector,
 			record.ConnectorID,
-		) != nil || record.PolicyRevision <= 0 || record.RetentionKeep <= 0 ||
+		) != nil || record.PolicyRevision <= 0 || !recordcodec.ValidSHA256(record.PolicySHA256) || record.RetentionKeep <= 0 ||
 		record.RetentionKeep > backuppolicy.MaximumBackupPolicyKeep ||
 		record.ConnectorRevision <= 0 || record.ConnectorCredentialsRevision < 0 ||
 		(record.ConnectorHasDirectCredentials != (record.ConnectorCredentialsRevision > 0)) ||
@@ -163,6 +171,15 @@ func ValidateBackupRunRecord(record BackupRunRecord) error {
 			source,
 		); err != nil {
 			return err
+		}
+		if !validBackupSourceArtifactState(source.State, source.Phase, source.Evidence, source.Upload, source.Object) {
+			return invalidBackupRuntimeRecord("backup source upload outcome or selected identity is invalid")
+		}
+		if source.Evidence != (BackupArtifactEvidence{}) {
+			target := backupSourceTarget(record, source)
+			if !validBackupArtifactForTarget(source.Evidence, target) || source.Upload.Target != target.ObjectTarget() {
+				return invalidBackupRuntimeRecord("backup source evidence does not match its frozen target")
+			}
 		}
 		if _, exists := seenSources[source.SourceID]; exists {
 			return invalidBackupRuntimeRecord("backup run source ids are not unique")
@@ -317,16 +334,30 @@ func validateBackupRunSourceAttempt(
 	); err != nil {
 		return err
 	}
-	if (record.SizeBytes == 0) != (record.SHA256 == "") || record.SizeBytes < 0 ||
-		(record.SHA256 != "" && !recordcodec.ValidSHA256(record.SHA256)) {
+	if record.Evidence != (BackupArtifactEvidence{}) && !validBackupArtifact(record.Evidence) {
 		return invalidBackupRuntimeRecord("backup run source artifact evidence is invalid")
 	}
+	if record.Kind == BackupRuntimeSourceConfig && record.Phase == BackupSourcePhaseCapture {
+		if record.ConfigArchive != (BackupConfigArchiveEvidence{}) {
+			return invalidBackupRuntimeRecord("Config source has archive evidence before capture completion")
+		}
+	} else if err := validateSelectedConfigArchive(record.Kind, record.ConfigArchive, record.Evidence); err != nil {
+		return err
+	}
+	if record.Kind == BackupRuntimeSourceVolume && record.Phase == BackupSourcePhaseCapture {
+		if record.VolumeArchive != (BackupVolumeArchiveEvidence{}) {
+			return invalidBackupRuntimeRecord("Volume source has archive evidence before capture completion")
+		}
+	} else if err := validateSelectedVolumeArchive(record.Kind, record.VolumeArchive, record.Evidence); err != nil {
+		return err
+	}
 	if SourceAttemptRequiresArtifact(record.State, record.Phase) &&
-		(record.SizeBytes <= 0 || record.SHA256 == "") {
+		!validBackupArtifact(record.Evidence) {
 		return invalidBackupRuntimeRecord("backup run source state requires artifact evidence")
 	}
 	if sourceAttemptForbidsArtifact(record.State) &&
-		(record.SizeBytes != 0 || record.SHA256 != "") {
+		(record.Evidence != (BackupArtifactEvidence{}) || record.Upload != (BackupUploadOutcome{}) ||
+			record.Object != (BackupObjectIdentity{})) {
 		return invalidBackupRuntimeRecord("backup run source state cannot carry artifact evidence")
 	}
 	if !validBackupPhaseForAttemptState(record.State, record.Phase) ||
@@ -357,6 +388,7 @@ func validateBackupRunSourceSnapshot(
 	case BackupRuntimeSourceVolume:
 		if snapshot.Volume == nil || validateBackupVolumeSnapshot(*snapshot.Volume) != nil ||
 			snapshot.Volume.EnvironmentID != environmentID || snapshot.Volume.VolumeID != targetID ||
+			snapshot.Volume.HeadRevision != targetRevision ||
 			targetRevision <= 0 {
 			return invalidBackupRuntimeRecord("volume backup source snapshot is invalid")
 		}

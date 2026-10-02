@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
-	grounderrs "github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const (
@@ -111,6 +110,9 @@ const (
 	OperationRestoreApply            Operation = 9
 	OperationPostRestoreVerify       Operation = 10
 	OperationStop                    Operation = 11
+	OperationEvidence                Operation = 12
+	OperationRetire                  Operation = 13
+	OperationRecoveryInventory       Operation = 14
 )
 
 type Request struct {
@@ -121,6 +123,7 @@ type Request struct {
 	Role             string
 	SourceSize       uint64
 	SourceSHA256     Digest
+	RequestSHA256    Digest
 }
 
 type InputMode uint8
@@ -233,6 +236,10 @@ func ParseArguments(arguments []string) (Request, error) {
 		return parseRunArguments(arguments)
 	case "stop":
 		return parseStopArguments(arguments)
+	case "recovery-inventory":
+		return parseRecoveryInventoryArguments(arguments)
+	case "evidence", "retire":
+		return parseEvidenceArguments(arguments)
 	default:
 		return Request{}, invalid("postgres helper operation is invalid")
 	}
@@ -250,6 +257,13 @@ func (request Request) Arguments() ([]string, error) {
 		return nil, err
 	}
 	deadline := strconv.FormatUint(request.DeadlineUnixNano, 10)
+	if request.Operation == OperationEvidence || request.Operation == OperationRetire {
+		return []string{request.Operation.String(), protocolVersionArgument, request.Nonce.String(),
+			deadline, request.RequestSHA256.String()}, nil
+	}
+	if request.Operation == OperationRecoveryInventory {
+		return []string{request.Operation.String(), protocolVersionArgument, request.Nonce.String(), deadline}, nil
+	}
 	if request.Operation == OperationStop {
 		return []string{"stop", protocolVersionArgument, request.Nonce.String(), deadline}, nil
 	}
@@ -298,6 +312,23 @@ func (request Request) DockerExecCommand() ([]string, error) {
 func (request Request) Validate() error {
 	if request.Nonce == (Nonce{}) || request.DeadlineUnixNano == 0 {
 		return invalid("postgres helper request identity is invalid")
+	}
+	if request.Operation == OperationEvidence || request.Operation == OperationRetire {
+		if request.RequestSHA256 == (Digest{}) || request.Database != "" || request.Role != "" ||
+			request.SourceSize != 0 || request.SourceSHA256 != (Digest{}) {
+			return invalid("postgres helper evidence request is invalid")
+		}
+		return nil
+	}
+	if request.Operation == OperationRecoveryInventory {
+		if request.Database != "" || request.Role != "" || request.SourceSize != 0 ||
+			request.SourceSHA256 != (Digest{}) || request.RequestSHA256 != (Digest{}) {
+			return invalid("postgres helper recovery inventory request has inapplicable fields")
+		}
+		return nil
+	}
+	if request.RequestSHA256 != (Digest{}) {
+		return invalid("postgres helper run carries an evidence selector")
 	}
 	if request.Operation == OperationStop {
 		if request.Database != "" || request.Role != "" || request.SourceSize != 0 ||
@@ -360,6 +391,12 @@ func (operation Operation) String() string {
 		return "post-restore-verify"
 	case OperationStop:
 		return "stop"
+	case OperationEvidence:
+		return "evidence"
+	case OperationRetire:
+		return "retire"
+	case OperationRecoveryInventory:
+		return "recovery-inventory"
 	default:
 		return ""
 	}
@@ -419,133 +456,15 @@ func PolicyFor(operation Operation) (StreamPolicy, error) {
 		policy.Input = InputRestoreSource
 		policy.Output = OutputDiscardCount
 		policy.OutputLimit = DiagnosticLimitBytes
+	case OperationEvidence:
+		policy.OutputLimit = MaximumExecutionEvidenceBytes
+	case OperationRecoveryInventory:
+		policy.OutputLimit = MaximumRecoveryInventoryEncodedBytes
+	case OperationRetire:
+		policy.Output = OutputDiscardCount
+		policy.OutputLimit = DiagnosticLimitBytes
 	default:
 		return StreamPolicy{}, invalid("postgres helper operation has no stream policy")
 	}
 	return policy, nil
-}
-
-func parseRunArguments(arguments []string) (Request, error) {
-	if len(arguments) < 5 || arguments[1] != protocolVersionArgument {
-		return Request{}, invalid("postgres helper run header is invalid")
-	}
-	nonce, err := ParseNonce(arguments[2])
-	if err != nil {
-		return Request{}, err
-	}
-	deadline, err := parsePositiveUint(arguments[3])
-	if err != nil {
-		return Request{}, err
-	}
-	operation, err := parseRunOperation(arguments[4])
-	if err != nil {
-		return Request{}, err
-	}
-	request := Request{Operation: operation, Nonce: nonce, DeadlineUnixNano: deadline}
-	suffix := arguments[5:]
-	switch operation {
-	case OperationProbePGDump, OperationProbePGRestore, OperationProbePSQL:
-		if len(suffix) != 1 || suffix[0] != strconv.FormatUint(uint64(PostgreSQLMajor), 10) {
-			return Request{}, invalid("postgres helper probe version is invalid")
-		}
-	case OperationServerMajor:
-		if len(suffix) != 2 || suffix[0] != strconv.FormatUint(uint64(PostgreSQLMajor), 10) {
-			return Request{}, invalid("postgres helper server-major suffix is invalid")
-		}
-		request.Database = suffix[1]
-	case OperationDump:
-		if len(suffix) != 2 {
-			return Request{}, invalid("postgres helper dump suffix is invalid")
-		}
-		request.Database, request.Role = suffix[0], suffix[1]
-	case OperationRestoreList:
-		if len(suffix) != 2 {
-			return Request{}, invalid("postgres helper restore-list suffix is invalid")
-		}
-		request.SourceSize, err = parseCanonicalUint(suffix[0])
-		if err == nil {
-			request.SourceSHA256, err = ParseDigest(suffix[1])
-		}
-	case OperationTerminateDBConnections, OperationAssertZeroDBConnections, OperationPostRestoreVerify:
-		if len(suffix) != 1 {
-			return Request{}, invalid("postgres helper database suffix is invalid")
-		}
-		request.Database = suffix[0]
-	case OperationRestoreApply:
-		if len(suffix) != 4 {
-			return Request{}, invalid("postgres helper restore-apply suffix is invalid")
-		}
-		request.SourceSize, err = parseCanonicalUint(suffix[0])
-		if err == nil {
-			request.SourceSHA256, err = ParseDigest(suffix[1])
-		}
-		request.Database, request.Role = suffix[2], suffix[3]
-	default:
-		return Request{}, invalid("postgres helper run operation is invalid")
-	}
-	if err != nil {
-		return Request{}, err
-	}
-	if err := request.Validate(); err != nil {
-		return Request{}, err
-	}
-	return request, nil
-}
-
-func parseStopArguments(arguments []string) (Request, error) {
-	if len(arguments) != 4 || arguments[1] != protocolVersionArgument {
-		return Request{}, invalid("postgres helper stop suffix is invalid")
-	}
-	nonce, err := ParseNonce(arguments[2])
-	if err != nil {
-		return Request{}, err
-	}
-	deadline, err := parsePositiveUint(arguments[3])
-	if err != nil {
-		return Request{}, err
-	}
-	request := Request{Operation: OperationStop, Nonce: nonce, DeadlineUnixNano: deadline}
-	return request, request.Validate()
-}
-
-func parseRunOperation(value string) (Operation, error) {
-	for operation := OperationProbePGDump; operation <= OperationPostRestoreVerify; operation++ {
-		if operation.String() == value {
-			return operation, nil
-		}
-	}
-	return 0, invalid("postgres helper run operation is invalid")
-}
-
-func parsePositiveUint(value string) (uint64, error) {
-	if value == "" || len(value) > 1 && value[0] == '0' {
-		return 0, invalid("postgres helper integer is not canonical")
-	}
-	parsed, err := strconv.ParseUint(value, 10, 64)
-	if err != nil || parsed == 0 {
-		return 0, invalid("postgres helper integer is invalid")
-	}
-	return parsed, nil
-}
-
-func parseCanonicalUint(value string) (uint64, error) {
-	if value == "0" {
-		return 0, nil
-	}
-	return parsePositiveUint(value)
-}
-
-func parseLowerHex(value string, size int) ([]byte, error) {
-	if len(value) != size*2 {
-		return nil, invalid("postgres helper hexadecimal value has invalid length")
-	}
-	decoded, err := hex.DecodeString(value)
-	if err != nil || hex.EncodeToString(decoded) != value {
-		return nil, invalid("postgres helper hexadecimal value is not canonical")
-	}
-	return decoded, nil
-}
-
-func invalid(message string) error {
-	return grounderrs.New(grounderrs.KindValidationFailed, message)
 }

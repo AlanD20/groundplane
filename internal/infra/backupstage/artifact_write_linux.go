@@ -106,6 +106,9 @@ func (artifact *Artifact) Write(ctx context.Context, content []byte) (int, error
 	if stage.poisoned {
 		return 0, internalError("stage capacity reservation is poisoned")
 	}
+	if stage.capacity.kind == capacityNoGrowth && len(content) != 0 {
+		return 0, stateConflictError("recovered stage was resumed without future growth")
+	}
 	if stage.capacity.kind == capacityBounded && uint64(len(content)) > stage.reservationRemaining {
 		return 0, internalError("write exceeds caller-supplied required byte bound")
 	}
@@ -154,6 +157,44 @@ func (artifact *Artifact) Write(ctx context.Context, content []byte) (int, error
 		return written, artifact.failWriteLocked(ctx, reservationErr)
 	}
 	return written, nil
+}
+
+// SyncPartial makes the currently written partial prefix durable and returns
+// evidence for its retained partial name without publishing it.
+func (artifact *Artifact) SyncPartial(ctx context.Context) (ArtifactEvidence, error) {
+	if err := contextError(ctx); err != nil {
+		return ArtifactEvidence{}, err
+	}
+	if artifact == nil || artifact.stage == nil {
+		return ArtifactEvidence{}, internalError("artifact is required")
+	}
+	stage := artifact.stage
+	stage.mu.Lock()
+	defer stage.mu.Unlock()
+	if artifact.state != artifactOpen || artifact.file == nil || stage.closed || stage.cleaned {
+		return ArtifactEvidence{}, internalError("artifact is not an open partial")
+	}
+	if stage.poisoned || artifact.hasher == nil {
+		return ArtifactEvidence{}, internalError("partial artifact evidence is unavailable")
+	}
+	if err := stage.owner.ops.fsync(int(artifact.file.Fd())); err != nil {
+		return ArtifactEvidence{}, storageSystemError("sync partial artifact", err)
+	}
+	if err := validateRegularFD(ctx, int(artifact.file.Fd()), artifact.written, 1); err != nil {
+		return ArtifactEvidence{}, joinPrivate(internalError("partial artifact metadata is invalid"), err)
+	}
+	if err := stage.syncParents(ctx); err != nil {
+		return ArtifactEvidence{}, err
+	}
+	return ArtifactEvidence{
+		Name: artifact.temporary, Size: uint64(artifact.written), SHA256: artifact.partialDigestLocked(),
+	}, nil
+}
+
+func (artifact *Artifact) partialDigestLocked() [sha256.Size]byte {
+	var digest [sha256.Size]byte
+	copy(digest[:], artifact.hasher.Sum(nil))
+	return digest
 }
 
 // Publish renames without replacement while retaining and validating the

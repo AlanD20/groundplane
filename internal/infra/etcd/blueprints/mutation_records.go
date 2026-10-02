@@ -22,12 +22,22 @@ func ValidateEnvironmentDesiredRevisionIdentity(value EnvironmentDesiredRevision
 }
 
 type EnvironmentDesiredMutationAudit struct {
-	Volume  *EnvironmentVolumeMutationAudit
-	Service *EnvironmentServiceMutationAudit
-	Entry   *EnvironmentEntryMutationAudit
-	Entries []EnvironmentEntryMutationAudit
-	Zone    *EnvironmentZoneMutationAudit
-	Route   *EnvironmentRouteMutationAudit
+	Volume        *EnvironmentVolumeMutationAudit
+	Service       *EnvironmentServiceMutationAudit
+	Entry         *EnvironmentEntryMutationAudit
+	Entries       []EnvironmentEntryMutationAudit
+	Zone          *EnvironmentZoneMutationAudit
+	Route         *EnvironmentRouteMutationAudit
+	ConfigRestore *EnvironmentConfigRestoreAudit
+}
+
+// EnvironmentConfigRestoreAudit identifies a complete Entry-set replacement.
+// Selected bytes remain in their immutable generations, never in this audit.
+type EnvironmentConfigRestoreAudit struct {
+	BaseRevisionID string
+	PointID        string
+	GenerationID   string
+	SourceSHA256   [sha256.Size]byte
 }
 type EnvironmentEntryMutationAction uint8
 

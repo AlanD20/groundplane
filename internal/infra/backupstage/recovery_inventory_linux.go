@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
-	"golang.org/x/sys/unix"
+	"hash"
 	"os"
 	"strings"
+
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"golang.org/x/sys/unix"
 )
 
 func (session *RecoverySession) inventoryLocked(ctx context.Context) error {
@@ -161,6 +164,10 @@ func (session *RecoverySession) captureRecoveredLocked(
 		}
 		return nil
 	}
+	if len(session.recovered) >= executionplan.MaximumBackupRecoveredStages {
+		return closeRecoveredCapture(ctx, validationError("startup staging inventory exceeds its stage limit"), files,
+			rootFD, reservationRootFD, reservationTaskCopy, reservationStepCopy, reservationFD, pointFD, stepFD, taskFD)
+	}
 	session.recovered[recovered.entry.RecoveryID] = recovered
 	session.order = append(session.order, recovered.entry.RecoveryID)
 	return nil
@@ -177,7 +184,6 @@ func scanRecoveredFiles(
 	}
 	files := make(map[string]*os.File)
 	var evidence []ArtifactEvidence
-	partialsRemoved := false
 	for _, name := range names {
 		fd, err := ops.openat2(pointFD, name, &unix.OpenHow{
 			Flags: uint64(unix.O_RDWR | unix.O_CLOEXEC | unix.O_NOFOLLOW), Resolve: descendantResolvePolicy,
@@ -190,17 +196,11 @@ func scanRecoveredFiles(
 			return files, evidence, closeWithPrimary(ctx,
 				joinPrivate(internalError("managed recovered artifact metadata is invalid"), err), fd)
 		}
+		finalName := name
 		if isManagedPartial(name) {
-			if err := unix.Close(fd); err != nil {
-				return files, evidence, systemError("close recovered partial", err)
-			}
-			if err := unix.Unlinkat(pointFD, name, 0); err != nil {
-				return files, evidence, systemError("remove recovered partial", err)
-			}
-			partialsRemoved = true
-			continue
+			finalName = strings.TrimSuffix(strings.TrimPrefix(name, "."), ".partial")
 		}
-		if err := validateFinalArtifactName(name); err != nil {
+		if err := validateFinalArtifactName(finalName); err != nil {
 			return files, evidence, closeWithPrimary(ctx,
 				joinPrivate(internalError("managed recovered artifact name is invalid"), err), fd)
 		}
@@ -215,27 +215,28 @@ func scanRecoveredFiles(
 		}
 		files[name], evidence = file, append(evidence, item)
 	}
-	if partialsRemoved {
-		if err := syncFD(ctx, pointFD); err != nil {
-			return files, evidence, err
-		}
-	}
 	return files, evidence, nil
 }
 
 func evidenceFromFD(ctx context.Context, name string, fd int) (ArtifactEvidence, error) {
+	evidence, _, err := evidenceAndHashFromFD(ctx, name, fd)
+	return evidence, err
+}
+
+func evidenceAndHashFromFD(ctx context.Context, name string, fd int) (ArtifactEvidence, hash.Hash, error) {
 	var before unix.Stat_t
 	if err := unix.Fstat(fd, &before); err != nil {
-		return ArtifactEvidence{}, systemError("inspect recovered artifact", err)
+		return ArtifactEvidence{}, nil, systemError("inspect recovered artifact", err)
 	}
 	if before.Size < 0 {
-		return ArtifactEvidence{}, internalError("recovered artifact has negative size")
+		return ArtifactEvidence{}, nil, internalError("recovered artifact has negative size")
 	}
 	hasher := sha256.New()
 	buffer := make([]byte, 128*1024)
+	defer clear(buffer)
 	for offset := int64(0); offset < before.Size; {
 		if err := contextError(ctx); err != nil {
-			return ArtifactEvidence{}, err
+			return ArtifactEvidence{}, nil, err
 		}
 		length := int64(len(buffer))
 		if length > before.Size-offset {
@@ -243,22 +244,22 @@ func evidenceFromFD(ctx context.Context, name string, fd int) (ArtifactEvidence,
 		}
 		n, err := unix.Pread(fd, buffer[:length], offset)
 		if err != nil {
-			return ArtifactEvidence{}, systemError("hash recovered artifact", err)
+			return ArtifactEvidence{}, nil, systemError("hash recovered artifact", err)
 		}
 		if n == 0 {
-			return ArtifactEvidence{}, internalError("recovered artifact changed while hashing")
+			return ArtifactEvidence{}, nil, internalError("recovered artifact changed while hashing")
 		}
 		if _, err := hasher.Write(buffer[:n]); err != nil {
-			return ArtifactEvidence{}, internalError("hash recovered artifact bytes")
+			return ArtifactEvidence{}, nil, internalError("hash recovered artifact bytes")
 		}
 		offset += int64(n)
 	}
 	if err := validateRegularFD(ctx, fd, before.Size, 1); err != nil {
-		return ArtifactEvidence{}, joinPrivate(internalError("recovered artifact metadata changed"), err)
+		return ArtifactEvidence{}, nil, joinPrivate(internalError("recovered artifact metadata changed"), err)
 	}
 	item := ArtifactEvidence{Name: name, Size: uint64(before.Size)}
 	copy(item.SHA256[:], hasher.Sum(nil))
-	return item, nil
+	return item, hasher, nil
 }
 
 func isManagedPartial(name string) bool {

@@ -81,6 +81,7 @@ type Server struct {
 	backupPolicyMutations   BackupPolicyMutator
 	recoveryPoints          RecoveryPointReader
 	backupRuns              BackupRunMutator
+	backupRestores          BackupRestorer
 	backupKeyMutations      BackupKeyMutator
 	backupKeyExports        BackupKeyExporter
 	volumes                 VolumeReader
@@ -153,6 +154,7 @@ type Options struct {
 	BackupPolicyMutations   BackupPolicyMutator
 	RecoveryPoints          RecoveryPointReader
 	BackupRuns              BackupRunMutator
+	BackupRestores          BackupRestorer
 	BackupKeyMutations      BackupKeyMutator
 	BackupKeyExports        BackupKeyExporter
 	Volumes                 VolumeReader
@@ -242,6 +244,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		backupPolicyMutations:   options.BackupPolicyMutations,
 		recoveryPoints:          options.RecoveryPoints,
 		backupRuns:              options.BackupRuns,
+		backupRestores:          options.BackupRestores,
 		backupKeyMutations:      options.BackupKeyMutations,
 		backupKeyExports:        options.BackupKeyExports,
 		volumes:                 options.Volumes,
@@ -290,6 +293,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerBackupPolicies()
 	s.registerRecoveryPoints()
 	s.registerBackupRuns()
+	s.registerBackupRestore()
 	s.registerBackupKeyRoutes()
 	s.registerVolumes()
 	s.registerAttaches()
@@ -319,7 +323,6 @@ func (s *Server) routes() {
 	// environment (?project=). Typed list/show/create/rename operations are
 	// registered through Huma after the legacy mux surface is assembled.
 	// environment singleton sub-resources
-	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
 	// router: READ-ONLY projection grouping ingress components — GET only,
 	// never PUT (api-cli.md, section 4). Managed entirely through /components.
 

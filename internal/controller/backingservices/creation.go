@@ -29,12 +29,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -289,6 +291,22 @@ func (service *CreationService) createBackingServiceFromStage(
 		volume = &resolvedVolume
 	}
 	serviceID := allocator.New(ids.KindService)
+	var postgresRelease *backingpostgresrelease.Record
+	if input.Adapter == "postgres:16" {
+		release, releaseErr := postgres16protocol.CompiledManagedRelease()
+		if releaseErr != nil {
+			return idempotencyrecord.IdempotencyResponse{}, releaseErr
+		}
+		if spec.Image != release.Image {
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindStateConflict, "managed PostgreSQL creation image differs from release authority")
+		}
+		selected, releaseErr := backingpostgresrelease.New(environment.ID, serviceID, release)
+		if releaseErr != nil {
+			return idempotencyrecord.IdempotencyResponse{}, releaseErr
+		}
+		postgresRelease = &selected
+	}
 	mounts := []core.Mount(nil)
 	if volume != nil {
 		mounts = []core.Mount{{Volume: volumeID, Mount: spec.MountPath}}
@@ -492,6 +510,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		Entries: entries, EntryValues: generations, Claim: claim,
 		Revision:   blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: environment.ID, RevisionID: task.ID},
 		Projection: projection, Task: task, HookInputs: hookInputs, Marker: marker,
+		PostgresRelease: postgresRelease,
 	})
 	if publishErr != nil {
 		if !isUnknownBackingServiceCreationOutcome(publishErr) {

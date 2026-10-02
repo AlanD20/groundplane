@@ -24,21 +24,25 @@ service AgentChannel {
 message Authenticate {
   string agent_id = 1;
   bytes token = 2; // exactly 32 decoded bytes; never the base64url materialization
+  uint32 execution_plan_schema = 3; // exactly schema one
+  bytes process_generation = 4; // exactly 16 bytes, distinct from durable Agent generation
+  bytes postgres16_managed_release_sha256 = 5; // exactly 32 bytes
 }
 
 message AgentConfig {
   int32 pull_interval_seconds = 1;
   int32 max_concurrent_tasks = 2;
-  map<string, string> labels = 3;
+  repeated AgentLabel labels = 3; // sorted by unique key
+}
+
+message AgentLabel {
+  string key = 1;
+  string value = 2;
 }
 
 // ---- Agent -> Controller ----
 
 message AgentMessage {
-  // Hold schema-1 Backup allocations until their named messages are implemented.
-  // Release only the matching tag in docs/features/backups/wire-contract.md.
-  reserved 32 to 39;
-
   oneof payload {
     Authenticate authenticate = 1; // mandatory first message; no config or work is served before it succeeds
     Ready ready = 2;               // idle Ready IS the heartbeat; authoritative for dead-agent detection
@@ -54,6 +58,14 @@ message AgentMessage {
     VolumeRemovalCheckpointRequest volume_removal_checkpoint_request = 12;
     ServiceObservationResult service_observation_result = 13;
     BackingHookCheckpointRequest backing_hook_checkpoint_request = 14;
+    BackupConfigTransfer backup_config_transfer = 32;
+    BackupConfigCredit backup_config_credit = 33;
+    BackupStagingInventory backup_staging_inventory = 34;
+    BackupStagingRecoveryAck backup_staging_recovery_ack = 35;
+    BackupVolumeManifestTransfer backup_volume_manifest_transfer = 36;
+    BackupVolumeManifestAckCredit backup_volume_manifest_ack_credit = 37;
+    TaskTerminalReceiptApplied task_terminal_receipt_applied = 38;
+    TaskTerminalAssignmentRetired task_terminal_assignment_retired = 39;
   }
 }
 
@@ -63,6 +75,7 @@ message Ready {
   string operating_system = 3;
   string architecture = 4;
   string architecture_variant = 5;
+  optional bool terminal_delivery_clean = 6; // presence required, including false
 }
 
 // Ephemeral read-only image lookup; never an execution Task or pull request.
@@ -200,6 +213,9 @@ enum TaskState {
 
 message ObservedState {
   repeated ObservedProject projects = 1;
+  string snapshot_id = 2;
+  uint32 batch_ordinal = 3;
+  optional bool final_batch = 4; // presence required
 }
 
 message ObservedProject {
@@ -274,10 +290,17 @@ message TaskAck {
   oneof result {
     ComposeTaskResult compose_result = 5;
     EnvironmentDirectoryTaskResult environment_directory_result = 6;
+    BackupTaskResult backup_result = 10;
   }
   string assignment_id = 7;
   uint32 execution_epoch = 8;
   bytes release_recovery_record_sha256 = 9;
+  uint64 assignment_generation = 11;
+}
+
+message BackupTaskResult {
+  string failed_step_id = 1;
+  optional bool recovery_required = 2; // presence required
 }
 
 message ComposeTaskResult {
@@ -381,10 +404,6 @@ enum TaskTerminal {
 // ---- Controller -> Agent ----
 
 message ControllerMessage {
-  // Hold schema-1 Backup allocations until their named messages are implemented.
-  // Release only the matching tag in docs/features/backups/wire-contract.md.
-  reserved 32 to 40;
-
   oneof payload {
     TaskAssignment task_assignment = 1; // the full procedure: steps, params, timeout
     TaskAbort task_abort = 2;           // cancel in-flight work NOW
@@ -404,6 +423,15 @@ message ControllerMessage {
     BackingHookCheckpointAck backing_hook_checkpoint_ack = 16;
     LogCredit log_credit = 17;
     TaskEventAck task_event_ack = 22;
+    BackupConfigTransfer backup_config_transfer = 32;
+    BackupConfigCredit backup_config_credit = 33;
+    BackupStagingRecoveryPlan backup_staging_recovery_plan = 34;
+    BackupVolumeManifestTransfer backup_volume_manifest_transfer = 35;
+    BackupVolumeManifestAckCredit backup_volume_manifest_ack_credit = 36;
+    TaskTerminalReceiptAck task_terminal_receipt_ack = 37;
+    TaskTerminalReceiptAppliedAck task_terminal_receipt_applied_ack = 38;
+    BackupStagingRecoveryAckReceipt backup_staging_recovery_ack_receipt = 39;
+    TaskTerminalAssignmentRetiredAck task_terminal_assignment_retired_ack = 40;
   }
 }
 
@@ -559,6 +587,10 @@ message TaskAssignment {
   ScriptAssignmentArtifacts script_artifacts = 8;
   repeated ScriptExecutionCheckpoint script_checkpoints = 9;
   bool automatic_reconcile = 10;
+  BackupTaskAuthority backup_authority = 11;
+  BackupTaskResume backup_resume = 12;
+  bytes backup_authority_sha256 = 13;
+  uint64 assignment_generation = 14;
   uint32 execution_epoch = 16; // positive shared fence for every emitted event and terminal acknowledgement
   TaskExecutionMode execution_mode = 17;
   google.protobuf.Timestamp recovery_deadline = 18; // fixed at first claim and never extended
@@ -812,6 +844,7 @@ message ExecutionPlan {
   ManagedComponentProcedure managed_component_procedure = 15;
   ServiceLifecycleProcedure service_lifecycle_procedure = 16;
   EntryMutationProcedure entry_mutation_procedure = 17;
+  BackupPlanScope backup_scope = 18;
 }
 
 // EntryMutationProcedure confines configuration reconciliation to retained
@@ -943,6 +976,7 @@ enum PlanOperation {
   PLAN_OPERATION_BACKUP_PRUNE = 13;
   PLAN_OPERATION_SCRIPT = 14;
   PLAN_OPERATION_BLUEPRINT_APPLY = 15;
+  PLAN_OPERATION_RESTORE = 16;
 }
 
 message ComposeArtifact {
@@ -1012,7 +1046,8 @@ message LabelPair {
 }
 
 message ExecutionStep {
-  reserved 13;
+  reserved 13, 14, 15;
+  reserved "backup_source_capture", "backup_artifact_prune";
   string step_id = 1;
   uint32 timeout_seconds = 2;
   oneof payload {
@@ -1026,8 +1061,6 @@ message ExecutionStep {
     EnvironmentDirectoryRemove environment_directory_remove = 10;
     AdapterProcedure adapter_procedure = 11;
     ManagedNetworkRemove managed_network_remove = 12;
-    BackupSourceCapture backup_source_capture = 14;
-    BackupArtifactPrune backup_artifact_prune = 15;
     ComposeWorkloadApply compose_workload_apply = 16;
     WaitWorkloadHealthy wait_workload_healthy = 17;
     ServiceProxySwitch service_proxy_switch = 18;
@@ -1047,6 +1080,9 @@ message ExecutionStep {
     ManagedNetworkEnsure managed_network_ensure = 34;
     ManagedVolumeEnsure managed_volume_ensure = 35;
     BackingHookProcedure backing_hook_procedure = 36;
+    // Immutable typed Backup step input. Dispatch wraps these exact steps in
+    // the assignment-specific BackupTaskAuthority; no source reconstruction.
+    BackupStepAuthority backup_step = 37;
   }
   ExecutionStepPolicy policy = 30;
   string prerequisite_step_id = 31;
@@ -1359,78 +1395,30 @@ enum ExecutionStepPolicy {
   EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK = 7;
 }
 
-// BackupSourceCapture is one immutable source attempt in policy order. It
-// carries only Controller-authorized control evidence. Credentials, Entry
-// values, artifact bytes, and provider responses never enter the plan or
-// ordinary Task messages.
-message BackupSourceCapture {
-  string source_id = 1;
-  uint64 source_revision = 2;
-  string target_id = 3;
-  uint64 target_revision = 4;
-  string point_id = 5;
-  string connector_id = 6;
-  uint64 connector_revision = 7;
-  BackupSourceFormat source_format = 8;
-  BackupEncryption encryption = 9;
-  uint64 key_era = 10;       // positive exactly when encryption is age
-  string age_recipient = 11; // public recipient; empty when encryption is none
-  oneof source {
-    BackupAttachSource attach = 12;
-    BackupConfigSource config = 13;
-    BackupVolumeSource volume = 14;
-  }
-  BackupUploadAuthority upload = 15;
+// Schema-one Backup authority and evidence. Digests and execution nonces are
+// exactly 32 bytes; stable resource ids are never mutable names. These typed
+// messages contain no plaintext credentials or age identity.
+message RevisionDigest {
+  int64 mod_revision = 1; // positive durable etcd revision
+  bytes sha256 = 2;
 }
 
-enum BackupS3Addressing {
-  BACKUP_S3_ADDRESSING_UNSPECIFIED = 0;
-  BACKUP_S3_ADDRESSING_PATH_STYLE = 1;
-  BACKUP_S3_ADDRESSING_VIRTUAL_HOSTED_STYLE = 2;
+message CheckpointFence {
+  bytes authority_digest = 1;
+  int64 dedupe_key_mod_revision = 2;
 }
 
-message BackupUploadAuthority {
-  string connector_endpoint = 1;
-  string connector_bucket = 2;
-  string connector_prefix = 3;
-  string connector_region = 4;
-  BackupS3Addressing connector_addressing = 5;
-  string protected_object_key = 6;
-  bool immutable_create = 7;
-  bool put_after_artifact_prepared_ack = 8;
-  bool head_after_upload_completed_ack = 9;
+enum BackupResourceKind {
+  BACKUP_RESOURCE_KIND_UNSPECIFIED = 0;
+  BACKUP_RESOURCE_KIND_ATTACH = 1;
+  BACKUP_RESOURCE_KIND_ENVIRONMENT = 2;
+  BACKUP_RESOURCE_KIND_VOLUME = 3;
 }
 
-// BackupArtifactPrune is one ordered Recovery Point authority. Credentials
-// arrive only through the existing assignment/step-fenced S3 secret slots.
-// The protected object key is private control evidence, never public Task data.
-message BackupArtifactPrune {
-  uint32 ordinal = 1;
-  string prune_operation_id = 2;
-  uint64 prune_revision = 3;
-  string point_id = 4;
-  uint64 point_revision = 5;
-  string source_id = 6;
-  uint64 source_revision = 7;
-  string environment_id = 8;
-  uint64 environment_revision = 9;
-  string connector_id = 10;
-  uint64 connector_revision = 11;
-  string connector_endpoint = 12;
-  string connector_bucket = 13;
-  string connector_prefix = 14;
-  string connector_region = 15;
-  BackupS3Addressing connector_addressing = 16;
-  string protected_object_key = 17;
-  uint64 stored_size_bytes = 18;
-  bytes stored_sha256 = 19;
-}
-
-enum BackupSourceFormat {
-  BACKUP_SOURCE_FORMAT_UNSPECIFIED = 0;
-  BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1 = 1;
-  BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1 = 2;
-  BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1 = 3;
+message BackupResourceIdentity {
+  BackupResourceKind kind = 1;
+  string resource_id = 2;
+  RevisionDigest resource = 3;
 }
 
 enum BackupEncryption {
@@ -1439,37 +1427,12 @@ enum BackupEncryption {
   BACKUP_ENCRYPTION_AGE = 2;
 }
 
-message BackupAttachSource {
-  string backing_service_id = 1;
-  uint64 backing_service_revision = 2;
-  string database = 3;
-  string role = 4;
-}
-
-// The snapshot revision is the one linearizable read shared by every Entry
-// metadata record, current generation, and bounded transient value frame.
-message BackupConfigSource {
-  uint64 snapshot_revision = 1;
-}
-
-message BackupVolumeSource {
-  repeated BackupVolumeService services = 1; // uniquely sorted by service_id
-  string artifact_id = 2;
-  bytes artifact_sha256 = 3;
-  uint64 artifact_revision = 4;
-  uint64 projection_root = 5;
-  uint64 render_generation = 6;
-  string compose_volume_key = 7;
-  string docker_volume_name = 8;
-  string authorized_volume_dir = 9;
-}
-
-message BackupVolumeService {
-  string service_id = 1;
-  uint64 service_revision = 2;
-  BackupServiceRuntimeIntent prior_intent = 3;
-  string compose_key = 4;
-  repeated string mount_paths = 5;
+message BackupEncryptionAuthority {
+  BackupEncryption kind = 1;
+  string secret_slot_id = 2;
+  bytes recipient_sha256 = 3;
+  RevisionDigest secret_slot = 4;
+  optional uint64 key_era = 5; // frozen object metadata; absent only for none
 }
 
 enum BackupServiceRuntimeIntent {
@@ -1479,46 +1442,1193 @@ enum BackupServiceRuntimeIntent {
   BACKUP_SERVICE_RUNTIME_INTENT_ABSENT = 3;
 }
 
-// A checkpoint request is private assignment traffic. Sequence is one-based
-// and contiguous within the exact task/assignment/step tuple. The digest is
-// the canonical Controller-protected control payload; it contains no
-// Secret-derived fingerprint.
-message BackupCheckpointRequest {
-  string task_id = 1;
-  string assignment_id = 2;
-  string step_id = 3;
-  uint32 sequence = 4;
-  BackupCheckpointKind kind = 5;
-  bytes control_payload_sha256 = 6;
-  oneof payload {
-    BackupArtifactPreparedCheckpoint artifact_prepared = 7;
-    BackupUploadVerifiedCheckpoint upload_verified = 8;
-    BackupSourceCleanupCompletedCheckpoint source_cleanup_completed = 9;
-    BackupRestoreArtifactValidatedCheckpoint restore_artifact_validated = 10;
-    BackupVolumeTreeStagedCheckpoint volume_tree_staged = 11;
-    BackupVolumeTreeExchangedCheckpoint volume_tree_exchanged = 12;
-    BackupVolumeReplacedTreeCleanedCheckpoint volume_replaced_tree_cleaned = 13;
-    BackupConfigGenerationStagedCheckpoint config_generation_staged = 14;
-    BackupConfigGenerationActivatedCheckpoint config_generation_activated = 15;
-    BackupPostgresRestoreVerifiedCheckpoint postgres_restore_verified = 16;
-    BackupRemoteObjectAbsentCheckpoint remote_object_absent = 17;
-    BackupUploadCompletedCheckpoint upload_completed = 18;
+message BackupPriorRuntimeIntent {
+  BackupServiceRuntimeIntent kind = 1;
+  RevisionDigest intent = 2; // separate Controller-owned ServiceRuntime record
+}
+
+message BackupServiceFact {
+  string service_id = 1;
+  string current_name = 2;
+  RevisionDigest service = 3;
+  RevisionDigest compose = 4;
+  BackupPriorRuntimeIntent prior_runtime_intent = 5;
+  uint32 required_label_count = 6;
+  bytes required_labels_sha256 = 7;
+  bytes local_image_id_sha256 = 8; // decoded sha256: local image ID, not an OCI repository digest
+}
+
+message BackupConnectorAuthority {
+  string connector_id = 1;
+  RevisionDigest connector = 2;
+  string canonical_endpoint_url = 3;
+  string region = 4;
+  optional bool path_style = 5; // presence required
+  string prefix = 6;
+  string access_key_slot_id = 7;
+  string secret_key_slot_id = 8;
+  RevisionDigest access_key_slot = 9;
+  RevisionDigest secret_key_slot = 10;
+}
+
+message BackupObjectTarget {
+  BackupConnectorAuthority connector = 1;
+  string bucket = 2;
+  string object_key = 3;
+}
+
+// A present VersionId, including empty string or literal "null", never falls
+// back to ETag. Wrapper presence is the immutable discriminator.
+message BackupS3VersionId {
+  string value = 1;
+}
+
+message BackupS3ETag {
+  string value = 1;
+}
+
+message BackupObjectIdentity {
+  BackupConnectorAuthority connector = 1;
+  string bucket = 2;
+  string object_key = 3;
+  oneof discriminator {
+    BackupS3VersionId version_id = 4;
+    BackupS3ETag etag = 5;
   }
 }
 
-// A future Controller sends this only after the domain checkpoint,
-// deduplication evidence, next-sequence cursor, and required lock/epoch change
-// commit atomically. It echoes the delivery identity and nothing else.
+message BackupArtifactEvidence {
+  uint64 source_size_bytes = 1;
+  bytes source_sha256 = 2;
+  uint64 stored_size_bytes = 3;
+  bytes stored_sha256 = 4;
+}
+
+message BackupTaskAuthority {
+  uint32 authority_schema = 1; // exactly one
+  string task_id = 2;
+  string operation_id = 3;
+  uint32 task_attempt = 4;
+  bytes plan_hash = 5;
+  string project_id = 6;
+  RevisionDigest project = 7;
+  string environment_id = 8;
+  RevisionDigest environment = 9;
+  uint64 task_deadline_unix_nano = 10; // absolute, never extended on reconnect
+  string assignment_id = 11;
+  uint64 assignment_generation = 12;
+  repeated BackupServiceFact services = 13;
+  repeated BackupStepAuthority steps = 14;
+}
+
+// Sealed once during publication. Assignment adds only its exact delivery
+// identity and absolute claim deadline; reconnect never rereads live resources.
+message BackupPlanScope {
+  string project_id = 1;
+  RevisionDigest project = 2;
+  string environment_id = 3;
+  RevisionDigest environment = 4;
+  repeated BackupServiceFact services = 5;
+  uint32 task_attempt = 6;
+}
+
+message BackupStepAuthority {
+  string step_id = 1;
+  string execution_id = 2;
+  bytes step_digest = 3;
+  uint64 step_deadline_unix_nano = 4;
+  repeated string consumer_service_ids = 5;
+  oneof operation {
+    BackupCaptureAuthority capture = 10;
+    BackupPruneAuthority prune = 11;
+    BackupRestoreAuthority restore = 12;
+  }
+}
+
+message BackupTaskResume {
+  string assignment_id = 1;
+  uint64 assignment_generation = 2;
+  repeated BackupStepResume steps = 3;
+}
+
+message BackupStepResume {
+  string step_id = 1;
+  string execution_id = 2;
+  oneof operation {
+    BackupCaptureResume capture = 10;
+    BackupPruneResume prune = 11;
+    BackupRestoreResume restore = 12;
+  }
+}
+
+enum BackupCapturePhase {
+  BACKUP_CAPTURE_PHASE_UNSPECIFIED = 0;
+  BACKUP_CAPTURE_PHASE_CAPTURING = 1;
+  BACKUP_CAPTURE_PHASE_ARTIFACT_PREPARED = 2;
+  BACKUP_CAPTURE_PHASE_UPLOADING = 3;
+  BACKUP_CAPTURE_PHASE_HEAD_VERIFICATION = 4;
+  BACKUP_CAPTURE_PHASE_POINT_COMMIT = 5;
+  BACKUP_CAPTURE_PHASE_SOURCE_CLEANUP = 6;
+  BACKUP_CAPTURE_PHASE_SERVICE_RECOVERY = 7;
+  BACKUP_CAPTURE_PHASE_TERMINAL = 8;
+}
+
+enum BackupRestorePhase {
+  BACKUP_RESTORE_PHASE_UNSPECIFIED = 0;
+  BACKUP_RESTORE_PHASE_ARTIFACT_VALIDATION = 1;
+  BACKUP_RESTORE_PHASE_TARGET_PREPARATION = 2;
+  BACKUP_RESTORE_PHASE_TARGET_MUTATION = 3;
+  BACKUP_RESTORE_PHASE_PUBLICATION = 4;
+  BACKUP_RESTORE_PHASE_CLEANUP = 5;
+  BACKUP_RESTORE_PHASE_SERVICE_RECOVERY = 6;
+  BACKUP_RESTORE_PHASE_TERMINAL = 7;
+}
+
+message BackupCaptureResume {
+  uint64 checkpoint_sequence = 1;
+  CheckpointFence preceding_checkpoint = 2;
+  BackupCapturePhase phase = 3;
+  BackupCaptureCursor cursor = 4;
+  // Retain the original archive and byte evidence after the checkpoint advances.
+  // Absent before Prepared; immutable for the remainder of this capture.
+  BackupArtifactPrepared prepared_artifact = 5;
+  BackupPostgresDumpStart dump_start = 6;
+  oneof checkpoint {
+    BackupArtifactPrepared artifact_prepared = 10;
+    BackupUploadVerified upload_verified = 11;
+    BackupSourceCleanupCompleted source_cleanup_completed = 12;
+    BackupPostgresContainerObserved postgres_container_observed = 13;
+    BackupPostgresDumpStart postgres_dump_start = 14;
+    BackupVolumeProgress volume_progress = 15;
+    BackupConfigProgress config_progress = 16;
+    BackupUploadCompleted upload_completed = 17;
+  }
+}
+
+message BackupPruneResume {
+  uint64 checkpoint_sequence = 1;
+  CheckpointFence preceding_checkpoint = 2;
+  uint32 next_object_ordinal = 3;
+  oneof checkpoint {
+    BackupPruneObjectDeleted object_deleted = 10;
+  }
+}
+
+message BackupRestoreResume {
+  uint64 checkpoint_sequence = 1;
+  CheckpointFence preceding_checkpoint = 2;
+  BackupRestorePhase phase = 3;
+  BackupRestoreCursor cursor = 4;
+  BackupPostgresRestoreApplyStartCheckpoint apply_start = 5;
+  oneof checkpoint {
+    BackupRestoreArtifactValidated artifact_validated = 10;
+    BackupPostgresContainerObserved postgres_container_observed = 11;
+    BackupPostgresRestoreApplyStartCheckpoint postgres_restore_apply_start = 12;
+    BackupConfigProgress config_progress = 13;
+    BackupVolumeProgress volume_progress = 14;
+    BackupPostgresRestoreVerified postgres_restore_verified = 15;
+    BackupPostgresServiceProgress postgres_service_progress = 16;
+    BackupSourceCleanupCompleted source_cleanup_completed = 17;
+  }
+}
+
+message BackupCaptureCursor {
+  uint32 object_attempt = 1;
+  uint64 config_record_sequence = 2;
+  uint32 config_value_ordinal = 3;
+  uint32 service_cursor = 4;
+  bytes cumulative_chain_sha256 = 5;
+}
+
+message BackupRestoreCursor {
+  uint32 object_attempt = 1;
+  uint64 config_record_sequence = 2;
+  uint32 config_value_ordinal = 3;
+  uint64 volume_cursor = 4;
+  uint32 service_cursor = 5;
+  bytes cumulative_chain_sha256 = 6;
+}
+
+message BackupCheckpointRequest {
+  reserved "sequence", "kind", "control_payload_sha256";
+  string task_id = 1;
+  string step_id = 2;
+  string execution_id = 3;
+  uint64 checkpoint_sequence = 4;
+  CheckpointFence preceding_checkpoint = 5;
+  bytes authority_digest = 6;
+  string assignment_id = 7;
+  oneof checkpoint {
+    BackupArtifactPrepared artifact_prepared = 20;
+    BackupUploadVerified upload_verified = 21;
+    BackupSourceCleanupCompleted source_cleanup_completed = 22;
+    BackupPostgresContainerObserved postgres_container_observed = 23;
+    BackupPostgresDumpStart postgres_dump_start = 24;
+    BackupPostgresRestoreApplyStartCheckpoint postgres_restore_apply_start = 25;
+    BackupRestoreArtifactValidated restore_artifact_validated = 26;
+    BackupConfigCheckpoint config = 27;
+    BackupVolumeCheckpoint volume = 28;
+    BackupPruneObjectDeleted prune_object_deleted = 29;
+    BackupPostgresRestoreVerified postgres_restore_verified = 30;
+    BackupPostgresServiceProgress postgres_service_progress = 31;
+    BackupUploadCompleted upload_completed = 32;
+  }
+}
+
 message BackupCheckpointAck {
+  reserved "sequence";
+  string task_id = 1;
+  string step_id = 2;
+  string execution_id = 3;
+  uint64 checkpoint_sequence = 4;
+  CheckpointFence committed = 5;
+  string assignment_id = 6;
+}
+
+message BackupCaptureAuthority {
+  reserved 5;
+  reserved "services";
+  string point_id = 1;
+  BackupResourceIdentity resource = 2;
+  BackupObjectTarget target = 3;
+  BackupEncryptionAuthority encryption = 4;
+  oneof source {
+    BackupPostgresCaptureAuthority postgres = 10;
+    BackupConfigCaptureAuthority config = 11;
+    BackupVolumeCaptureAuthority volume = 12;
+  }
+}
+
+message BackupRestoreAuthority {
+  reserved 6;
+  reserved "services";
+  string point_id = 1;
+  BackupResourceIdentity destination = 2;
+  BackupObjectIdentity source_object = 3;
+  BackupArtifactEvidence expected_evidence = 4;
+  BackupEncryptionAuthority encryption = 5;
+  oneof source {
+    BackupPostgresRestoreAuthority postgres = 10;
+    BackupConfigRestoreAuthority config = 11;
+    BackupVolumeRestoreAuthority volume = 12;
+  }
+  oneof identity {
+    BackupOriginalIdentity original_identity = 20;
+    BackupAdoptedIdentity adopted_identity = 21;
+  }
+}
+
+message BackupPruneAuthority {
+  RevisionDigest retention_policy = 1;
+  repeated BackupPruneObject objects = 2;
+}
+
+message BackupOriginalIdentity {
+  string original_execution_id = 1;
+  BackupResourceIdentity destination = 2;
+  string original_assignment_id = 3;
+}
+
+message BackupAdoptedIdentity {
+  string adoption_id = 1;
+  string predecessor_execution_id = 2;
+  CheckpointFence predecessor_fence = 3;
+  int64 adoption_mod_revision = 4;
+  string predecessor_assignment_id = 5;
+  string adopted_assignment_id = 6;
+}
+
+message BackupPruneObject {
+  uint32 ordinal = 1;
+  string point_id = 2;
+  RevisionDigest point = 3;
+  BackupArtifactEvidence evidence = 4;
+  BackupObjectIdentity object = 5;
+  uint32 metadata_count = 6;
+  bytes metadata_sha256 = 7;
+}
+
+message BackupPruneObjectDeleted {
+  uint32 ordinal = 1;
+  string point_id = 2;
+  BackupObjectIdentity object = 3;
+}
+
+// Startup inventory contains at most 32 total stage and private Volume
+// Restore rows, each group in recovery-key order. Stages carry one or two
+// unique role-ordered files. Recovery repeats exact evidence; silence never
+// grants discard permission.
+message BackupStagingInventory {
+  repeated BackupRecoveredStage entries = 1;
+  repeated BackupRecoveredVolumeRestore volume_restores = 2;
+}
+
+// The two private Volume metadata journals are inventoried as one exact
+// Restore generation. Neither a path nor an unbounded manifest is sent.
+message BackupRecoveredVolumeRestore {
+  bytes recovery_key_sha256 = 1;
+  string assignment_id = 2;
+  string restore_generation_id = 3;
+  bytes step_sha256 = 4;
+  bool journal_present = 5;
+  bytes old_manifest_sha256 = 6;
+  bytes old_full_tree_sha256 = 7;
+  bytes new_manifest_sha256 = 8;
+  bytes new_full_tree_sha256 = 9;
+  uint64 old_entry_count = 10;
+  uint64 new_entry_count = 11;
+  uint64 journal_record_count = 12;
+  bytes journal_chain_sha256 = 13;
+  bool journal_pending = 14;
+  bool journal_root_deleted = 15;
+  bool receiver_present = 16;
+  uint64 receiver_committed_record_sequence = 17;
+  bool receiver_complete = 18;
+  bool receiver_partial = 19;
+  bool journal_partial = 20;
+  bool journal_retiring = 21;
+  bool receiver_retiring = 22;
+  bytes receiver_content_manifest_sha256 = 23;
+  bytes receiver_full_tree_sha256 = 24;
+  bytes receiver_source_sha256 = 25;
+  uint64 receiver_entry_count = 26;
+  bool journal_discarding = 27;
+  bool receiver_discarding = 28;
+}
+
+message BackupRecoveredStage {
+  bytes recovery_key_sha256 = 1;
+  repeated BackupRecoveredFile files = 2;
+  // Durable execution marker survives source-file cleanup until helper state
+  // is classified under a Controller disposition. It may have no files.
+  bool postgres_execution = 3;
+}
+
+enum BackupRecoveredFileRole {
+  BACKUP_RECOVERED_FILE_ROLE_UNSPECIFIED = 0;
+  BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT = 1;
+  BACKUP_RECOVERED_FILE_ROLE_STORED_OBJECT = 2;
+}
+
+message BackupRecoveredFile {
+  BackupRecoveredFileRole role = 1;
+  uint64 size_bytes = 2;
+  bytes sha256 = 3;
+}
+
+message BackupStagingRecoveryPlan {
+  bytes inventory_sha256 = 1;
+  repeated BackupStagingDisposition dispositions = 2;
+  repeated BackupVolumeRestoreRecoveryDisposition volume_dispositions = 3;
+  // Reclassification after native authority changes while delivery is pending.
+  // The exact predecessor plan remains identified; inventory cannot change.
+  bytes supersedes_plan_sha256 = 4;
+}
+
+message BackupVolumeRestoreRecoveryDisposition {
+  bytes recovery_key_sha256 = 1;
+  oneof disposition {
+    BackupVolumeRestoreResume resume = 2;
+    BackupVolumeRestoreHold hold = 3;
+    BackupVolumeRestoreCleanup cleanup = 4;
+  }
+}
+
+message BackupVolumeRestoreResume {
+  bytes assignment_resume_sha256 = 1;
+  int64 native_restore_mod_revision = 2;
+  bytes native_restore_sha256 = 3;
+}
+
+message BackupVolumeRestoreHold {
+  int64 native_restore_mod_revision = 1;
+  bytes native_restore_sha256 = 2;
+}
+
+message BackupVolumeRestoreCleanup {
+  int64 native_restore_mod_revision = 1;
+  bytes native_restore_sha256 = 2;
+}
+
+message BackupStagingDisposition {
+  bytes recovery_key_sha256 = 1;
+  oneof disposition {
+    BackupResumePrepared resume_prepared = 2;
+    BackupDiscardRecovered discard_recovered = 3;
+    BackupRecoveryRequired recovery_required = 4;
+  }
+  BackupPostgresStagingGuard postgres_guard = 5;
+}
+
+// Exact retained release and runtime selection, never current desired state.
+// Inspection grants no client execution or file cleanup authority by itself.
+message BackupPostgresStagingGuard {
+  string task_id = 1;
+  BackupStepAuthority step = 2;
+  BackupServiceFact database_service = 3;
+  ComposeArtifact database_artifact = 4;
+  // Present only for the exact terminal native RecoveryRequired apply attempt.
+  BackupPostgresRestoreApplyStartCheckpoint recovery_apply = 5;
+  // Only a terminal safe/completed Task permits namespace retirement and
+  // removal of its execution marker. Live resume and recovery holds do not.
+  bool terminal_cleanup = 6;
+  // Native completion already proves helper retirement. Only forget this
+  // Task's marker; the database may now belong to a different operation.
+  bool completed_task = 7;
+}
+
+enum BackupRemainingGrowth {
+  BACKUP_REMAINING_GROWTH_UNSPECIFIED = 0;
+  BACKUP_REMAINING_GROWTH_NO_GROWTH = 1;
+  BACKUP_REMAINING_GROWTH_BOUNDED = 2;
+  BACKUP_REMAINING_GROWTH_EXCLUSIVE_UNKNOWN = 3;
+}
+
+message BackupResumePrepared {
+  bytes assignment_resume_sha256 = 1;
+  BackupRemainingGrowth remaining_growth = 2;
+  uint64 required_growth_bytes = 3; // positive only for bounded growth
+  repeated BackupRecoveredFile expected_files = 4;
+  // Config capture only, before ArtifactPrepared selected ciphertext. Preserve
+  // the independently verified complete source; retire only derived ciphertext.
+  BackupRestartConfigEncryption restart_config_encryption = 5;
+  // PostgreSQL capture only, before ArtifactPrepared. Preserve the inventoried
+  // source for original-Exec verification; retire only unselected ciphertext.
+  BackupRestartPostgresEncryption restart_postgres_encryption = 6;
+}
+
+message BackupRestartConfigEncryption {}
+message BackupRestartPostgresEncryption {}
+
+message BackupDiscardRecovered {}
+
+// Classified unresolved mutation: preserve the exact files without granting
+// execution, cleanup or growth authority. Other owned work may become Ready.
+message BackupRecoveryRequired {
+  int64 native_restore_mod_revision = 1;
+  bytes native_restore_sha256 = 2;
+  repeated BackupRecoveredFile expected_files = 3;
+}
+
+message BackupStagingRecoveryAck {
+  bytes inventory_sha256 = 1;
+  bytes applied_plan_sha256 = 2;
+  uint32 applied_disposition_count = 3;
+}
+
+enum BackupConfigDirection {
+  BACKUP_CONFIG_DIRECTION_UNSPECIFIED = 0;
+  BACKUP_CONFIG_DIRECTION_CAPTURE = 1;
+  BACKUP_CONFIG_DIRECTION_RESTORE = 2;
+}
+
+message BackupConfigTransfer {
+  string task_id = 1;
+  string step_id = 2;
+  string execution_id = 3;
+  string transfer_id = 4;
+  uint64 record_sequence = 5;
+  string assignment_id = 6;
+  oneof record {
+    BackupConfigTransferStart start = 10;
+    BackupConfigEntryHeader entry_header = 11;
+    BackupConfigValueChunk value_chunk = 12;
+    BackupConfigEntryEnd entry_end = 13;
+    BackupConfigTransferEnd end = 14;
+    BackupConfigTransferResume resume = 15;
+  }
+}
+
+message BackupConfigTransferStart {
+  BackupConfigDirection direction = 1;
+  BackupConfigContentAuthority content = 2;
+}
+
+message BackupConfigEntryHeader {
+  oneof entry {
+    BackupConfigEntry capture_entry = 1;
+    BackupConfigRestoreEntry restore_entry = 2;
+  }
+  uint32 chunk_count = 3;
+}
+
+message BackupConfigValueChunk {
+  uint32 ordinal = 1;
+  uint64 offset = 2;
+  bytes content = 3;
+}
+
+message BackupConfigEntryEnd {
+  uint32 ordinal = 1;
+  uint64 value_size_bytes = 2;
+  bytes value_sha256 = 3;
+}
+
+message BackupConfigTransferEnd {
+  BackupConfigDirection direction = 1;
+  BackupConfigContentAuthority content = 2;
+  bytes transcript_sha256 = 3;
+}
+
+message BackupConfigTransferResume {
+  reserved 1, 2, 4, 5, 7, 8, 9;
+  reserved "direction", "next_record_sequence", "metadata_accepted",
+    "metadata_chain_sha256", "prior_ack_sequence",
+    "prior_committed_record_sequence", "prior_ack_sha256";
+  uint32 next_ordinal = 3;
+  bytes value_chain_sha256 = 6;
+}
+
+message BackupConfigCredit {
+  string task_id = 1;
+  string step_id = 2;
+  string execution_id = 3;
+  string transfer_id = 4;
+  BackupConfigDirection direction = 5;
+  uint64 credit_sequence = 6;
+  string assignment_id = 7;
+  oneof credit {
+    BackupConfigMetadataAccepted metadata_accepted = 10;
+    BackupConfigValueCredit value_credit = 11;
+    BackupConfigMetadataCredit metadata_credit = 16;
+  }
+  uint64 committed_record_sequence = 12;
+  uint32 next_ordinal = 13;
+  bytes cumulative_chain_sha256 = 14;
+  bytes ack_sha256 = 15;
+}
+
+enum BackupVolumeManifestDirection {
+  BACKUP_VOLUME_MANIFEST_DIRECTION_UNSPECIFIED = 0;
+  BACKUP_VOLUME_MANIFEST_DIRECTION_CAPTURE = 1; // Agent to Controller
+  BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_NEW = 2; // Controller to Agent
+  BACKUP_VOLUME_MANIFEST_DIRECTION_RESTORE_OLD = 3; // Agent to Controller
+}
+
+enum BackupVolumeManifestRole {
+  BACKUP_VOLUME_MANIFEST_ROLE_UNSPECIFIED = 0;
+  BACKUP_VOLUME_MANIFEST_ROLE_CAPTURED = 1;
+  BACKUP_VOLUME_MANIFEST_ROLE_RESTORE_NEW = 2;
+  BACKUP_VOLUME_MANIFEST_ROLE_STOPPED_LIVE_OLD = 3;
+}
+
+message BackupVolumeManifestTransfer {
   string task_id = 1;
   string assignment_id = 2;
   string step_id = 3;
-  uint32 sequence = 4;
+  bytes authority_digest = 4;
+  string transfer_id = 5;
+  BackupVolumeManifestDirection direction = 6;
+  uint64 record_sequence = 7;
+  oneof record {
+    BackupVolumeManifestStart start = 10;
+    BackupVolumeManifestBatch batch = 11;
+    BackupVolumeManifestEnd end = 12;
+    BackupVolumeManifestResume resume = 13;
+  }
 }
 
-// BackupSecretSlotTransfer is transient Controller-to-Agent traffic. Every
-// record repeats the complete assignment/purpose fence. Config Entry content
-// uses its own typed transfer and is never a secret-slot purpose.
+message BackupVolumeManifestStart {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  BackupVolumeManifestRole role = 3;
+  uint64 entry_count = 4;
+  bytes content_manifest_sha256 = 5;
+  bytes full_tree_sha256 = 6;
+  oneof archive {
+    BackupVolumeSourceArchiveEvidence source_archive = 7;
+    BackupVolumeNoSourceArchiveEvidence no_source_archive = 8;
+  }
+}
+
+message BackupVolumeManifestBatch {
+  uint64 first_ordinal = 1;
+  repeated BackupVolumeManifestEntry entries = 2;
+  bytes preceding_transfer_chain_sha256 = 3;
+  bytes resulting_transfer_chain_sha256 = 4;
+}
+
+message BackupVolumeManifestEnd {
+  uint64 entry_count = 1;
+  bytes content_manifest_sha256 = 2;
+  bytes full_tree_sha256 = 3;
+  bytes final_transfer_chain_sha256 = 4;
+}
+
+message BackupVolumeManifestResume {
+  uint64 next_record_sequence = 1;
+  uint64 next_ordinal = 2;
+  bytes preceding_transfer_chain_sha256 = 3;
+  uint64 prior_ack_sequence = 4;
+  uint64 prior_committed_record_sequence = 5;
+}
+
+message BackupVolumeManifestAckCredit {
+  string task_id = 1;
+  string assignment_id = 2;
+  string step_id = 3;
+  bytes authority_digest = 4;
+  string transfer_id = 5;
+  uint64 ack_sequence = 6;
+  uint64 committed_record_sequence = 7;
+  uint64 next_ordinal = 8;
+  bytes transfer_chain_sha256 = 9;
+  uint32 record_credit = 10;
+  uint64 byte_credit = 11;
+}
+
+message BackupArtifactPrepared {
+  string point_id = 1;
+  BackupArtifactEvidence evidence = 2;
+  BackupStagingFinals finals = 3;
+  oneof archive {
+    BackupPostgresArchiveEvidence postgres = 10;
+    BackupConfigArchiveEvidence config = 11;
+    BackupVolumeArchiveEvidence volume = 12;
+  }
+}
+
+message BackupUploadCompleted {
+  string point_id = 1;
+  BackupArtifactEvidence evidence = 2;
+  BackupObjectTarget target = 3;
+  oneof outcome {
+    BackupObjectIdentity returned_object = 4;
+    BackupPutOutcomeUnknown unknown = 5;
+  }
+  uint32 metadata_count = 6;
+  bytes metadata_sha256 = 7;
+}
+
+message BackupPutOutcomeUnknown {}
+
+message BackupUploadVerified {
+  string point_id = 1;
+  BackupArtifactEvidence evidence = 2;
+  BackupObjectIdentity object = 3;
+  uint32 metadata_count = 4;
+  bytes metadata_sha256 = 5;
+}
+
+message BackupSourceCleanupCompleted {
+  string point_id = 1;
+  BackupArtifactEvidence evidence = 2;
+}
+
+message BackupRestoreArtifactValidated {
+  string point_id = 1;
+  BackupObjectIdentity object = 2;
+  BackupArtifactEvidence evidence = 3;
+  BackupStagingFinals finals = 4;
+  oneof archive {
+    BackupPostgresArchiveEvidence postgres = 10;
+    BackupConfigArchiveEvidence config = 11;
+    BackupVolumeArchiveEvidence volume = 12;
+  }
+}
+
+message BackupConfigCheckpoint {
+  oneof checkpoint {
+    BackupConfigValueProgress value_progress = 1;
+    BackupConfigTransferCompleted transfer_completed = 2;
+    BackupConfigMaterializationVerified materialization_verified = 3;
+  }
+}
+
+message BackupConfigProgress {
+  optional bool metadata_accepted = 1; // presence required
+  bytes metadata_transcript_sha256 = 2;
+  uint32 next_value_ordinal = 3;
+  bytes value_chain_sha256 = 4;
+  BackupSourceCleanupCompleted source_cleanup_completed = 5; // restore only, after materialization
+  oneof progress {
+    BackupConfigTransferCompleted transfer = 10;
+    BackupConfigMaterializationVerified materialization = 11;
+  }
+}
+
+message BackupConfigValueProgress {
+  uint32 next_ordinal = 1;
+  bytes chain_sha256 = 2;
+}
+
+message BackupConfigTransferCompleted {
+  string restore_generation_id = 1; // restore only; absent for capture
+  BackupConfigContentAuthority content = 2;
+  uint64 committed_record_count = 3;
+  bytes value_chain_sha256 = 4;
+  bytes transfer_transcript_sha256 = 5;
+  uint64 render_generation = 6; // restore only; zero for capture
+}
+
+message BackupConfigMaterializationVerified {
+  string restore_generation_id = 1;
+  uint32 materialized_entry_count = 2;
+  bytes materialization_sha256 = 3;
+}
+
+message BackupVolumeCheckpoint {
+  oneof checkpoint {
+    BackupVolumeConsumersStopped consumers_stopped = 1;
+    BackupVolumeConstructionIntent construction_intent = 2;
+    BackupVolumeConstructionCompleted construction_completed = 3;
+    BackupVolumeFinalizationIntent finalization_intent = 4;
+    BackupVolumeFinalizationCompleted finalization_completed = 5;
+    BackupVolumeExchangeIntent exchange_intent = 6;
+    BackupVolumeTreeExchanged tree_exchanged = 7;
+    BackupVolumeDeleteIntent replaced_path_delete_intent = 8;
+    BackupVolumeReplacedPathCleaned volume_replaced_path_cleaned = 9;
+    BackupVolumeServiceProgress service_progress = 10;
+  }
+}
+
+message BackupVolumeProgress {
+  uint64 construction_cursor = 1;
+  bytes construction_chain_sha256 = 2;
+  optional BackupVolumeConstructionIntent pending_construction = 3;
+  uint64 finalization_cursor = 4;
+  bytes finalization_chain_sha256 = 5;
+  optional BackupVolumeFinalizationIntent pending_finalization = 6;
+  bytes old_full_tree_sha256 = 7;
+  bytes new_full_tree_sha256 = 8;
+  optional BackupVolumeExchangeIntent pending_exchange = 9;
+  uint64 deletion_cursor = 10;
+  optional BackupVolumeDeleteIntent pending_delete = 11;
+  uint32 service_cursor = 12;
+  BackupServicePhase service_phase = 13;
+}
+
+message BackupStagingFinals {
+  string source_relative_name = 1;
+  string stored_relative_name = 2;
+  optional bool same_inode = 3; // presence required
+}
+
+message BackupConfigEntry {
+  uint32 ordinal = 1;
+  string entry_id = 2;
+  RevisionDigest entry = 3;
+  optional bool secret = 4; // presence mandatory, including false
+  oneof metadata {
+    BackupConfigEnvironment environment = 10;
+    BackupConfigFile file = 11;
+  }
+  oneof exposure {
+    BackupConfigExposureAll exposure_all = 20;
+    BackupConfigExposureServices exposure_services = 21;
+  }
+  oneof source {
+    BackupConfigLiteral literal = 30;
+    BackupConfigSecretRef secret_ref = 31;
+    BackupConfigFactRef fact_ref = 32;
+  }
+  uint64 selected_value_size_bytes = 40;
+  bytes selected_value_sha256 = 41;
+}
+
+message BackupConfigEnvironment {
+  string name = 1;
+}
+
+message BackupConfigFile {
+  string path = 1;
+  uint32 mode = 2;
+  uint32 uid = 3;
+  uint32 gid = 4;
+}
+
+message BackupConfigExposureAll {}
+
+message BackupConfigExposureServices {
+  repeated string service_ids = 1;
+}
+
+message BackupConfigLiteral {}
+
+message BackupConfigSecretRef {
+  string secret_id = 1;
+  string authored_key = 2;
+  RevisionDigest secret = 3;
+}
+
+message BackupConfigFactRef {
+  string attach_id = 1;
+  string fact = 2;
+  optional string grant_attach_id = 3;
+  RevisionDigest attach = 4;
+  optional RevisionDigest grant_attach = 5;
+}
+
+message BackupConfigRestoreEntry {
+  string entry_id = 1;
+  BackupConfigEntryMetadata metadata = 2;
+  BackupConfigEntryExposure exposure = 3;
+  BackupConfigArtifactDesiredSource source = 4;
+  optional bool secret = 5; // presence mandatory, including false
+  BackupConfigSelectedValue selected_value = 6;
+}
+
+message BackupConfigEntryMetadata {
+  oneof metadata {
+    BackupConfigEnvironment environment = 1;
+    BackupConfigFile file = 2;
+  }
+}
+
+message BackupConfigEntryExposure {
+  oneof exposure {
+    BackupConfigExposureAll all = 1;
+    BackupConfigExposureServices services = 2;
+  }
+}
+
+message BackupConfigArtifactDesiredSource {
+  oneof source {
+    BackupConfigLiteralSource literal = 1;
+    BackupConfigArtifactSecretRefSource secret_ref = 2;
+    BackupConfigArtifactFactSource fact_ref = 3;
+  }
+}
+
+message BackupConfigLiteralSource {}
+
+message BackupConfigArtifactSecretRefSource {
+  string authored_key = 1;
+}
+
+message BackupConfigArtifactFactSource {
+  string attach_id = 1;
+  optional string grant_attach_id = 2;
+  string fact = 3;
+}
+
+message BackupConfigSelectedValue {
+  uint64 size_bytes = 1;
+  bytes sha256 = 2;
+}
+
+message BackupConfigContentAuthority {
+  bytes manifest_sha256 = 1;
+  uint32 entry_count = 2;
+  uint64 total_selected_value_bytes = 3;
+  uint64 manifest_size_bytes = 4;
+  uint64 source_size_bytes = 5;
+  bytes metadata_snapshot_sha256 = 6;
+}
+
+message BackupConfigArchiveEvidence {
+  BackupConfigContentAuthority content = 1;
+  bytes capture_transcript_sha256 = 2;
+}
+
+message BackupConfigCaptureAuthority {
+  reserved 2, 5;
+  reserved "environment", "metadata_snapshot_sha256";
+  string environment_id = 1;
+  BackupConfigContentAuthority content = 3;
+  int64 metadata_snapshot_revision = 4;
+  uint32 metadata_entry_count = 6;
+  uint64 metadata_proto_bytes = 7;
+}
+
+message BackupConfigRestoreAuthority {
+  reserved 2;
+  reserved "destination";
+  string destination_environment_id = 1;
+  BackupConfigArchiveEvidence expected_archive = 3;
+  string restore_generation_id = 4;
+  uint64 render_generation = 5;
+  string baseline_revision_id = 6;
+  int64 baseline_head_revision = 7;
+  BackupConfigFileContext files = 8;
+}
+
+// Non-secret predecessor file authority, sealed at Restore admission. Archive
+// metadata selects restored outputs; this context alone authorizes removals.
+message BackupConfigFileContext {
+  string volume_root = 1;
+  string volume_dir = 2;
+  repeated BackupConfigFileService services = 3;
+  repeated BackupConfigPriorFile prior_files = 4;
+}
+
+message BackupConfigFileService {
+  string service_id = 1;
+  string name = 2;
+  bool had_environment_file = 3;
+}
+
+message BackupConfigPriorFile {
+  string entry_id = 1;
+  string destination = 2;
+  bool secret = 3;
+  uint32 uid = 4;
+  uint32 gid = 5;
+}
+
+message BackupConfigMetadataRow {
+  bytes authority_digest = 1;
+  bytes metadata_snapshot_sha256 = 2;
+  uint32 ordinal = 3;
+  oneof entry {
+    BackupConfigEntry capture_entry = 4;
+    BackupConfigRestoreEntry restore_entry = 5;
+  }
+  bytes preceding_transfer_chain_sha256 = 6;
+  bytes resulting_transfer_chain_sha256 = 7;
+}
+
+// Exactly 46 metadata records / 393216 bytes; initial and subsequent value
+// grants never exceed 262144 bytes / eight records.
+message BackupConfigMetadataAccepted {
+  bytes metadata_transcript_sha256 = 1;
+  uint64 initial_value_credit_bytes = 2;
+  uint32 initial_value_record_credit = 3;
+}
+
+message BackupConfigValueCredit {
+  uint64 value_credit_bytes = 1;
+  uint32 record_credit = 2;
+}
+
+message BackupConfigMetadataCredit {
+  uint32 record_credit = 1;
+  uint64 byte_credit = 2;
+}
+
+message BackupPostgresCaptureAuthority {
+  reserved 3, 4;
+  reserved "consumers", "managed_postgres_repository_digest";
+  uint32 adapter_contract_version = 1;
+  string database_service_id = 2;
+  string database_name = 5;
+  string role_name = 6;
+  uint64 max_plaintext_bytes = 7; // 5497558138880 none; 5496216289016 age
+  bytes managed_release_index = 8; // canonical release-owned index, native images and helper measurements
+}
+
+message BackupPostgresRestoreAuthority {
+  reserved 3, 4;
+  reserved "consumers", "managed_postgres_repository_digest";
+  uint32 adapter_contract_version = 1;
+  string database_service_id = 2;
+  string database_name = 5;
+  string role_name = 6;
+  bytes managed_release_index = 7;
+}
+
+message BackupPostgresContainerObserved {
+  string service_id = 1;
+  string container_id = 2; // 64 lowercase hexadecimal characters
+  bytes repository_digest = 3;
+  uint32 observed_label_count = 4;
+  bytes observed_labels_sha256 = 5;
+  bytes observation_sha256 = 6;
+}
+
+message BackupPostgresDumpStart {
+  string point_id = 1;
+  bytes execution_nonce = 2;
+  string container_id = 3;
+  string exec_id = 4; // 64 lowercase hexadecimal characters
+  bytes repository_digest = 5;
+  bytes expected_labels_sha256 = 6;
+  uint32 adapter_contract_version = 7;
+  string database_name = 8;
+  string role_name = 9;
+  uint64 max_plaintext_bytes = 10;
+}
+
+message BackupPostgresRestoreApplyStartCheckpoint {
+  string point_id = 1;
+  bytes execution_nonce = 2;
+  string container_id = 3;
+  string exec_id = 4;
+  bytes repository_digest = 5;
+  bytes expected_labels_sha256 = 6;
+  uint64 source_size_bytes = 7;
+  bytes source_sha256 = 8;
+}
+
+message BackupPostgresRestoreVerified {
+  string point_id = 1;
+  string container_id = 2;
+  BackupArtifactEvidence evidence = 3;
+  bytes verification_sha256 = 4;
+}
+
+enum BackupServicePhase {
+  BACKUP_SERVICE_PHASE_UNSPECIFIED = 0;
+  BACKUP_SERVICE_PHASE_NOT_RUNNING = 1;
+  BACKUP_SERVICE_PHASE_STOP_INTENT = 2;
+  BACKUP_SERVICE_PHASE_STOPPED = 3;
+  BACKUP_SERVICE_PHASE_RESTART_INTENT = 4;
+  BACKUP_SERVICE_PHASE_RESTARTED = 5;
+  BACKUP_SERVICE_PHASE_HEALTH_WAIT = 6;
+  BACKUP_SERVICE_PHASE_HEALTHY = 7;
+}
+
+message BackupPostgresServiceProgress {
+  uint32 service_cursor = 1;
+  string service_id = 2;
+  BackupServicePhase phase = 3;
+  bytes observation_sha256 = 4;
+}
+
+message BackupPostgresArchiveEvidence {
+  uint32 pg_dump_major = 1; // exactly 16
+  uint32 adapter_contract_version = 2; // exactly one
+}
+
+enum BackupVolumeEntryKind {
+  BACKUP_VOLUME_ENTRY_KIND_UNSPECIFIED = 0;
+  BACKUP_VOLUME_ENTRY_KIND_DIRECTORY = 1;
+  BACKUP_VOLUME_ENTRY_KIND_REGULAR_FILE = 2;
+}
+
+message BackupVolumeManifestEntry {
+  uint64 ordinal = 1;
+  bytes relative_path = 2; // canonical raw path bytes, not restricted to UTF-8
+  BackupVolumeEntryKind kind = 3;
+  uint32 mode = 4;
+  uint32 uid = 5;
+  uint32 gid = 6;
+  uint64 size_bytes = 7;
+  bytes content_sha256 = 8;
+}
+
+message BackupVolumeArchiveEvidence {
+  uint64 entry_count = 1;
+  bytes content_manifest_sha256 = 2;
+  bytes full_tree_sha256 = 3;
+  uint64 source_size_bytes = 4;
+}
+
+message BackupVolumeProjectionAuthority {
+  string artifact_id = 1;
+  bytes artifact_sha256 = 2;
+  int64 artifact_revision = 3;
+  int64 projection_root = 4;
+  uint64 render_generation = 5;
+  string compose_volume_key = 6;
+  string docker_volume_name = 7;
+  string authorized_volume_dir = 8;
+}
+
+message BackupVolumeCaptureAuthority {
+  reserved 4;
+  reserved "consumers";
+  string volume_id = 1;
+  RevisionDigest volume = 2;
+  uint64 source_size_upper_bound = 3;
+  BackupVolumeProjectionAuthority projection = 5;
+}
+
+message BackupVolumeRestoreAuthority {
+  reserved 4;
+  reserved "consumers";
+  string volume_id = 1;
+  RevisionDigest volume = 2;
+  BackupVolumeArchiveEvidence archive = 3;
+  BackupVolumeProjectionAuthority projection = 5;
+}
+
+message BackupVolumeSourceArchiveEvidence {
+  uint64 source_size_bytes = 1;
+  bytes source_sha256 = 2;
+}
+
+message BackupVolumeNoSourceArchiveEvidence {}
+
+message BackupVolumeConsumersStopped {
+  uint32 stopped_count = 1;
+  bytes service_progress_sha256 = 2;
+}
+
+message BackupVolumeConstructionIntent {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  bytes new_tree_content_manifest_sha256 = 3;
+  uint64 construction_cursor_before = 4;
+  uint64 archive_ordinal = 5;
+  bytes logical_path = 6;
+  BackupVolumeEntryKind kind = 7;
+  uint32 mode = 8;
+  uint32 uid = 9;
+  uint32 gid = 10;
+  uint64 size_bytes = 11;
+  bytes content_sha256 = 12;
+}
+
+message BackupVolumeConstructionCompleted {
+  BackupVolumeConstructionIntent intent = 1;
+  uint64 construction_cursor_after = 2;
+}
+
+message BackupVolumeFinalizationIntent {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  bytes new_tree_content_manifest_sha256 = 3;
+  uint64 finalization_cursor_before = 4;
+  uint64 finalization_ordinal = 5;
+  bytes logical_path = 6;
+  uint32 final_uid = 7;
+  uint32 final_gid = 8;
+  uint32 final_mode = 9;
+}
+
+message BackupVolumeFinalizationCompleted {
+  BackupVolumeFinalizationIntent intent = 1;
+  uint64 finalization_cursor_after = 2;
+}
+
+message BackupVolumeExchangeIntent {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  bytes old_full_tree_sha256 = 3;
+  bytes new_full_tree_sha256 = 4;
+}
+
+message BackupVolumeTreeExchanged {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  bytes old_full_tree_sha256 = 3;
+  bytes new_full_tree_sha256 = 4;
+}
+
+message BackupVolumeDeleteIntent {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  bytes old_full_tree_sha256 = 3;
+  bytes new_full_tree_sha256 = 4;
+  uint64 deletion_cursor_before = 5;
+  uint64 deletion_ordinal = 6;
+  bytes logical_path = 7;
+  BackupVolumeEntryKind kind = 8;
+  bytes parent_logical_path = 9;
+}
+
+message BackupVolumeReplacedPathCleaned {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  bytes old_full_tree_sha256 = 3;
+  bytes new_full_tree_sha256 = 4;
+  uint64 deletion_cursor_before = 5;
+  uint64 deletion_ordinal = 6;
+  bytes logical_path = 7;
+  BackupVolumeEntryKind kind = 8;
+  bytes parent_logical_path = 9;
+}
+
+message BackupVolumeServiceProgress {
+  uint32 service_cursor = 1;
+  string service_id = 2;
+  BackupServicePhase phase = 3;
+  bytes observation_sha256 = 4;
+}
+
+// Secret material remains transient assignment/step-fenced header/chunk/end
+// traffic. Config selected values use BackupConfigTransfer instead.
 message BackupSecretSlotTransfer {
   string task_id = 1;
   string assignment_id = 2;
@@ -1545,90 +2655,73 @@ message BackupSecretSlotHeader {
 }
 
 message BackupSecretSlotChunk {
-  uint32 sequence = 1; // one-based and contiguous within the exact slot fence
-  bytes content = 2;   // at most 32 KiB; transient and cleared after consumption
+  uint32 sequence = 1;
+  bytes content = 2; // at most 32768 transient bytes, cleared after consumption
 }
 
 message BackupSecretSlotEnd {
   uint32 chunk_count = 1;
 }
 
-enum BackupCheckpointKind {
-  BACKUP_CHECKPOINT_KIND_UNSPECIFIED = 0;
-  BACKUP_CHECKPOINT_KIND_ARTIFACT_PREPARED = 1;
-  BACKUP_CHECKPOINT_KIND_UPLOAD_VERIFIED = 2;
-  BACKUP_CHECKPOINT_KIND_SOURCE_CLEANUP_COMPLETED = 3;
-  BACKUP_CHECKPOINT_KIND_RESTORE_ARTIFACT_VALIDATED = 4;
-  BACKUP_CHECKPOINT_KIND_VOLUME_TREE_STAGED = 5;
-  BACKUP_CHECKPOINT_KIND_VOLUME_TREE_EXCHANGED = 6;
-  BACKUP_CHECKPOINT_KIND_VOLUME_REPLACED_TREE_CLEANED = 7;
-  BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_STAGED = 8;
-  BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_ACTIVATED = 9;
-  BACKUP_CHECKPOINT_KIND_POSTGRES_RESTORE_VERIFIED = 10;
-  BACKUP_CHECKPOINT_KIND_REMOTE_OBJECT_ABSENT = 11;
-  BACKUP_CHECKPOINT_KIND_UPLOAD_COMPLETED = 12;
+message TaskTerminalReceiptAck {
+  bytes process_generation = 1;
+  string task_id = 2;
+  string assignment_id = 3;
+  uint64 assignment_generation = 4;
+  bytes plan_hash = 5;
+  TaskTerminal terminal = 6;
+  bytes task_ack_sha256 = 7;
+  bytes terminal_receipt_sha256 = 8;
+  int64 durable_task_mod_revision = 9;
 }
 
-message BackupArtifactPreparedCheckpoint {
-  string point_id = 1;
-  uint64 stored_size_bytes = 2;
-  bytes stored_sha256 = 3;
+message TaskTerminalReceiptApplied {
+  bytes process_generation = 1;
+  string task_id = 2;
+  string assignment_id = 3;
+  uint64 assignment_generation = 4;
+  bytes plan_hash = 5;
+  TaskTerminal terminal = 6;
+  bytes task_ack_sha256 = 7;
+  bytes terminal_receipt_sha256 = 8;
+  int64 durable_task_mod_revision = 9;
 }
 
-message BackupUploadCompletedCheckpoint {
-  string point_id = 1;
-  uint64 stored_size_bytes = 2;
-  bytes stored_sha256 = 3;
+message TaskTerminalReceiptAppliedAck {
+  bytes process_generation = 1;
+  string task_id = 2;
+  string assignment_id = 3;
+  uint64 assignment_generation = 4;
+  bytes plan_hash = 5;
+  TaskTerminal terminal = 6;
+  bytes task_ack_sha256 = 7;
+  bytes terminal_receipt_sha256 = 8;
+  int64 durable_task_mod_revision = 9;
 }
 
-message BackupUploadVerifiedCheckpoint {
-  string point_id = 1;
-  uint64 stored_size_bytes = 2;
-  bytes stored_sha256 = 3;
+message TaskTerminalAssignmentRetired {
+  bytes process_generation = 1;
+  string task_id = 2;
+  string assignment_id = 3;
+  uint64 assignment_generation = 4;
+  bytes plan_hash = 5;
+  TaskTerminal terminal = 6;
 }
 
-message BackupSourceCleanupCompletedCheckpoint {
-  string point_id = 1;
+message TaskTerminalAssignmentRetiredAck {
+  bytes process_generation = 1;
+  string task_id = 2;
+  string assignment_id = 3;
+  uint64 assignment_generation = 4;
+  bytes plan_hash = 5;
+  TaskTerminal terminal = 6;
 }
 
-message BackupRestoreArtifactValidatedCheckpoint {
-  string point_id = 1;
-  bytes stored_sha256 = 2;
-  bytes decoded_sha256 = 3;
-}
-
-message BackupVolumeTreeStagedCheckpoint {
-  string point_id = 1;
-  bytes staged_tree_manifest_sha256 = 2;
-}
-
-message BackupVolumeTreeExchangedCheckpoint {
-  string point_id = 1;
-  bytes live_tree_manifest_sha256 = 2;
-}
-
-message BackupVolumeReplacedTreeCleanedCheckpoint {
-  string point_id = 1;
-}
-
-message BackupConfigGenerationStagedCheckpoint {
-  string point_id = 1;
-  string restore_generation_id = 2; // Controller-owned cfg_ identity, stable across eligible Task retries.
-  bytes entry_generation_manifest_sha256 = 3;
-}
-
-message BackupConfigGenerationActivatedCheckpoint {
-  string point_id = 1;
-  string restore_generation_id = 2; // Same cfg_ identity acknowledged by config_generation_staged.
-  uint64 render_generation = 3;
-}
-
-message BackupPostgresRestoreVerifiedCheckpoint {
-  string point_id = 1;
-}
-
-message BackupRemoteObjectAbsentCheckpoint {
-  string point_id = 1;
+message BackupStagingRecoveryAckReceipt {
+  bytes process_generation = 1;
+  bytes inventory_sha256 = 2;
+  bytes applied_plan_sha256 = 3;
+  bytes recovery_ack_sha256 = 4;
 }
 
 enum AdapterProcedurePhase {
@@ -1984,6 +3077,30 @@ message ComposeHelperRequest {
   uint32 timeout_seconds = 6; // remaining bounded execution time
   string assignment_id = 7;
   ReleaseRestorationAuthority restoration_authority = 9;
+  BackupVolumeConsumerAction backup_volume_consumer = 10;
+  BackupPostgresConsumerAction backup_postgres_consumer = 11;
+}
+
+enum BackupVolumeConsumerOperation {
+  BACKUP_VOLUME_CONSUMER_OPERATION_UNSPECIFIED = 0;
+  BACKUP_VOLUME_CONSUMER_OPERATION_STOP = 1;
+  BACKUP_VOLUME_CONSUMER_OPERATION_RECOVER = 2;
+}
+
+message BackupVolumeConsumerAction {
+  string service_id = 1;
+  BackupVolumeConsumerOperation operation = 2;
+}
+
+enum BackupPostgresConsumerOperation {
+  BACKUP_POSTGRES_CONSUMER_OPERATION_UNSPECIFIED = 0;
+  BACKUP_POSTGRES_CONSUMER_OPERATION_STOP = 1;
+  BACKUP_POSTGRES_CONSUMER_OPERATION_RECOVER = 2;
+}
+
+message BackupPostgresConsumerAction {
+  string service_id = 1;
+  BackupPostgresConsumerOperation operation = 2;
 }
 
 message ComposeHelperResponse {
@@ -2018,6 +3135,12 @@ message TaskAbort {
   string task_id = 1;
   string reason = 2;
   string assignment_id = 3;
+  uint64 assignment_generation = 4;
+  bytes plan_hash = 5;
+  TaskTerminal terminal = 6;
+  bytes terminal_receipt_sha256 = 7;
+  int64 durable_task_mod_revision = 8;
+  optional bytes rejected_task_ack_sha256 = 9;
 }
 
 message ConfigUpdate {

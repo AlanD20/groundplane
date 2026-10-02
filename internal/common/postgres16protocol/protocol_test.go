@@ -272,7 +272,7 @@ func TestOperationPoliciesAreClosed(t *testing.T) {
 			t.Fatalf("operation %d: PolicyFor() = %#v, %v; want %#v", operation, policy, err, test.policy)
 		}
 	}
-	for _, operation := range []Operation{0, OperationStop, 12, 255} {
+	for _, operation := range []Operation{0, OperationStop, 15, 255} {
 		if _, err := ClientPath(operation); err == nil {
 			t.Fatalf("operation %d: client path accepted", operation)
 		}

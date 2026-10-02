@@ -71,19 +71,16 @@ func (repository *Reader) ListBackupOrphansByEnvironment(
 			return BackupRuntimePage[BackupOrphanRecord]{}, CorruptBackupRuntimeRecord()
 		}
 		record, decodeErr := DecodeBackupOrphanRecord(value.Value)
-		expectedVersion := int64(1)
-		if record.State == BackupOrphanDelete {
-			expectedVersion = 2
-		}
-		if decodeErr != nil || record.Point.ID != pointIDs[position] ||
-			record.Point.EnvironmentID != environmentID || value.Version != expectedVersion ||
+		expectedVersion := backupOrphanRecordVersion(record)
+		if decodeErr != nil || record.Target.ID != pointIDs[position] ||
+			record.Target.EnvironmentID != environmentID || value.Version != expectedVersion ||
 			index.Values[position].Version != expectedVersion ||
 			index.Values[position].ModRevision != value.ModRevision {
 			return BackupRuntimePage[BackupOrphanRecord]{}, CorruptBackupRuntimeRecord()
 		}
 		connectorKey, keyErr := BackupOrphanConnectorIndexKey(
-			record.Point.ConnectorID,
-			record.Point.ID,
+			record.Target.ConnectorID,
+			record.Target.ID,
 		)
 		if keyErr != nil {
 			return BackupRuntimePage[BackupOrphanRecord]{}, CorruptBackupRuntimeRecord()
@@ -106,13 +103,10 @@ func (repository *Reader) ListBackupOrphansByEnvironment(
 	for position, connector := range connectors.Values {
 		record := records[position]
 		value := primaries.Values[position]
-		expectedVersion := int64(1)
-		if record.State == BackupOrphanDelete {
-			expectedVersion = 2
-		}
+		expectedVersion := backupOrphanRecordVersion(record)
 		if connector == nil || connector.Key != connectorKeys[position] ||
 			connector.Version != expectedVersion || connector.ModRevision != value.ModRevision ||
-			string(connector.Value) != record.Point.ID {
+			string(connector.Value) != record.Target.ID {
 			return BackupRuntimePage[BackupOrphanRecord]{}, CorruptBackupRuntimeRecord()
 		}
 		page.Items[position] = etcdstore.Versioned[BackupOrphanRecord]{

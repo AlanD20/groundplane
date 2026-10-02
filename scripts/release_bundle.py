@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import gzip
 import hashlib
 import io
@@ -15,6 +16,7 @@ import tarfile
 
 import deploy
 from controller_release import build_metadata
+from release_postgres16 import load_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?")
@@ -22,7 +24,7 @@ IMAGE = re.compile(r"[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}")
 ARCHES = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
 
 
-def payload(version: str, agent: str | None, runner: str, arch: str) -> dict[str, bytes]:
+def payload(version: str, agent: str | None, runner: str, arch: str, postgres_catalog: bytes) -> dict[str, bytes]:
     sources = [deploy.CONTROLLER, deploy.CONTROLLER_METADATA, deploy.CLI,
                deploy.RELEASE_STAGER, deploy.BOOTSTRAP_HELPER, deploy.UPDATE_CLIENT,
                deploy.CONTROLLER_UNIT, deploy.TMPFILES, deploy.CONFIG_EXAMPLE,
@@ -36,8 +38,10 @@ def payload(version: str, agent: str | None, runner: str, arch: str) -> dict[str
         raise ValueError("Controller bytes differ from build metadata")
     files["install-runtime.sh"] = deploy.REMOTE_INSTALL.encode()
     files["setup-host.sh"] = deploy.REMOTE_SETUP.encode()
+    files["postgres16-release.json"] = postgres_catalog
+    postgres = json.loads(postgres_catalog)
     manifest = {"schema": 1, "version": version, "os": "linux", "arch": arch,
-                "agent_image": agent, "runner_image": runner,
+                "agent_image": agent, "runner_image": runner, "postgres_image": postgres["image"],
                 "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
     files["bundle.json"] = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
     return files
@@ -61,6 +65,7 @@ def main() -> None:
     parser.add_argument("--agent-image", help="published repository@sha256:digest; omitted for Controller-only")
     parser.add_argument("--controller-only", action="store_true")
     parser.add_argument("--runner-image", required=True, help="published repository@sha256:digest")
+    parser.add_argument("--postgres16-release", required=True, help="native-pair managed PostgreSQL release catalog")
     parser.add_argument("--output", default=".tmp/releases", help="new artifacts below repository .tmp")
     args = parser.parse_args()
     if not VERSION.fullmatch(args.version) or len(args.version) > 100:
@@ -84,9 +89,11 @@ def main() -> None:
         "GOMAXPROCS": "2", "CGO_ENABLED": "0", "GOFLAGS": "-p=2 -trimpath",
         "GOOS": "linux", "GOARCH": ARCHES[platform.machine()], "GOAMD64": "v1", "GOARM64": "v8.0",
     }
+    postgres_catalog, _ = load_catalog(Path(args.postgres16_release), published=True)
+    environment["POSTGRES16_RELEASE_BASE64"] = base64.b64encode(postgres_catalog).decode("ascii")
     subprocess.run(["bash", "scripts/repo-env.sh", "make", "controller", "cli", f"VERSION=controller/v{args.version}"],
                    cwd=ROOT, env=environment, check=True)
-    files = payload(args.version, args.agent_image, args.runner_image, ARCHES[platform.machine()])
+    files = payload(args.version, args.agent_image, args.runner_image, ARCHES[platform.machine()], postgres_catalog)
     write_archive(destination, files)
     checksum = hashlib.sha256(destination.read_bytes()).hexdigest()
     with checksum_path.open("x") as out:

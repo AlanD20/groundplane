@@ -1,7 +1,10 @@
 package backupsecrets
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -27,8 +30,9 @@ func (reader *Reader) decodePruneDynamicEvidence(
 	}
 	items := make([]backupplanning.PruneExecutionEvidence, len(dispatch.RecoveryPointIDs))
 	for index, pointID := range dispatch.RecoveryPointIDs {
-		planned := plan.Steps[index].GetBackupArtifactPrune()
-		if planned == nil || planned.PruneRevision == 0 {
+		planned := plan.Steps[index].GetBackupStep().GetPrune()
+		if planned == nil || len(planned.Objects) != 1 || planned.Objects[0].Ordinal != uint32(index+1) ||
+			planned.Objects[0].PointId != pointID {
 			return errs.New(errs.KindStateConflict, "backup prune sealed authority is unavailable")
 		}
 		pointValue := result.Values[dynamic.points[pointID]]
@@ -46,25 +50,12 @@ func (reader *Reader) decodePruneDynamicEvidence(
 			pruneValue.ModRevision != evidence.DispatchRevision {
 			return errs.New(errs.KindStateConflict, "backup prune point evidence changed")
 		}
-		sealed, err := reader.readFixed(
-			ctx, []string{backupruntime.BackupRecoveryPointPruneKey(pointID)}, int64(planned.PruneRevision),
-		)
-		if err != nil {
-			return err
+		policyDigest, err := hex.DecodeString(prune.PolicySHA256)
+		if err != nil || len(policyDigest) != sha256.Size || planned.RetentionPolicy == nil ||
+			planned.RetentionPolicy.ModRevision != prune.PolicyRevision || !bytes.Equal(planned.RetentionPolicy.Sha256, policyDigest) {
+			return errs.New(errs.KindStateConflict, "backup prune retained policy authority changed")
 		}
-		sealedValue := sealed.Values[0]
-		if sealedValue == nil || sealedValue.ModRevision != int64(planned.PruneRevision) {
-			etcdstore.ClearValues(sealed.Values)
-			return errs.New(errs.KindStateConflict, "backup prune sealed authority changed")
-		}
-		sealedPrune, sealedErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(sealedValue.Value)
-		etcdstore.ClearValues(sealed.Values)
-		if sealedErr != nil || sealedPrune.Point != prune.Point ||
-			sealedPrune.PointRevision != prune.PointRevision ||
-			sealedPrune.OperationID != prune.OperationID || sealedPrune.TaskID != "" ||
-			sealedPrune.State != backupruntime.BackupPrunePending {
-			return errs.New(errs.KindStateConflict, "backup prune sealed authority changed")
-		}
+		policy := &agentpb.RevisionDigest{ModRevision: prune.PolicyRevision, Sha256: policyDigest}
 		sourceValue := result.Values[dynamic.sources[point.SourceID]]
 		environmentValue := result.Values[dynamic.environment]
 		connectorValue := result.Values[dynamic.connectors[point.ConnectorID]]
@@ -99,26 +90,29 @@ func (reader *Reader) decodePruneDynamicEvidence(
 		); err != nil {
 			return err
 		}
+		pointDigest := sha256.Sum256(pointValue.Value)
 		items[index] = backupplanning.PruneExecutionEvidence{
-			Prune: prune, PruneRevision: int64(planned.PruneRevision),
+			Prune: prune, PruneRevision: pruneValue.ModRevision,
 			PointRevision: pointValue.ModRevision, SourceRevision: sourceValue.ModRevision,
 			EnvironmentRevision: environmentValue.ModRevision,
 			ConnectorRevision:   connectorValue.ModRevision,
 			ConnectorEndpoint:   connector.Connector.Endpoint, ConnectorBucket: connector.Connector.Bucket,
 			ConnectorPrefix: connector.Connector.Prefix, ConnectorRegion: connector.Connector.Region,
 			ConnectorPathStyle: connector.Connector.PathStyle,
+			RetentionPolicy:    policy, PointSHA256: append([]byte(nil), pointDigest[:]...),
+			ConnectorAuthority: dynamic.connectorAuthorities[point.ConnectorID],
 		}
 	}
 	if err := backupplanning.ValidateBackupPruneExecutionPlan(*dispatch, items, plan); err != nil {
 		return err
 	}
 	selected := plan.Steps[stepIndex]
-	prune := selected.GetBackupArtifactPrune()
-	if prune == nil {
+	prune := selected.GetBackupStep().GetPrune()
+	if prune == nil || len(prune.Objects) != 1 {
 		return errs.New(errs.KindStateConflict, "backup prune step evidence changed")
 	}
 	for index, pointID := range dispatch.RecoveryPointIDs {
-		if pointID == prune.PointId {
+		if pointID == prune.Objects[0].PointId {
 			pointValue := result.Values[dynamic.points[pointID]]
 			pruneValue := result.Values[dynamic.prunes[pointID]]
 			point, _ := backupruntime.DecodeBackupRecoveryPointRecord(pointValue.Value)

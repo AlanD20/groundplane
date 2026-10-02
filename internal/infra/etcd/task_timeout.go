@@ -65,6 +65,10 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 			ReconciliationRequired: true, ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch,
 			ReleaseRecoveryRecordSHA256: assignment.Assignment.Record.ReleaseRecoveryRecordSHA256,
 		}
+		if record.BackupAuthorityFence != nil {
+			result.Kind = taskjournal.TaskResultBackup
+			result.AssignmentGeneration = record.BackupAuthorityFence.AssignmentGeneration
+		}
 		if classified, candidate, classifyErr := repository.preparedTaskTimeoutResult(ctx, assignment); candidate {
 			if classifyErr != nil {
 				return timedOut, classifyErr
@@ -145,6 +149,10 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 				Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 				ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
 				ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,
+			}
+			if assignment.BackupAuthorityFence != nil {
+				result.Kind = taskjournal.TaskResultBackup
+				result.AssignmentGeneration = assignment.BackupAuthorityFence.AssignmentGeneration
 			}
 			if current, assignmentErr := repository.GetTaskAssignment(ctx, taskID); assignmentErr == nil {
 				if classified, candidate, classifyErr := repository.preparedTaskTimeoutResult(ctx, current); candidate {

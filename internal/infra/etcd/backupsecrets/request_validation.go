@@ -8,7 +8,6 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"time"
 )
 
 func validateBackupSecretResolutionRequest(request backupsecret.Request) error {
@@ -28,16 +27,19 @@ func validateBackupSecretTaskAssignment(
 	assignment taskassignments.TaskAssignmentRecord,
 	request backupsecret.Request,
 ) error {
-	if task.ID != request.TaskID || task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune ||
-		task.Status != taskjournal.TaskStatusRunning || task.Executor != taskjournal.TaskExecutorAgent ||
-		assignment.AssignmentID != request.AssignmentID || assignment.TaskID != task.ID ||
-		assignment.Executor != taskjournal.TaskExecutorAgent || assignment.AgentID != request.AgentID ||
+	if task.ID != request.TaskID ||
+		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune && task.Type != taskjournal.TaskRestore) ||
+		task.Status != taskjournal.TaskStatusRunning ||
+		task.Executor != taskjournal.TaskExecutorAgent ||
+		assignment.AssignmentID != request.AssignmentID ||
+		assignment.TaskID != task.ID ||
+		assignment.Executor != taskjournal.TaskExecutorAgent ||
+		assignment.AgentID != request.AgentID ||
 		assignment.AgentGeneration != request.AgentGeneration ||
-		!assignment.Deadline.Equal(request.Deadline) || task.StartedAt == nil ||
+		!assignment.Deadline.Equal(request.Deadline) ||
+		task.StartedAt == nil ||
 		!task.StartedAt.Equal(assignment.AssignedAt) ||
-		!assignment.Deadline.Equal(assignment.AssignedAt.Add(
-			time.Duration(task.TimeoutSeconds)*time.Second,
-		)) {
+		!assignment.Deadline.Equal(base.TaskForwardDeadline(task, assignment.AssignedAt)) {
 		return errs.New(errs.KindStateConflict, "backup task assignment is not active")
 	}
 	return nil

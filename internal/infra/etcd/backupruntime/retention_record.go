@@ -8,18 +8,43 @@ import (
 )
 
 type BackupOrphanRecord struct {
-	Point          BackupRecoveryPointSnapshot         `json:"point"`
-	TaskID         string                              `json:"task_id"`
-	Reconciliation BackupOrphanReconciliationAuthority `json:"reconciliation"`
-	State          BackupOrphanState                   `json:"state"`
-	CreatedAt      time.Time                           `json:"created_at"`
-	UpdatedAt      time.Time                           `json:"updated_at"`
+	Target                      BackupRecoveryPointTargetSnapshot   `json:"target"`
+	Evidence                    BackupArtifactEvidence              `json:"evidence"`
+	ConfigArchive               BackupConfigArchiveEvidence         `json:"config_archive"`
+	VolumeArchive               BackupVolumeArchiveEvidence         `json:"volume_archive"`
+	Upload                      BackupUploadOutcome                 `json:"upload"`
+	Object                      BackupObjectIdentity                `json:"object"`
+	Postgres                    BackupPostgresPointIdentity         `json:"postgres"`
+	CleanupProof                BackupOrphanCleanupProof            `json:"cleanup_proof"`
+	UnknownResolvedByReconciler bool                                `json:"unknown_resolved_by_reconciler"`
+	Phase                       BackupSourceAttemptPhase            `json:"phase"`
+	TaskID                      string                              `json:"task_id"`
+	Reconciliation              BackupOrphanReconciliationAuthority `json:"reconciliation"`
+	State                       BackupOrphanState                   `json:"state"`
+	CreatedAt                   time.Time                           `json:"created_at"`
+	UpdatedAt                   time.Time                           `json:"updated_at"`
 }
 
 type BackupOrphanReconciliationAuthority struct {
 	OperationID    string `json:"operation_id"`
 	PolicyRevision int64  `json:"policy_revision"`
+	PolicySHA256   string `json:"policy_sha256"`
 	RetentionKeep  int64  `json:"retention_keep"`
+}
+
+// BackupOrphanCleanupProof is copied from one acknowledged Agent startup
+// inventory while its original terminal Task and staging index still exist.
+// It is independent of Task retention after the guarded native write.
+type BackupOrphanCleanupProof struct {
+	TaskID            string `json:"task_id"`
+	TaskRevision      int64  `json:"task_revision"`
+	StepID            string `json:"step_id"`
+	RecoveryKeySHA256 string `json:"recovery_key_sha256"`
+	AgentID           string `json:"agent_id"`
+	AgentGeneration   uint64 `json:"agent_generation"`
+	DeliveryRevision  int64  `json:"delivery_revision"`
+	DeliverySHA256    string `json:"delivery_sha256"`
+	Disposition       string `json:"disposition"`
 }
 
 type BackupRetentionSweepRecord struct {
@@ -27,6 +52,7 @@ type BackupRetentionSweepRecord struct {
 	TriggerRecoveryPointID string               `json:"trigger_recovery_point_id"`
 	Keep                   int64                `json:"keep"`
 	Revision               int64                `json:"revision"`
+	PolicySHA256           string               `json:"policy_sha256"`
 	SelectionRevision      int64                `json:"selection_revision,omitempty"`
 	Cursor                 string               `json:"cursor,omitempty"`
 	RetainedCount          int64                `json:"retained_count"`
@@ -37,13 +63,16 @@ type BackupRetentionSweepRecord struct {
 }
 
 type BackupRecoveryPointPruneRecord struct {
-	Point         BackupRecoveryPointSnapshot `json:"point"`
-	PointRevision int64                       `json:"point_revision"`
-	OperationID   string                      `json:"operation_id"`
-	State         BackupPruneState            `json:"state"`
-	TaskID        string                      `json:"task_id,omitempty"`
-	CreatedAt     time.Time                   `json:"created_at"`
-	UpdatedAt     time.Time                   `json:"updated_at"`
+	Point            BackupRecoveryPointSnapshot `json:"point"`
+	PointRevision    int64                       `json:"point_revision"`
+	PolicyRevision   int64                       `json:"policy_revision"`
+	PolicySHA256     string                      `json:"policy_sha256"`
+	OperationID      string                      `json:"operation_id"`
+	DispatchAttempts uint8                       `json:"dispatch_attempts,omitempty"`
+	State            BackupPruneState            `json:"state"`
+	TaskID           string                      `json:"task_id,omitempty"`
+	CreatedAt        time.Time                   `json:"created_at"`
+	UpdatedAt        time.Time                   `json:"updated_at"`
 }
 
 type BackupRecoveryPointPruneDispatchRecord struct {
@@ -55,17 +84,61 @@ type BackupRecoveryPointPruneDispatchRecord struct {
 }
 
 func validateBackupOrphanRecord(record BackupOrphanRecord) error {
-	if err := ValidateBackupRecoveryPointSnapshot(record.Point); err != nil {
+	if err := ValidateBackupRecoveryPointTargetSnapshot(record.Target); err != nil {
 		return err
+	}
+	if err := validateSelectedConfigArchive(record.Target.SourceKind, record.ConfigArchive, record.Evidence); err != nil {
+		return err
+	}
+	if err := validateSelectedVolumeArchive(record.Target.SourceKind, record.VolumeArchive, record.Evidence); err != nil {
+		return err
+	}
+	if !validBackupArtifactForTarget(record.Evidence, record.Target) ||
+		record.Upload.Target != record.Target.ObjectTarget() ||
+		!validBackupSourceArtifactState(
+			BackupSourceAttemptOrphaned,
+			record.Phase,
+			record.Evidence,
+			record.Upload,
+			record.Object,
+		) {
+		return invalidBackupRuntimeRecord("backup orphan upload evidence or identity is invalid")
+	}
+	if record.Target.SourceKind == BackupRuntimeSourceAttach {
+		if !validBackupPostgresIdentity(record.Postgres.Database) ||
+			!validBackupPostgresIdentity(record.Postgres.Role) ||
+			recordcodec.ValidateID(ids.KindEnvironment, record.Postgres.BackingEnvironmentID) != nil ||
+			recordcodec.ValidateID(ids.KindService, record.Postgres.BackingServiceID) != nil ||
+			recordcodec.ValidateID(ids.KindService, record.Postgres.ConsumerServiceID) != nil {
+			return invalidBackupRuntimeRecord("postgres backup orphan target identity is incomplete")
+		}
+	} else if record.Postgres != (BackupPostgresPointIdentity{}) {
+		return invalidBackupRuntimeRecord("non-postgres backup orphan carries database identity")
+	}
+	if proof := record.CleanupProof; proof != (BackupOrphanCleanupProof{}) {
+		if proof.TaskID != record.TaskID || proof.TaskRevision <= 0 ||
+			recordcodec.ValidateID(ids.KindStep, proof.StepID) != nil ||
+			!recordcodec.ValidSHA256(proof.RecoveryKeySHA256) ||
+			recordcodec.ValidateID(ids.KindAgent, proof.AgentID) != nil || proof.AgentGeneration == 0 ||
+			proof.DeliveryRevision <= proof.TaskRevision ||
+			!recordcodec.ValidSHA256(proof.DeliverySHA256) ||
+			(proof.Disposition != "discarded" && proof.Disposition != "absent") {
+			return invalidBackupRuntimeRecord("backup orphan cleanup proof is incomplete")
+		}
+	}
+	if record.UnknownResolvedByReconciler &&
+		(record.CleanupProof == (BackupOrphanCleanupProof{}) || record.Upload.Kind != BackupUploadUnknown ||
+			record.Object == (BackupObjectIdentity{}) || record.Phase != BackupSourcePhasePointCommit) {
+		return invalidBackupRuntimeRecord("backup orphan unknown-upload resolution is invalid")
 	}
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindOperation, record.Reconciliation.OperationID) != nil ||
-		record.Reconciliation.PolicyRevision <= 0 ||
+		record.Reconciliation.PolicyRevision <= 0 || !recordcodec.ValidSHA256(record.Reconciliation.PolicySHA256) ||
 		record.Reconciliation.RetentionKeep <= 0 ||
 		record.Reconciliation.RetentionKeep > backuppolicy.MaximumBackupPolicyKeep ||
 		(record.State != BackupOrphanInspect && record.State != BackupOrphanDelete) ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) ||
-		record.CreatedAt.Before(record.Point.CreatedAt) {
+		record.CreatedAt.Before(record.Target.CreatedAt) {
 		return invalidBackupRuntimeRecord("backup orphan is invalid")
 	}
 	return nil
@@ -77,7 +150,7 @@ func validateBackupRetentionSweepRecord(record BackupRetentionSweepRecord) error
 			ids.KindRecoveryPoint,
 			record.TriggerRecoveryPointID,
 		) != nil || record.Keep <= 0 || record.Keep > backuppolicy.MaximumBackupPolicyKeep ||
-		record.Revision <= 0 || !validBackupRetentionState(record.State) ||
+		record.Revision <= 0 || !recordcodec.ValidSHA256(record.PolicySHA256) || !validBackupRetentionState(record.State) ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
 		return invalidBackupRuntimeRecord("backup retention sweep is invalid")
 	}
@@ -105,10 +178,11 @@ func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecor
 	if err := ValidateBackupRecoveryPointSnapshot(record.Point); err != nil {
 		return err
 	}
-	if record.PointRevision <= 0 ||
+	if record.PointRevision <= 0 || record.PolicyRevision <= 0 || !recordcodec.ValidSHA256(record.PolicySHA256) ||
 		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) ||
-		record.CreatedAt.Before(record.Point.CreatedAt) {
+		record.CreatedAt.Before(record.Point.CreatedAt) ||
+		record.DispatchAttempts > MaximumBackupPruneDispatchAttempts {
 		return invalidBackupRuntimeRecord("recovery point prune lifecycle is invalid")
 	}
 	switch record.State {

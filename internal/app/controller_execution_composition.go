@@ -123,7 +123,7 @@ func newControllerExecutionComposition(
 		_ = store.Close()
 		return controllerExecutionComposition{}, errs.Wrap(errs.KindInternal, err)
 	}
-	backupSecrets, err := backupcapability.NewBackupSecretResolver(backupSecretEvidence, authority.intentProtector)
+	backupSecrets, err := backupcapability.NewBackupSecretResolver(ctx, backupSecretEvidence, authority.intentProtector)
 	if err != nil {
 		// Rationale: initialization is already failing; store shutdown is
 		// best-effort and must not replace the primary typed error.

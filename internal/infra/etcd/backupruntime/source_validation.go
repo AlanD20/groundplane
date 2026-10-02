@@ -3,6 +3,7 @@ package backupruntime
 import (
 	"filippo.io/age"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/oklog/ulid/v2"
 	"path"
@@ -12,6 +13,9 @@ import (
 )
 
 func validateBackupPostgresSnapshot(snapshot BackupPostgresSourceSnapshot) error {
+	if _, err := postgres16protocol.DecodeManagedReleaseIndex([]byte(snapshot.ManagedReleaseIndex)); err != nil {
+		return invalidBackupRuntimeRecord("postgres source release authority is invalid")
+	}
 	if recordcodec.ValidateID(ids.KindEnvironment, snapshot.ConsumerEnvironmentID) != nil ||
 		recordcodec.ValidateID(
 			ids.KindAttach,
@@ -22,6 +26,7 @@ func validateBackupPostgresSnapshot(snapshot BackupPostgresSourceSnapshot) error
 		recordcodec.ValidateID(ids.KindEnvironment, snapshot.BackingEnvironmentID) != nil ||
 		snapshot.BackingEnvironmentRevision <= 0 ||
 		recordcodec.ValidateID(ids.KindService, snapshot.BackingServiceID) != nil ||
+		recordcodec.ValidateID(ids.KindService, snapshot.ConsumerServiceID) != nil ||
 		snapshot.BackingServiceRevision <= 0 || snapshot.AttachFactsRevision <= 0 ||
 		!validBackupPostgresIdentity(snapshot.Database) || !validBackupPostgresIdentity(snapshot.Role) {
 		return invalidBackupRuntimeRecord("postgres source snapshot is invalid")
@@ -46,7 +51,8 @@ func validateBackupVolumeSnapshot(snapshot BackupVolumeSourceSnapshot) error {
 	if recordcodec.ValidateID(ids.KindEnvironment, snapshot.EnvironmentID) != nil ||
 		recordcodec.ValidateID(ids.KindVolume, snapshot.VolumeID) != nil ||
 		recordcodec.ValidateID(ids.KindTask, snapshot.DesiredRevisionID) != nil ||
-		snapshot.EnvironmentRevision <= 0 || snapshot.ProjectionRoot <= 0 ||
+		snapshot.EnvironmentRevision <= 0 || snapshot.HeadRevision <= 0 ||
+		!recordcodec.ValidSHA256(snapshot.HeadSHA256) || snapshot.ProjectionRoot <= 0 ||
 		!recordcodec.ValidSHA256(snapshot.DependencyDigest) || snapshot.RenderGeneration == 0 ||
 		snapshot.ComposeVolumeKey == "" || snapshot.DockerVolumeName != "gp_vol_"+snapshot.VolumeID ||
 		snapshot.AuthorizedVolumeDir == "" {

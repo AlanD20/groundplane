@@ -60,7 +60,8 @@ func (repository *TaskRepository) retryTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if source.Record.Type == taskjournal.TaskBackup || source.Record.Type == taskjournal.TaskBackupPrune {
+	if source.Record.Type == taskjournal.TaskBackup || source.Record.Type == taskjournal.TaskBackupPrune ||
+		source.Record.Type == taskjournal.TaskRestore {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindTaskNotRetryable, "backup retry requires its atomic domain retry protocol",
 		)

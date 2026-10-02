@@ -9,6 +9,7 @@ import (
 )
 
 type TaskResultData struct {
+	AssignmentGeneration            uint64                              `json:"assignment_generation,omitempty"`
 	ExecutionEpoch                  uint32                              `json:"execution_epoch,omitempty"`
 	ReleaseRecoveryRecordSHA256     string                              `json:"release_recovery_record_sha256,omitempty"`
 	Kind                            TaskResultKind                      `json:"kind"`
@@ -38,7 +39,8 @@ func TaskResultToData(result *TaskResultRecord) *TaskResultData {
 		return nil
 	}
 	data := &TaskResultData{
-		ExecutionEpoch: result.ExecutionEpoch, ReleaseRecoveryRecordSHA256: result.ReleaseRecoveryRecordSHA256,
+		AssignmentGeneration: result.AssignmentGeneration,
+		ExecutionEpoch:       result.ExecutionEpoch, ReleaseRecoveryRecordSHA256: result.ReleaseRecoveryRecordSHA256,
 		Kind: result.Kind, ExitCode: result.ExitCode, FailedStepID: result.FailedStepID,
 		Diagnostic: result.Diagnostic, ReconciliationRequired: result.ReconciliationRequired,
 		Projects:                 make([]taskObservedProjectSummaryData, len(result.Projects)),
@@ -65,7 +67,8 @@ func TaskResultFromData(data *TaskResultData) (*TaskResultRecord, error) {
 		return nil, nil
 	}
 	result := &TaskResultRecord{
-		ExecutionEpoch: data.ExecutionEpoch, ReleaseRecoveryRecordSHA256: data.ReleaseRecoveryRecordSHA256,
+		AssignmentGeneration: data.AssignmentGeneration,
+		ExecutionEpoch:       data.ExecutionEpoch, ReleaseRecoveryRecordSHA256: data.ReleaseRecoveryRecordSHA256,
 		Kind: data.Kind, ExitCode: data.ExitCode, FailedStepID: data.FailedStepID,
 		Diagnostic: data.Diagnostic, ReconciliationRequired: data.ReconciliationRequired,
 		Projects:                 make([]TaskObservedProjectSummary, len(data.Projects)),

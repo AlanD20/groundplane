@@ -202,12 +202,12 @@ func DecodeBackupRecoveryPointPruneDispatchRecord(
 	)
 }
 
-func encodeBackupRestoreRecord(record BackupRestoreRecord) ([]byte, error) {
-	return EncodeBackupRuntimeRecord("backup-restore", record, validateBackupRestoreRecord)
+func EncodeBackupRestoreRecord(record BackupRestoreRecord) ([]byte, error) {
+	return EncodeBackupRuntimeRecord("backup-restore", record, ValidateBackupRestoreRecord)
 }
 
-func decodeBackupRestoreRecord(value []byte) (BackupRestoreRecord, error) {
-	return DecodeBackupRuntimeRecord(value, "backup-restore", validateBackupRestoreRecord)
+func DecodeBackupRestoreRecord(value []byte) (BackupRestoreRecord, error) {
+	return DecodeBackupRuntimeRecord(value, "backup-restore", ValidateBackupRestoreRecord)
 }
 
 func encodeBackupRestoreServiceRecord(record BackupRestoreServiceRecord) ([]byte, error) {

@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresbackingguard"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -124,6 +125,27 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 			)
 		}
 	}
+	backingEnvironmentIDs, err := backupruntime.PostgresBackingEnvironmentIDs(current.Record)
+	if err != nil {
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
+	}
+	backingGuard, err := postgresbackingguard.PrepareOwnership(
+		ctx,
+		repository.store,
+		backingEnvironmentIDs,
+		current.Record.EnvironmentID,
+		postgresbackingguard.Owner(
+			backupruntime.BackupOperationBackup,
+			current.Record.OperationID,
+			current.Record.TaskID,
+		),
+		anchor.ReadRevision,
+		false,
+	)
+	if err != nil {
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
+	}
+	defer backingGuard.Clear()
 	if replay {
 		if checkpoint != nil && !checkpointPlan.duplicate {
 			return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
@@ -163,6 +185,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	}
 	conditions = append(conditions, extraConditions...)
 	conditions = append(conditions, evidence.TransactionConditions()...)
+	conditions = append(conditions, backingGuard.Conditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: backupruntime.BackupRunKey(next.TaskID), Value: value},
 	}

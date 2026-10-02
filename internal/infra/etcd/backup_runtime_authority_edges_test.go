@@ -8,6 +8,9 @@ import (
 	testing "testing"
 	time "time"
 
+	backupformat "github.com/AlanD20/groundplane/internal/common/backupformat"
+	backupsecret "github.com/AlanD20/groundplane/internal/common/backupsecret"
+	"github.com/AlanD20/groundplane/internal/common/backupservicefact"
 	executionplan "github.com/AlanD20/groundplane/internal/common/executionplan"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	testbackupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
@@ -21,91 +24,164 @@ import (
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func backupRuntimeSealedRunPlan(
+func backupRuntimeRunPlanDraft(
 	t *testing.T,
 	run testbackupruntime.BackupRunRecord,
 	planID string,
+	projectID string,
 ) *agentpb.ExecutionPlan {
 	t.Helper()
+	digest, err := hex.DecodeString(testBackupDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := func(value int64) *agentpb.RevisionDigest {
+		return &agentpb.RevisionDigest{ModRevision: value, Sha256: append([]byte(nil), digest...)}
+	}
+	pathStyle := run.ConnectorPathStyle
+	era := uint64(run.KeyEra)
+	recipientDigest := sha256.Sum256([]byte(run.Recipient))
 	plan := &agentpb.ExecutionPlan{
 		Schema:    executionplan.SchemaVersion,
 		PlanId:    planID,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP,
 		TargetId:  run.EnvironmentID,
-		Steps:     make([]*agentpb.ExecutionStep, len(run.Sources)),
+		BackupScope: &agentpb.BackupPlanScope{
+			ProjectId: projectID, Project: revision(1),
+			EnvironmentId: run.EnvironmentID, Environment: revision(2), TaskAttempt: 1,
+		},
+		Steps: make([]*agentpb.ExecutionStep, len(run.Sources)),
+	}
+	addService := func(fact *agentpb.BackupServiceFact) {
+		for _, current := range plan.BackupScope.Services {
+			if current.ServiceId == fact.ServiceId {
+				return
+			}
+		}
+		plan.BackupScope.Services = append(plan.BackupScope.Services, fact)
 	}
 	for index, source := range run.Sources {
-		capture := &agentpb.BackupSourceCapture{
-			SourceId: source.SourceID, SourceRevision: uint64(source.SourceRevision),
-			TargetId: source.TargetID, TargetRevision: uint64(source.TargetRevision),
-			PointId:     source.RecoveryPointID,
-			ConnectorId: run.ConnectorID, ConnectorRevision: uint64(run.ConnectorRevision),
-			SourceFormat: map[testbackupruntime.BackupRuntimeFormat]agentpb.BackupSourceFormat{
-				testbackupruntime.BackupRuntimeFormatPostgres: agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
-				testbackupruntime.BackupRuntimeFormatConfig:   agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1,
-				testbackupruntime.BackupRuntimeFormatVolume:   agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1,
-			}[source.Format],
-			Encryption: map[testbackupruntime.BackupRuntimeEncryption]agentpb.BackupEncryption{
-				testbackupruntime.BackupRuntimeEncryptionNone: agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
-				testbackupruntime.BackupRuntimeEncryptionAge:  agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
-			}[run.Encryption],
-			KeyEra: uint64(run.KeyEra), AgeRecipient: run.Recipient,
-			Upload: &agentpb.BackupUploadAuthority{
-				ConnectorEndpoint: run.ConnectorEndpoint, ConnectorBucket: run.ConnectorBucket,
-				ConnectorPrefix: run.ConnectorPrefix, ConnectorRegion: run.ConnectorRegion,
-				ConnectorAddressing: backupFixtureAddressing(run.ConnectorPathStyle),
-				ProtectedObjectKey:  source.ObjectKey,
-				ImmutableCreate:     true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
+		capture := &agentpb.BackupCaptureAuthority{
+			PointId: source.RecoveryPointID,
+			Resource: &agentpb.BackupResourceIdentity{
+				ResourceId: source.TargetID, Resource: revision(source.TargetRevision),
+			},
+			Target: &agentpb.BackupObjectTarget{
+				Connector: &agentpb.BackupConnectorAuthority{
+					ConnectorId: run.ConnectorID, Connector: revision(run.ConnectorRevision),
+					CanonicalEndpointUrl: run.ConnectorEndpoint, Region: run.ConnectorRegion,
+					PathStyle: &pathStyle, Prefix: run.ConnectorPrefix,
+					AccessKeySlotId: backupsecret.AccessKeySlotID, SecretKeySlotId: backupsecret.SecretKeySlotID,
+					AccessKeySlot: revision(run.ConnectorCredentialsRevision),
+					SecretKeySlot: revision(run.ConnectorCredentialsRevision),
+				},
+				Bucket: run.ConnectorBucket, ObjectKey: source.ObjectKey,
+			},
+			Encryption: &agentpb.BackupEncryptionAuthority{
+				Kind:            agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
+				SecretSlotId:    backupsecret.CurrentAgeIdentitySlotID,
+				RecipientSha256: recipientDigest[:], SecretSlot: revision(run.BackupKeyValueRevision), KeyEra: &era,
 			},
 		}
+		consumerServiceIDs := []string(nil)
 		switch source.Kind {
 		case testbackupruntime.BackupRuntimeSourceAttach:
 			snapshot := source.Snapshot.Postgres
-			capture.Source = &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
-				BackingServiceId:       snapshot.BackingServiceID,
-				BackingServiceRevision: uint64(snapshot.BackingServiceRevision),
-				Database:               snapshot.Database, Role: snapshot.Role,
+			labels := []*agentpb.LabelPair{{Key: "groundplane.service", Value: snapshot.BackingServiceID}}
+			labelsDigest, labelErr := backupservicefact.LabelsDigest(labels)
+			if labelErr != nil {
+				t.Fatal(labelErr)
+			}
+			if len(plan.Artifacts) == 0 {
+				yaml := []byte("services: {}\n")
+				yamlDigest := sha256.Sum256(yaml)
+				plan.Artifacts = append(plan.Artifacts, &agentpb.ComposeArtifact{
+					ArtifactId: ids.NewAt(ids.KindConfig, run.CreatedAt, 2700),
+					OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+					OwnerId:    snapshot.BackingEnvironmentID, CanonicalYaml: yaml, YamlSha256: yamlDigest[:],
+					Services: []*agentpb.ComposeService{{
+						ServiceId: snapshot.BackingServiceID, ComposeName: "postgres",
+						Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+						ExpectedLabels: labels, ImageReference: "registry.example.test/postgres@sha256:" + testBackupDigest,
+					}},
+				})
+			}
+			capture.Resource.Kind = agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ATTACH
+			capture.Source = &agentpb.BackupCaptureAuthority_Postgres{Postgres: &agentpb.BackupPostgresCaptureAuthority{
+				AdapterContractVersion: 1, DatabaseServiceId: snapshot.BackingServiceID,
+				DatabaseName: snapshot.Database, RoleName: snapshot.Role,
+				MaxPlaintextBytes: backupformat.MaxAgeSourceBytes, ManagedReleaseIndex: []byte(snapshot.ManagedReleaseIndex),
 			}}
+			addService(&agentpb.BackupServiceFact{
+				ServiceId: snapshot.BackingServiceID, CurrentName: "postgres",
+				Service: revision(snapshot.BackingServiceRevision), Compose: revision(snapshot.BackingServiceRevision),
+				PriorRuntimeIntent: &agentpb.BackupPriorRuntimeIntent{
+					Kind:   agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
+					Intent: revision(snapshot.BackingServiceRevision),
+				},
+				RequiredLabelCount: 1, RequiredLabelsSha256: labelsDigest,
+				LocalImageIdSha256: append([]byte(nil), digest...),
+			})
 		case testbackupruntime.BackupRuntimeSourceConfig:
-			capture.Source = &agentpb.BackupSourceCapture_Config{Config: &agentpb.BackupConfigSource{
-				SnapshotRevision: uint64(source.Snapshot.Config.ReadRevision),
+			capture.Resource.Kind = agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ENVIRONMENT
+			capture.Source = &agentpb.BackupCaptureAuthority_Config{Config: &agentpb.BackupConfigCaptureAuthority{
+				EnvironmentId: run.EnvironmentID, MetadataSnapshotRevision: source.Snapshot.Config.ReadRevision,
+				MetadataEntryCount: 1, MetadataProtoBytes: 128,
+				Content: &agentpb.BackupConfigContentAuthority{
+					ManifestSha256: append(
+						[]byte(nil),
+						digest...), MetadataSnapshotSha256: append([]byte(nil), digest...),
+					EntryCount: 1, TotalSelectedValueBytes: 1, ManifestSizeBytes: 128, SourceSizeBytes: 4096,
+				},
 			}}
 		case testbackupruntime.BackupRuntimeSourceVolume:
 			artifactSHA256, err := hex.DecodeString(source.Snapshot.Volume.ArtifactDigest)
 			if err != nil {
 				t.Fatal(err)
 			}
-			services := make([]*agentpb.BackupVolumeService, len(source.Snapshot.Volume.Services))
-			for serviceIndex, service := range source.Snapshot.Volume.Services {
-				services[serviceIndex] = &agentpb.BackupVolumeService{
-					ServiceId: service.ServiceID, ServiceRevision: uint64(service.ServiceRevision),
-					PriorIntent: map[testbackupruntime.BackupServiceRuntimeIntent]agentpb.BackupServiceRuntimeIntent{
-						testbackupruntime.BackupServiceIntentRunning: agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
-						testbackupruntime.BackupServiceIntentStopped: agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_STOPPED,
-						testbackupruntime.BackupServiceIntentAbsent:  agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_ABSENT,
-					}[service.PriorIntent],
-					ComposeKey: service.ComposeKey, MountPaths: append([]string(nil), service.MountPaths...),
-				}
-			}
+			capture.Resource.Kind = agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_VOLUME
 			volume := source.Snapshot.Volume
-			capture.Source = &agentpb.BackupSourceCapture_Volume{Volume: &agentpb.BackupVolumeSource{
-				Services: services, ArtifactId: volume.ArtifactID, ArtifactSha256: artifactSHA256,
-				ArtifactRevision: uint64(volume.ArtifactRevision), ProjectionRoot: uint64(volume.ProjectionRoot),
-				RenderGeneration: volume.RenderGeneration, ComposeVolumeKey: volume.ComposeVolumeKey,
-				DockerVolumeName: volume.DockerVolumeName, AuthorizedVolumeDir: volume.AuthorizedVolumeDir,
+			plan.BackupScope.Environment = revision(volume.EnvironmentRevision)
+			capture.Resource.Resource.Sha256, err = hex.DecodeString(volume.HeadSHA256)
+			if err != nil {
+				t.Fatal(err)
+			}
+			capture.Source = &agentpb.BackupCaptureAuthority_Volume{Volume: &agentpb.BackupVolumeCaptureAuthority{
+				VolumeId: source.TargetID, Volume: revision(source.TargetRevision),
+				SourceSizeUpperBound: backupformat.MaxAgeSourceBytes,
+				Projection: &agentpb.BackupVolumeProjectionAuthority{
+					ArtifactId: volume.ArtifactID, ArtifactSha256: artifactSHA256,
+					ArtifactRevision: volume.ArtifactRevision, ProjectionRoot: volume.ProjectionRoot,
+					RenderGeneration: volume.RenderGeneration, ComposeVolumeKey: volume.ComposeVolumeKey,
+					DockerVolumeName: volume.DockerVolumeName, AuthorizedVolumeDir: volume.AuthorizedVolumeDir,
+				},
 			}}
+			for _, service := range volume.Services {
+				consumerServiceIDs = append(consumerServiceIDs, service.ServiceID)
+				addService(&agentpb.BackupServiceFact{
+					ServiceId: service.ServiceID, CurrentName: service.ComposeKey,
+					Service: revision(service.ServiceRevision), Compose: revision(service.ServiceRevision),
+					PriorRuntimeIntent: &agentpb.BackupPriorRuntimeIntent{
+						Kind:   agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
+						Intent: revision(service.ServiceRevision),
+					},
+					RequiredLabelCount: 1, RequiredLabelsSha256: append([]byte(nil), digest...),
+					LocalImageIdSha256: append([]byte(nil), digest...),
+				})
+			}
+		}
+		authority := &agentpb.BackupStepAuthority{
+			StepId: ids.NewAt(ids.KindStep, run.CreatedAt, int64(2600+index)), ExecutionId: ids.NewULID(),
+			StepDeadlineUnixNano: uint64(run.CreatedAt.Add(6 * time.Hour).UnixNano()),
+			ConsumerServiceIds:   consumerServiceIDs,
+			Operation:            &agentpb.BackupStepAuthority_Capture{Capture: capture},
 		}
 		plan.Steps[index] = &agentpb.ExecutionStep{
-			StepId:         ids.NewAt(ids.KindStep, run.CreatedAt, int64(2600+index)),
-			TimeoutSeconds: executionplan.MaximumBackupPruneStepTimeoutSeconds,
-			Payload:        &agentpb.ExecutionStep_BackupSourceCapture{BackupSourceCapture: capture},
+			StepId: authority.StepId, TimeoutSeconds: 6 * 60 * 60,
+			Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: authority},
 		}
 	}
-	sealed, err := executionplan.Seal(plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return sealed
+	return plan
 }
 
 func prepareBackupRuntimeStagedRun(
@@ -127,8 +203,7 @@ func prepareBackupRuntimeStagedRun(
 	staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
 	staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
 	staged.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
-	staged.Sources[0].SizeBytes = 123
-	staged.Sources[0].SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(staged, &staged.Sources[0])
 	staged.UpdatedAt = run.UpdatedAt.Add(time.Second)
 	created, err = repository.replaceBackupRunForTest(context.Background(), created, staged)
 	if err != nil {
@@ -149,7 +224,8 @@ func backupRuntimePointCommitRecords(
 	point := backupRuntimeTestPoint(run, staged.Sources[0], committed.UpdatedAt)
 	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, State: testbackupruntime.BackupRetentionPending,
+		Revision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
+		State:     testbackupruntime.BackupRetentionPending,
 		CreatedAt: committed.UpdatedAt, UpdatedAt: committed.UpdatedAt,
 	}
 	return committed, point, sweep
@@ -186,9 +262,9 @@ func TestBackupRuntimeRepositoryPointPagesRejectIncompleteAuthority(t *testing.T
 			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 			committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-			checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
+			checkpoint = backupSourceCleanupCheckpoint(t, checkpoint, point.ID, point.Evidence)
 			if _, _, err := repository.CommitBackupRecoveryPoint(
-				context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion,
+				context.Background(), checkpoint, stagedVersion,
 				committed, 0, point, nil, sweep,
 			); err != nil {
 				t.Fatal(err)
@@ -247,9 +323,9 @@ func TestBackupRuntimeRepositoryRetentionRejectsMalformedPointAuthority(t *testi
 			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 			committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-			checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
+			checkpoint = backupSourceCleanupCheckpoint(t, checkpoint, point.ID, point.Evidence)
 			_, committedRun, err := repository.CommitBackupRecoveryPoint(
-				context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion,
+				context.Background(), checkpoint, stagedVersion,
 				committed, 0, point, nil, sweep,
 			)
 			if err != nil {
@@ -290,11 +366,11 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	t.Parallel()
 	_, _, run := newBackupRuntimeBareFixture(t)
 	source := run.Sources[0]
-	source.SizeBytes = 123
-	source.SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(run, &source)
 	point := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
 	prune := testbackupruntime.BackupRecoveryPointPruneRecord{
 		Point: point.BackupRecoveryPointSnapshot, PointRevision: 71, OperationID: run.OperationID,
+		PolicyRevision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
 		State: testbackupruntime.BackupPrunePending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 	}
 	pruneValue, err := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(prune)
@@ -335,7 +411,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	}
 	stalePrune := expectedPrune
 	stalePrune.Revision++
-	if err := validatePendingBackupPruneAuthority(values, stalePrune); !errors.Is(
+	if err := testbackupruntime.ValidatePendingBackupPruneAuthority(values, stalePrune); !errors.Is(
 		err,
 		errs.New(errs.KindStateConflict, ""),
 	) {
@@ -345,7 +421,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	corruptPrunePrimary := *values[0]
 	corruptPrunePrimary.Value = []byte(`{"invalid":`)
 	corruptPrune[0] = &corruptPrunePrimary
-	if err := validatePendingBackupPruneAuthority(corruptPrune, expectedPrune); !errors.Is(
+	if err := testbackupruntime.ValidatePendingBackupPruneAuthority(corruptPrune, expectedPrune); !errors.Is(
 		err,
 		errs.New(errs.KindInternal, ""),
 	) {
@@ -353,7 +429,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	}
 	missingCompanion := append([]*testkeyvalue.KeyValue(nil), values...)
 	missingCompanion[4] = nil
-	if err := validatePendingBackupPruneAuthority(missingCompanion, expectedPrune); !errors.Is(
+	if err := testbackupruntime.ValidatePendingBackupPruneAuthority(missingCompanion, expectedPrune); !errors.Is(
 		err,
 		errs.New(errs.KindInternal, ""),
 	) {
@@ -363,7 +439,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	rewrittenPointPrimary := *values[1]
 	rewrittenPointPrimary.Version = 2
 	rewrittenPoint[1] = &rewrittenPointPrimary
-	if err := validatePendingBackupPruneAuthority(rewrittenPoint, expectedPrune); !errors.Is(
+	if err := testbackupruntime.ValidatePendingBackupPruneAuthority(rewrittenPoint, expectedPrune); !errors.Is(
 		err,
 		errs.New(errs.KindInternal, ""),
 	) {
@@ -373,7 +449,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	rewrittenSourceIndex := *values[3]
 	rewrittenSourceIndex.Version = 2
 	rewrittenIndex[3] = &rewrittenSourceIndex
-	if err := validatePendingBackupPruneAuthority(rewrittenIndex, expectedPrune); !errors.Is(
+	if err := testbackupruntime.ValidatePendingBackupPruneAuthority(rewrittenIndex, expectedPrune); !errors.Is(
 		err,
 		errs.New(errs.KindInternal, ""),
 	) {
@@ -400,7 +476,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 		t.Run(path+" revision drift", func(t *testing.T) {
 			stale := expectedDispatch
 			stale.Revision++
-			if err := validateExactBackupPruneDispatchValue(dispatchEntry, stale); !errors.Is(
+			if err := testbackupruntime.ValidateExactBackupPruneDispatchValue(dispatchEntry, stale); !errors.Is(
 				err,
 				errs.New(errs.KindStateConflict, ""),
 			) {
@@ -410,7 +486,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 		t.Run(path+" same-revision corruption", func(t *testing.T) {
 			corrupt := *dispatchEntry
 			corrupt.Value = []byte(`{"invalid":`)
-			if err := validateExactBackupPruneDispatchValue(&corrupt, expectedDispatch); !errors.Is(
+			if err := testbackupruntime.ValidateExactBackupPruneDispatchValue(&corrupt, expectedDispatch); !errors.Is(
 				err,
 				errs.New(errs.KindInternal, ""),
 			) {
@@ -569,19 +645,21 @@ func TestBackupRuntimeRepositoryClassifiesReconciledOrphanAdoptionRaces(t *testi
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repository, store, orphan := createBackupRuntimeOrphanForReadTest(t)
-			current, found, err := repository.GetBackupOrphan(context.Background(), orphan.Point.ID)
+			current, found, err := repository.GetBackupOrphan(context.Background(), orphan.Target.ID)
 			if err != nil || !found {
 				t.Fatalf("GetBackupOrphan() = %#v/%v/%v", current, found, err)
 			}
+			current = seedBackupOrphanAcknowledgedCleanup(t, store, current)
 			point := testbackupruntime.BackupRecoveryPointRecord{
-				BackupRecoveryPointSnapshot: current.Record.Point,
+				BackupRecoveryPointSnapshot: backupRuntimeOrphanPoint(current.Record),
 				VerifiedAt:                  current.Record.UpdatedAt.Add(time.Second),
 			}
 			sweep := testbackupruntime.BackupRetentionSweepRecord{
 				SourceID: point.SourceID, TriggerRecoveryPointID: point.ID,
-				Keep:     current.Record.Reconciliation.RetentionKeep,
-				Revision: current.Record.Reconciliation.PolicyRevision,
-				State:    testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
+				Keep:         current.Record.Reconciliation.RetentionKeep,
+				Revision:     current.Record.Reconciliation.PolicyRevision,
+				PolicySHA256: current.Record.Reconciliation.PolicySHA256,
+				State:        testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 			}
 			orphanConnectorIndex, _ := testbackupruntime.BackupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
 			orphanEnvironmentIndex, _ := testbackupruntime.BackupOrphanEnvironmentIndexKey(
@@ -654,20 +732,22 @@ func TestBackupRuntimeRepositoryClassifiesReconciledOrphanAdoptionRaces(t *testi
 // valid instants; the winner is durable authority and the loser observes a CAS conflict.
 func TestBackupRuntimeRepositoryRejectsAlternateValidReconciledOrphanAdoptionReplay(t *testing.T) {
 	t.Parallel()
-	repository, _, orphan := createBackupRuntimeOrphanForReadTest(t)
-	current, found, err := repository.GetBackupOrphan(context.Background(), orphan.Point.ID)
+	repository, store, orphan := createBackupRuntimeOrphanForReadTest(t)
+	current, found, err := repository.GetBackupOrphan(context.Background(), orphan.Target.ID)
 	if err != nil || !found {
 		t.Fatalf("GetBackupOrphan() = %#v/%v/%v", current, found, err)
 	}
+	current = seedBackupOrphanAcknowledgedCleanup(t, store, current)
 	point := testbackupruntime.BackupRecoveryPointRecord{
-		BackupRecoveryPointSnapshot: current.Record.Point,
+		BackupRecoveryPointSnapshot: backupRuntimeOrphanPoint(current.Record),
 		VerifiedAt:                  current.Record.UpdatedAt.Add(time.Second),
 	}
 	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID,
-		Keep:     current.Record.Reconciliation.RetentionKeep,
-		Revision: current.Record.Reconciliation.PolicyRevision,
-		State:    testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
+		Keep:         current.Record.Reconciliation.RetentionKeep,
+		Revision:     current.Record.Reconciliation.PolicyRevision,
+		PolicySHA256: current.Record.Reconciliation.PolicySHA256,
+		State:        testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 	}
 	if _, err := repository.AdoptReconciledBackupOrphan(
 		context.Background(), current, point, sweep,
@@ -689,11 +769,8 @@ func TestBackupRuntimeRepositoryRejectsAlternateValidReconciledOrphanAdoptionRep
 func backupRemoteAbsentCheckpoint(
 	input testbackupruntime.BackupCheckpointInput,
 	sequence uint64,
+	run testbackupruntime.BackupRunRecord,
 	pointID string,
 ) testbackupruntime.BackupCheckpointInput {
-	input.Sequence = sequence
-	input.Payload = testbackupruntime.BackupCheckpointPayload{
-		Kind: testbackupruntime.BackupCheckpointRemoteObjectAbsent, PointID: pointID,
-	}
-	return input
+	return backupPruneObjectDeletedCheckpoint(input, sequence, 1, pointID, backupCheckpointPruneObject(run, pointID))
 }

@@ -29,6 +29,10 @@ func (reader *Reader) decodeCommonDynamicEvidence(
 	}
 	evidence.Environment = environment
 	evidence.EnvironmentRevision = environmentValue.ModRevision
+	if environment.ID != dynamic.scope.GetEnvironmentId() ||
+		!backupSecretRecordMatches(environmentValue, dynamic.scope.GetEnvironment()) {
+		return errs.New(errs.KindStateConflict, "backup sealed Environment authority changed")
+	}
 	projectKeyID = environment.ProjectID
 	dynamic.project = dynamic.add(hierarchyrecord.ProjectKey(projectKeyID))
 	dynamic.projectFence = dynamic.add(
@@ -49,6 +53,12 @@ func (reader *Reader) decodeCommonDynamicEvidence(
 			connector.Connector.EnvironmentID != environmentID {
 			return errs.New(errs.KindInternal, "backup connector evidence is corrupt")
 		}
+		authority := dynamic.connectorAuthorities[connectorID]
+		if authority == nil || !backupSecretRecordMatches(value, authority.GetConnector()) ||
+			authority.CanonicalEndpointUrl != connector.Connector.Endpoint || authority.Region != connector.Connector.Region ||
+			authority.PathStyle == nil || authority.GetPathStyle() != connector.Connector.PathStyle || authority.Prefix != connector.Connector.Prefix {
+			return errs.New(errs.KindStateConflict, "backup sealed Connector authority changed")
+		}
 		if err := requireNoDeletionFence(
 			result.Values[dynamic.connectorFences[connectorID]], deletionrecord.DeletionTargetConnector, connectorID,
 		); err != nil {
@@ -58,8 +68,12 @@ func (reader *Reader) decodeCommonDynamicEvidence(
 			if evidence.Run != nil && value.ModRevision != evidence.Run.ConnectorRevision {
 				return errs.New(errs.KindStateConflict, "backup connector snapshot changed")
 			}
+			if evidence.Restore != nil && value.ModRevision != evidence.Restore.ConnectorRevision {
+				return errs.New(errs.KindStateConflict, "backup Restore connector snapshot changed")
+			}
 			evidence.Connector = connector
 			evidence.ConnectorRevision = value.ModRevision
+			evidence.ConnectorAuthority = authority
 		}
 	}
 	if evidence.Connector.Connector.ID != selectedConnectorID {

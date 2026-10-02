@@ -25,7 +25,7 @@ const (
 	BackupOrphanConnectorPrefix            = "/v1/indexes/backup-orphans/by-connector/"
 	BackupOrphanEnvironmentPrefix          = "/v1/indexes/backup-orphans/by-environment/"
 	BackupRetentionPrefix                  = "/v1/runtime/backup-retention/"
-	backupRecoveryPointPrunePrefix         = "/v1/runtime/recovery-point-prunes/"
+	BackupRecoveryPointPrunePrefix         = "/v1/runtime/recovery-point-prunes/"
 	backupRecoveryPointPruneDispatchPrefix = "/v1/runtime/recovery-point-prune-dispatches/"
 	backupRestorePrefix                    = "/v1/runtime/backup-restores/"
 	BackupRestoreEnvironmentPrefix         = "/v1/indexes/backup-restores/by-environment/"
@@ -209,18 +209,18 @@ func BackupRetentionKey(sourceID string, triggerRecoveryPointID string) string {
 }
 
 func BackupRecoveryPointPruneKey(recoveryPointID string) string {
-	return backupRecoveryPointPrunePrefix + recoveryPointID
+	return BackupRecoveryPointPrunePrefix + recoveryPointID
 }
 
 func BackupRecoveryPointPruneDispatchKey(taskID string) string {
 	return backupRecoveryPointPruneDispatchPrefix + taskID
 }
 
-func backupRestoreKey(taskID string) string {
+func BackupRestoreKey(taskID string) string {
 	return backupRestorePrefix + taskID
 }
 
-func backupRestoreEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
+func BackupRestoreEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
 	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
 		recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return "", errs.New(

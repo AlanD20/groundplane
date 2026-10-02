@@ -54,6 +54,8 @@ func TestBackupRunPublicationRejectsNilRepository(t *testing.T) {
 func TestPrepareManualBackupRunDerivesFixedRevisionCandidate(t *testing.T) {
 	repository, store, seeded := newBackupRuntimeBareFixture(t)
 	now := seeded.CreatedAt
+	_, evidencePlan, _, _ := backupRuntimePublicationTask(t, store, seeded)
+	fixedRevision := backupRuntimeCurrentRevision(t, store, seeded.EnvironmentID)
 	prepared, err := repository.PrepareManualBackupRun(
 		context.Background(), testbackupplanning.ManualBackupRunInput{
 			EnvironmentID: seeded.EnvironmentID,
@@ -70,6 +72,18 @@ func TestPrepareManualBackupRunDerivesFixedRevisionCandidate(t *testing.T) {
 				seeded.EnvironmentID,
 			),
 			CreatedAt: now,
+			ResolveServiceFact: func(_ context.Context, input testbackupplanning.BackupServiceFactInput) (
+				*testbackupplanning.BackupServiceFactEvidence, error,
+			) {
+				if input.ReadRevision != fixedRevision ||
+					input.ServiceID != seeded.Sources[0].Snapshot.Postgres.BackingServiceID ||
+					input.EnvironmentID != seeded.Sources[0].Snapshot.Postgres.BackingEnvironmentID {
+					t.Fatal("Service evidence was requested outside the selected backing snapshot")
+				}
+				return &testbackupplanning.BackupServiceFactEvidence{
+					Fact: evidencePlan.BackupScope.Services[0], Artifact: evidencePlan.Artifacts[0],
+				}, nil
+			},
 		}, func(
 			_ context.Context,
 			_ testkeyvalue.Versioned[testattachments.Record],
@@ -219,6 +233,9 @@ func TestBackupRunPublicationReplayAcceptsTerminalWinner(t *testing.T) {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
 	}
 	resultRecord := completedComposeTaskResult()
+	resultRecord.Kind = testtaskjournal.TaskResultBackup
+	resultRecord.ExecutionEpoch = claim.Assignment.Record.ExecutionEpoch
+	resultRecord.AssignmentGeneration = claim.Assignment.Record.BackupAuthorityFence.AssignmentGeneration
 	resultRecord.ExitCode = 1
 	terminal, err := tasks.AcknowledgeTask(
 		context.Background(),
@@ -294,6 +311,9 @@ func TestBackupRunPublicationReplayRejectsTornSuccessors(t *testing.T) {
 			t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
 		}
 		resultRecord := completedComposeTaskResult()
+		resultRecord.Kind = testtaskjournal.TaskResultBackup
+		resultRecord.ExecutionEpoch = claim.Assignment.Record.ExecutionEpoch
+		resultRecord.AssignmentGeneration = claim.Assignment.Record.BackupAuthorityFence.AssignmentGeneration
 		resultRecord.ExitCode = 1
 		if _, err := tasks.AcknowledgeTask(
 			context.Background(), agentID, 1, run.TaskID,

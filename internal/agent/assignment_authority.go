@@ -110,6 +110,32 @@ func validateAndCopyAssignment(
 	if err != nil {
 		return taskassignment.Assignment{}, errs.Wrap(errs.KindInternal, err)
 	}
+	var backupAuthority *agentpb.BackupTaskAuthority
+	var backupResume *agentpb.BackupTaskResume
+	if plan.BackupScope != nil {
+		if assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD {
+			return taskassignment.Assignment{}, errs.New(
+				errs.KindInternal,
+				"agent: Backup cannot carry release recovery authority",
+			)
+		}
+		backupAuthority, err = executionplan.ValidateBackupAssignment(
+			plan,
+			assignment.BackupAuthority,
+			assignment.BackupAuthoritySHA256,
+			executionplan.BackupAssignmentIdentity{TaskID: assignment.TaskID, OperationID: assignment.OperationID,
+				AssignmentID: assignment.AssignmentID, Generation: assignment.AssignmentGeneration, DeadlineUnixNano: uint64(assignment.ForwardDeadline.UnixNano())},
+		)
+		if err != nil {
+			return taskassignment.Assignment{}, err
+		}
+		backupResume, err = executionplan.ValidateBackupTaskResume(assignment.BackupResume, backupAuthority)
+		if err != nil {
+			return taskassignment.Assignment{}, err
+		}
+	} else if assignment.BackupAuthority != nil || assignment.BackupResume != nil || len(assignment.BackupAuthoritySHA256) != 0 || assignment.AssignmentGeneration != 0 {
+		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: non-Backup assignment carries Backup authority")
+	}
 	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
 		return taskassignment.Assignment{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -174,6 +200,7 @@ func validateAndCopyAssignment(
 		recoveryDirective = proto.Clone(assignment.ReleaseRecoveryDirective).(*agentpb.ReleaseRecoveryDirective)
 	}
 	return taskassignment.Assignment{
+		BackupAuthority: backupAuthority, BackupResume: backupResume, BackupAuthoritySHA256: append([]byte(nil), assignment.BackupAuthoritySHA256...), AssignmentGeneration: assignment.AssignmentGeneration,
 		AssignmentID: assignment.AssignmentID,
 		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
 		RetryOf: assignment.RetryOf, Plan: plan, ScriptArtifacts: scriptArtifacts,

@@ -28,6 +28,7 @@ func (s *Server) dispatchReady(
 	capacity int32,
 	delivered map[string]string,
 	quarantined map[string]string,
+	payloads *assignmentPayloadDelivery,
 ) error {
 	if capacity == 0 {
 		return nil
@@ -83,7 +84,7 @@ func (s *Server) dispatchReady(
 		if remaining == 0 {
 			break
 		}
-		disposition, err := s.dispatchTaskAssignment(session, stream, assignment, true)
+		disposition, err := s.dispatchTaskAssignment(session, stream, assignment, true, payloads)
 		if err != nil {
 			return err
 		}
@@ -125,7 +126,7 @@ func (s *Server) dispatchReady(
 		if !session.AssignmentsAllowed() {
 			return nil
 		}
-		disposition, err := s.dispatchTaskAssignment(session, stream, assignment, false)
+		disposition, err := s.dispatchTaskAssignment(session, stream, assignment, false, payloads)
 		if err != nil {
 			return err
 		}
@@ -149,6 +150,7 @@ func (s *Server) dispatchTaskAssignment(
 	stream agentpb.AgentChannel_ConnectServer,
 	claim etcd.TaskAssignment,
 	recovered bool,
+	payloads *assignmentPayloadDelivery,
 ) (assignmentDispatch, error) {
 	assignment, err := s.taskAssignmentMessage(stream.Context(), claim, recovered)
 	if err != nil {
@@ -160,7 +162,7 @@ func (s *Server) dispatchTaskAssignment(
 		)
 		return assignmentQuarantined, nil
 	}
-	sent, err := s.dispatchResolvedTaskAssignment(session, stream, claim, assignment, recovered)
+	sent, err := s.dispatchResolvedTaskAssignment(session, stream, claim, assignment, recovered, payloads)
 	if sent {
 		return assignmentSent, err
 	}

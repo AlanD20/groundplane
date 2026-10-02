@@ -113,7 +113,7 @@ func probeExactEOF(ctx context.Context, source io.ReaderAt, exactSize uint64) er
 	return nil
 }
 
-func proveOwnedExactSize(ctx context.Context, source ownedSpool, exactSize uint64) error {
+func proveOwnedExactSize(ctx context.Context, source ValidationSpool, exactSize uint64) error {
 	if err := checkContext(ctx); err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func proveOwnedExactSize(ctx context.Context, source ownedSpool, exactSize uint6
 
 func copyOwnedSource(
 	ctx context.Context,
-	destination ownedSpool,
+	destination ValidationSpool,
 	source io.ReaderAt,
 	evidence SourceEvidence,
 ) error {

@@ -381,6 +381,7 @@ func TestTaskPruningRemovesAttachInputOnlyAfterFinalPlanReference(t *testing.T) 
 		TaskID: firstTaskID, TaskRevision: 1,
 		BackupCheckpointCursorsComplete:        true,
 		BackupCheckpointDeduplicationsComplete: true,
+		BackupConfigTransfersComplete:          true,
 		TaskPrimaryDeleted:                     true,
 		AttachPlanID:                           planID,
 	})
@@ -401,6 +402,7 @@ func TestTaskPruningRemovesAttachInputOnlyAfterFinalPlanReference(t *testing.T) 
 		TaskID: lastTaskID, TaskRevision: 1,
 		BackupCheckpointCursorsComplete:        true,
 		BackupCheckpointDeduplicationsComplete: true,
+		BackupConfigTransfersComplete:          true,
 		TaskPrimaryDeleted:                     true,
 		AttachPlanID:                           planID,
 	})

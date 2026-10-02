@@ -25,6 +25,15 @@ func BuildManifest(
 	return payload, authority, metadata, nil
 }
 
+// BuildContentAuthority validates the native canonical manifest without a
+// transport descriptor encoder. File materialization needs this exact artifact
+// authority, not a second wire inventory or a transfer framing dependency.
+func BuildContentAuthority(ctx context.Context, entries []Entry) (ContentAuthority, error) {
+	payload, authority, err := buildManifestPayload(ctx, entries)
+	clearBytes(payload)
+	return authority, err
+}
+
 func buildManifestPayload(ctx context.Context, entries []Entry) ([]byte, ContentAuthority, error) {
 	if err := checkContext(ctx); err != nil {
 		return nil, ContentAuthority{}, err

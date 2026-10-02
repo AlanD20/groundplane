@@ -3,12 +3,14 @@ package backupsecrettransfer
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -92,33 +94,41 @@ func TestBackupSecretInboxRejectsStaleAssignment(t *testing.T) {
 }
 
 // QA: CON-07, BAK-05/08; local plan-to-slot selection only, not credential resolution or S3 execution.
-// Rationale: capture encrypts with a public recipient and prune does not
-// decrypt, so neither current operation may reserve or accept either private
-// restore identity purpose.
-func TestBackupSecretInboxReservesOnlyS3PurposesForCaptureAndPrune(t *testing.T) {
+// Rationale: capture may receive only the current Environment identity selected
+// by its sealed authority, while prune receives no decryption identity.
+func TestBackupSecretInboxReservesSealedPurposesForCaptureAndPrune(t *testing.T) {
 	for _, stepKind := range []string{"age capture", "prune"} {
 		t.Run(stepKind, func(t *testing.T) {
 			inbox := New()
 			assignment := agentBackupSecretAssignment(t)
 			if stepKind == "age capture" {
-				assignment.Plan.GetSteps()[0].GetBackupSourceCapture().Encryption =
-					agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE
-			} else {
-				assignment.Plan.GetSteps()[0].Payload = &agentpb.ExecutionStep_BackupArtifactPrune{
-					BackupArtifactPrune: &agentpb.BackupArtifactPrune{},
+				assignment.Plan.GetSteps()[0].Payload = &agentpb.ExecutionStep_BackupStep{
+					BackupStep: &agentpb.BackupStepAuthority{Operation: &agentpb.BackupStepAuthority_Capture{
+						Capture: &agentpb.BackupCaptureAuthority{Encryption: &agentpb.BackupEncryptionAuthority{
+							Kind:         agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
+							SecretSlotId: backupsecret.CurrentAgeIdentitySlotID,
+						}},
+					}},
 				}
 			}
 			if err := inbox.Register(assignment); err != nil {
 				t.Fatalf("Register() error = %v", err)
 			}
 			slots := inbox.tasks[assignment.TaskID].steps[backupSecretTestStepID]
-			if len(slots) != 2 ||
+			wantSlots := 2
+			if stepKind == "age capture" {
+				wantSlots = 3
+			}
+			if len(slots) != wantSlots ||
 				slots[agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY] == nil ||
 				slots[agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY] == nil {
-				t.Fatalf("reserved slots = %#v, want exact S3 pair", slots)
+				t.Fatalf("reserved slots = %#v, want %d authority-selected slots", slots, wantSlots)
+			}
+			if stepKind == "age capture" &&
+				slots[agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY] == nil {
+				t.Fatal("age capture did not reserve its sealed current identity")
 			}
 			for _, purpose := range []agentpb.BackupSecretSlotPurpose{
-				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY,
 				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_OPERATOR_OLD_AGE_IDENTITY,
 			} {
 				frame := agentBackupSecretFrames(assignment, []byte("identity"))[0]
@@ -269,32 +279,51 @@ func (ctx *observedDoneContext) Done() <-chan struct{} {
 
 func agentBackupSecretAssignment(t *testing.T) testtaskassignment.Assignment {
 	t.Helper()
+	pathStyle := true
+	deadline := time.Now().Add(120 * time.Second)
+	digest := bytes.Repeat([]byte{1}, sha256.Size)
+	authority, err := executionplan.SealBackupStepAuthority(&agentpb.BackupStepAuthority{
+		StepId: backupSecretTestStepID, ExecutionId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		StepDeadlineUnixNano: uint64(deadline.UnixNano()),
+		Operation: &agentpb.BackupStepAuthority_Prune{Prune: &agentpb.BackupPruneAuthority{
+			RetentionPolicy: backupSecretRevision(1, 1), Objects: []*agentpb.BackupPruneObject{{
+				Ordinal: 1, PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", Point: backupSecretRevision(2, 2),
+				Evidence: &agentpb.BackupArtifactEvidence{
+					SourceSizeBytes: 4096, SourceSha256: append([]byte(nil), digest...),
+					StoredSizeBytes: 4096, StoredSha256: append([]byte(nil), digest...),
+				},
+				Object: &agentpb.BackupObjectIdentity{
+					Connector: &agentpb.BackupConnectorAuthority{
+						ConnectorId: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV", Connector: backupSecretRevision(3, 3),
+						CanonicalEndpointUrl: "https://objects.example.test", Region: "auto", PathStyle: &pathStyle,
+						Prefix: "production/", AccessKeySlotId: backupsecret.AccessKeySlotID,
+						SecretKeySlotId: backupsecret.SecretKeySlotID,
+						AccessKeySlot:   backupSecretRevision(4, 4), SecretKeySlot: backupSecretRevision(5, 5),
+					},
+					Bucket: "groundplane-backups",
+					ObjectKey: "production/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+						"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV/rp_01ARZ3NDEKTSV4RRFFQ69G5FAV/artifact.bin",
+					Discriminator: &agentpb.BackupObjectIdentity_Etag{Etag: &agentpb.BackupS3ETag{Value: "etag"}},
+				},
+				MetadataCount: 10, MetadataSha256: bytes.Repeat([]byte{6}, sha256.Size),
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SealBackupStepAuthority() error = %v", err)
+	}
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion, PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP,
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE,
 		TargetId:  "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		BackupScope: &agentpb.BackupPlanScope{
+			ProjectId: "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV", Project: backupSecretRevision(6, 6),
+			EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Environment: backupSecretRevision(7, 7),
+			TaskAttempt: 1,
+		},
 		Steps: []*agentpb.ExecutionStep{{
-			StepId: backupSecretTestStepID, TimeoutSeconds: 60,
-			Payload: &agentpb.ExecutionStep_BackupSourceCapture{BackupSourceCapture: &agentpb.BackupSourceCapture{
-				SourceId: "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV", SourceRevision: 2,
-				TargetId: "att_01ARZ3NDEKTSV4RRFFQ69G5FAV", TargetRevision: 3,
-				PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", ConnectorId: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-				ConnectorRevision: 4,
-				SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
-				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
-				Upload: &agentpb.BackupUploadAuthority{
-					ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "groundplane-backups",
-					ConnectorPrefix: "production/", ConnectorRegion: "auto",
-					ConnectorAddressing: agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
-					ProtectedObjectKey: "production/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
-						"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV/rp_01ARZ3NDEKTSV4RRFFQ69G5FAV/artifact.bin",
-					ImmutableCreate: true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
-				},
-				Source: &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
-					BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 5,
-					Database: "application", Role: "application_owner",
-				}},
-			}},
+			StepId: backupSecretTestStepID, TimeoutSeconds: executionplan.MaximumBackupPruneStepTimeoutSeconds,
+			Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: authority},
 		}},
 	})
 	if err != nil {
@@ -304,8 +333,12 @@ func agentBackupSecretAssignment(t *testing.T) testtaskassignment.Assignment {
 		AssignmentID: backupSecretTestAssignmentID, TaskID: backupSecretTestTaskID,
 		OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV", Plan: plan,
 		ExecutionEpoch: 1, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
-		ForwardDeadline: time.Now().Add(120 * time.Second), RecoveryDeadline: time.Now().Add(240 * time.Second),
+		ForwardDeadline: deadline, RecoveryDeadline: deadline.Add(120 * time.Second),
 	}
+}
+
+func backupSecretRevision(revision int64, fill byte) *agentpb.RevisionDigest {
+	return &agentpb.RevisionDigest{ModRevision: revision, Sha256: bytes.Repeat([]byte{fill}, sha256.Size)}
 }
 
 func agentBackupSecretFrames(

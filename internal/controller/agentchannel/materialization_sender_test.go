@@ -20,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestSendTaskAssignmentStreamsExactMaterializationRecords(t *testing.T) {
@@ -35,8 +36,8 @@ func TestSendTaskAssignmentStreamsExactMaterializationRecords(t *testing.T) {
 		authorizedAuthenticator(), NewRegistry(), nil, &fakePlanResolver{plan: plan}, resolver,
 	)
 	claim := controllerMaterializationClaim(task)
-	if err := server.sendTaskAssignment(stream, claim); err != nil {
-		t.Fatalf("sendTaskAssignment() error = %v", err)
+	if err := sendTestTaskAssignment(server, stream, claim); err != nil {
+		t.Fatalf("sendTestTaskAssignment() error = %v", err)
 	}
 	if len(stream.sent) != 5 || stream.sent[0].GetTaskAssignment() == nil ||
 		stream.sent[1].GetMaterializationTransfer().GetHeader() == nil ||
@@ -97,11 +98,11 @@ func TestSendTaskAssignmentRejectsSourceDigestMismatchWithoutEnd(t *testing.T) {
 		authorizedAuthenticator(), NewRegistry(), nil, &fakePlanResolver{plan: plan},
 		&fakeMaterializationResolver{source: source},
 	)
-	if err := server.sendTaskAssignment(stream, controllerMaterializationClaim(task)); !errors.Is(
+	if err := sendTestTaskAssignment(server, stream, controllerMaterializationClaim(task)); !errors.Is(
 		err,
 		errs.New(errs.KindInternal, ""),
 	) {
-		t.Fatalf("sendTaskAssignment() error = %v, want internal digest mismatch", err)
+		t.Fatalf("sendTestTaskAssignment() error = %v, want internal digest mismatch", err)
 	}
 	if len(stream.sent) != 3 || stream.sent[0].GetTaskAssignment() == nil ||
 		stream.sent[1].GetMaterializationTransfer().GetHeader() == nil ||
@@ -119,6 +120,72 @@ func TestSendTaskAssignmentRejectsSourceDigestMismatchWithoutEnd(t *testing.T) {
 }
 
 type materializationRecordingStream struct{ scriptedStream }
+
+// sendTestTaskAssignment keeps these payload-framing tests on the current
+// split assignment/payload sender without adding a second production send path.
+func sendTestTaskAssignment(
+	server *Server,
+	stream agentpb.AgentChannel_ConnectServer,
+	claim etcd.TaskAssignment,
+) error {
+	plan, err := server.plans.ResolveExecutionPlan(stream.Context(), claim.Task.Record)
+	if err != nil {
+		return err
+	}
+	assignment := &agentpb.TaskAssignment{
+		TaskId: claim.Task.Record.ID, OperationId: claim.Task.Record.OperationID,
+		RetryOf: claim.Task.Record.RetryOf, AssignmentId: claim.Assignment.Record.AssignmentID,
+		Plan: plan, ExecutionEpoch: claim.Assignment.Record.ExecutionEpoch,
+		ExecutionDeadline: timestamppb.New(time.Now().Add(time.Minute)),
+	}
+	if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_TaskAssignment{
+		TaskAssignment: assignment,
+	}}); err != nil {
+		return err
+	}
+	delivery := newAssignmentPayloadDelivery(stream.Context(), 1)
+	if err := delivery.start(
+		stream,
+		assignment,
+		func() {},
+		func(
+			queued agentpb.AgentChannel_ConnectServer,
+			owned *agentpb.TaskAssignment,
+			credits *configTransferExchange,
+		) error {
+			return server.sendAssignmentPayloads(queued, claim, owned, credits)
+		},
+	); err != nil {
+		delivery.close()
+		return err
+	}
+	done := make(chan struct{})
+	go func() {
+		delivery.workers.Wait()
+		close(done)
+	}()
+	for {
+		select {
+		case frame := <-delivery.frames:
+			if err := delivery.deliver(stream, frame); err != nil {
+				delivery.close()
+				return err
+			}
+		case err := <-delivery.failures:
+			delivery.close()
+			return err
+		case <-done:
+			select {
+			case err := <-delivery.failures:
+				delivery.close()
+				return err
+			default:
+				delivery.close()
+				return nil
+			}
+		}
+	}
+}
 
 func (stream *materializationRecordingStream) Send(message *agentpb.ControllerMessage) error {
 	// Capture wire-time bytes; the sender clears its owned buffers after Send returns.

@@ -15,25 +15,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (s *Server) sendTaskAssignment(
-	stream agentpb.AgentChannel_ConnectServer,
-	claim etcd.TaskAssignment,
-) error {
-	assignment, err := s.taskAssignmentMessage(stream.Context(), claim, false)
-	if err != nil {
-		return err
-	}
-	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
-	defer clearBackingHookPlanSecrets(assignment.GetPlan())
-	return s.sendResolvedTaskAssignment(stream, claim, assignment)
-}
-
 func (s *Server) dispatchResolvedTaskAssignment(
 	session *Session,
 	stream agentpb.AgentChannel_ConnectServer,
 	claim etcd.TaskAssignment,
 	assignment *agentpb.TaskAssignment,
 	recovered bool,
+	payloads *assignmentPayloadDelivery,
 ) (bool, error) {
 	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
 	defer clearBackingHookPlanSecrets(assignment.GetPlan())
@@ -44,7 +32,25 @@ func (s *Server) dispatchResolvedTaskAssignment(
 			expired = true
 			return nil
 		}
-		return s.sendResolvedTaskAssignment(stream, claim, assignment)
+		releasePayload, allowed := session.beginDispatch()
+		if !allowed {
+			expired = true
+			return nil
+		}
+		if err := stream.Send(&agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: assignment},
+		}); err != nil {
+			releasePayload()
+			return err
+		}
+		return payloads.start(
+			stream,
+			assignment,
+			releasePayload,
+			func(queued agentpb.AgentChannel_ConnectServer, owned *agentpb.TaskAssignment, credits *configTransferExchange) error {
+				return s.sendAssignmentPayloads(queued, claim, owned, credits)
+			},
+		)
 	})
 	if expired {
 		return false, nil
@@ -52,18 +58,14 @@ func (s *Server) dispatchResolvedTaskAssignment(
 	return sent, err
 }
 
-func (s *Server) sendResolvedTaskAssignment(
+func (s *Server) sendAssignmentPayloads(
 	stream agentpb.AgentChannel_ConnectServer,
 	claim etcd.TaskAssignment,
 	assignment *agentpb.TaskAssignment,
+	credits *configTransferExchange,
 ) error {
-	if err := stream.Send(&agentpb.ControllerMessage{
-		Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: assignment},
-	}); err != nil {
-		return err
-	}
 	for _, step := range assignment.GetPlan().GetSteps() {
-		if step.GetBackupSourceCapture() != nil || step.GetBackupArtifactPrune() != nil {
+		if step.GetBackupStep() != nil {
 			if err := s.sendBackupSecretSlots(
 				stream.Context(),
 				stream,
@@ -79,6 +81,29 @@ func (s *Server) sendResolvedTaskAssignment(
 				},
 			); err != nil {
 				return err
+			}
+			if step.GetBackupStep().GetCapture().GetConfig() != nil {
+				if err := s.sendBackupConfigCapture(stream, claim, assignment, step.GetStepId(), credits); err != nil {
+					return err
+				}
+			}
+			if step.GetBackupStep().GetCapture().GetVolume() != nil {
+				if err := s.receiveBackupVolumeCapture(stream, claim, assignment, step.GetStepId(), credits); err != nil {
+					return err
+				}
+			}
+			if step.GetBackupStep().GetRestore().GetVolume() != nil {
+				if err := s.sendBackupVolumeRestoreNew(stream, claim, assignment, step.GetStepId(), credits); err != nil {
+					return err
+				}
+				if err := s.receiveBackupVolumeRestoreOld(stream, claim, assignment, step.GetStepId(), credits); err != nil {
+					return err
+				}
+			}
+			if step.GetBackupStep().GetRestore().GetConfig() != nil {
+				if err := s.receiveBackupConfigRestore(stream, claim, assignment, step.GetStepId(), credits); err != nil {
+					return err
+				}
 			}
 		}
 		if action := step.GetComponentApply(); action != nil && action.GetManagedConfigContent() &&
@@ -185,7 +210,7 @@ func (s *Server) taskAssignmentMessage(
 			return nil, errs.New(errs.KindInternal, "active recovery carries proof-required execution budget")
 		}
 	}
-	return &agentpb.TaskAssignment{
+	message := &agentpb.TaskAssignment{
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
 		Plan: plan, ScriptArtifacts: scriptArtifacts, ScriptCheckpoints: scriptCheckpoints,
@@ -198,7 +223,29 @@ func (s *Server) taskAssignmentMessage(
 		ReleaseRecoveryRecordSha256: append([]byte(nil), executionAuthority.recoveryDigest...),
 		ReleaseRecoveryDirective:    executionAuthority.recovery,
 		ExecutionDeadline:           timestamppb.New(executionDeadline.UTC()),
-	}, nil
+	}
+	if plan.BackupScope != nil {
+		if record.BackupAuthorityFence == nil || s.checkpoints == nil {
+			return nil, errs.New(errs.KindInternal, "backup assignment delivery authority is unavailable")
+		}
+		authority, digest, err := executionplan.BindBackupTaskAuthority(plan, executionplan.BackupAssignmentIdentity{
+			TaskID: task.ID, OperationID: task.OperationID, AssignmentID: record.AssignmentID,
+			Generation: record.BackupAuthorityFence.AssignmentGeneration, DeadlineUnixNano: uint64(record.Deadline.UnixNano()),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if hex.EncodeToString(digest) != record.BackupAuthorityFence.AuthoritySHA256 {
+			return nil, errs.New(errs.KindInternal, "backup assignment digest changed")
+		}
+		resume, err := s.checkpoints.ResolveBackupTaskResume(ctx, record.AgentID, record.AgentGeneration, authority)
+		if err != nil {
+			return nil, err
+		}
+		message.BackupAuthority, message.BackupAuthoritySha256, message.BackupResume = authority, digest, resume
+		message.AssignmentGeneration = authority.AssignmentGeneration
+	}
+	return message, nil
 }
 
 func clearScriptAssignmentArtifacts(artifacts *agentpb.ScriptAssignmentArtifacts) {

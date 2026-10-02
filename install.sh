@@ -273,7 +273,8 @@ root = pathlib.Path(sys.argv[1])
 allowed = {"controller", "groundplane", "controller-release.json", "controller_release.py",
            "controller_bootstrap.py", "controller_update.py", "groundplane-controller.service",
            "groundplane.conf", "controller.yaml.example", "install_bundle.py",
-           "install-runtime.sh", "setup-host.sh", "bundle.json", "install_agent.py", "release_selection.py"}
+           "install-runtime.sh", "setup-host.sh", "bundle.json", "install_agent.py", "release_selection.py",
+           "postgres16-release.json"}
 if sys.argv[4] == "agent":
     allowed = {"install_agent.py", "controller_update.py", "controller_release.py", "bundle.json"}
 with tarfile.open(root / "bundle.tar.gz", "r:gz") as archive:

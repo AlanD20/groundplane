@@ -13,7 +13,8 @@ type backupCheckpointKey struct {
 	taskID       string
 	assignmentID string
 	stepID       string
-	sequence     uint32
+	executionID  string
+	sequence     uint64
 }
 
 type backupCheckpointWaiter struct {
@@ -86,7 +87,8 @@ func backupCheckpointRequestKey(request *agentpb.BackupCheckpointRequest) backup
 		taskID:       request.GetTaskId(),
 		assignmentID: request.GetAssignmentId(),
 		stepID:       request.GetStepId(),
-		sequence:     request.GetSequence(),
+		executionID:  request.GetExecutionId(),
+		sequence:     request.GetCheckpointSequence(),
 	}
 }
 
@@ -95,7 +97,8 @@ func backupCheckpointAckKey(ack *agentpb.BackupCheckpointAck) backupCheckpointKe
 		taskID:       ack.GetTaskId(),
 		assignmentID: ack.GetAssignmentId(),
 		stepID:       ack.GetStepId(),
-		sequence:     ack.GetSequence(),
+		executionID:  ack.GetExecutionId(),
+		sequence:     ack.GetCheckpointSequence(),
 	}
 }
 

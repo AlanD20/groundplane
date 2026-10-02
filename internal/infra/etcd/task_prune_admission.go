@@ -119,7 +119,8 @@ func (repository *TaskRepository) beginTaskPrune(
 		companionKeys = append(companionKeys, backupruntime.BackupRecoveryPointPruneDispatchKey(task.ID))
 	}
 	backupTerminalReceiptIndex := -1
-	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune {
+	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
+		task.Type == taskjournal.TaskRestore {
 		backupTerminalReceiptIndex = len(companionKeys)
 		companionKeys = append(companionKeys, backupruntime.BackupTerminalReceiptKey(task.ID))
 	}

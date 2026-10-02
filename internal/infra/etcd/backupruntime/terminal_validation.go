@@ -22,7 +22,7 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 	switch record.Task.TaskType {
 	case taskjournal.TaskBackup:
 		if len(record.Sources) == 0 || len(record.Sources) > backuppolicy.MaximumBackupPolicySources ||
-			len(record.Points) != 0 {
+			len(record.Points) != 0 || record.Restore != nil {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt sources are invalid")
 		}
 		for index, source := range record.Sources {
@@ -35,8 +35,13 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 				!ValidBackupSourceAttemptState(source.State) ||
 				!ValidBackupSourceAttemptPhase(source.Phase) ||
 				!ValidBackupFailureCodeForAttempt(source.State, source.Phase, source.FailureCode) ||
-				source.SizeBytes < 0 || (source.SHA256 != "" && !recordcodec.ValidSHA256(source.SHA256)) ||
-				((source.SizeBytes > 0) != (source.SHA256 != "")) {
+				!validBackupSourceArtifactState(
+					source.State,
+					source.Phase,
+					source.Evidence,
+					source.Upload,
+					source.Object,
+				) {
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt source is invalid")
 			}
 			switch source.Kind {
@@ -46,7 +51,7 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 			}
 		}
 	case taskjournal.TaskBackupPrune:
-		if len(record.Sources) != 0 || len(record.Points) == 0 ||
+		if len(record.Sources) != 0 || record.Restore != nil || len(record.Points) == 0 ||
 			len(record.Points) > MaximumBackupPruneDispatchPoints {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt points are invalid")
 		}
@@ -71,6 +76,22 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 		if err != nil || domainDigest != record.DomainDigest {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt point digest is invalid")
 		}
+	case taskjournal.TaskRestore:
+		if len(record.Sources) != 0 || len(record.Points) != 0 || record.Restore == nil ||
+			ValidateBackupRestoreRecord(*record.Restore) != nil ||
+			record.Restore.Point.SourceKind != BackupRuntimeSourceConfig ||
+			record.Restore.TaskID != record.Task.TaskID || record.Restore.OperationID != record.Task.OperationID ||
+			record.Restore.EnvironmentID != record.Task.Owner.EnvironmentID ||
+			!validConfigRestoreTerminalOutcome(record.Restore.State, record.Task.Status) ||
+			!record.Restore.CreatedAt.Equal(
+				record.Task.CreatedAt,
+			) || !record.Restore.UpdatedAt.Equal(record.Task.FinishedAt) {
+			return errs.New(errs.KindValidationFailed, "Restore terminal receipt outcome is invalid")
+		}
+		domainDigest, err := BackupRestoreTerminalDomainDigest(*record.Restore)
+		if err != nil || domainDigest != record.DomainDigest {
+			return errs.New(errs.KindValidationFailed, "Restore terminal receipt digest is invalid")
+		}
 	default:
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt Task type is invalid")
 	}
@@ -82,6 +103,14 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt digest is invalid")
 	}
 	return nil
+}
+
+func validConfigRestoreTerminalOutcome(state BackupRestoreState, status taskjournal.TaskStatus) bool {
+	if state == BackupRestoreCompleted {
+		return status == taskjournal.TaskStatusCompleted
+	}
+	return (state == BackupRestoreFailedSafe || state == BackupRestoreRecoveryRequired) &&
+		(status == taskjournal.TaskStatusFailed || status == taskjournal.TaskStatusAborted || status == taskjournal.TaskStatusTimedOut)
 }
 
 func ValidateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) error {
@@ -109,11 +138,15 @@ func ValidateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) err
 	if evidence.TerminalAssignment != nil {
 		assignment := evidence.TerminalAssignment
 		if evidence.StartedAt == nil || recordcodec.ValidateID(ids.KindAssignment, assignment.AssignmentID) != nil ||
-			recordcodec.ValidateID(ids.KindAgent, assignment.AgentID) != nil || assignment.AgentGeneration == 0 {
+			recordcodec.ValidateID(
+				ids.KindAgent,
+				assignment.AgentID,
+			) != nil || assignment.AgentGeneration == 0 || assignment.AssignmentGeneration == 0 {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt assignment is invalid")
 		}
 	}
-	if evidence.TaskType != taskjournal.TaskBackup && evidence.TaskType != taskjournal.TaskBackupPrune {
+	if evidence.TaskType != taskjournal.TaskBackup && evidence.TaskType != taskjournal.TaskBackupPrune &&
+		evidence.TaskType != taskjournal.TaskRestore {
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt Task evidence type is invalid")
 	}
 	if evidence.TaskType == taskjournal.TaskBackupPrune && evidence.Actor != taskjournal.TaskActorSystem {

@@ -19,8 +19,9 @@ type BackupTerminalSourceOutcome struct {
 	RecoveryPointCreatedAt time.Time                `json:"recovery_point_created_at"`
 	State                  BackupSourceAttemptState `json:"state"`
 	Phase                  BackupSourceAttemptPhase `json:"phase"`
-	SizeBytes              int64                    `json:"size_bytes,omitempty"`
-	SHA256                 string                   `json:"sha256,omitempty"`
+	Evidence               BackupArtifactEvidence   `json:"evidence"`
+	Upload                 BackupUploadOutcome      `json:"upload"`
+	Object                 BackupObjectIdentity     `json:"object"`
 	FailureCode            BackupFailureCode        `json:"failure_code,omitempty"`
 }
 
@@ -75,6 +76,7 @@ type BackupTerminalReceiptRecord struct {
 	DomainDigest                  string                            `json:"domain_digest"`
 	Sources                       []BackupTerminalSourceOutcome     `json:"sources,omitempty"`
 	Points                        []BackupPruneTerminalPointOutcome `json:"points,omitempty"`
+	Restore                       *BackupRestoreRecord              `json:"restore,omitempty"`
 	ReceiptDigest                 string                            `json:"receipt_digest"`
 }
 

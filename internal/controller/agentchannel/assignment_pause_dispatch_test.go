@@ -30,9 +30,13 @@ func TestDispatchReadyPauseDuringPreparationRemainsDispatchable(t *testing.T) {
 	delivered := make(map[string]string)
 	quarantined := make(map[string]string)
 	authorization := Authorization{Generation: 7, Config: &agentpb.AgentConfig{MaxConcurrentTasks: 1}}
+	payloads := newAssignmentPayloadDelivery(stream.Context(), 1)
+	defer payloads.close()
 	dispatchResult := make(chan error, 1)
 	go func() {
-		dispatchResult <- server.dispatchReady(stream, session, testAgentID, authorization, 1, delivered, quarantined)
+		dispatchResult <- server.dispatchReady(
+			stream, session, testAgentID, authorization, 1, delivered, quarantined, payloads,
+		)
 	}()
 	<-resolver.entered
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -57,7 +61,9 @@ func TestDispatchReadyPauseDuringPreparationRemainsDispatchable(t *testing.T) {
 	}
 	paused.resume()
 	server.plans = &fakePlanResolver{plan: plan}
-	if err := server.dispatchReady(stream, session, testAgentID, authorization, 1, delivered, quarantined); err != nil {
+	if err := server.dispatchReady(
+		stream, session, testAgentID, authorization, 1, delivered, quarantined, payloads,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if len(stream.sent) != 1 || len(delivered) != 1 || len(quarantined) != 0 ||

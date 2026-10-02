@@ -21,6 +21,9 @@ func (reader *Reader) decodeSourceDynamicEvidence(
 	stepIndex int,
 	sourceIDs map[string]int,
 ) error {
+	if evidence.Restore != nil {
+		return decodeConfigRestoreSourceEvidence(result, dynamic, evidence)
+	}
 	if evidence.Run == nil {
 		return nil
 	}
@@ -39,7 +42,7 @@ func (reader *Reader) decodeSourceDynamicEvidence(
 	}
 	evidence.Source = stored
 	evidence.SourceRevision = value.ModRevision
-	step := plan.Steps[stepIndex].GetBackupSourceCapture()
+	step := plan.Steps[stepIndex].GetBackupStep().GetCapture()
 	if step == nil {
 		return errs.New(errs.KindStateConflict, "backup source step evidence changed")
 	}
@@ -49,12 +52,35 @@ func (reader *Reader) decodeSourceDynamicEvidence(
 	return nil
 }
 
+func decodeConfigRestoreSourceEvidence(result *etcdstore.GetManyResult, dynamic *backupSecretDynamicRead,
+	evidence *Evidence,
+) error {
+	restored := evidence.Restore
+	sourceValue := result.Values[dynamic.sources[restored.Point.SourceID]]
+	pointValue := result.Values[dynamic.points[restored.Point.ID]]
+	if sourceValue == nil || sourceValue.ModRevision != restored.SourceRevision ||
+		pointValue == nil || pointValue.ModRevision != restored.RecoveryPointRevision {
+		return errs.New(errs.KindStateConflict, "Config Restore source or Recovery Point changed")
+	}
+	source, err := backuppolicy.DecodeBackupSourceRecord(sourceValue.Value)
+	if err != nil || source.ID != restored.Point.SourceID || source.EnvironmentID != restored.EnvironmentID ||
+		string(source.Kind) != string(restored.Point.SourceKind) || source.TargetID != restored.Point.TargetID {
+		return errs.New(errs.KindStateConflict, "Config Restore source identity changed")
+	}
+	point, err := backupruntime.DecodeBackupRecoveryPointRecord(pointValue.Value)
+	if err != nil || point.BackupRecoveryPointSnapshot != restored.Point {
+		return errs.New(errs.KindStateConflict, "Config Restore selected Recovery Point changed")
+	}
+	evidence.Source, evidence.SourceRevision, evidence.Point = source, sourceValue.ModRevision, &point
+	return nil
+}
+
 func (reader *Reader) validateCaptureTargetEvidence(
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	run *backupruntime.BackupRunRecord,
 	source backupruntime.BackupRunSourceAttemptRecord,
-	step *agentpb.BackupSourceCapture,
+	step *agentpb.BackupCaptureAuthority,
 ) error {
 	switch source.Kind {
 	case backupruntime.BackupRuntimeSourceAttach:
@@ -68,6 +94,9 @@ func (reader *Reader) validateCaptureTargetEvidence(
 			result.Values[dynamic.index[hierarchyrecord.ProjectKey(snapshot.BackingProjectID)]],
 			result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID)]],
 			result.Values[dynamic.index[blueprints.EnvironmentBlueprintHeadKey(snapshot.BackingEnvironmentID)]],
+		}
+		if !backupSecretRecordMatches(keys[0], step.GetResource().GetResource()) {
+			return errs.New(errs.KindStateConflict, "postgres backup sealed resource changed")
 		}
 		return backupplanning.ValidateBackupPostgresPublicationEvidence(keys, source, *snapshot)
 	case backupruntime.BackupRuntimeSourceVolume:
@@ -85,16 +114,20 @@ func (reader *Reader) validateCaptureTargetEvidence(
 		for _, service := range snapshot.Services {
 			keys = append(keys, result.Values[dynamic.index[servicerecord.ServiceRuntimeKey(service.ServiceID)]])
 		}
+		if !backupSecretRecordMatches(keys[1], step.GetResource().GetResource()) {
+			return errs.New(errs.KindStateConflict, "volume backup sealed resource changed")
+		}
 		return backupplanning.ValidateBackupVolumePublicationEvidence(keys, source, *snapshot)
 	case backupruntime.BackupRuntimeSourceConfig:
 		snapshot := source.Snapshot.Config
 		config := step.GetConfig()
 		if snapshot == nil || config == nil || snapshot.ConfigSnapshotID != run.TaskID ||
-			config.SnapshotRevision != uint64(snapshot.ReadRevision) {
+			config.MetadataSnapshotRevision != snapshot.ReadRevision {
 			return errs.New(errs.KindStateConflict, "backup config snapshot revision changed")
 		}
 		target := result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(run.EnvironmentID)]]
-		if target == nil || target.ModRevision != source.TargetRevision {
+		if target == nil || target.ModRevision != source.TargetRevision ||
+			!backupSecretRecordMatches(target, step.GetResource().GetResource()) {
 			return errs.New(errs.KindStateConflict, "backup config target evidence changed")
 		}
 		return nil

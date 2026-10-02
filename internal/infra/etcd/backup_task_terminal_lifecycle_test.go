@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -29,6 +31,9 @@ func TestBackupTaskTerminalTransactionFailureLeavesRunningAuthorityIntact(t *tes
 			t.Fatal(err)
 		}
 		result := completedComposeTaskResult()
+		result.Kind = testtaskjournal.TaskResultBackup
+		result.ExecutionEpoch = claim.Assignment.Record.ExecutionEpoch
+		result.AssignmentGeneration = claim.Assignment.Record.BackupAuthorityFence.AssignmentGeneration
 		result.ExitCode = 1
 		terminalAt := claim.Assignment.Record.AssignedAt.Add(time.Second)
 		if _, err := failingTasks.AcknowledgeTask(
@@ -77,6 +82,9 @@ func TestBackupTaskTerminalTransactionFailureLeavesRunningAuthorityIntact(t *tes
 			t.Fatal(err)
 		}
 		result := completedComposeTaskResult()
+		result.Kind = testtaskjournal.TaskResultBackup
+		result.ExecutionEpoch = claim.Assignment.Record.ExecutionEpoch
+		result.AssignmentGeneration = claim.Assignment.Record.BackupAuthorityFence.AssignmentGeneration
 		result.ExitCode = 1
 		terminalAt := claim.Assignment.Record.AssignedAt.Add(time.Second)
 		if _, err := failingTasks.AcknowledgeTask(
@@ -281,6 +289,11 @@ func publishBackupTerminalLifecycleTask(
 	if err != nil || !found || claim.Task.Record.ID != run.TaskID {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
 	}
+	claimedRun, err := runtime.GetBackupRun(context.Background(), run.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = claimedRun.Record
 	return runtime, store, tasks, run, claim
 }
 
@@ -299,7 +312,9 @@ func assertRunningBackupTerminalAuthority(
 		t.Fatalf("Task after terminal transaction failure = %#v, %v", current, err)
 	}
 	assignment, err := tasks.GetTaskAssignment(context.Background(), taskID)
-	if err != nil || assignment.Assignment.Record != claim.Assignment.Record ||
+	actual, encodeErr := taskassignments.EncodeTaskAssignment(assignment.Assignment.Record)
+	expected, expectedErr := taskassignments.EncodeTaskAssignment(claim.Assignment.Record)
+	if err != nil || encodeErr != nil || expectedErr != nil || !bytes.Equal(actual, expected) ||
 		assignment.Assignment.Revision != claim.Assignment.Revision {
 		t.Fatalf("assignment after terminal transaction failure = %#v, %v", assignment, err)
 	}

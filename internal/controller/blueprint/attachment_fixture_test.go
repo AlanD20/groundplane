@@ -82,7 +82,7 @@ type attachFactTestAdapter struct{}
 
 func (attachFactTestAdapter) Key() string                       { return "test:1" }
 func (attachFactTestAdapter) Label() string                     { return "Test" }
-func (attachFactTestAdapter) DefaultImage() string              { return "test:1" }
+func (attachFactTestAdapter) DefaultImage() (string, error)     { return "test:1", nil }
 func (attachFactTestAdapter) FactsPrefix() string               { return "test_" }
 func (attachFactTestAdapter) URLScheme() string                 { return "pgsql://" }
 func (attachFactTestAdapter) Port() string                      { return "5432" }

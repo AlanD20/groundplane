@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"bytes"
+	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -14,6 +15,7 @@ type backupPruneTransactionPlan struct {
 	conditions   []etcdstore.Condition
 	mutations    []etcdstore.Mutation
 	authority    *backupTaskPublicationAuthority
+	evidence     []backupplanning.PruneExecutionEvidence
 	readRevision int64
 }
 
@@ -46,6 +48,7 @@ func (plan backupPruneTransactionPlan) composeTransaction(
 func (plan *backupPruneTransactionPlan) clear() {
 	etcdstore.ClearMutationValues(plan.mutations)
 	plan.authority = nil
+	plan.evidence = nil
 	plan.readRevision = 0
 }
 

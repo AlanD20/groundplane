@@ -20,7 +20,8 @@ import (
 	"math"
 )
 
-// TaskPlanResolver rebuilds plans from closed durable Task inputs and daemon-owned policy; plans are never stored.
+// TaskPlanResolver resolves exact procedures from their capability-owned sealed
+// inputs. Backup procedures are retained; rendered procedures use pinned inputs.
 type TaskPlanResolver struct {
 	volumeRoot            string
 	blueprints            blueprintPlanStateReader
@@ -99,7 +100,8 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		}
 		return resolver.componentPlans.ResolveComponentExecutionPlan(ctx, task)
 	}
-	if task.Type == taskjournal.TaskBackup {
+	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
+		task.Type == taskjournal.TaskRestore {
 		return resolver.resolveBackupRunPlan(ctx, task)
 	}
 	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {

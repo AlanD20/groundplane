@@ -1,9 +1,12 @@
 package backupruntime
 
 const (
-	maximumBackupRuntimeRecordBytes  = 256 * 1024
-	maximumBackupObjectKeyBytes      = 1024
-	MaximumBackupPruneDispatchPoints = 11
+	maximumBackupRuntimeRecordBytes = 256 * 1024
+	maximumBackupObjectKeyBytes     = 1024
+	// A terminal prune commits both domain and delivery receipts within the
+	// unchanged transaction budget. Larger sweeps are split into more Tasks.
+	MaximumBackupPruneDispatchPoints   = 10
+	MaximumBackupPruneDispatchAttempts = 3
 )
 
 type BackupRuntimeSourceKind string

@@ -8,11 +8,16 @@ import (
 	testing "testing"
 	time "time"
 
+	backupobject "github.com/AlanD20/groundplane/internal/common/backupobject"
 	executionplan "github.com/AlanD20/groundplane/internal/common/executionplan"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	core "github.com/AlanD20/groundplane/internal/core"
 	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
+	testbackupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppruneevidence"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
@@ -25,6 +30,7 @@ import (
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	proto "google.golang.org/protobuf/proto"
 )
 
 func backupRuntimePrunePublicationTask(
@@ -63,7 +69,7 @@ func backupRuntimePrunePublicationTask(
 	task.RenderGeneration = 0
 	task.Params = nil
 	task.Materializations = nil
-	task.TimeoutSeconds = backupTaskTimeoutSeconds
+	task.TimeoutSeconds = backupTaskTimeout(task.Type)
 	task.Steps = make([]testtaskjournal.TaskStepRecord, len(sealed.Steps))
 	for index, step := range sealed.Steps {
 		task.Steps[index] = testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: step.StepId}
@@ -104,36 +110,53 @@ func backupRuntimeSealedPrunePlan(
 		TargetId:  dispatch.EnvironmentID,
 		Steps:     make([]*agentpb.ExecutionStep, len(pending)),
 	}
+	environmentEntry := mustOptionalKey(t, store, testhierarchy.EnvironmentKey(dispatch.EnvironmentID))
+	environment, err := testhierarchy.DecodeEnvironment(environmentEntry.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectEntry := mustOptionalKey(t, store, testhierarchy.ProjectKey(environment.ProjectID))
+	plan.BackupScope = &agentpb.BackupPlanScope{
+		ProjectId: environment.ProjectID, Project: backupRuntimeRevisionDigest(projectEntry),
+		EnvironmentId: environment.ID, Environment: backupRuntimeRevisionDigest(environmentEntry), TaskAttempt: 1,
+	}
+	repository, err := newBackupRuntimeRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := repository.ReadCurrentKeys(
+		context.Background(),
+		[]string{testhierarchy.EnvironmentKey(environment.ID)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testkeyvalue.ClearValues(read.Values)
 	for index, version := range pending {
 		point := version.Record.Point
 		pointEntry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointKey(point.ID))
-		sourceEntry := mustOptionalKey(t, store, testbackuppolicy.BackupSourceKey(point.SourceID))
-		environmentEntry := mustOptionalKey(t, store, testhierarchy.EnvironmentKey(point.EnvironmentID))
-		connectorEntry := mustOptionalKey(t, store, testconnectors.RecordKey(point.ConnectorID))
-		connector, err := testconnectors.DecodeRecord(connectorEntry.Value)
+		evidence, err := repository.loadBackupPrunePointExecutionEvidence(
+			context.Background(), version, pointEntry, read.ReadRevision,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		digest, err := hex.DecodeString(point.SHA256)
+		object := backupRuntimePruneObject(t, evidence, uint32(index+1))
+		authority, err := executionplan.SealBackupStepAuthority(&agentpb.BackupStepAuthority{
+			StepId:               ids.NewAt(ids.KindStep, dispatch.CreatedAt, int64(2500+index)),
+			ExecutionId:          ids.NewULID(),
+			StepDeadlineUnixNano: uint64(dispatch.CreatedAt.Add(30 * time.Minute).UnixNano()),
+			Operation: &agentpb.BackupStepAuthority_Prune{Prune: &agentpb.BackupPruneAuthority{
+				RetentionPolicy: proto.CloneOf(evidence.RetentionPolicy), Objects: []*agentpb.BackupPruneObject{object},
+			}},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		plan.Steps[index] = &agentpb.ExecutionStep{
-			StepId:         ids.NewAt(ids.KindStep, dispatch.CreatedAt, int64(2500+index)),
+			StepId:         authority.StepId,
 			TimeoutSeconds: executionplan.MaximumBackupPruneStepTimeoutSeconds,
-			Payload: &agentpb.ExecutionStep_BackupArtifactPrune{BackupArtifactPrune: &agentpb.BackupArtifactPrune{
-				Ordinal: uint32(index + 1), PruneOperationId: dispatch.OperationID,
-				PruneRevision: uint64(version.Revision), PointId: point.ID,
-				PointRevision: uint64(pointEntry.ModRevision), SourceId: point.SourceID,
-				SourceRevision: uint64(sourceEntry.ModRevision), EnvironmentId: point.EnvironmentID,
-				EnvironmentRevision: uint64(environmentEntry.ModRevision), ConnectorId: point.ConnectorID,
-				ConnectorRevision: uint64(connectorEntry.ModRevision),
-				ConnectorEndpoint: connector.Connector.Endpoint, ConnectorBucket: connector.Connector.Bucket,
-				ConnectorPrefix: connector.Connector.Prefix, ConnectorRegion: connector.Connector.Region,
-				ConnectorAddressing: backupFixtureAddressing(connector.Connector.PathStyle),
-				ProtectedObjectKey:  point.ObjectKey, StoredSizeBytes: uint64(point.SizeBytes),
-				StoredSha256: digest,
-			}},
+			Payload:        &agentpb.ExecutionStep_BackupStep{BackupStep: authority},
 		}
 	}
 	sealed, err := executionplan.Seal(plan)
@@ -141,6 +164,68 @@ func backupRuntimeSealedPrunePlan(
 		t.Fatal(err)
 	}
 	return sealed
+}
+
+func backupRuntimeRevisionDigest(entry *testkeyvalue.KeyValue) *agentpb.RevisionDigest {
+	digest := sha256.Sum256(entry.Value)
+	return &agentpb.RevisionDigest{ModRevision: entry.ModRevision, Sha256: digest[:]}
+}
+
+func backupRuntimePruneObject(
+	t *testing.T,
+	evidence testbackupplanning.PruneExecutionEvidence,
+	ordinal uint32,
+) *agentpb.BackupPruneObject {
+	t.Helper()
+	point := evidence.Prune.Point
+	sourceDigest, err := hex.DecodeString(point.Evidence.SourceSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storedDigest, err := hex.DecodeString(point.Evidence.StoredSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact := backupobject.Artifact{
+		Key: point.ObjectKey, EnvironmentID: point.EnvironmentID, SourceID: point.SourceID,
+		RecoveryPointID: point.ID, SourceFormat: backupobject.SourceFormat(point.SourceFormat),
+		Encryption: backupobject.Encryption(point.Encryption),
+		Evidence: backupobject.Evidence{
+			SourceSizeBytes: point.Evidence.SourceSizeBytes, StoredSizeBytes: point.Evidence.StoredSizeBytes,
+		},
+	}
+	copy(artifact.Evidence.SourceSHA256[:], sourceDigest)
+	copy(artifact.Evidence.StoredSHA256[:], storedDigest)
+	if point.Encryption == testbackupruntime.BackupRuntimeEncryptionAge {
+		era := uint64(point.KeyEra)
+		artifact.KeyEra = &era
+	}
+	metadataCount, metadataDigest := artifact.MetadataEvidence()
+	object := &agentpb.BackupObjectIdentity{
+		Connector: proto.CloneOf(evidence.ConnectorAuthority), Bucket: point.Object.Target.ConnectorBucket,
+		ObjectKey: point.Object.Target.ObjectKey,
+	}
+	switch point.Object.Discriminator.Kind {
+	case backupobject.DiscriminatorVersionID:
+		object.Discriminator = &agentpb.BackupObjectIdentity_VersionId{
+			VersionId: &agentpb.BackupS3VersionId{Value: point.Object.Discriminator.Value},
+		}
+	case backupobject.DiscriminatorETag:
+		object.Discriminator = &agentpb.BackupObjectIdentity_Etag{
+			Etag: &agentpb.BackupS3ETag{Value: point.Object.Discriminator.Value},
+		}
+	default:
+		t.Fatalf("unsupported backup object discriminator %q", point.Object.Discriminator.Kind)
+	}
+	return &agentpb.BackupPruneObject{
+		Ordinal: ordinal, PointId: point.ID,
+		Point: &agentpb.RevisionDigest{ModRevision: evidence.PointRevision, Sha256: evidence.PointSHA256},
+		Evidence: &agentpb.BackupArtifactEvidence{
+			SourceSizeBytes: point.Evidence.SourceSizeBytes, SourceSha256: sourceDigest,
+			StoredSizeBytes: point.Evidence.StoredSizeBytes, StoredSha256: storedDigest,
+		},
+		Object: object, MetadataCount: metadataCount, MetadataSha256: metadataDigest[:],
+	}
 }
 
 // Rationale: stable-id validation must fail before malformed identifiers can
@@ -178,7 +263,7 @@ func newBackupRuntimeBareFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Millisecond)
 	connector := testConnectorRecord(t, environment.Record.ID, now, 900, "backup-store")
 	credentials, err := testconnectors.NewEncryptedCredentials(
 		connector.Connector.ID,
@@ -213,8 +298,9 @@ func newBackupRuntimeBareFixture(
 	run.ConnectorRevision = createdConnector.Revision
 	run.ConnectorHasDirectCredentials = true
 	run.ConnectorCredentialsRevision = createdConnector.Revision
-	run.Sources[0].SizeBytes = 0
-	run.Sources[0].SHA256 = ""
+	run.Sources[0].Evidence = testbackupruntime.BackupArtifactEvidence{}
+	run.Sources[0].Upload = testbackupruntime.BackupUploadOutcome{}
+	run.Sources[0].Object = testbackupruntime.BackupObjectIdentity{}
 	run.Sources[0].ObjectKey = run.ConnectorPrefix + environment.Record.ID + "/" + run.Sources[0].SourceID + "/" +
 		run.Sources[0].RecoveryPointID + "/artifact.bin"
 	seedBackupRuntimePublicationEvidence(t, store, &run)
@@ -246,6 +332,10 @@ func seedBackupRuntimePublicationEvidence(
 		t.Fatal(err)
 	}
 	backingServiceID := snapshot.BackingServiceID
+	release, err := postgres16protocol.DecodeManagedReleaseIndex([]byte(snapshot.ManagedReleaseIndex))
+	if err != nil {
+		t.Fatal(err)
+	}
 	backingNetworkID := newBackupRuntimeID(ids.KindNetwork, run.CreatedAt, 911)
 	backingServiceRevisionID := newBackupRuntimeID(ids.KindTask, run.CreatedAt, 914)
 	backingServiceProjection := withTestEnvironmentComposeArtifact(
@@ -257,7 +347,7 @@ func seedBackupRuntimePublicationEvidence(
 				EnvironmentID:    backingEnvironment.ID,
 				BackingNetworkID: backingNetworkID,
 				Desired: core.Service{
-					ID: backingServiceID, Name: "postgres", Image: "postgres:16-alpine", Adapter: "postgres:16",
+					ID: backingServiceID, Name: "postgres", Image: release.Image, Adapter: "postgres:16",
 				},
 			}},
 		},
@@ -325,6 +415,7 @@ func seedBackupRuntimePublicationEvidence(
 		t.Fatal(err)
 	}
 	defer clear(facts.Ciphertext)
+	snapshot.ConsumerServiceID = attach.ServiceID
 	policy := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
@@ -356,6 +447,21 @@ func seedBackupRuntimePublicationEvidence(
 		key    string
 		encode func() ([]byte, error)
 	}{
+		{backingpostgresrelease.Key(backingEnvironment.ID, backingServiceID), func() ([]byte, error) {
+			return backingpostgresrelease.Encode(backingpostgresrelease.Record{
+				EnvironmentID: backingEnvironment.ID, ServiceID: backingServiceID, Release: release,
+			})
+		}},
+		{
+			testhierarchy.EnvironmentMutationEpochKey(backingEnvironment.ID),
+			func() ([]byte, error) {
+				return testbackupruntime.EncodeEnvironmentMutationEpochRecord(
+					testbackupruntime.EnvironmentMutationEpochRecord{
+						EnvironmentID: backingEnvironment.ID,
+					},
+				)
+			},
+		},
 		{
 			testbackuppolicy.BackupPolicyKey(run.EnvironmentID),
 			func() ([]byte, error) { return testbackuppolicy.EncodeBackupPolicyRecord(policy) },
@@ -443,6 +549,9 @@ func seedBackupRuntimePublicationEvidence(
 		t.Fatalf("seed backup publication evidence = %#v, %v", result, err)
 	}
 	run.PolicyRevision = result.Revision
+	policyEntry := mustOptionalKey(t, store, testbackuppolicy.BackupPolicyKey(run.EnvironmentID))
+	policyDigest := sha256.Sum256(policyEntry.Value)
+	run.PolicySHA256 = hex.EncodeToString(policyDigest[:])
 	run.BackupKeyRecordRevision = result.Revision
 	run.BackupKeyValueRevision = result.Revision
 	source.SourceRevision = result.Revision
@@ -483,6 +592,7 @@ func extendBackupRuntimePublicationSources(
 	mutations := make([]testkeyvalue.Mutation, 0, len(run.Sources)*3)
 	for index := range run.Sources {
 		source := &run.Sources[index]
+		source.Snapshot.Postgres.ConsumerServiceID = baseAttach.ServiceID
 		sourceIDs[index] = source.SourceID
 		value, err := testbackuppolicy.EncodeBackupSourceRecord(backupRuntimeSourceRecord(
 			t, source.SourceID, run.EnvironmentID, "attach", source.TargetID, run.CreatedAt,
@@ -535,6 +645,7 @@ func extendBackupRuntimePublicationSources(
 		testkeyvalue.ClearMutationValues(mutations)
 		t.Fatal(err)
 	}
+	policyDigest := sha256.Sum256(policyValue)
 	mutations = append(mutations, testkeyvalue.Mutation{
 		Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupPolicyKey(run.EnvironmentID), Value: policyValue,
 	})
@@ -544,6 +655,7 @@ func extendBackupRuntimePublicationSources(
 		t.Fatalf("extend backup publication sources = %#v, %v", result, err)
 	}
 	run.PolicyRevision = result.Revision
+	run.PolicySHA256 = hex.EncodeToString(policyDigest[:])
 	for index := range run.Sources {
 		run.Sources[index].SourceRevision = result.Revision
 		if index > 0 {
@@ -644,7 +756,45 @@ func backupRuntimePublicationTask(
 	task.Type = testtaskjournal.TaskBackup
 	task.Target = run.EnvironmentID
 	task.IdempotencyKey = "backup-runtime-0001"
-	sealed := backupRuntimeSealedRunPlan(t, run, task.PlanID)
+	sealed := backupRuntimeRunPlanDraft(t, run, task.PlanID, task.Owner.ProjectID)
+	sealed.PlanHash = nil
+	sealed.BackupScope.Project = backupRuntimeRevisionDigest(projectEntry)
+	sealed.BackupScope.Environment = backupRuntimeRevisionDigest(environmentEntry)
+	connectorEntry := mustOptionalKey(t, store, testconnectors.RecordKey(run.ConnectorID))
+	connector, err := testconnectors.DecodeRecord(connectorEntry.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository, err := newBackupRuntimeRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectorAuthority, err := backuppruneevidence.LoadConnectorAuthority(context.Background(), repository,
+		connector, connectorEntry, mustOptionalKey(t, store, testconnectors.CredentialValueKey(run.ConnectorID)),
+		project.ID, backupRuntimeCurrentRevision(t, store, run.EnvironmentID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range sealed.Steps {
+		authority := step.GetBackupStep()
+		authority.StepDigest = nil
+		authority.GetCapture().Target.Connector = proto.Clone(connectorAuthority).(*agentpb.BackupConnectorAuthority)
+		authority.GetCapture().Encryption.SecretSlot = backupRuntimeRevisionDigest(
+			mustOptionalKey(t, store, testbackuppolicy.BackupKeyValueKey(run.EnvironmentID)))
+		if authority.GetCapture().GetPostgres() != nil {
+			authority.GetCapture().Resource.Resource = backupRuntimeRevisionDigest(
+				mustOptionalKey(t, store, testattachments.AttachKey(authority.GetCapture().Resource.ResourceId)))
+		}
+		sealedAuthority, sealErr := executionplan.SealBackupStepAuthority(authority)
+		if sealErr != nil {
+			t.Fatal(sealErr)
+		}
+		step.Payload = &agentpb.ExecutionStep_BackupStep{BackupStep: sealedAuthority}
+	}
+	sealed, err = executionplan.Seal(sealed)
+	if err != nil {
+		t.Fatal(err)
+	}
 	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
 	task.RenderGeneration = 0
 	task.Params = nil
@@ -687,6 +837,7 @@ func configureBackupRuntimeConfigRun(
 	if err != nil {
 		t.Fatal(err)
 	}
+	policyDigest := sha256.Sum256(policyValue)
 	sourceValue, err := testbackuppolicy.EncodeBackupSourceRecord(backupRuntimeSourceRecord(
 		t, source.SourceID, run.EnvironmentID, "config", run.EnvironmentID, run.CreatedAt,
 	))
@@ -704,6 +855,7 @@ func configureBackupRuntimeConfigRun(
 		t.Fatalf("replace Config publication evidence = %#v, %v", result, err)
 	}
 	run.PolicyRevision = result.Revision
+	run.PolicySHA256 = hex.EncodeToString(policyDigest[:])
 	source.SourceRevision = result.Revision
 	fixedRevision := backupRuntimeCurrentRevision(t, store, run.EnvironmentID)
 	source.Snapshot.Config.ReadRevision = fixedRevision

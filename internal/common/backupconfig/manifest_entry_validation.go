@@ -17,7 +17,7 @@ func validateEntries(entries []Entry) error {
 		if index > 0 && entries[index-1].ID >= entry.ID {
 			return archiveError("Config entries are not in unique raw-byte stable-ID order")
 		}
-		if err := validateEntry(entry); err != nil {
+		if err := ValidateEntry(entry); err != nil {
 			return err
 		}
 		if total > MaxTotalSelectedValueBytes-entry.Value.SizeBytes {
@@ -28,7 +28,9 @@ func validateEntries(entries []Entry) error {
 	return nil
 }
 
-func validateEntry(entry Entry) error {
+// ValidateEntry is the single archive-level Entry grammar used after decoding
+// canonical manifests or schema-one transfer metadata.
+func ValidateEntry(entry Entry) error {
 	if ids.Validate(ids.KindEnvEntry, entry.ID) != nil {
 		return archiveError("Config Entry has an invalid stable ID")
 	}

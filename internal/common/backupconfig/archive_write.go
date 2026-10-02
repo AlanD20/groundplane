@@ -1,7 +1,6 @@
 package backupconfig
 
 import (
-	"bytes"
 	"context"
 	"io"
 )
@@ -11,9 +10,9 @@ const (
 	manifestMemberMode = uint32(0444)
 )
 
-// WriteArtifact writes one canonical USTAR to dst. It writes selected values
-// directly from the supplied readers at their final offsets and never creates
-// a second plaintext spool.
+// WriteArtifact writes one canonical USTAR at contiguous final offsets. Both
+// reader-based capture and framed channel capture use ArtifactWriter's single
+// construction and selected-value validation path.
 func WriteArtifact(
 	ctx context.Context,
 	dst io.WriterAt,
@@ -22,126 +21,63 @@ func WriteArtifact(
 	metadata []MetadataFrame,
 	values []io.Reader,
 ) error {
-	if err := checkContext(ctx); err != nil {
-		return err
+	if dst == nil || len(values) != len(layout.Entries) {
+		return archiveError("artifact destination or value reader count is invalid")
 	}
-	if dst == nil {
-		return archiveError("artifact destination is nil")
-	}
-	canonical, authority, err := buildManifestPayload(ctx, layout.Entries)
+	writer, err := NewArtifactWriter(ctx, &contiguousWriterAt{destination: dst}, manifest, layout, metadata)
 	if err != nil {
 		return err
 	}
-	defer clearBytes(canonical)
-	if !bytes.Equal(manifest, canonical) || authority != layout.Authority {
-		return archiveError("artifact inputs do not match canonical content authority")
-	}
-	if err := validateMetadataFrames(layout.Entries, metadata); err != nil {
-		return err
-	}
-	expectedLayout, err := ComputeLayout(ctx, authority, layout.Entries)
-	if err != nil {
-		return err
-	}
-	if !sameOffsets(layout, expectedLayout) || len(values) != len(layout.Entries) {
-		return archiveError("artifact layout or selected value reader count is invalid")
-	}
-
-	header, err := canonicalHeader(manifestMemberName, manifestMemberMode, uint64(len(manifest)))
-	if err != nil {
-		return err
-	}
-	if err := writeAtFull(ctx, dst, header[:], 0); err != nil {
-		return err
-	}
-	if err := writeAtFull(ctx, dst, manifest, TarBlockBytes); err != nil {
-		return err
-	}
-	manifestRounded, _ := roundTar(uint64(len(manifest)))
-	if err := writeZerosAt(
-		ctx,
-		dst,
-		TarBlockBytes+uint64(len(manifest)),
-		manifestRounded-uint64(len(manifest)),
-	); err != nil {
-		return err
-	}
-
+	buffer := make([]byte, TransferChunkBytes)
+	defer clearBytes(buffer)
 	for index, entry := range layout.Entries {
+		if values[index] == nil {
+			return writer.fail(archiveError("selected value reader is nil"))
+		}
+		var offset uint64
+		for offset < entry.Value.SizeBytes {
+			length := uint64(len(buffer))
+			if length > entry.Value.SizeBytes-offset {
+				length = entry.Value.SizeBytes - offset
+			}
+			chunk := buffer[:int(length)]
+			if err := readFull(ctx, values[index], chunk); err != nil {
+				return writer.fail(err)
+			}
+			if err := writer.WriteValueChunk(ctx, uint32(index+1), offset, chunk); err != nil {
+				return err
+			}
+			offset += length
+		}
 		if err := checkContext(ctx); err != nil {
-			return err
+			return writer.fail(err)
 		}
-		mode := uint32(0444)
-		if entry.Secret {
-			mode = 0600
+		var extra [1]byte
+		count, err := values[index].Read(extra[:])
+		clearBytes(extra[:])
+		if count != 0 || err == nil {
+			return writer.fail(archiveError("selected value is longer than its declared size"))
 		}
-		header, headerErr := canonicalHeader(entry.Value.Path, mode, entry.Value.SizeBytes)
-		if headerErr != nil {
-			return headerErr
+		if err != io.EOF {
+			return writer.fail(archiveCause("selected value EOF probe failed", err))
 		}
-		if err := writeAtFull(ctx, dst, header[:], layout.ValueHeaderOffsets[index]); err != nil {
-			return err
-		}
-		digest, streamErr := streamSelectedValue(
-			ctx,
-			values[index],
-			entry,
-			true,
-			func(chunk []byte, offset uint64) error {
-				return writeAtFull(ctx, dst, chunk, layout.ValuePayloadOffsets[index]+offset)
-			},
-		)
-		if streamErr != nil {
-			return streamErr
-		}
-		if digest != entry.Value.SHA256 {
-			return archiveError("selected value digest does not match manifest evidence")
-		}
-		rounded, _ := roundTar(entry.Value.SizeBytes)
-		if err := writeZerosAt(
-			ctx,
-			dst,
-			layout.ValuePayloadOffsets[index]+entry.Value.SizeBytes,
-			rounded-entry.Value.SizeBytes,
-		); err != nil {
+		if err := writer.EndValue(ctx, uint32(index+1)); err != nil {
 			return err
 		}
 	}
-	return writeZerosAt(ctx, dst, layout.FooterOffset, 2*TarBlockBytes)
+	_, err = writer.Finish(ctx)
+	return err
 }
 
-func writeAtFull(ctx context.Context, destination io.WriterAt, value []byte, offset uint64) error {
-	for len(value) != 0 {
-		if err := checkContext(ctx); err != nil {
-			return err
-		}
-		count, err := destination.WriteAt(value, int64(offset))
-		if count > 0 {
-			offset += uint64(count)
-			value = value[count:]
-		}
-		if err != nil {
-			return archiveCause("artifact destination write failed", err)
-		}
-		if count == 0 {
-			return archiveError("artifact destination write was short")
-		}
-	}
-	return nil
+type contiguousWriterAt struct {
+	destination io.WriterAt
+	offset      int64
 }
 
-func writeZerosAt(ctx context.Context, destination io.WriterAt, offset, length uint64) error {
-	var zero [TarBlockBytes]byte
-	for length != 0 {
-		count := uint64(len(zero))
-		if count > length {
-			count = length
-		}
-		if err := writeAtFull(ctx, destination, zero[:int(count)], offset); err != nil {
-			return err
-		}
-		offset += count
-		length -= count
+func (writer *contiguousWriterAt) Write(content []byte) (int, error) {
+	count, err := writer.destination.WriteAt(content, writer.offset)
+	if count > 0 && count <= len(content) {
+		writer.offset += int64(count)
 	}
-	return nil
+	return count, err
 }

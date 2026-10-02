@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type BackupRunRetryInput struct {
@@ -20,6 +21,9 @@ type BackupRunRetryInput struct {
 }
 
 type PreparedBackupRunRetry struct {
+	Scope       *agentpb.BackupPlanScope
+	Authority   []*agentpb.BackupStepAuthority
+	Artifacts   []*agentpb.ComposeArtifact
 	SourceTask  TaskRecord
 	Run         backupruntime.BackupRunRecord
 	Owner       taskjournal.TaskOwner
@@ -85,14 +89,25 @@ func (repository *BackupRuntimeRepository) PrepareBackupRunRetry(
 	if err != nil {
 		return PreparedBackupRunRetry{}, err
 	}
+	scope, authority, procedureCondition, err := repository.backupRetryProcedureInputs(ctx, source, run)
+	if err != nil {
+		plan.clear()
+		return PreparedBackupRunRetry{}, err
+	}
+	artifacts, err := repository.backupRetryVolumeArtifacts(ctx, source, procedureCondition)
+	if err != nil {
+		plan.clear()
+		return PreparedBackupRunRetry{}, err
+	}
+	plan.conditions = append(plan.conditions, procedureCondition)
 	return PreparedBackupRunRetry{
+		Scope: scope, Authority: authority, Artifacts: artifacts,
 		SourceTask: cloneTaskRecord(source.task.Record),
 		Run:        backupruntime.CloneBackupRunPublicationRecord(run),
 		Owner:      source.task.Record.Owner,
-		Publication: &PreparedBackupRunPublication{state: &preparedBackupRunState{
-			repository: repository,
-			plan:       plan,
-		}},
+		Publication: &PreparedBackupRunPublication{
+			state: prepareBackupRunPublicationState(repository, plan, scope, authority, artifacts),
+		},
 	}, nil
 }
 
@@ -198,8 +213,11 @@ func newBackupRunRetryRecord(
 			attempt.SourceID + "/" + pointID + "/artifact.bin"
 		attempt.State = backupruntime.BackupSourceAttemptPending
 		attempt.Phase = backupruntime.BackupSourcePhaseCapture
-		attempt.SizeBytes = 0
-		attempt.SHA256 = ""
+		attempt.Evidence = backupruntime.BackupArtifactEvidence{}
+		attempt.ConfigArchive = backupruntime.BackupConfigArchiveEvidence{}
+		attempt.VolumeArchive = backupruntime.BackupVolumeArchiveEvidence{}
+		attempt.Upload = backupruntime.BackupUploadOutcome{}
+		attempt.Object = backupruntime.BackupObjectIdentity{}
 		attempt.FailureCode = ""
 		retry.Sources = append(retry.Sources, attempt)
 	}

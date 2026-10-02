@@ -62,6 +62,12 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 	}
 	if lock.EnvironmentID != environment.ID || lockValue.ModRevision <= terminalRevision ||
 		lock.TaskID == receipt.Task.TaskID {
+		if receipt.Restore != nil && receipt.Restore.State == backupruntime.BackupRestoreRecoveryRequired &&
+			lock.Kind == backupruntime.BackupOperationRestore && lock.EnvironmentID == environment.ID &&
+			lock.TaskID == receipt.Task.TaskID && lock.OperationID == receipt.Task.OperationID &&
+			lockValue.ModRevision < terminalRevision && tombstoneValue == nil {
+			return true, &lock, false, nil
+		}
 		return false, nil, false, errs.New(errs.KindStateConflict, "stale terminal backup lock remains")
 	}
 	if lock.Kind != backupruntime.BackupOperationDeletion {

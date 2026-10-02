@@ -483,6 +483,7 @@ func TestConnectDispatchRejectedAssignmentClearsScriptArtifacts(t *testing.T) {
 		etcd.TaskAssignment{},
 		assignment,
 		false,
+		nil,
 	)
 	if err != nil || sent {
 		t.Fatalf("rejected dispatch = (%v, %v), want (false, nil)", sent, err)

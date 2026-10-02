@@ -7,10 +7,14 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 	"sync"
 )
 
 type PreparedManualBackupRun struct {
+	Scope       *agentpb.BackupPlanScope
+	Authority   []*agentpb.BackupStepAuthority
+	Artifacts   []*agentpb.ComposeArtifact
 	Run         backupruntime.BackupRunRecord
 	Owner       taskjournal.TaskOwner
 	Publication *PreparedBackupRunPublication
@@ -20,11 +24,29 @@ type preparedBackupRunState struct {
 	mu         sync.Mutex
 	repository *BackupRuntimeRepository
 	plan       backupRunPublicationPlan
+	scope      *agentpb.BackupPlanScope
+	authority  []*agentpb.BackupStepAuthority
+	artifacts  []*agentpb.ComposeArtifact
 	consumed   bool
 }
 
 // PreparedBackupRunPublication is shared-state one-shot authority.
 type PreparedBackupRunPublication struct{ state *preparedBackupRunState }
+
+func prepareBackupRunPublicationState(repository *BackupRuntimeRepository, plan backupRunPublicationPlan,
+	scope *agentpb.BackupPlanScope, authority []*agentpb.BackupStepAuthority, artifacts []*agentpb.ComposeArtifact,
+) *preparedBackupRunState {
+	owned := make([]*agentpb.BackupStepAuthority, len(authority))
+	for index, step := range authority {
+		owned[index] = proto.CloneOf(step)
+	}
+	ownedArtifacts := make([]*agentpb.ComposeArtifact, len(artifacts))
+	for index, artifact := range artifacts {
+		ownedArtifacts[index] = proto.CloneOf(artifact)
+	}
+	return &preparedBackupRunState{repository: repository, plan: plan, scope: proto.CloneOf(scope), authority: owned,
+		artifacts: ownedArtifacts}
+}
 
 func (publication *PreparedBackupRunPublication) Record() backupruntime.BackupRunRecord {
 	if publication == nil || publication.state == nil {
@@ -57,10 +79,36 @@ func (publication *PreparedBackupRunPublication) Publish(
 	publication.state.consumed = true
 	repository := publication.state.repository
 	plan := publication.state.plan
+	scope, authority, artifacts := publication.state.scope, publication.state.authority, publication.state.artifacts
 	publication.state.repository = nil
 	publication.state.plan = backupRunPublicationPlan{}
+	publication.state.scope, publication.state.authority, publication.state.artifacts = nil, nil, nil
 	publication.state.mu.Unlock()
 	defer plan.clear()
+	if sealed == nil || scope == nil || !proto.Equal(sealed.BackupScope, scope) ||
+		len(sealed.Steps) != len(authority) ||
+		len(sealed.Artifacts) != len(artifacts) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"backup publication snapshot authority changed",
+		)
+	}
+	for index, artifact := range artifacts {
+		if !proto.Equal(sealed.Artifacts[index], artifact) {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"backup Volume artifact authority changed",
+			)
+		}
+	}
+	for index, step := range sealed.Steps {
+		if step == nil || !proto.Equal(step.GetBackupStep(), authority[index]) {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"backup publication procedure authority changed",
+			)
+		}
+	}
 	if task.Actor != taskjournal.TaskActorOperator && task.Actor != taskjournal.TaskActorSystem {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "backup run task actor must be operator or system",
@@ -90,5 +138,6 @@ func (publication *PreparedBackupRunPublication) Clear() {
 	publication.state.plan.clear()
 	publication.state.plan = backupRunPublicationPlan{}
 	publication.state.repository = nil
+	publication.state.scope, publication.state.authority, publication.state.artifacts = nil, nil, nil
 	publication.state.consumed = true
 }

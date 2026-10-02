@@ -100,14 +100,9 @@ func TestBackupRuntimeRepositoryCheckpointTransitionIsAtomicAndReplayable(t *tes
 	staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), ready.Sources...)
 	staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
 	staged.Sources[0].Phase = testbackupruntime.BackupSourcePhaseUpload
-	staged.Sources[0].SizeBytes = 123
-	staged.Sources[0].SHA256 = testBackupDigest
+	backupRuntimeSetSourceArtifact(staged, &staged.Sources[0])
 	staged.UpdatedAt = ready.UpdatedAt.Add(time.Second)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload = testbackupruntime.BackupCheckpointPayload{
-		Kind: testbackupruntime.BackupCheckpointArtifactPrepared, PointID: staged.Sources[0].RecoveryPointID,
-		StoredSizeBytes: uint64(staged.Sources[0].SizeBytes), StoredSHA256: staged.Sources[0].SHA256,
-	}
 	transitioned, err := repository.CheckpointBackupRun(
 		context.Background(), checkpoint, created, staged,
 	)
@@ -123,6 +118,7 @@ func TestBackupRuntimeRepositoryCheckpointTransitionIsAtomicAndReplayable(t *tes
 	headVerified := staged
 	headVerified.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
 	headVerified.Sources[0].Phase = testbackupruntime.BackupSourcePhaseHeadVerification
+	backupRuntimeSetSourceArtifact(headVerified, &headVerified.Sources[0])
 	headVerified.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	if _, err := repository.TransitionBackupRun(
 		context.Background(),
@@ -132,9 +128,9 @@ func TestBackupRuntimeRepositoryCheckpointTransitionIsAtomicAndReplayable(t *tes
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("TransitionBackupRun(upload without checkpoint) error = %v", err)
 	}
-	uploadCompleted := checkpoint
-	uploadCompleted.Sequence++
-	uploadCompleted.Payload.Kind = testbackupruntime.BackupCheckpointUploadCompleted
+	uploadCompleted := backupUploadCompletedCheckpoint(
+		t, checkpoint, 2, transitioned.Revision, run, headVerified.Sources[0],
+	)
 	headVersion, err := repository.CheckpointBackupRun(
 		context.Background(),
 		uploadCompleted,
@@ -150,10 +146,11 @@ func TestBackupRuntimeRepositoryCheckpointTransitionIsAtomicAndReplayable(t *tes
 		headVerified.Sources...,
 	)
 	pointCommitReady.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
+	backupRuntimeSetSourceArtifact(pointCommitReady, &pointCommitReady.Sources[0])
 	pointCommitReady.UpdatedAt = headVerified.UpdatedAt.Add(time.Second)
-	uploadVerified := uploadCompleted
-	uploadVerified.Sequence++
-	uploadVerified.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
+	uploadVerified := backupUploadVerifiedCheckpoint(
+		t, uploadCompleted, 3, headVersion.Revision, run, pointCommitReady.Sources[0],
+	)
 	if _, err := repository.CheckpointBackupRun(
 		context.Background(),
 		uploadVerified,
@@ -196,16 +193,9 @@ func TestBackupRuntimeRepositoryOrphanFollowsUploadCheckpoints(t *testing.T) {
 	staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), ready.Sources...)
 	staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
 	staged.Sources[0].Phase = testbackupruntime.BackupSourcePhaseUpload
-	staged.Sources[0].SizeBytes = 123
-	staged.Sources[0].SHA256 = testBackupDigest
+	backupRuntimeSetSourceArtifact(staged, &staged.Sources[0])
 	staged.UpdatedAt = ready.UpdatedAt.Add(time.Second)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload = testbackupruntime.BackupCheckpointPayload{
-		Kind:            testbackupruntime.BackupCheckpointArtifactPrepared,
-		PointID:         staged.Sources[0].RecoveryPointID,
-		StoredSizeBytes: uint64(staged.Sources[0].SizeBytes),
-		StoredSHA256:    staged.Sources[0].SHA256,
-	}
 	stagedVersion, err := repository.CheckpointBackupRun(
 		context.Background(), checkpoint, readyVersion, staged,
 	)
@@ -216,14 +206,7 @@ func TestBackupRuntimeRepositoryOrphanFollowsUploadCheckpoints(t *testing.T) {
 	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
 	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
-	point := backupRuntimeTestPoint(run, orphaned.Sources[0], orphaned.UpdatedAt)
-	orphan := testbackupruntime.BackupOrphanRecord{
-		Point:     point.BackupRecoveryPointSnapshot,
-		TaskID:    run.TaskID,
-		State:     testbackupruntime.BackupOrphanInspect,
-		CreatedAt: orphaned.UpdatedAt,
-		UpdatedAt: orphaned.UpdatedAt,
-	}
+	orphan := testbackupruntime.BackupOrphanRecordFromRun(orphaned, 0)
 	orphanedVersion, err := repository.CreateBackupOrphan(
 		context.Background(),
 		backupAssignmentFromCheckpoint(checkpoint),
@@ -238,10 +221,11 @@ func TestBackupRuntimeRepositoryOrphanFollowsUploadCheckpoints(t *testing.T) {
 	headVerified := orphaned
 	headVerified.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
 	headVerified.Sources[0].Phase = testbackupruntime.BackupSourcePhaseHeadVerification
+	backupRuntimeSetSourceArtifact(headVerified, &headVerified.Sources[0])
 	headVerified.UpdatedAt = orphaned.UpdatedAt.Add(time.Second)
-	uploadCompleted := checkpoint
-	uploadCompleted.Sequence++
-	uploadCompleted.Payload.Kind = testbackupruntime.BackupCheckpointUploadCompleted
+	uploadCompleted := backupUploadCompletedCheckpoint(
+		t, checkpoint, 2, stagedVersion.Revision, run, headVerified.Sources[0],
+	)
 	headVersion, err := repository.CheckpointBackupRun(
 		context.Background(), uploadCompleted, orphanedVersion, headVerified,
 	)
@@ -251,10 +235,11 @@ func TestBackupRuntimeRepositoryOrphanFollowsUploadCheckpoints(t *testing.T) {
 	pointCommit := headVerified
 	pointCommit.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), headVerified.Sources...)
 	pointCommit.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
+	backupRuntimeSetSourceArtifact(pointCommit, &pointCommit.Sources[0])
 	pointCommit.UpdatedAt = headVerified.UpdatedAt.Add(time.Second)
-	uploadVerified := uploadCompleted
-	uploadVerified.Sequence++
-	uploadVerified.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
+	uploadVerified := backupUploadVerifiedCheckpoint(
+		t, uploadCompleted, 3, headVersion.Revision, run, pointCommit.Sources[0],
+	)
 	pointVersion, err := repository.CheckpointBackupRun(
 		context.Background(), uploadVerified, headVersion, pointCommit,
 	)
@@ -418,8 +403,7 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 	running.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
 	running.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
 	running.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
-	running.Sources[0].SizeBytes = 123
-	running.Sources[0].SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(running, &running.Sources[0])
 	running.UpdatedAt = run.UpdatedAt.Add(time.Second)
 	created, err = repository.replaceBackupRunForTest(context.Background(), created, running)
 	if err != nil {
@@ -433,7 +417,8 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 	point := backupRuntimeTestPoint(run, running.Sources[0], committed.UpdatedAt)
 	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, State: testbackupruntime.BackupRetentionPending,
+		Revision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
+		State:     testbackupruntime.BackupRetentionPending,
 		CreatedAt: committed.UpdatedAt, UpdatedAt: committed.UpdatedAt,
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(
@@ -441,9 +426,9 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 		repository.store.(*memoryHierarchyStore),
 		run,
 	)
-	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
+	checkpoint = backupSourceCleanupCheckpoint(t, checkpoint, point.ID, point.Evidence)
 	storedPoint, storedRun, err := repository.CommitBackupRecoveryPoint(
-		context.Background(), backupAssignmentFromCheckpoint(checkpoint), created, committed, 0, point, nil, sweep,
+		context.Background(), checkpoint, created, committed, 0, point, nil, sweep,
 	)
 	if err != nil {
 		t.Fatalf("CommitBackupRecoveryPoint() error = %v", err)
@@ -492,7 +477,7 @@ func TestBackupRuntimeRepositoryPointCommitUnknownOutcomeValidatesAllCompanions(
 			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 			committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-			checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
+			checkpoint = backupSourceCleanupCheckpoint(t, checkpoint, point.ID, point.Evidence)
 			unknown := &backupRuntimeUnknownOutcomeStore{hierarchyStore: store, failNext: true}
 			unknownRepository, err := newBackupRuntimeRepository(unknown)
 			if err != nil {
@@ -500,7 +485,7 @@ func TestBackupRuntimeRepositoryPointCommitUnknownOutcomeValidatesAllCompanions(
 			}
 			if _, _, err := unknownRepository.CommitBackupRecoveryPoint(
 				context.Background(),
-				backupAssignmentFromCheckpoint(checkpoint),
+				checkpoint,
 				stagedVersion,
 				committed,
 				0,
@@ -530,7 +515,7 @@ func TestBackupRuntimeRepositoryPointCommitUnknownOutcomeValidatesAllCompanions(
 			}
 			storedPoint, storedRun, err := repository.CommitBackupRecoveryPoint(
 				context.Background(),
-				backupAssignmentFromCheckpoint(checkpoint),
+				checkpoint,
 				stagedVersion,
 				committed,
 				0,
@@ -561,18 +546,17 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	committed, newest, sweep := backupRuntimePointCommitRecords(run, staged)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
+	checkpoint = backupSourceCleanupCheckpoint(t, checkpoint, newest.ID, newest.Evidence)
 	mismatchedSweep := sweep
 	mismatchedSweep.Keep--
 	if _, _, err := repository.CommitBackupRecoveryPoint(
-		context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion,
+		context.Background(), checkpoint, stagedVersion,
 		committed, 0, newest, nil, mismatchedSweep,
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("CommitBackupRecoveryPoint(changed Keep) error = %v", err)
 	}
 	_, committedRun, err := repository.CommitBackupRecoveryPoint(
-		context.Background(),
-		backupAssignmentFromCheckpoint(checkpoint),
+		context.Background(), checkpoint,
 		stagedVersion,
 		committed,
 		0,
@@ -588,6 +572,7 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 		olderAt := time.Date(2015, 1, 1, 0, 0, int(offset), 0, time.UTC)
 		older.ID = ids.NewAt(ids.KindRecoveryPoint, olderAt, offset)
 		older.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + older.SourceID + "/" + older.ID + "/artifact.bin"
+		older.Object.Target.ObjectKey = older.ObjectKey
 		older.CreatedAt = olderAt
 		older.VerifiedAt = olderAt.Add(time.Millisecond)
 		value, encodeErr := testbackupruntime.EncodeBackupRecoveryPointRecord(older)
@@ -639,6 +624,7 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 	hostile.ID = ids.NewAt(ids.KindRecoveryPoint, hostileAt, 98)
 	hostile.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + hostile.SourceID + "/" +
 		hostile.ID + "/artifact.bin"
+	hostile.Object.Target.ObjectKey = hostile.ObjectKey
 	hostile.CreatedAt = hostileAt
 	hostile.VerifiedAt = hostileAt.Add(time.Millisecond)
 	seedBackupRuntimePointAuthority(t, store, hostile)
@@ -693,9 +679,9 @@ func TestBackupRuntimeRepositoryRetentionSweepAtPublicMaximumPrunesRemainingPoin
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
+	checkpoint = backupSourceCleanupCheckpoint(t, checkpoint, point.ID, point.Evidence)
 	_, committedRun, err := repository.CommitBackupRecoveryPoint(
-		context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion,
+		context.Background(), checkpoint, stagedVersion,
 		committed, 0, point, nil, sweep,
 	)
 	if err != nil {
@@ -719,6 +705,7 @@ func TestBackupRuntimeRepositoryRetentionSweepAtPublicMaximumPrunesRemainingPoin
 		older.ID = ids.NewAt(ids.KindRecoveryPoint, olderAt, 603+offset)
 		older.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + older.SourceID + "/" +
 			older.ID + "/artifact.bin"
+		older.Object.Target.ObjectKey = older.ObjectKey
 		older.CreatedAt = olderAt
 		older.VerifiedAt = olderAt.Add(time.Millisecond)
 		seedBackupRuntimePointAuthority(t, store, older)

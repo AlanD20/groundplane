@@ -1,9 +1,11 @@
 package transport
 
 import (
+	"cmp"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
@@ -72,10 +74,11 @@ func (authenticator *agentChannelAuthenticator) Configuration(
 }
 
 func agentChannelConfig(config localagentrecord.LocalAgentConfig) *agentpb.AgentConfig {
-	labels := make(map[string]string, len(config.Labels))
+	labels := make([]*agentpb.AgentLabel, 0, len(config.Labels))
 	for key, value := range config.Labels {
-		labels[key] = value
+		labels = append(labels, &agentpb.AgentLabel{Key: key, Value: value})
 	}
+	slices.SortFunc(labels, func(left, right *agentpb.AgentLabel) int { return cmp.Compare(left.Key, right.Key) })
 	return &agentpb.AgentConfig{
 		PullIntervalSeconds: config.PullIntervalSeconds,
 		MaxConcurrentTasks:  config.MaxConcurrentTasks,

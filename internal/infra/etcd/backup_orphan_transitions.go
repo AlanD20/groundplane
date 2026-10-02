@@ -19,7 +19,13 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	next.Reconciliation = current.Record.Reconciliation
 	if current.Revision <= 0 || current.Record.State != backupruntime.BackupOrphanInspect ||
 		next.State != backupruntime.BackupOrphanDelete ||
-		current.Record.Point != next.Point ||
+		current.Record.Target != next.Target || current.Record.Evidence != next.Evidence ||
+		current.Record.ConfigArchive != next.ConfigArchive ||
+		current.Record.VolumeArchive != next.VolumeArchive ||
+		current.Record.Postgres != next.Postgres ||
+		current.Record.CleanupProof != next.CleanupProof ||
+		current.Record.UnknownResolvedByReconciler != next.UnknownResolvedByReconciler ||
+		current.Record.Upload != next.Upload || current.Record.Object != next.Object || current.Record.Phase != next.Phase ||
 		current.Record.TaskID != next.TaskID ||
 		!next.UpdatedAt.After(current.Record.UpdatedAt) ||
 		next.CreatedAt != current.Record.CreatedAt ||
@@ -35,13 +41,13 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	defer clear(value)
-	connectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(next.Point.ConnectorID, next.Point.ID)
+	connectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(next.Target.ConnectorID, next.Target.ID)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	environmentIndex, err := backupruntime.BackupOrphanEnvironmentIndexKey(
-		next.Point.EnvironmentID,
-		next.Point.ID,
+		next.Target.EnvironmentID,
+		next.Target.ID,
 	)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
@@ -50,7 +56,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		backupruntime.BackupRunKey(
 			run.Record.TaskID,
 		),
-		backupruntime.BackupOrphanKey(next.Point.ID),
+		backupruntime.BackupOrphanKey(next.Target.ID),
 		connectorIndex,
 		environmentIndex,
 	})
@@ -107,7 +113,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	}
 	conditions := []etcdstore.Condition{
 		{Key: backupruntime.BackupRunKey(run.Record.TaskID), ModRevision: run.Revision},
-		{Key: backupruntime.BackupOrphanKey(next.Point.ID), ModRevision: current.Revision},
+		{Key: backupruntime.BackupOrphanKey(next.Target.ID), ModRevision: current.Revision},
 		{Key: connectorIndex, ModRevision: current.Revision},
 		{Key: environmentIndex, ModRevision: current.Revision},
 	}
@@ -119,9 +125,9 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	}
 	defer clear(epoch.Value)
 	result, err := repository.TransactRuntime(ctx, conditions, []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: backupruntime.BackupOrphanKey(next.Point.ID), Value: value},
-		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(next.Point.ID)},
-		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(next.Point.ID)},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupOrphanKey(next.Target.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(next.Target.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(next.Target.ID)},
 		epoch,
 	})
 	if err != nil {
@@ -153,7 +159,7 @@ func (repository *BackupRuntimeRepository) prepareBackupOrphanAbsentTerminal(
 	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
 		orphan.Revision <= 0 ||
 		orphan.Record.State != backupruntime.BackupOrphanDelete || orphan.Record.TaskID != currentRun.Record.TaskID ||
-		orphan.Record.Point.ID != currentRun.Record.Sources[ordinal].RecoveryPointID ||
+		!backupruntime.BackupOrphanMatchesRunSource(orphan.Record, currentRun.Record, ordinal) ||
 		backupruntime.ValidateBackupRunTransition(
 			currentRun.Record,
 			nextRun,
@@ -164,8 +170,13 @@ func (repository *BackupRuntimeRepository) prepareBackupOrphanAbsentTerminal(
 			"backup orphan deletion is invalid",
 		)
 	}
-	if checkpoint.Payload.Kind != backupruntime.BackupCheckpointRemoteObjectAbsent ||
-		checkpoint.Payload.PointID != orphan.Record.Point.ID {
+	object := orphan.Record.Object
+	if object == (backupruntime.BackupObjectIdentity{}) &&
+		orphan.Record.Upload.Kind == backupruntime.BackupUploadReturned {
+		object = orphan.Record.Upload.ReturnedObject
+	}
+	if checkpoint.TaskID != currentRun.Record.TaskID ||
+		!backupruntime.BackupPruneCheckpointMatchesObject(checkpoint, ordinal, orphan.Record.Target.ID, object) {
 		return backupRunPublicationPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan absence checkpoint is invalid",

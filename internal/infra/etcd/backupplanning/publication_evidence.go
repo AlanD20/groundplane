@@ -36,7 +36,8 @@ func ValidateBackupPostgresPublicationEvidence(
 	if attach.ID != source.TargetID || attach.EnvironmentID != snapshot.ConsumerEnvironmentID ||
 		string(attach.Status) != "ready" || attach.BackingProjectID != snapshot.BackingProjectID ||
 		attach.BackingEnvironmentID != snapshot.BackingEnvironmentID ||
-		attach.BackingServiceID != snapshot.BackingServiceID || facts.AttachID != source.TargetID ||
+		attach.BackingServiceID != snapshot.BackingServiceID ||
+		attach.ServiceID != snapshot.ConsumerServiceID || facts.AttachID != source.TargetID ||
 		project.ID != snapshot.BackingProjectID || project.Kind != hierarchyrecord.ProjectKindBacking ||
 		environment.ID != snapshot.BackingEnvironmentID || environment.ProjectID != project.ID {
 		return errs.New(errs.KindStateConflict, "postgres backup publication evidence changed")

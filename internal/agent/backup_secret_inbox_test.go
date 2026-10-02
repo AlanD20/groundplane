@@ -3,12 +3,14 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -104,7 +106,7 @@ func TestWorkerPoolClearsBackupSecretsBeforeTerminalOutput(t *testing.T) {
 
 // QA: CON-07, BAK-16; controlled in-memory race only, not live stream loss or external consumer termination.
 // Rationale: abort and stream teardown must wake a blocked consumer with a
-// lifecycle conflict, rather than strand it or classify cancellation as an
+// lifecycle cancellation/conflict, rather than strand it or classify cancellation as an
 // internal corruption.
 func TestWorkerPoolBlockedBackupSecretConsumeRacingAbortAndStop(t *testing.T) {
 	for _, stop := range []bool{false, true} {
@@ -125,6 +127,9 @@ func TestWorkerPoolBlockedBackupSecretConsumeRacingAbortAndStop(t *testing.T) {
 				}
 			}
 			consumeContext := newObservedDoneContext()
+			pool.mu.Lock()
+			consumeContext.Context = pool.reservations[assignment.TaskID].ctx
+			pool.mu.Unlock()
 			errCh := make(chan error, 1)
 			go func() {
 				errCh <- pool.ConsumeBackupSecretSlot(
@@ -136,12 +141,16 @@ func TestWorkerPoolBlockedBackupSecretConsumeRacingAbortAndStop(t *testing.T) {
 			<-consumeContext.observed
 			if stop {
 				pool.stop()
-			} else if err := pool.Abort(context.Background(), assignment.TaskID, assignment.AssignmentID); err != nil {
+			} else if err := pool.AbortMessage(context.Background(), &agentpb.TaskAbort{
+				TaskId: assignment.TaskID, AssignmentId: assignment.AssignmentID,
+				AssignmentGeneration: assignment.AssignmentGeneration, PlanHash: assignment.Plan.PlanHash,
+			}); err != nil {
 				t.Fatalf("Abort() error = %v", err)
 			}
 			close(consumeContext.proceed)
-			if err := <-errCh; !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-				t.Fatalf("ConsumeBackupSecretSlot() error = %v, want state conflict", err)
+			if err := <-errCh; !errors.Is(err, context.Canceled) &&
+				!(stop && errors.Is(err, errs.New(errs.KindStateConflict, ""))) {
+				t.Fatalf("ConsumeBackupSecretSlot() error = %v, want lifecycle cancellation", err)
 			}
 		})
 	}
@@ -215,48 +224,93 @@ func (ctx *observedDoneContext) Done() <-chan struct{} {
 		close(ctx.observed)
 		<-ctx.proceed
 	})
-	return nil
+	return ctx.Context.Done()
 }
 
 func agentBackupSecretAssignment(t *testing.T) testtaskassignment.Assignment {
 	t.Helper()
+	pathStyle := true
+	forwardDeadline := time.Now().Add(120 * time.Second)
+	digest := bytes.Repeat([]byte{1}, sha256.Size)
+	stepAuthority, err := executionplan.SealBackupStepAuthority(&agentpb.BackupStepAuthority{
+		StepId: workerTestStepID, ExecutionId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		StepDeadlineUnixNano: uint64(forwardDeadline.UnixNano()),
+		Operation: &agentpb.BackupStepAuthority_Prune{Prune: &agentpb.BackupPruneAuthority{
+			RetentionPolicy: agentBackupSecretRevision(1, 1), Objects: []*agentpb.BackupPruneObject{{
+				Ordinal: 1, PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", Point: agentBackupSecretRevision(2, 2),
+				Evidence: &agentpb.BackupArtifactEvidence{
+					SourceSizeBytes: 4096, SourceSha256: append([]byte(nil), digest...),
+					StoredSizeBytes: 4096, StoredSha256: append([]byte(nil), digest...),
+				},
+				Object: &agentpb.BackupObjectIdentity{
+					Connector: &agentpb.BackupConnectorAuthority{
+						ConnectorId: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV", Connector: agentBackupSecretRevision(3, 3),
+						CanonicalEndpointUrl: "https://objects.example.test", Region: "auto", PathStyle: &pathStyle,
+						Prefix: "production/", AccessKeySlotId: backupsecret.AccessKeySlotID,
+						SecretKeySlotId: backupsecret.SecretKeySlotID,
+						AccessKeySlot: agentBackupSecretRevision(
+							4,
+							4,
+						), SecretKeySlot: agentBackupSecretRevision(5, 5),
+					},
+					Bucket: "groundplane-backups",
+					ObjectKey: "production/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+						"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV/rp_01ARZ3NDEKTSV4RRFFQ69G5FAV/artifact.bin",
+					Discriminator: &agentpb.BackupObjectIdentity_Etag{Etag: &agentpb.BackupS3ETag{Value: "etag"}},
+				},
+				MetadataCount: 10, MetadataSha256: bytes.Repeat([]byte{6}, sha256.Size),
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SealBackupStepAuthority() error = %v", err)
+	}
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion, PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP,
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE,
 		TargetId:  "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		BackupScope: &agentpb.BackupPlanScope{
+			ProjectId: "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV", Project: agentBackupSecretRevision(6, 6),
+			EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Environment: agentBackupSecretRevision(7, 7),
+			TaskAttempt: 1,
+		},
 		Steps: []*agentpb.ExecutionStep{{
-			StepId: workerTestStepID, TimeoutSeconds: 60,
-			Payload: &agentpb.ExecutionStep_BackupSourceCapture{BackupSourceCapture: &agentpb.BackupSourceCapture{
-				SourceId: "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV", SourceRevision: 2,
-				TargetId: "att_01ARZ3NDEKTSV4RRFFQ69G5FAV", TargetRevision: 3,
-				PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", ConnectorId: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-				ConnectorRevision: 4,
-				SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
-				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
-				Upload: &agentpb.BackupUploadAuthority{
-					ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "groundplane-backups",
-					ConnectorPrefix: "production/", ConnectorRegion: "auto",
-					ConnectorAddressing: agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
-					ProtectedObjectKey: "production/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
-						"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV/rp_01ARZ3NDEKTSV4RRFFQ69G5FAV/artifact.bin",
-					ImmutableCreate: true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
-				},
-				Source: &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
-					BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 5,
-					Database: "application", Role: "application_owner",
-				}},
-			}},
+			StepId: workerTestStepID, TimeoutSeconds: executionplan.MaximumBackupPruneStepTimeoutSeconds,
+			Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: stepAuthority},
 		}},
 	})
 	if err != nil {
 		t.Fatalf("Seal(Backup) error = %v", err)
 	}
+	authority, authorityDigest, err := executionplan.BindBackupTaskAuthority(
+		plan,
+		executionplan.BackupAssignmentIdentity{
+			TaskID: workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			AssignmentID: workerTestAssignmentID, Generation: 1, DeadlineUnixNano: uint64(forwardDeadline.UnixNano()),
+		},
+	)
+	if err != nil {
+		t.Fatalf("BindBackupTaskAuthority() error = %v", err)
+	}
+	resume := &agentpb.BackupTaskResume{
+		AssignmentId: workerTestAssignmentID, AssignmentGeneration: 1,
+		Steps: []*agentpb.BackupStepResume{{
+			StepId: stepAuthority.StepId, ExecutionId: stepAuthority.ExecutionId,
+			Operation: &agentpb.BackupStepResume_Prune{Prune: &agentpb.BackupPruneResume{NextObjectOrdinal: 1}},
+		}},
+	}
 	return testtaskassignment.Assignment{
+		BackupAuthority: authority, BackupResume: resume,
+		BackupAuthoritySHA256: authorityDigest, AssignmentGeneration: 1,
 		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
 		OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV", Plan: plan,
 		ExecutionEpoch: 1, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
-		ForwardDeadline: time.Now().Add(120 * time.Second), RecoveryDeadline: time.Now().Add(240 * time.Second),
+		ForwardDeadline: forwardDeadline, RecoveryDeadline: forwardDeadline.Add(120 * time.Second),
 	}
+}
+
+func agentBackupSecretRevision(revision int64, fill byte) *agentpb.RevisionDigest {
+	return &agentpb.RevisionDigest{ModRevision: revision, Sha256: bytes.Repeat([]byte{fill}, sha256.Size)}
 }
 
 func agentBackupSecretFrames(

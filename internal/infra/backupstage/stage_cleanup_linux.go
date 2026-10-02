@@ -101,10 +101,27 @@ func (artifact *Artifact) removeUnpublishedLocked(ctx context.Context) error {
 func (artifact *Artifact) failWriteLocked(_ context.Context, primary error) error {
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), artifact.stage.owner.ops.cleanupTimeout)
 	defer cancel()
-	cleanupErr := artifact.removeUnpublishedLocked(cleanupCtx)
+	// A write failure is not authority to delete a previously acknowledged
+	// prefix. Freeze this lease and retain its bytes for startup classification;
+	// only explicit Cleanup/Abort may retire the artifact namespace.
+	artifact.stage.poisoned = true
+	var fileErr error
+	if artifact.file != nil {
+		fileErr = joinPrivate(
+			storageOperationError(
+				"sync failed artifact prefix",
+				artifact.stage.owner.ops.fsync(int(artifact.file.Fd())),
+			),
+			rawOperationError("close failed artifact", artifact.file.Close()),
+		)
+		artifact.file = nil
+	}
+	if artifact.state == artifactOpen {
+		artifact.state = artifactPartial
+	}
 	syncErr := syncFD(cleanupCtx, artifact.stage.pointFD)
 	growthErr := artifact.sealGrowthLocked(cleanupCtx)
-	return joinPrivate(primary, cleanupErr, syncErr, growthErr)
+	return joinPrivate(primary, fileErr, syncErr, growthErr)
 }
 
 func (artifact *Artifact) sealGrowthLocked(ctx context.Context) error {
@@ -124,6 +141,11 @@ func (artifact *Artifact) sealGrowthLocked(ctx context.Context) error {
 
 func (stage *Stage) closeArtifactsLocked(ctx context.Context) error {
 	var causes []error
+	for spool := range stage.validationSpools {
+		if err := spool.closeLocked(); err != nil {
+			causes = append(causes, err)
+		}
+	}
 	for artifact := range stage.artifacts {
 		for reader := range artifact.readers {
 			if err := reader.closeLocked(ctx); err != nil {

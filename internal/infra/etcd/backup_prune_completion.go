@@ -22,32 +22,32 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		backupruntime.ValidateBackupRecoveryPointPruneDispatchRecord(dispatch.Record) != nil ||
 		current.Record.State != backupruntime.BackupPruneAssigned || next.State != backupruntime.BackupPruneVerifiedAbsent ||
 		current.Record.Point != next.Point || current.Record.OperationID != next.OperationID ||
+		current.Record.PointRevision != next.PointRevision || current.Record.PolicyRevision != next.PolicyRevision ||
+		current.Record.PolicySHA256 != next.PolicySHA256 ||
 		current.Record.TaskID != next.TaskID || current.Record.CreatedAt != next.CreatedAt ||
 		!next.UpdatedAt.After(current.Record.UpdatedAt) ||
 		next.OperationID != dispatch.Record.OperationID || next.TaskID != dispatch.Record.TaskID ||
 		next.Point.EnvironmentID != dispatch.Record.EnvironmentID ||
-		!backupPruneDispatchContains(dispatch.Record, next.Point.ID) {
+		!backupruntime.BackupPruneDispatchContains(dispatch.Record, next.Point.ID) {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup prune absence checkpoint is invalid",
 		)
 	}
-	if checkpointInput.TaskID != dispatch.Record.TaskID ||
-		checkpointInput.Payload.Kind != backupruntime.BackupCheckpointRemoteObjectAbsent ||
-		checkpointInput.Payload.PointID != next.Point.ID {
-		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
-			errs.KindValidationFailed,
-			"backup prune checkpoint is invalid",
-		)
-	}
-	checkpointOrdinal, found := backupPruneDispatchPointOrdinal(
+	checkpointOrdinal, found := backupruntime.BackupPruneDispatchPointOrdinal(
 		dispatch.Record,
 		next.Point.ID,
 	)
-	if !found {
+	if !found || checkpointInput.TaskID != dispatch.Record.TaskID ||
+		!backupruntime.BackupPruneCheckpointMatchesObject(
+			checkpointInput,
+			checkpointOrdinal,
+			next.Point.ID,
+			next.Point.Object,
+		) {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindValidationFailed,
-			"backup prune checkpoint point order is invalid",
+			"backup prune checkpoint object or point order is invalid",
 		)
 	}
 	value, err := backupruntime.EncodeBackupRecoveryPointPruneRecord(next)
@@ -55,7 +55,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	defer clear(value)
-	authorityKeys, err := backupPruneAuthorityKeys(current.Record.Point)
+	authorityKeys, err := backupruntime.BackupPruneAuthorityKeys(current.Record.Point)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
@@ -68,7 +68,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	defer etcdstore.ClearValues(anchor.Values)
-	if err := validateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
+	if err := backupruntime.ValidateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	checkpointPlan, err := repository.loadBackupCheckpointPlan(
@@ -102,10 +102,10 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 			"backup prune checkpoint domain state is incomplete",
 		)
 	}
-	if err := validatePendingBackupPruneAuthority(anchor.Values[1:6], current); err != nil {
+	if err := backupruntime.ValidatePendingBackupPruneAuthority(anchor.Values[1:6], current); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
-	if err := validateCompletedBackupRetentionSweep(
+	if err := backupruntime.ValidateCompletedBackupRetentionSweep(
 		anchor.Values[6],
 		current.Record.Point,
 		anchor.Values[2].ModRevision,
@@ -137,6 +137,14 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	for _, key := range keys[2:] {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
+	cleanupConditions, cleanupMutations, err := repository.prepareVolumeManifestCleanup(
+		ctx, current.Record.Point, anchor.ReadRevision)
+	if err != nil {
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
+	}
+	defer etcdstore.ClearMutationValues(cleanupMutations)
+	conditions = append(conditions, cleanupConditions...)
+	mutations = append(mutations, cleanupMutations...)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
@@ -192,7 +200,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 				"backup prune completion authority is invalid",
 			)
 		}
-		authorityKeys, err := backupPruneAuthorityKeys(prune.Record.Point)
+		authorityKeys, err := backupruntime.BackupPruneAuthorityKeys(prune.Record.Point)
 		if err != nil {
 			return backupPruneTransactionPlan{}, err
 		}
@@ -203,7 +211,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 		return backupPruneTransactionPlan{}, err
 	}
 	defer etcdstore.ClearValues(anchor.Values)
-	if err := validateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
+	if err := backupruntime.ValidateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
 	for index, prune := range prunes {

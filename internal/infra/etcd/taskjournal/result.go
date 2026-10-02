@@ -57,10 +57,12 @@ type TaskResultRecord struct {
 	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
 	ExecutionEpoch                  uint32                              `json:"-"`
 	ReleaseRecoveryRecordSHA256     string                              `json:"-"`
+	AssignmentGeneration            uint64                              `json:"-"`
 }
 
 type TaskTerminalAssignmentRecord struct {
-	AssignmentID    string `json:"assignment_id"`
-	AgentID         string `json:"agent_id"`
-	AgentGeneration uint64 `json:"agent_generation"`
+	AssignmentID         string `json:"assignment_id"`
+	AgentID              string `json:"agent_id"`
+	AgentGeneration      uint64 `json:"agent_generation"`
+	AssignmentGeneration uint64 `json:"assignment_generation,omitempty"`
 }

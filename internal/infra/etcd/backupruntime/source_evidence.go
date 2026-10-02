@@ -15,14 +15,9 @@ func BackupPointMatchesRunSource(
 		return false
 	}
 	source := run.Sources[ordinal]
-	return point.ID == source.RecoveryPointID && point.EnvironmentID == run.EnvironmentID &&
-		point.CreatedAt.Equal(source.RecoveryPointCreatedAt) &&
-		point.SourceID == source.SourceID && point.SourceKind == source.Kind &&
-		point.TargetID == source.TargetID && point.ConnectorID == run.ConnectorID &&
-		point.ConnectorPrefix == run.ConnectorPrefix && point.ObjectKey == source.ObjectKey &&
-		point.SourceFormat == source.Format &&
-		point.Encryption == run.Encryption && point.KeyEra == run.KeyEra && point.Recipient == run.Recipient &&
-		point.SizeBytes == source.SizeBytes && point.SHA256 == source.SHA256
+	return point.BackupRecoveryPointTargetSnapshot == backupSourceTarget(run, source) &&
+		point.Evidence == source.Evidence && point.ConfigArchive == source.ConfigArchive &&
+		point.VolumeArchive == source.VolumeArchive && point.Object == source.Object
 }
 
 func RunContainsOrphanedPoint(run BackupRunRecord, orphan BackupOrphanRecord) bool {
@@ -35,25 +30,59 @@ func RunContainsOrphanedPoint(run BackupRunRecord, orphan BackupOrphanRecord) bo
 	return false
 }
 
+// Adoption accepts only a fully verified selected identity for the retained
+// target, and never replaces an identity returned by the original Put.
+func BackupOrphanMatchesRecoveryPoint(orphan BackupOrphanRecord, point BackupRecoveryPointSnapshot) bool {
+	if validateBackupOrphanRecord(orphan) != nil || ValidateBackupRecoveryPointSnapshot(point) != nil ||
+		orphan.Target != point.BackupRecoveryPointTargetSnapshot || orphan.Evidence != point.Evidence ||
+		orphan.ConfigArchive != point.ConfigArchive || orphan.VolumeArchive != point.VolumeArchive {
+		return false
+	}
+	if orphan.Postgres != point.Postgres {
+		return false
+	}
+	if orphan.Object != (BackupObjectIdentity{}) {
+		return orphan.Object == point.Object
+	}
+	if orphan.Upload.Kind == BackupUploadReturned {
+		return orphan.Upload.ReturnedObject == point.Object
+	}
+	return false
+}
+
 func BackupOrphanMatchesRunSource(
 	orphan BackupOrphanRecord,
 	run BackupRunRecord,
 	ordinal uint32,
 ) bool {
+	if int(ordinal) >= len(run.Sources) || validateBackupOrphanRecord(orphan) != nil {
+		return false
+	}
+	source := run.Sources[ordinal]
 	return orphan.TaskID == run.TaskID &&
 		orphan.Reconciliation == (BackupOrphanReconciliationAuthority{
 			OperationID:    run.OperationID,
 			PolicyRevision: run.PolicyRevision,
+			PolicySHA256:   run.PolicySHA256,
 			RetentionKeep:  run.RetentionKeep,
 		}) &&
-		BackupPointMatchesRunSource(orphan.Point, run, ordinal)
+		orphan.Target == backupSourceTarget(run, source) && orphan.Evidence == source.Evidence &&
+		orphan.ConfigArchive == source.ConfigArchive && orphan.VolumeArchive == source.VolumeArchive &&
+		orphan.Upload == source.Upload && orphan.Object == source.Object && orphan.Phase == source.Phase &&
+		backupOrphanPostgresMatchesSource(orphan.Postgres, source.Snapshot.Postgres)
+}
+
+func backupOrphanPostgresMatchesSource(point BackupPostgresPointIdentity, source *BackupPostgresSourceSnapshot) bool {
+	if source == nil {
+		return point == (BackupPostgresPointIdentity{})
+	}
+	return point == (BackupPostgresPointIdentity{Database: source.Database, Role: source.Role,
+		BackingEnvironmentID: source.BackingEnvironmentID, BackingServiceID: source.BackingServiceID,
+		ConsumerServiceID: source.ConsumerServiceID})
 }
 
 func ValidateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expected BackupOrphanRecord) error {
-	expectedVersion := int64(1)
-	if expected.State == BackupOrphanDelete {
-		expectedVersion = 2
-	}
+	expectedVersion := backupOrphanRecordVersion(expected)
 	if len(values) != 3 || values[0] == nil || values[1] == nil || values[2] == nil ||
 		values[0].Version != expectedVersion || values[1].Version != expectedVersion ||
 		values[2].Version != expectedVersion ||
@@ -61,7 +90,7 @@ func ValidateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expecte
 		values[0].ModRevision != values[2].ModRevision ||
 		string(
 			values[1].Value,
-		) != expected.Point.ID || string(values[2].Value) != expected.Point.ID {
+		) != expected.Target.ID || string(values[2].Value) != expected.Target.ID {
 		return CorruptBackupRuntimeRecord()
 	}
 	stored, err := DecodeBackupOrphanRecord(values[0].Value)

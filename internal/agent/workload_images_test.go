@@ -113,7 +113,8 @@ func TestClientResolvesWorkloadImagesOnAuthenticatedStream(t *testing.T) {
 		t.Fatal("client did not stop")
 	}
 	sent := stream.sentMessages()
-	if len(sent) != 2 || sent[0].GetAuthenticate() == nil || sent[1].GetReady().GetCapacity() != 2 {
+	if len(sent) != 3 || sent[0].GetAuthenticate() == nil || sent[1].GetReady().GetCapacity() != 2 ||
+		sent[2].GetBackupStagingInventory() == nil {
 		t.Fatalf("unexpected Task/capacity effects: %v", sent)
 	}
 }

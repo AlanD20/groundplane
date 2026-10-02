@@ -667,6 +667,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore the selected Recovery Point to its original target */
+        post: operations["backup.restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/rotate-key": {
         parameters: {
             query?: never;
@@ -2946,6 +2963,17 @@ export interface components {
             operation_id: string;
             release_id: string;
             task_id: string;
+        };
+        RestoreRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RestoreRequest.json
+             */
+            readonly $schema?: string;
+            age_identity?: string;
+            recovery_point_id?: string;
+            source_id: string;
         };
         RollbackRequest: {
             /**
@@ -5526,6 +5554,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Environment"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backup.restore": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */

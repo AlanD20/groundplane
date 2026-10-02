@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backupobject"
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -18,6 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testbackupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	backupsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
@@ -38,11 +40,12 @@ const (
 	appBackupEnvironmentRevision  int64 = 101
 	appBackupConnectorRevision    int64 = 102
 	appBackupSecretRevision       int64 = 103
+	appBackupPolicyRevision       int64 = 104
 	appBackupPointRevision        int64 = 200
 	appBackupPendingPruneRevision int64 = 201
 	appBackupPublicationRevision  int64 = 300
 	appBackupAssignmentRevision   int64 = 400
-	appBackupTaskTimeoutSeconds   int64 = 6 * 60 * 60
+	appBackupTaskTimeoutSeconds   int64 = executionplan.MaximumBackupPruneStepTimeoutSeconds
 )
 
 // Rationale: the app composition must run one published prune snapshot through
@@ -59,7 +62,7 @@ func TestBackupSecretReaderResolverAgentChannelComposition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver, err := testbackup.NewBackupSecretResolver(reader, protector)
+	resolver, err := testbackup.NewBackupSecretResolver(t.Context(), reader, protector)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,22 +74,51 @@ func TestBackupSecretReaderResolverAgentChannelComposition(t *testing.T) {
 			MaxConcurrentTasks:  1,
 		},
 	}
-	server := agentchannel.NewWithPrivateTransfers(
+	checkpointStore := newMemoryHierarchyStore()
+	if _, err := checkpointStore.Put(t.Context(), testtaskjournal.TaskAssignmentIndexKey(fixture.request.TaskID),
+		appBackupAssignmentValue(t, fixture.claim.Assignment.Record)); err != nil {
+		t.Fatal(err)
+	}
+	checkpointRepository, err := etcd.NewBackupRuntimeRepository(checkpointStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoints, err := testbackup.NewBackupCheckpointService(checkpointRepository, checkpointStore, protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := agentchannel.NewWithRuntimeServices(
 		auth,
 		agentchannel.NewRegistry(),
 		&appBackupSecretTaskStore{claim: fixture.claim},
 		&appBackupSecretPlanResolver{plan: fixture.request.Plan},
 		nil,
 		resolver,
+		checkpoints,
 	)
-	stream := &appBackupSecretStream{messages: []*agentpb.AgentMessage{
-		appBackupSecretAuthenticate(fixture.request.AgentID),
-		{
-			Payload: &agentpb.AgentMessage_Ready{
-				Ready: &agentpb.Ready{Capacity: 1, Version: "integration"},
+	stagingInventory, stagingAck := appBackupSecretStagingExchange(t)
+	streamContext, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	stream := &appBackupSecretStream{
+		ctx:         streamContext,
+		payloadDone: make(chan struct{}),
+		messages: []*agentpb.AgentMessage{
+			appBackupSecretAuthenticate(fixture.request.AgentID),
+			{
+				Payload: &agentpb.AgentMessage_BackupStagingInventory{BackupStagingInventory: stagingInventory},
+			},
+			{
+				Payload: &agentpb.AgentMessage_BackupStagingRecoveryAck{BackupStagingRecoveryAck: stagingAck},
+			},
+			{
+				Payload: &agentpb.AgentMessage_Ready{
+					Ready: &agentpb.Ready{
+						Capacity: 1, Version: "integration", TerminalDeliveryClean: proto.Bool(true),
+					},
+				},
 			},
 		},
-	}}
+	}
 	if err := server.Connect(stream); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
@@ -238,32 +270,63 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		SecretID: secretID, EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextSHA256: hex.EncodeToString(secretDigest[:]), Ciphertext: secretCiphertext,
 	}
+	projectValue := appBackupEnvelope(t, "project", project)
+	environmentValue := appBackupEnvelope(t, "environment", environment)
+	connectorValue := appBackupEnvelope(t, "connector", connector)
+	directCredentialsValue := appBackupEnvelope(t, "connector_credentials", directCredentials)
+	secretValueValue := appBackupEnvelope(t, "secret_value", secretValue)
 
 	source := testbackuppolicy.BackupSourceRecord{
 		ID: sourceID, EnvironmentID: environmentID, Kind: core.BackupSourceVolume,
 		TargetID: volumeID, CreatedAt: environmentCreatedAt,
 	}
 	storedDigest := sha256.Sum256([]byte("stored-artifact"))
+	storedDigestHex := hex.EncodeToString(storedDigest[:])
+	objectKey := "production/" + environmentID + "/" + sourceID + "/" + pointID + "/artifact.bin"
 	point := testbackupruntime.BackupRecoveryPointRecord{
 		BackupRecoveryPointSnapshot: testbackupruntime.BackupRecoveryPointSnapshot{
-			ID:              pointID,
-			EnvironmentID:   environmentID,
-			SourceID:        sourceID,
-			SourceKind:      testbackupruntime.BackupRuntimeSourceVolume,
-			TargetID:        volumeID,
-			ConnectorID:     connectorID,
-			ConnectorPrefix: "production/",
-			ObjectKey:       "production/" + environmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
-			SourceFormat:    testbackupruntime.BackupRuntimeFormatVolume,
-			Encryption:      testbackupruntime.BackupRuntimeEncryptionNone,
-			SizeBytes:       4096,
-			SHA256:          hex.EncodeToString(storedDigest[:]),
-			CreatedAt:       pointCreatedAt,
+			BackupRecoveryPointTargetSnapshot: testbackupruntime.BackupRecoveryPointTargetSnapshot{
+				ID: pointID, EnvironmentID: environmentID, SourceID: sourceID,
+				SourceKind: testbackupruntime.BackupRuntimeSourceVolume, TargetID: volumeID,
+				ConnectorID: connectorID, ConnectorPrefix: connector.Connector.Prefix,
+				ConnectorEndpoint: connector.Connector.Endpoint, ConnectorBucket: connector.Connector.Bucket,
+				ConnectorRegion: connector.Connector.Region, ConnectorPathStyle: connector.Connector.PathStyle,
+				ObjectKey: objectKey, SourceFormat: testbackupruntime.BackupRuntimeFormatVolume,
+				Encryption: testbackupruntime.BackupRuntimeEncryptionNone, CreatedAt: pointCreatedAt,
+			},
+			Evidence: testbackupruntime.BackupArtifactEvidence{
+				SourceSizeBytes: 4096, SourceSHA256: storedDigestHex,
+				StoredSizeBytes: 4096, StoredSHA256: storedDigestHex,
+			},
+			VolumeArchive: testbackupruntime.BackupVolumeArchiveEvidence{
+				EntryCount: 1, ContentManifestSHA256: storedDigestHex,
+				FullTreeSHA256: storedDigestHex, SourceSizeBytes: 4096,
+				Manifest: testbackupruntime.BackupVolumeManifestReference{
+					TaskID: taskID, AssignmentID: assignmentID, StepID: stepID, TransferID: ids.NewULID(),
+					AuthoritySHA256: storedDigestHex, AgentID: agentID,
+					AgentGeneration: 1, AssignmentGeneration: 1, CursorRevision: appBackupPointRevision,
+				},
+			},
+			Object: testbackupruntime.BackupObjectIdentity{
+				Target: testbackupruntime.BackupObjectTarget{
+					ConnectorID: connectorID, ConnectorPrefix: connector.Connector.Prefix,
+					ConnectorEndpoint: connector.Connector.Endpoint, ConnectorBucket: connector.Connector.Bucket,
+					ConnectorRegion: connector.Connector.Region, ConnectorPathStyle: connector.Connector.PathStyle,
+					ObjectKey: objectKey,
+				},
+				Discriminator: testbackupruntime.BackupObjectDiscriminator{
+					Kind: backupobject.DiscriminatorVersionID, Value: "version-1",
+				},
+			},
 		},
 		VerifiedAt: verifiedAt,
 	}
+	pointValue := appBackupEnvelope(t, "recovery-point", point)
+	pointDigest := sha256.Sum256(pointValue)
+	policyDigest := sha256.Sum256([]byte("app-backup-retention-policy"))
 	pendingPrune := testbackupruntime.BackupRecoveryPointPruneRecord{
 		Point: point.BackupRecoveryPointSnapshot, PointRevision: appBackupPointRevision,
+		PolicyRevision: appBackupPolicyRevision, PolicySHA256: hex.EncodeToString(policyDigest[:]),
 		OperationID: operationID, State: testbackupruntime.BackupPrunePending,
 		CreatedAt: pruneCreatedAt, UpdatedAt: pruneCreatedAt,
 	}
@@ -275,43 +338,6 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		TaskID: taskID, OperationID: operationID, EnvironmentID: environmentID,
 		RecoveryPointIDs: []string{pointID}, CreatedAt: dispatchAt,
 	}
-
-	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: executionplan.SchemaVersion, PlanId: planID,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE, TargetId: environmentID,
-		Steps: []*agentpb.ExecutionStep{
-			{
-				StepId:         stepID,
-				TimeoutSeconds: executionplan.MaximumBackupPruneStepTimeoutSeconds,
-				Payload: &agentpb.ExecutionStep_BackupArtifactPrune{
-					BackupArtifactPrune: &agentpb.BackupArtifactPrune{
-						Ordinal:             1,
-						PruneOperationId:    operationID,
-						PruneRevision:       uint64(appBackupPendingPruneRevision),
-						PointId:             pointID,
-						PointRevision:       uint64(appBackupPointRevision),
-						SourceId:            sourceID,
-						SourceRevision:      uint64(appBackupSourceRevision),
-						EnvironmentId:       environmentID,
-						EnvironmentRevision: uint64(appBackupEnvironmentRevision),
-						ConnectorId:         connectorID,
-						ConnectorRevision:   uint64(appBackupConnectorRevision),
-						ConnectorEndpoint:   connector.Connector.Endpoint,
-						ConnectorBucket:     connector.Connector.Bucket,
-						ConnectorPrefix:     connector.Connector.Prefix,
-						ConnectorRegion:     connector.Connector.Region,
-						ConnectorAddressing: agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
-						ProtectedObjectKey:  point.ObjectKey,
-						StoredSizeBytes:     uint64(point.SizeBytes),
-						StoredSha256:        storedDigest[:],
-					},
-				},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("seal backup prune plan: %v", err)
-	}
 	startedAt := assignedAt
 	task := etcd.TaskRecord{
 		ID:                taskID,
@@ -320,7 +346,6 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		Actor:             testtaskjournal.TaskActorSystem,
 		Executor:          testtaskjournal.TaskExecutorAgent,
 		PlanID:            planID,
-		PlanHash:          hex.EncodeToString(plan.PlanHash),
 		Type:              testtaskjournal.TaskBackupPrune,
 		Target:            environmentID,
 		Steps:             []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}},
@@ -331,13 +356,67 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		UpdatedAt:         assignedAt,
 		StartedAt:         &startedAt,
 	}
-	deadline := assignedAt.Add(time.Duration(appBackupTaskTimeoutSeconds) * time.Second)
+	pathStyle := connector.Connector.PathStyle
+	connectorAuthority := &agentpb.BackupConnectorAuthority{
+		ConnectorId: connectorID, Connector: appBackupRevisionDigest(connectorValue, appBackupConnectorRevision),
+		CanonicalEndpointUrl: connector.Connector.Endpoint, Region: connector.Connector.Region,
+		PathStyle: &pathStyle, Prefix: connector.Connector.Prefix,
+		AccessKeySlotId: backupsecret.AccessKeySlotID, SecretKeySlotId: backupsecret.SecretKeySlotID,
+		AccessKeySlot: appBackupRevisionDigest(directCredentialsValue, appBackupConnectorRevision),
+		SecretKeySlot: appBackupRevisionDigest(secretValueValue, appBackupSecretRevision),
+	}
+	plan, err := testbackup.BuildBackupPrunePlan(testbackup.BackupPrunePlanInput{
+		Task: task,
+		Scope: &agentpb.BackupPlanScope{
+			ProjectId: projectID, Project: appBackupRevisionDigest(projectValue, appBackupSecretRevision-1),
+			EnvironmentId: environmentID,
+			Environment:   appBackupRevisionDigest(environmentValue, appBackupEnvironmentRevision), TaskAttempt: 1,
+		},
+		Dispatch: dispatch,
+		Evidence: []testbackupplanning.PruneExecutionEvidence{{
+			Prune: pendingPrune, PruneRevision: appBackupPendingPruneRevision,
+			PointRevision: appBackupPointRevision, SourceRevision: appBackupSourceRevision,
+			EnvironmentRevision: appBackupEnvironmentRevision, ConnectorRevision: appBackupConnectorRevision,
+			ConnectorEndpoint: connector.Connector.Endpoint, ConnectorBucket: connector.Connector.Bucket,
+			ConnectorPrefix: connector.Connector.Prefix, ConnectorRegion: connector.Connector.Region,
+			ConnectorPathStyle: connector.Connector.PathStyle,
+			RetentionPolicy: &agentpb.RevisionDigest{
+				ModRevision: appBackupPolicyRevision, Sha256: policyDigest[:],
+			},
+			PointSHA256: pointDigest[:], ConnectorAuthority: connectorAuthority,
+		}},
+		ExecutionIDs: []string{ids.NewULID()},
+	})
+	if err != nil {
+		t.Fatalf("build backup prune plan: %v", err)
+	}
+	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	deadline := dispatchAt.Add(time.Duration(appBackupTaskTimeoutSeconds) * time.Second)
 	recoveryDeadline := deadline.Add(time.Duration(appBackupTaskTimeoutSeconds) * time.Second)
 	assignment := testtaskassignments.TaskAssignmentRecord{
 		AssignmentID: assignmentID, TaskID: taskID, Executor: testtaskjournal.TaskExecutorAgent,
 		AgentID: agentID, AgentGeneration: 1, ClaimedTaskRevision: appBackupPublicationRevision,
 		AssignedAt: assignedAt, Deadline: deadline, RecoveryDeadline: recoveryDeadline,
 		ExecutionMode: testtaskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
+	}
+	authority, authorityDigest, err := executionplan.BindBackupTaskAuthority(
+		plan,
+		executionplan.BackupAssignmentIdentity{
+			TaskID: taskID, OperationID: operationID, AssignmentID: assignmentID,
+			Generation: 1, DeadlineUnixNano: uint64(deadline.UnixNano()),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignment.BackupAuthorityFence = &testtaskassignments.BackupAuthorityFence{
+		AssignmentGeneration: authority.AssignmentGeneration, AuthoritySHA256: hex.EncodeToString(authorityDigest),
+	}
+	for _, step := range authority.Steps {
+		assignment.BackupAuthorityFence.Steps = append(assignment.BackupAuthorityFence.Steps,
+			testtaskassignments.BackupStepAuthorityFence{
+				StepID: step.StepId, ExecutionID: step.ExecutionId, AuthoritySHA256: hex.EncodeToString(step.StepDigest),
+			})
 	}
 	claim := etcd.TaskAssignment{
 		Task: testkeyvalue.Versioned[etcd.TaskRecord]{
@@ -360,17 +439,16 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		task:              appBackupTaskValue(t, task),
 		assignment:        appBackupAssignmentValue(t, assignment),
 		dispatch:          appBackupEnvelope(t, "recovery-point-prune-dispatch", dispatch),
-		point:             appBackupEnvelope(t, "recovery-point", point),
-		pendingPrune:      appBackupEnvelope(t, "recovery-point-prune", pendingPrune),
+		point:             pointValue,
 		assignedPrune:     appBackupEnvelope(t, "recovery-point-prune", assignedPrune),
 		source:            appBackupEnvelope(t, "backup-source", source),
-		connector:         appBackupEnvelope(t, "connector", connector),
-		environment:       appBackupEnvelope(t, "environment", environment),
-		directCredentials: appBackupEnvelope(t, "connector_credentials", directCredentials),
-		project:           appBackupEnvelope(t, "project", project),
+		connector:         connectorValue,
+		environment:       environmentValue,
+		directCredentials: directCredentialsValue,
+		project:           projectValue,
 		secretID:          []byte(secretID),
 		secretRecord:      appBackupEnvelope(t, "secret", secretRecord),
-		secretValue:       appBackupEnvelope(t, "secret_value", secretValue),
+		secretValue:       secretValueValue,
 	}
 	return appBackupSecretFixture{
 		claim: claim, request: request, store: store,
@@ -387,7 +465,6 @@ type appBackupSecretStore struct {
 	assignment        []byte
 	dispatch          []byte
 	point             []byte
-	pendingPrune      []byte
 	assignedPrune     []byte
 	source            []byte
 	connector         []byte
@@ -422,29 +499,26 @@ func (store *appBackupSecretStore) GetMany(
 		readRevision = appBackupAssignmentRevision
 		values = []appBackupSecretStoredValue{{}, store.assignmentValue()}
 	case 2:
-		if request.Revision != appBackupAssignmentRevision || len(request.Keys) != 6 {
+		if request.Revision != appBackupAssignmentRevision || len(request.Keys) != 7 {
 			return nil, errs.New(errs.KindInternal, "backup secret base read changed")
 		}
 		readRevision = appBackupAssignmentRevision
 		assignment := store.assignmentValue()
 		values = []appBackupSecretStoredValue{
-			store.taskValue(), assignment, assignment, assignment, {}, store.dispatchValue(),
+			store.taskValue(), assignment, assignment, assignment, {}, store.dispatchValue(), {},
 		}
 	case 3:
+		if request.Revision != appBackupAssignmentRevision || len(request.Keys) != 1 {
+			return nil, errs.New(errs.KindInternal, "backup secret point planning read changed")
+		}
+		readRevision = appBackupAssignmentRevision
+		values = []appBackupSecretStoredValue{appBackupStored(store.point, appBackupPointRevision)}
+	case 4:
 		if request.Revision != appBackupAssignmentRevision || len(request.Keys) != 8 {
 			return nil, errs.New(errs.KindInternal, "backup secret first dynamic read changed")
 		}
 		readRevision = appBackupAssignmentRevision
 		values = store.dynamicValues()
-	case 4:
-		if request.Revision != appBackupPendingPruneRevision || len(request.Keys) != 1 {
-			return nil, errs.New(errs.KindInternal, "backup secret sealed prune read changed")
-		}
-		readRevision = appBackupPendingPruneRevision
-		values = []appBackupSecretStoredValue{{
-			value: store.pendingPrune, createRevision: appBackupPendingPruneRevision,
-			modRevision: appBackupPendingPruneRevision, version: 1,
-		}}
 	case 5:
 		if request.Revision != appBackupAssignmentRevision || len(request.Keys) != 12 {
 			return nil, errs.New(errs.KindInternal, "backup secret second dynamic read changed")
@@ -528,6 +602,11 @@ func appBackupStored(value []byte, revision int64) appBackupSecretStoredValue {
 	}
 }
 
+func appBackupRevisionDigest(value []byte, revision int64) *agentpb.RevisionDigest {
+	digest := sha256.Sum256(value)
+	return &agentpb.RevisionDigest{ModRevision: revision, Sha256: digest[:]}
+}
+
 func appBackupEnvelope(t *testing.T, kind string, data any) []byte {
 	t.Helper()
 	value, err := json.Marshal(struct {
@@ -589,33 +668,7 @@ func appBackupTaskValue(t *testing.T, task etcd.TaskRecord) []byte {
 
 func appBackupAssignmentValue(t *testing.T, assignment testtaskassignments.TaskAssignmentRecord) []byte {
 	t.Helper()
-	value, err := json.Marshal(struct {
-		Schema              int                                   `json:"schema"`
-		AssignmentID        string                                `json:"assignment_id"`
-		TaskID              string                                `json:"task_id"`
-		Executor            testtaskjournal.TaskExecutor          `json:"executor"`
-		AgentID             string                                `json:"agent_id"`
-		AgentGeneration     uint64                                `json:"agent_generation"`
-		ClaimedTaskRevision int64                                 `json:"claimed_task_revision"`
-		AssignedAt          string                                `json:"assigned_at"`
-		Deadline            string                                `json:"forward_deadline"`
-		RecoveryDeadline    string                                `json:"recovery_deadline"`
-		ExecutionMode       testtaskassignments.TaskExecutionMode `json:"execution_mode"`
-		ExecutionEpoch      uint32                                `json:"execution_epoch"`
-	}{
-		Schema:              3,
-		AssignmentID:        assignment.AssignmentID,
-		TaskID:              assignment.TaskID,
-		Executor:            assignment.Executor,
-		AgentID:             assignment.AgentID,
-		AgentGeneration:     assignment.AgentGeneration,
-		ClaimedTaskRevision: assignment.ClaimedTaskRevision,
-		AssignedAt:          assignment.AssignedAt.Format(time.RFC3339Nano),
-		Deadline:            assignment.Deadline.Format(time.RFC3339Nano),
-		RecoveryDeadline:    assignment.RecoveryDeadline.Format(time.RFC3339Nano),
-		ExecutionMode:       assignment.ExecutionMode,
-		ExecutionEpoch:      assignment.ExecutionEpoch,
-	})
+	value, err := testtaskassignments.EncodeTaskAssignment(assignment)
 	if err != nil {
 		t.Fatalf("encode assignment fixture: %v", err)
 	}
@@ -672,7 +725,8 @@ func (auth *appBackupSecretAuthenticator) Configuration(
 }
 
 type appBackupSecretTaskStore struct {
-	claim etcd.TaskAssignment
+	claim   etcd.TaskAssignment
+	staging *testbackupruntime.BackupStagingDeliveryRecord
 }
 
 func (store *appBackupSecretTaskStore) ListAgentAssignments(
@@ -708,6 +762,72 @@ func (store *appBackupSecretTaskStore) GetTask(
 		return testkeyvalue.Versioned[etcd.TaskRecord]{}, errs.New(errs.KindTaskNotFound, "unexpected task")
 	}
 	return store.claim.Task, nil
+}
+
+func (*appBackupSecretTaskStore) ReadBackupStagingSource(
+	context.Context,
+	string,
+	uint64,
+	[]byte,
+) (etcd.BackupStagingSource, error) {
+	return etcd.BackupStagingSource{}, errs.New(errs.KindInternal, "unexpected nonempty backup staging inventory")
+}
+
+func (*appBackupSecretTaskStore) ReadBackupStagingDelivery(
+	context.Context,
+	string,
+) (testkeyvalue.Versioned[testbackupruntime.BackupStagingDeliveryRecord], bool, error) {
+	return testkeyvalue.Versioned[testbackupruntime.BackupStagingDeliveryRecord]{}, false, nil
+}
+
+func (store *appBackupSecretTaskStore) PublishBackupStagingDelivery(
+	_ context.Context,
+	record testbackupruntime.BackupStagingDeliveryRecord,
+	sources []etcd.BackupStagingSource,
+) error {
+	if len(sources) != 0 || executionplan.ValidateBackupStagingRecoveryPlan(record.Inventory, record.Plan) != nil {
+		return errs.New(errs.KindInternal, "unexpected backup staging recovery plan")
+	}
+	store.staging = &record
+	return nil
+}
+
+func (store *appBackupSecretTaskStore) ApplyBackupStagingDelivery(
+	_ context.Context,
+	agentID string,
+	agentGeneration uint64,
+	processGeneration [16]byte,
+	ack *agentpb.BackupStagingRecoveryAck,
+) (*agentpb.BackupStagingRecoveryAckReceipt, error) {
+	if store.staging == nil || store.staging.AgentID != agentID || store.staging.AgentGeneration != agentGeneration ||
+		store.staging.ProcessGeneration != processGeneration || !proto.Equal(store.staging.Inventory, &agentpb.BackupStagingInventory{}) {
+		return nil, errs.New(errs.KindInternal, "unexpected backup staging acknowledgement identity")
+	}
+	planDigest, err := executionplan.BackupStagingRecoveryPlanSHA256(store.staging.Plan)
+	if err != nil || !bytes.Equal(ack.GetInventorySha256(), store.staging.Plan.GetInventorySha256()) ||
+		!bytes.Equal(ack.GetAppliedPlanSha256(), planDigest) || ack.GetAppliedDispositionCount() != 0 {
+		return nil, errs.New(errs.KindInternal, "unexpected backup staging acknowledgement")
+	}
+	ackDigest, err := executionplan.BackupStagingRecoveryAckSHA256(ack)
+	if err != nil {
+		return nil, err
+	}
+	return &agentpb.BackupStagingRecoveryAckReceipt{
+		ProcessGeneration: processGeneration[:],
+		InventorySha256:   append([]byte(nil), ack.InventorySha256...),
+		AppliedPlanSha256: append([]byte(nil), ack.AppliedPlanSha256...),
+		RecoveryAckSha256: ackDigest,
+	}, nil
+}
+
+func (store *appBackupSecretTaskStore) GetTaskAssignment(
+	_ context.Context,
+	taskID string,
+) (etcd.TaskAssignment, error) {
+	if taskID != store.claim.Task.Record.ID {
+		return etcd.TaskAssignment{}, errs.New(errs.KindTaskNotFound, "unexpected task")
+	}
+	return store.claim, nil
 }
 
 func (store *appBackupSecretTaskStore) ListTaskEvents(
@@ -758,28 +878,42 @@ func (resolver *appBackupSecretPlanResolver) ResolveExecutionPlan(
 }
 
 type appBackupSecretStream struct {
-	messages []*agentpb.AgentMessage
-	sent     []*agentpb.ControllerMessage
+	ctx         context.Context
+	payloadDone chan struct{}
+	slotFrames  int
+	messages    []*agentpb.AgentMessage
+	sent        []*agentpb.ControllerMessage
 }
 
 func (stream *appBackupSecretStream) Send(message *agentpb.ControllerMessage) error {
 	stream.sent = append(stream.sent, proto.Clone(message).(*agentpb.ControllerMessage))
+	if message.GetBackupSecretSlotTransfer() != nil {
+		stream.slotFrames++
+		if stream.slotFrames == 6 {
+			close(stream.payloadDone)
+		}
+	}
 	return nil
 }
 
 func (stream *appBackupSecretStream) Recv() (*agentpb.AgentMessage, error) {
 	if len(stream.messages) == 0 {
-		return nil, io.EOF
+		select {
+		case <-stream.payloadDone:
+			return nil, io.EOF
+		case <-stream.ctx.Done():
+			return nil, stream.ctx.Err()
+		}
 	}
 	message := stream.messages[0]
 	stream.messages = stream.messages[1:]
 	return message, nil
 }
 
-func (*appBackupSecretStream) SetHeader(metadata.MD) error  { return nil }
-func (*appBackupSecretStream) SendHeader(metadata.MD) error { return nil }
-func (*appBackupSecretStream) SetTrailer(metadata.MD)       {}
-func (*appBackupSecretStream) Context() context.Context     { return context.Background() }
+func (*appBackupSecretStream) SetHeader(metadata.MD) error     { return nil }
+func (*appBackupSecretStream) SendHeader(metadata.MD) error    { return nil }
+func (*appBackupSecretStream) SetTrailer(metadata.MD)          {}
+func (stream *appBackupSecretStream) Context() context.Context { return stream.ctx }
 func (*appBackupSecretStream) SendMsg(any) error {
 	return errs.New(errs.KindInternal, "unexpected generic stream send")
 }
@@ -789,8 +923,32 @@ func (*appBackupSecretStream) RecvMsg(any) error {
 
 func appBackupSecretAuthenticate(agentID string) *agentpb.AgentMessage {
 	return &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Authenticate{
-		Authenticate: &agentpb.Authenticate{AgentId: agentID, Token: bytes.Repeat([]byte{7}, 32)},
+		Authenticate: &agentpb.Authenticate{
+			AgentId: agentID, Token: bytes.Repeat([]byte{7}, 32),
+			ExecutionPlanSchema: executionplan.SchemaVersion,
+			ProcessGeneration:   bytes.Repeat([]byte{1}, 16),
+		},
 	}}
+}
+
+func appBackupSecretStagingExchange(
+	t *testing.T,
+) (*agentpb.BackupStagingInventory, *agentpb.BackupStagingRecoveryAck) {
+	t.Helper()
+	inventory := &agentpb.BackupStagingInventory{}
+	inventoryDigest, err := executionplan.BackupStagingInventorySHA256(inventory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planDigest, err := executionplan.BackupStagingRecoveryPlanSHA256(
+		&agentpb.BackupStagingRecoveryPlan{InventorySha256: inventoryDigest},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory, &agentpb.BackupStagingRecoveryAck{
+		InventorySha256: inventoryDigest, AppliedPlanSha256: planDigest,
+	}
 }
 
 func assertAppBackupSecretSlot(

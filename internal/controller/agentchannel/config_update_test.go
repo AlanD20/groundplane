@@ -22,11 +22,9 @@ func TestConfigUpdateDrainsBeforeDelivery(t *testing.T) {
 		configuration: &agentpb.AgentConfig{PullIntervalSeconds: 5, MaxConcurrentTasks: 1},
 	}
 	stream := &scriptedStream{ctx: context.Background(), recvErr: io.EOF, messages: []*agentpb.AgentMessage{
-		{Payload: &agentpb.AgentMessage_Authenticate{Authenticate: &agentpb.Authenticate{
-			AgentId: agentID, Token: make([]byte, tokenSize),
-		}}},
-		{Payload: &agentpb.AgentMessage_Ready{Ready: &agentpb.Ready{Capacity: 1, Version: "v0.4.2"}}},
-		{Payload: &agentpb.AgentMessage_Ready{Ready: &agentpb.Ready{Capacity: 2, Version: "v0.4.2"}}},
+		authenticateMessage(agentID, make([]byte, tokenSize)),
+		readyMessage(1),
+		readyMessage(2),
 	}}
 	server := New(authenticator, NewRegistry(), &fakeTaskStore{}, nil)
 	if err := server.Connect(stream); err != nil {

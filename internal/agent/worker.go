@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	"github.com/AlanD20/groundplane/internal/agent/backupconfiguration"
 	backupsecrettransfer "github.com/AlanD20/groundplane/internal/agent/backupsecrettransfer"
 	checkpointmailbox "github.com/AlanD20/groundplane/internal/agent/checkpointmailbox"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
@@ -15,7 +16,6 @@ import (
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -24,10 +24,11 @@ import (
 )
 
 type taskReservation struct {
-	assignment    taskassignment.Assignment
-	ctx           context.Context
-	cancel        context.CancelFunc
-	eventsDurable bool
+	assignment       taskassignment.Assignment
+	ctx              context.Context
+	cancel           context.CancelFunc
+	eventsDurable    bool
+	terminalProduced bool
 }
 
 type ScriptRuntime interface {
@@ -54,6 +55,8 @@ type WorkerPool struct {
 	logger                 *slog.Logger
 	work                   chan *taskReservation
 	outputs                chan WorkerOutput
+	bulkFrames             chan *backupBulkFrame
+	bulkPending            map[string]*backupBulkFrame
 	executeStep            func(context.Context, *agentpb.ExecutionStep) error
 	compose                *composeruntime.Runtime
 	environmentDirectories *directoryruntime.Runtime
@@ -65,16 +68,21 @@ type WorkerPool struct {
 	materializations       *filematerialization.Inbox
 	managedConfigs         *componentaction.Inbox
 	backupSecrets          *backupsecrettransfer.Inbox
+	backupConfigs          *backupconfiguration.Inbox
+	backupVolumes          *backupVolumeExchange
+	backupStaging          *backupStagingState
 	backupCheckpoints      *checkpointmailbox.BackupInbox
 	scriptCheckpoints      *checkpointmailbox.ScriptInbox
 	backingHookCheckpoints *checkpointmailbox.BackingHookInbox
 	volumeCheckpoints      *checkpointmailbox.VolumeInbox
 	taskEventAcks          *taskEventAckInbox
+	persistBackupTerminal  func(context.Context, TaskResult) error
 
-	mu           sync.Mutex
-	reservations map[string]*taskReservation
-	running      bool
-	stopped      bool
+	mu                    sync.Mutex
+	reservations          map[string]*taskReservation
+	running               bool
+	stopped               bool
+	terminalDeliveryError error
 }
 
 func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger *slog.Logger) *WorkerPool {
@@ -85,10 +93,14 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		logger:                 logger,
 		work:                   make(chan *taskReservation, size),
 		outputs:                make(chan WorkerOutput, size),
+		bulkFrames:             make(chan *backupBulkFrame, size),
+		bulkPending:            make(map[string]*backupBulkFrame, size),
 		reservations:           make(map[string]*taskReservation, size),
 		materializations:       filematerialization.NewInbox(),
 		managedConfigs:         componentaction.NewInbox(),
 		backupSecrets:          backupsecrettransfer.New(),
+		backupConfigs:          backupconfiguration.NewInbox(),
+		backupVolumes:          newBackupVolumeExchange(),
 		backupCheckpoints:      checkpointmailbox.NewBackupInbox(),
 		scriptCheckpoints:      checkpointmailbox.NewScriptInbox(),
 		backingHookCheckpoints: checkpointmailbox.NewBackingHookInbox(),
@@ -169,6 +181,7 @@ func (p *WorkerPool) Run(ctx context.Context) {
 	<-ctx.Done()
 	p.stop()
 	workers.Wait()
+	p.drainBackupBulkFrames()
 	p.releaseQueued(ctx)
 }
 
@@ -248,6 +261,8 @@ func progressStateFor(taskCtx context.Context, err error) TaskProgressState {
 
 func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
 	p.backupSecrets.Release(result.TaskID)
+	p.backupConfigs.Release(result.TaskID)
+	p.backupVolumes.release(reservation.assignment.BackupAuthority)
 	p.materializations.Retire(result.TaskID)
 
 	owned := result
@@ -257,14 +272,38 @@ func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservati
 	if result.EnvironmentDirectory != nil {
 		owned.EnvironmentDirectory = proto.Clone(result.EnvironmentDirectory).(*agentpb.EnvironmentDirectoryTaskResult)
 	}
-	select {
-	case p.outputs <- WorkerOutput{Result: &owned}:
-	case <-runCtx.Done():
+	if result.Backup != nil {
+		owned.Backup = proto.CloneOf(result.Backup)
+	}
+	var persistErr error
+	if result.Backup != nil {
+		if p.persistBackupTerminal == nil {
+			persistErr = errs.New(errs.KindInternal, "agent: terminal journal is unavailable")
+		} else {
+			persistErr = p.persistBackupTerminal(runCtx, owned)
+		}
+		p.mu.Lock()
+		reservation.terminalProduced = true
+		if persistErr != nil {
+			p.terminalDeliveryError = persistErr
+		}
+		p.mu.Unlock()
+	}
+	if persistErr == nil {
+		select {
+		case p.outputs <- WorkerOutput{Result: &owned}:
+		case <-runCtx.Done():
+		}
+	} else {
+		select {
+		case p.outputs <- WorkerOutput{Error: persistErr}:
+		case <-runCtx.Done():
+		}
 	}
 	clearExecutionPlanSecrets(reservation.assignment.Plan)
 	taskassignment.ClearScriptArtifacts(reservation.assignment.ScriptArtifacts)
 	p.mu.Lock()
-	if p.reservations[result.TaskID] == reservation {
+	if result.Backup == nil && p.reservations[result.TaskID] == reservation {
 		delete(p.reservations, result.TaskID)
 	}
 	p.mu.Unlock()
@@ -280,6 +319,7 @@ func (p *WorkerPool) stop() {
 	}
 	p.mu.Unlock()
 	p.backupSecrets.ReleaseAll()
+	p.backupConfigs.Release("")
 }
 
 func (p *WorkerPool) releaseQueued(runCtx context.Context) {
@@ -292,7 +332,10 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 				Terminal: TaskTerminalAborted, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
 				ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
 			}
-			if usesEnvironmentDirectory(reservation.assignment.Plan) {
+			if reservation.assignment.BackupAuthority != nil {
+				result.Backup = &agentpb.BackupTaskResult{RecoveryRequired: proto.Bool(false)}
+				result.AssignmentGeneration = reservation.assignment.AssignmentGeneration
+			} else if usesEnvironmentDirectory(reservation.assignment.Plan) {
 				result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{}
 			} else {
 				result.Compose = &agentpb.ComposeTaskResult{
@@ -320,30 +363,7 @@ func isEnvironmentDirectoryTask(plan *agentpb.ExecutionPlan) bool {
 
 // Abort cancels queued or active work because ownership starts at Submit.
 func (p *WorkerPool) Abort(ctx context.Context, taskID string, assignmentID string) error {
-	if ctx == nil {
-		return errs.New(errs.KindInternal, "agent: abort context is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := ids.Validate(ids.KindTask, taskID); err != nil {
-		return errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
-	}
-	if err := ids.Validate(ids.KindAssignment, assignmentID); err != nil {
-		return errs.New(errs.KindInternal, "agent: Controller sent an invalid assignment id")
-	}
-	p.mu.Lock()
-	reservation := p.reservations[taskID]
-	if reservation == nil || reservation.assignment.AssignmentID != assignmentID {
-		p.mu.Unlock()
-		return errs.New(errs.KindStateConflict, "agent: Task abort assignment is not reserved")
-	}
-	reservation.cancel()
-	p.mu.Unlock()
-	p.materializations.Retire(taskID)
-	p.managedConfigs.Release(taskID)
-	p.backupSecrets.Release(taskID)
-	return nil
+	return p.AbortMessage(ctx, &agentpb.TaskAbort{TaskId: taskID, AssignmentId: assignmentID})
 }
 
 func (p *WorkerPool) AcceptMaterializationTransfer(
@@ -406,6 +426,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assig
 	}
 	if existing := p.reservations[owned.TaskID]; existing != nil {
 		if existing.assignment.AssignmentID != owned.AssignmentID ||
+			existing.assignment.AssignmentGeneration != owned.AssignmentGeneration ||
 			existing.assignment.ExecutionEpoch != owned.ExecutionEpoch ||
 			taskassignment.PlanDigest(existing.assignment.Plan) != taskassignment.PlanDigest(owned.Plan) {
 			return errs.New(errs.KindStateConflict, "agent: task id was reused with a different assignment")
@@ -427,6 +448,20 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assig
 		p.managedConfigs.Release(owned.TaskID)
 		return err
 	}
+	if err := p.backupConfigs.Register(owned.BackupAuthority); err != nil {
+		p.materializations.Release(owned.TaskID)
+		p.managedConfigs.Release(owned.TaskID)
+		p.backupSecrets.Release(owned.TaskID)
+		p.backupConfigs.Release(owned.TaskID)
+		return err
+	}
+	if err := p.backupVolumes.register(owned.BackupAuthority); err != nil {
+		p.materializations.Release(owned.TaskID)
+		p.managedConfigs.Release(owned.TaskID)
+		p.backupSecrets.Release(owned.TaskID)
+		p.backupConfigs.Release(owned.TaskID)
+		return err
+	}
 	taskCtx, cancel := context.WithDeadline(ctx, owned.Deadline)
 	reservation := &taskReservation{assignment: owned, ctx: taskCtx, cancel: cancel, eventsDurable: true}
 	p.reservations[owned.TaskID] = reservation
@@ -440,7 +475,18 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assig
 		p.materializations.Release(owned.TaskID)
 		p.managedConfigs.Release(owned.TaskID)
 		p.backupSecrets.Release(owned.TaskID)
+		p.backupConfigs.Release(owned.TaskID)
+		p.backupVolumes.release(owned.BackupAuthority)
 		return errs.New(errs.KindInternal, "agent: worker queue reservation is inconsistent")
+	}
+}
+
+func (p *WorkerPool) publishBackupConfigCredit(ctx context.Context, credit *agentpb.BackupConfigCredit) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case p.outputs <- WorkerOutput{BackupConfigCredit: proto.CloneOf(credit)}:
+		return nil
 	}
 }
 
@@ -460,7 +506,7 @@ func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) err
 		*agentpb.ExecutionStep_ManagedVolumeDirectoryRemove,
 		*agentpb.ExecutionStep_MaterializeFile, *agentpb.ExecutionStep_AdapterProcedure,
 		*agentpb.ExecutionStep_BackingHookProcedure,
-		*agentpb.ExecutionStep_BackupSourceCapture:
+		*agentpb.ExecutionStep_BackupStep:
 		return errs.New(errs.KindNotImplemented, "agent: task procedure is not implemented")
 	default:
 		return errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")

@@ -2,10 +2,12 @@ package backup
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -32,6 +34,9 @@ type BackupRunPrepareInput struct {
 // revision evidence has been validated. Publication remains opaque and
 // one-shot.
 type BackupRunPrepared struct {
+	Scope       *agentpb.BackupPlanScope
+	Authority   []*agentpb.BackupStepAuthority
+	Artifacts   []*agentpb.ComposeArtifact
 	Run         backupruntime.BackupRunRecord
 	Owner       taskjournal.TaskOwner
 	Publication backupRunPublication
@@ -44,6 +49,9 @@ type BackupRunRetryPrepareInput struct {
 }
 
 type BackupRunRetryPrepared struct {
+	Scope       *agentpb.BackupPlanScope
+	Authority   []*agentpb.BackupStepAuthority
+	Artifacts   []*agentpb.ComposeArtifact
 	SourceTask  etcd.TaskRecord
 	Run         backupruntime.BackupRunRecord
 	Owner       taskjournal.TaskOwner
@@ -81,6 +89,8 @@ func (repository *durableBackupRunRepository) PrepareBackupRunRetry(
 		return BackupRunRetryPrepared{}, err
 	}
 	return BackupRunRetryPrepared{
+		Scope: prepared.Scope, Authority: prepared.Authority,
+		Artifacts:   prepared.Artifacts,
 		SourceTask:  prepared.SourceTask,
 		Run:         prepared.Run,
 		Owner:       prepared.Owner,
@@ -91,16 +101,26 @@ func (repository *durableBackupRunRepository) PrepareBackupRunRetry(
 type durableBackupRunRepository struct {
 	runtime         *etcd.BackupRuntimeRepository
 	resolvePostgres backupplanning.BackupPostgresIdentityResolver
+	serviceFacts    backupplanning.BackupServiceFactResolver
+	configSnapshots *ConfigSnapshotProducer
 }
 
 func NewDurableBackupRunRepository(
 	runtime *etcd.BackupRuntimeRepository,
 	facts backupplanning.BackupPostgresIdentityResolver,
+	store etcdstore.Store, protector *secretvalue.Protector,
 ) (*durableBackupRunRepository, error) {
 	if runtime == nil || facts == nil {
 		return nil, errs.New(errs.KindInternal, "backup run repository dependencies are required")
 	}
-	return &durableBackupRunRepository{runtime: runtime, resolvePostgres: facts}, nil
+	configSnapshots, err := NewConfigSnapshotProducer(store, protector)
+	if err != nil {
+		return nil, err
+	}
+	return &durableBackupRunRepository{
+		runtime: runtime, resolvePostgres: facts,
+		serviceFacts: NewBackupServiceFactResolver(store), configSnapshots: configSnapshots,
+	}, nil
 }
 
 func (repository *durableBackupRunRepository) PrepareBackupRun(
@@ -112,11 +132,14 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 		TaskID:        input.TaskID, OperationID: input.OperationID, PlanID: input.PlanID,
 		FixedRevision: input.FixedRevision, CreatedAt: input.CreatedAt,
 		Initiator: input.Initiator, ScheduledAt: input.ScheduledAt,
+		ResolveConfig:      repository.configSnapshots.ResolveConfigSnapshot,
+		ResolveServiceFact: repository.serviceFacts,
 	}, repository.resolvePostgres)
 	if err != nil {
 		return BackupRunPrepared{}, err
 	}
 	return BackupRunPrepared{
+		Scope: prepared.Scope, Authority: prepared.Authority,
 		Run: prepared.Run, Owner: prepared.Owner, Publication: prepared.Publication,
 	}, nil
 }

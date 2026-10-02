@@ -66,9 +66,9 @@ type factTestAdapter struct {
 	scheme string
 }
 
-func (adapter factTestAdapter) Key() string          { return "test" }
-func (adapter factTestAdapter) Label() string        { return "Test" }
-func (adapter factTestAdapter) DefaultImage() string { return "test:latest" }
+func (adapter factTestAdapter) Key() string                   { return "test" }
+func (adapter factTestAdapter) Label() string                 { return "Test" }
+func (adapter factTestAdapter) DefaultImage() (string, error) { return "test:latest", nil }
 func (adapter factTestAdapter) FactsPrefix() string {
 	if adapter.prefix != "" || adapter.custom {
 		return adapter.prefix

@@ -33,8 +33,7 @@ func publishBackupPruneLifecycleTask(
 	source := run.Sources[0]
 	source.State = testbackupruntime.BackupSourceAttemptStaged
 	source.Phase = testbackupruntime.BackupSourcePhaseUpload
-	source.SizeBytes = 123
-	source.SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(run, &source)
 	point := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
 	pointValue, err := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
@@ -74,6 +73,7 @@ func publishBackupPruneLifecycleTask(
 	}
 	prune := testbackupruntime.BackupRecoveryPointPruneRecord{
 		Point: point.BackupRecoveryPointSnapshot, PointRevision: seeded.Revision,
+		PolicyRevision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
 		OperationID: operationID, State: testbackupruntime.BackupPrunePending,
 		CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 	}
@@ -144,8 +144,7 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	source := run.Sources[0]
 	source.State = testbackupruntime.BackupSourceAttemptStaged
 	source.Phase = testbackupruntime.BackupSourcePhaseUpload
-	source.SizeBytes = 123
-	source.SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(run, &source)
 	verifiedAt := run.CreatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, source, verifiedAt)
 	pointValue, err := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
@@ -179,7 +178,8 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	}
 	pendingSweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, State: testbackupruntime.BackupRetentionPending,
+		Revision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
+		State:     testbackupruntime.BackupRetentionPending,
 		CreatedAt: verifiedAt, UpdatedAt: verifiedAt,
 	}
 	pendingSweepValue, err := testbackupruntime.EncodeBackupRetentionSweepRecord(pendingSweep)
@@ -221,6 +221,7 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	}
 	prune := testbackupruntime.BackupRecoveryPointPruneRecord{
 		Point: point.BackupRecoveryPointSnapshot, PointRevision: pointCommit.Revision,
+		PolicyRevision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
 		OperationID: run.OperationID,
 		State:       testbackupruntime.BackupPrunePending, CreatedAt: verifiedAt.Add(time.Second),
 		UpdatedAt: verifiedAt.Add(time.Second),
@@ -297,7 +298,7 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	checkpointInput, _ := seedBackupPruneCheckpointAssignment(
 		t, store, run, dispatch.RecoveryPointIDs,
 	)
-	checkpointInput = backupRemoteAbsentCheckpoint(checkpointInput, 1, point.ID)
+	checkpointInput = backupRemoteAbsentCheckpoint(checkpointInput, 1, run, point.ID)
 	checkpoint, err := repository.MarkBackupRecoveryPointPruneVerifiedAbsent(
 		context.Background(), checkpointInput, dispatchVersion, assignedVersion, verified, true,
 	)
@@ -338,10 +339,10 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	}
 }
 
-// Rationale: the durable eleven-point prune maximum must leave exact room for
+// Rationale: the maximum prune dispatch must leave exact room for
 // complete Task publication, failure release, retry reacquisition, and
 // running-terminal parents.
-func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testing.T) {
+func TestBackupRuntimeRepositoryComposesMaximumPointPruneTaskBoundaries(t *testing.T) {
 	t.Parallel()
 	repository, store, run := newBackupRuntimeBareFixture(t)
 	operationID := ids.NewAt(ids.KindOperation, run.CreatedAt, 2100)
@@ -352,12 +353,27 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	credentials, err := testconnectors.NewEncryptedCredentials(
+		secondaryConnector.Connector.ID,
+		[]byte("sealed-credentials"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentialValue, err := testconnectors.EncodeEncryptedCredentials(credentials)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(credentialValue)
 	secondaryConnectorCreated, err := store.Transact(
 		context.Background(),
 		[]testkeyvalue.Condition{{Key: testconnectors.RecordKey(secondaryConnector.Connector.ID)}},
 		[]testkeyvalue.Mutation{{
 			Type: testkeyvalue.MutationPut, Key: testconnectors.RecordKey(secondaryConnector.Connector.ID),
 			Value: secondaryConnectorValue,
+		}, {
+			Type: testkeyvalue.MutationPut, Key: testconnectors.CredentialValueKey(secondaryConnector.Connector.ID),
+			Value: credentialValue,
 		}},
 	)
 	clear(secondaryConnectorValue)
@@ -366,10 +382,10 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	}
 	pending := make(
 		[]testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord],
-		testbackupruntime.MaximumBackupPruneBatch,
+		testbackupruntime.MaximumBackupPruneDispatchPoints,
 	)
-	pointIDs := make([]string, testbackupruntime.MaximumBackupPruneBatch)
-	mutations := make([]testkeyvalue.Mutation, 0, testbackupruntime.MaximumBackupPruneBatch*4)
+	pointIDs := make([]string, testbackupruntime.MaximumBackupPruneDispatchPoints)
+	mutations := make([]testkeyvalue.Mutation, 0, testbackupruntime.MaximumBackupPruneDispatchPoints*4)
 	for index := range pending {
 		allocatedAt := run.CreatedAt.Add(time.Duration(index) * time.Millisecond)
 		source := run.Sources[0]
@@ -379,8 +395,6 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 			source.RecoveryPointID + "/artifact.bin"
 		source.State = testbackupruntime.BackupSourceAttemptStaged
 		source.Phase = testbackupruntime.BackupSourcePhasePointCommit
-		source.SizeBytes = 123
-		source.SHA256 = testBackupDigest
 		pointRun := run
 		if index%2 == 1 {
 			pointRun.ConnectorID = secondaryConnector.Connector.ID
@@ -388,9 +402,11 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 			source.ObjectKey = pointRun.ConnectorPrefix + run.EnvironmentID + "/" + source.SourceID + "/" +
 				source.RecoveryPointID + "/artifact.bin"
 		}
+		backupRuntimeCompleteSourceArtifact(pointRun, &source)
 		point := backupRuntimeTestPoint(pointRun, source, allocatedAt.Add(time.Second))
 		record := testbackupruntime.BackupRecoveryPointPruneRecord{
-			Point:       point.BackupRecoveryPointSnapshot,
+			Point:          point.BackupRecoveryPointSnapshot,
+			PolicyRevision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,
 			OperationID: operationID,
 			State:       testbackupruntime.BackupPrunePending,
 			CreatedAt:   allocatedAt.Add(2 * time.Second),
@@ -438,7 +454,7 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	if err != nil || !pointSeeded.Succeeded {
 		t.Fatalf("seed eleven prune points = %#v, %v", pointSeeded, err)
 	}
-	mutations = make([]testkeyvalue.Mutation, 0, testbackupruntime.MaximumBackupPruneBatch)
+	mutations = make([]testkeyvalue.Mutation, 0, testbackupruntime.MaximumBackupPruneDispatchPoints)
 	for index := range pending {
 		pending[index].Record.PointRevision = pointSeeded.Revision
 		value, encodeErr := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(pending[index].Record)
@@ -492,7 +508,13 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	}
 	fabricated := proto.Clone(sealed).(*agentpb.ExecutionPlan)
 	fabricated.PlanHash = nil
-	fabricated.Steps[0].GetBackupArtifactPrune().ConnectorRevision++
+	fabricated.Steps[0].GetBackupStep().GetPrune().Objects[0].Object.Connector.Connector.ModRevision++
+	fabricated.Steps[0].GetBackupStep().StepDigest = nil
+	fabricatedStep, err := executionplan.SealBackupStepAuthority(fabricated.Steps[0].GetBackupStep())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fabricated.Steps[0].GetBackupStep().StepDigest = fabricatedStep.StepDigest
 	fabricated, err = executionplan.Seal(fabricated)
 	if err != nil {
 		t.Fatal(err)
@@ -541,6 +563,9 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	}
 	assigned := make([]testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord], len(pointIDs))
 	failedResult := completedComposeTaskResult()
+	failedResult.Kind = testtaskjournal.TaskResultBackup
+	failedResult.ExecutionEpoch = claim.Assignment.Record.ExecutionEpoch
+	failedResult.AssignmentGeneration = claim.Assignment.Record.BackupAuthorityFence.AssignmentGeneration
 	failedResult.ExitCode = 1
 	failedTask, err := tasks.AcknowledgeTask(
 		context.Background(),
@@ -686,7 +711,7 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 		verifiedMutations = append(verifiedMutations, testkeyvalue.Mutation{
 			Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRecoveryPointPruneKey(record.Point.ID), Value: value,
 		})
-		authorityKeys, keyErr := backupPruneAuthorityKeys(record.Point)
+		authorityKeys, keyErr := testbackupruntime.BackupPruneAuthorityKeys(record.Point)
 		if keyErr != nil {
 			testkeyvalue.ClearMutationValues(verifiedMutations)
 			t.Fatal(keyErr)
@@ -715,7 +740,11 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 		agentID,
 		1,
 		nextDispatch.TaskID,
-		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{
+			Kind: testtaskjournal.TaskResultBackup, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+			ExecutionEpoch:       claim.Assignment.Record.ExecutionEpoch,
+			AssignmentGeneration: claim.Assignment.Record.BackupAuthorityFence.AssignmentGeneration,
+		},
 		dispatch.CreatedAt.Add(7*time.Second),
 	)
 	if err != nil {
@@ -733,6 +762,7 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 		t.Fatalf("terminal source prune Task = %#v, %v", sourceTask, err)
 	}
 	pruneAt := sourceTask.Record.RetainUntil.Add(time.Nanosecond)
+	retireBackupTestTerminalDelivery(t, tasks, sourceTask)
 	for {
 		count, pruneErr := idempotency.PruneExpired(context.Background(), pruneAt)
 		if pruneErr != nil {

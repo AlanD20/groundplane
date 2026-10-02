@@ -93,6 +93,7 @@ func TestPrepareBackupPruneTerminalReceiptRecordsOrderedOutcomes(t *testing.T) {
 	pointTwo.CreatedAt = assigned.Record.Point.CreatedAt.Add(time.Millisecond)
 	pointTwo.ObjectKey = "production/" + pointTwo.EnvironmentID + "/" + pointTwo.SourceID + "/" +
 		pointTwo.ID + "/artifact.bin"
+	pointTwo.Object.Target.ObjectKey = pointTwo.ObjectKey
 	dispatch.RecoveryPointIDs = []string{assigned.Record.Point.ID, pointTwo.ID}
 	verified := assigned
 	verified.Record.State = testbackupruntime.BackupPruneVerifiedAbsent
@@ -260,7 +261,7 @@ func TestBackupTerminalReceiptReplaySurvivesCompactionAndLaterPointLifecycle(t *
 			name: "point later pruned",
 			mutate: func(t *testing.T, store *memoryTaskStore, _ testkeyvalue.Versioned[TaskRecord], point testbackupruntime.BackupPruneTerminalPointOutcome) {
 				t.Helper()
-				keys, err := backupPruneAuthorityKeys(point.Point)
+				keys, err := testbackupruntime.BackupPruneAuthorityKeys(point.Point)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -283,13 +284,14 @@ func TestBackupTerminalReceiptReplaySurvivesCompactionAndLaterPointLifecycle(t *
 					t.Fatalf("Get(recovery point) = %#v, %v", pointRead, err)
 				}
 				successor := testbackupruntime.BackupRecoveryPointPruneRecord{
-					Point:         point.Point,
-					PointRevision: pointRead.Entry.ModRevision,
-					OperationID:   ids.NewAt(ids.KindOperation, point.CreatedAt, 7401),
-					State:         testbackupruntime.BackupPruneAssigned,
-					TaskID:        ids.NewAt(ids.KindTask, point.CreatedAt, 7402),
-					CreatedAt:     point.CreatedAt,
-					UpdatedAt:     point.CreatedAt.Add(time.Hour),
+					Point:          point.Point,
+					PointRevision:  pointRead.Entry.ModRevision,
+					PolicyRevision: 1, PolicySHA256: testBackupDigest,
+					OperationID: ids.NewAt(ids.KindOperation, point.CreatedAt, 7401),
+					State:       testbackupruntime.BackupPruneAssigned,
+					TaskID:      ids.NewAt(ids.KindTask, point.CreatedAt, 7402),
+					CreatedAt:   point.CreatedAt,
+					UpdatedAt:   point.CreatedAt.Add(time.Hour),
 				}
 				value, err := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(successor)
 				if err != nil {
@@ -299,7 +301,7 @@ func TestBackupTerminalReceiptReplaySurvivesCompactionAndLaterPointLifecycle(t *
 				if _, err := putTerminalReceiptTestValue(ctx, store, testbackupruntime.BackupRecoveryPointPruneKey(point.Point.ID), value); err != nil {
 					t.Fatal(err)
 				}
-				keys, err := backupPruneAuthorityKeys(point.Point)
+				keys, err := testbackupruntime.BackupPruneAuthorityKeys(point.Point)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -324,13 +326,14 @@ func TestBackupTerminalReceiptReplaySurvivesCompactionAndLaterPointLifecycle(t *
 				successorAt := point.CreatedAt.Add(time.Hour)
 				successorTaskID := ids.NewAt(ids.KindTask, successorAt, 7403)
 				successor := testbackupruntime.BackupRecoveryPointPruneRecord{
-					Point:         point.Point,
-					PointRevision: pointRead.Entry.ModRevision,
-					OperationID:   task.Record.OperationID,
-					State:         testbackupruntime.BackupPruneAssigned,
-					TaskID:        successorTaskID,
-					CreatedAt:     point.CreatedAt,
-					UpdatedAt:     successorAt,
+					Point:          point.Point,
+					PointRevision:  pointRead.Entry.ModRevision,
+					PolicyRevision: 1, PolicySHA256: testBackupDigest,
+					OperationID: task.Record.OperationID,
+					State:       testbackupruntime.BackupPruneAssigned,
+					TaskID:      successorTaskID,
+					CreatedAt:   point.CreatedAt,
+					UpdatedAt:   successorAt,
 				}
 				pruneValue, err := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(successor)
 				if err != nil {
@@ -410,13 +413,14 @@ func TestBackupTerminalReceiptReplaySurvivesCompactionAndLaterPointLifecycle(t *
 					t.Fatalf("Get(recovery point) = %#v, %v", pointRead, err)
 				}
 				adopted := testbackupruntime.BackupRecoveryPointPruneRecord{
-					Point:         point.Point,
-					PointRevision: pointRead.Entry.ModRevision,
-					OperationID:   ids.NewAt(ids.KindOperation, point.CreatedAt, 7411),
-					State:         testbackupruntime.BackupPruneAssigned,
-					TaskID:        ids.NewAt(ids.KindTask, point.CreatedAt, 7412),
-					CreatedAt:     point.CreatedAt,
-					UpdatedAt:     point.CreatedAt.Add(2 * time.Hour),
+					Point:          point.Point,
+					PointRevision:  pointRead.Entry.ModRevision,
+					PolicyRevision: 1, PolicySHA256: testBackupDigest,
+					OperationID: ids.NewAt(ids.KindOperation, point.CreatedAt, 7411),
+					State:       testbackupruntime.BackupPruneAssigned,
+					TaskID:      ids.NewAt(ids.KindTask, point.CreatedAt, 7412),
+					CreatedAt:   point.CreatedAt,
+					UpdatedAt:   point.CreatedAt.Add(2 * time.Hour),
 				}
 				value, err := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(adopted)
 				if err != nil {
@@ -641,13 +645,15 @@ func TestBackupTerminalReceiptReplaySurvivesLaterOrphanReconciliationAndEnvironm
 		t.Fatal(err)
 	}
 	terminal.Result = &testtaskjournal.TaskResultRecord{
-		Kind:       testtaskjournal.TaskResultCompose,
-		Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+		Kind:           testtaskjournal.TaskResultBackup,
+		Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+		ExecutionEpoch: 1, AssignmentGeneration: 1,
 	}
 	terminal.TerminalAssignment = &testtaskjournal.TaskTerminalAssignmentRecord{
-		AssignmentID:    ids.NewAt(ids.KindAssignment, now, 7452),
-		AgentID:         ids.NewAt(ids.KindAgent, now, 7453),
-		AgentGeneration: 1,
+		AssignmentID:         ids.NewAt(ids.KindAssignment, now, 7452),
+		AgentID:              ids.NewAt(ids.KindAgent, now, 7453),
+		AgentGeneration:      1,
+		AssignmentGeneration: 1,
 	}
 	plan, err := prepareBackupRunTerminalReceipt(
 		testkeyvalue.Versioned[TaskRecord]{Record: current, Revision: 19},
@@ -737,11 +743,16 @@ func TestBackupTerminalReceiptReplaySurvivesLaterOrphanReconciliationAndEnvironm
 	}
 	point := backupRuntimeTestPoint(run, run.Sources[0], run.UpdatedAt)
 	orphan := testbackupruntime.BackupOrphanRecord{
-		Point:  point.BackupRecoveryPointSnapshot,
-		TaskID: run.TaskID,
+		Target: point.BackupRecoveryPointTargetSnapshot, Evidence: point.Evidence,
+		Object: point.Object, Postgres: point.Postgres,
+		Upload: testbackupruntime.BackupUploadOutcome{
+			Kind:   testbackupruntime.BackupUploadReturned,
+			Target: point.Object.Target, ReturnedObject: point.Object,
+		},
+		Phase: testbackupruntime.BackupSourcePhasePointCommit, TaskID: run.TaskID,
 		Reconciliation: testbackupruntime.BackupOrphanReconciliationAuthority{
 			OperationID: run.OperationID, PolicyRevision: run.PolicyRevision,
-			RetentionKeep: run.RetentionKeep,
+			PolicySHA256: run.PolicySHA256, RetentionKeep: run.RetentionKeep,
 		},
 		State: testbackupruntime.BackupOrphanInspect, CreatedAt: run.UpdatedAt, UpdatedAt: run.UpdatedAt,
 	}

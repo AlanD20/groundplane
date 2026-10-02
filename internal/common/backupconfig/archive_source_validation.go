@@ -8,7 +8,7 @@ import (
 
 func validateOwnedSource(
 	ctx context.Context,
-	source ownedSpool,
+	source ValidationSpool,
 	evidence SourceEvidence,
 ) (Layout, [32]byte, error) {
 	if err := proveOwnedExactSize(ctx, source, evidence.SizeBytes); err != nil {

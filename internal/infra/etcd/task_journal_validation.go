@@ -71,8 +71,9 @@ func ValidateTaskRecord(record TaskRecord) error {
 	if !recordcodec.ValidSHA256(record.PlanHash) {
 		return errs.New(errs.KindValidationFailed, "task plan hash must be a lowercase SHA-256 digest")
 	}
-	backupTask := record.Type == taskjournal.TaskBackup || record.Type == taskjournal.TaskBackupPrune
-	if backupTask && (record.RenderGeneration != 0 || record.TimeoutSeconds != backupTaskTimeoutSeconds ||
+	backupTask := record.Type == taskjournal.TaskBackup || record.Type == taskjournal.TaskBackupPrune ||
+		record.Type == taskjournal.TaskRestore
+	if backupTask && (record.RenderGeneration != 0 || record.TimeoutSeconds != backupTaskTimeout(record.Type) ||
 		len(record.Params) != 0 || len(record.Materializations) != 0) {
 		return errs.New(errs.KindValidationFailed, "backup task shape is invalid")
 	}
@@ -100,6 +101,9 @@ func ValidateTaskRecord(record TaskRecord) error {
 			recordcodec.ValidateID(ids.KindAssignment, identity.AssignmentID) != nil ||
 			recordcodec.ValidateID(ids.KindAgent, identity.AgentID) != nil || identity.AgentGeneration == 0 {
 			return errs.New(errs.KindInternal, "task terminal assignment identity is invalid")
+		}
+		if backupTask != (identity.AssignmentGeneration > 0) {
+			return errs.New(errs.KindInternal, "task terminal backup assignment generation is invalid")
 		}
 	}
 	if record.NextEventSequence == 0 ||
@@ -153,6 +157,9 @@ func ValidateTaskRecord(record TaskRecord) error {
 		return err
 	}
 	if record.Result != nil {
+		if backupTask != (record.Result.Kind == taskjournal.TaskResultBackup) {
+			return errs.New(errs.KindInternal, "Task result does not match its execution family")
+		}
 		if !taskjournal.IsTerminalTaskStatus(record.Status) {
 			return errs.New(errs.KindInternal, "nonterminal task has a completion result")
 		}

@@ -2,6 +2,7 @@ package backupruntime
 
 import (
 	"fmt"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
@@ -9,46 +10,18 @@ const (
 	backupCheckpointDedupPrefix  = "/v1/runtime/backup-checkpoint-dedup/"
 )
 
-type BackupCheckpointKind uint32
-
-const (
-	BackupCheckpointArtifactPrepared BackupCheckpointKind = iota + 1
-	BackupCheckpointUploadVerified
-	BackupCheckpointSourceCleanupCompleted
-	BackupCheckpointRestoreArtifactValidated
-	BackupCheckpointVolumeTreeStaged
-	BackupCheckpointVolumeTreeExchanged
-	BackupCheckpointVolumeReplacedTreeCleaned
-	BackupCheckpointConfigGenerationStaged
-	BackupCheckpointConfigGenerationActivated
-	BackupCheckpointPostgresRestoreVerified
-	BackupCheckpointRemoteObjectAbsent
-	BackupCheckpointUploadCompleted
-)
-
-// BackupCheckpointPayload is a closed persistence input. Validation selects
-// exactly the fields defined for Kind; unused fields must remain zero.
-type BackupCheckpointPayload struct {
-	Kind                          BackupCheckpointKind
-	PointID                       string
-	StoredSizeBytes               uint64
-	StoredSHA256                  string
-	DecodedSHA256                 string
-	StagedTreeManifestSHA256      string
-	LiveTreeManifestSHA256        string
-	RestoreGenerationID           string
-	EntryGenerationManifestSHA256 string
-	RenderGeneration              uint64
-}
-
 type BackupCheckpointInput struct {
-	TaskID          string
-	AssignmentID    string
-	AgentID         string
-	AgentGeneration uint64
-	StepID          string
-	Sequence        uint64
-	Payload         BackupCheckpointPayload
+	TaskID                      string
+	AssignmentID                string
+	AgentID                     string
+	AgentGeneration             uint64
+	StepID                      string
+	ExecutionID                 string
+	AssignmentGeneration        uint64
+	AuthoritySHA256             string
+	PrecedingCheckpointRevision int64
+	Sequence                    uint64
+	Request                     *agentpb.BackupCheckpointRequest
 }
 
 type BackupAssignmentInput struct {
@@ -60,27 +33,39 @@ type BackupAssignmentInput struct {
 }
 
 type BackupCheckpointCursorRecord struct {
-	TaskID       string `json:"task_id"`
-	AssignmentID string `json:"assignment_id"`
-	StepID       string `json:"step_id"`
-	NextSequence uint64 `json:"next_sequence"`
+	TaskID               string `json:"task_id"`
+	AssignmentID         string `json:"assignment_id"`
+	StepID               string `json:"step_id"`
+	ExecutionID          string `json:"execution_id"`
+	AssignmentGeneration uint64 `json:"assignment_generation"`
+	AuthoritySHA256      string `json:"authority_sha256"`
+	NextSequence         uint64 `json:"next_sequence"`
 }
 
 type BackupCheckpointDedupRecord struct {
-	TaskID        string               `json:"task_id"`
-	AssignmentID  string               `json:"assignment_id"`
-	StepID        string               `json:"step_id"`
-	Sequence      uint64               `json:"sequence"`
-	Kind          BackupCheckpointKind `json:"kind"`
-	PayloadSHA256 string               `json:"payload_sha256"`
+	TaskID                      string `json:"task_id"`
+	AssignmentID                string `json:"assignment_id"`
+	StepID                      string `json:"step_id"`
+	ExecutionID                 string `json:"execution_id"`
+	AssignmentGeneration        uint64 `json:"assignment_generation"`
+	AuthoritySHA256             string `json:"authority_sha256"`
+	PrecedingCheckpointRevision int64  `json:"preceding_checkpoint_revision"`
+	Sequence                    uint64 `json:"sequence"`
+	CheckpointTag               uint32 `json:"checkpoint_tag"`
+	PayloadSHA256               string `json:"payload_sha256"`
+	Request                     []byte `json:"request"`
 }
 
 func BackupCheckpointCursorKey(input BackupCheckpointInput) string {
-	return BackupCheckpointCursorTaskPrefix(input.TaskID) + input.AssignmentID + "/" + input.StepID
+	return BackupCheckpointCursorTaskPrefix(
+		input.TaskID,
+	) + input.AssignmentID + "/" + input.StepID + "/" + input.ExecutionID
 }
 
 func BackupCheckpointDedupKey(input BackupCheckpointInput) string {
-	return BackupCheckpointDedupTaskPrefix(input.TaskID) + input.AssignmentID + "/" + input.StepID +
+	return BackupCheckpointDedupTaskPrefix(
+		input.TaskID,
+	) + input.AssignmentID + "/" + input.StepID + "/" + input.ExecutionID +
 		"/" + fmt.Sprintf(
 		"%020d",
 		input.Sequence,

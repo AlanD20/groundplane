@@ -6,12 +6,12 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresbackingguard"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -162,6 +162,31 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
+	backingEnvironmentIDs, err := backupruntime.PostgresBackingEnvironmentIDs(record)
+	if err != nil {
+		etcdstore.ClearMutationValues(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	backingGuards, err := postgresbackingguard.PrepareAcquisition(
+		ctx,
+		repository.store,
+		backingEnvironmentIDs,
+		record.EnvironmentID,
+		postgresbackingguard.Owner(
+			backupruntime.BackupOperationBackup,
+			record.OperationID,
+			record.TaskID,
+		),
+		record.CreatedAt,
+		anchor.ReadRevision,
+	)
+	if err != nil {
+		etcdstore.ClearMutationValues(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	defer backingGuards.Clear()
 	policyFence := []etcdstore.Condition(nil)
 	if retrySource == nil {
 		policyFence, err = repository.loadManualBackupPolicyFence(ctx, record, fixedRevision)
@@ -180,6 +205,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	}
 	conditions = append(conditions, backupRunExternalConditions(record, snapshotConditions)...)
 	conditions = append(conditions, fence.TransactionConditions()...)
+	conditions = append(conditions, backingGuards.Conditions...)
 	conditions = append(conditions, policyFence...)
 	if retrySource != nil {
 		conditions = append(
@@ -201,6 +227,11 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(record.EnvironmentID), Value: lockValue,
 	})
+	for _, mutation := range backingGuards.Mutations {
+		copyOfMutation := mutation
+		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
+		mutations = append(mutations, copyOfMutation)
+	}
 	mutations = append(mutations, snapshotMutations...)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
@@ -231,10 +262,9 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	}, nil
 }
 
-// backupRunExternalConditions retains CAS for each source definition and for
-// backing Services outside the consumer Environment. Source definitions may
-// change independently of an Environment operation; the exact Environment
-// epoch and operation lock serialize the remaining consumer-owned evidence.
+// backupRunExternalConditions retains CAS for records that can change outside
+// an Environment mutation. The consumer and every PostgreSQL backing
+// Environment use their exact mutation epochs and canonical operation locks.
 func backupRunExternalConditions(
 	run backupruntime.BackupRunRecord,
 	conditions []etcdstore.Condition,
@@ -246,9 +276,6 @@ func backupRunExternalConditions(
 	}
 	for _, source := range run.Sources {
 		allowed[backuppolicy.BackupSourceKey(source.SourceID)] = struct{}{}
-		if source.Snapshot.Postgres != nil {
-			allowed[blueprints.EnvironmentBlueprintHeadKey(source.Snapshot.Postgres.BackingEnvironmentID)] = struct{}{}
-		}
 		if source.Snapshot.Volume != nil {
 			allowed[projectionrecord.EnvironmentComposeProjectionStorageKey(source.Snapshot.Volume.EnvironmentID)] = struct{}{}
 			for _, service := range source.Snapshot.Volume.Services {

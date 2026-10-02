@@ -125,7 +125,7 @@ func (session *RecoverySession) Complete(ctx context.Context) (*Stager, []*Prepa
 	return session.stager, prepared, nil
 }
 
-// Close abandons the boot attempt without deleting retained finals.
+// Close abandons the boot attempt without deleting retained staged files.
 func (session *RecoverySession) Close(ctx context.Context) error {
 	if session == nil {
 		return contextError(ctx)

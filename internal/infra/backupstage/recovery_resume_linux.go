@@ -2,10 +2,21 @@ package backupstage
 
 import (
 	"context"
+	"hash"
+	"io"
+	"strings"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"golang.org/x/sys/unix"
 	"math"
 )
+
+type verifiedRecoveredArtifact struct {
+	evidence ArtifactEvidence
+	hasher   hash.Hash
+	final    string
+	partial  bool
+}
 
 func (session *RecoverySession) resumePreparedLocked(
 	ctx context.Context,
@@ -18,7 +29,7 @@ func (session *RecoverySession) resumePreparedLocked(
 	if len(disposition.ExpectedFiles) != len(recovered.entry.Files) {
 		return internalError("controller recovery evidence file count does not match retained files")
 	}
-	verified := make([]ArtifactEvidence, 0, len(recovered.entry.Files))
+	verified := make([]verifiedRecoveredArtifact, 0, len(recovered.entry.Files))
 	for index, expected := range disposition.ExpectedFiles {
 		inventory := recovered.entry.Files[index]
 		if expected != inventory {
@@ -28,14 +39,26 @@ func (session *RecoverySession) resumePreparedLocked(
 		if file == nil {
 			return internalError("retained recovery artifact descriptor is missing")
 		}
-		actual, err := evidenceFromFD(ctx, expected.Name, int(file.Fd()))
+		actual, hasher, err := evidenceAndHashFromFD(ctx, expected.Name, int(file.Fd()))
 		if err != nil {
 			return err
 		}
 		if actual != expected {
 			return internalError("retained recovery artifact evidence changed before resume")
 		}
-		verified = append(verified, actual)
+		item := verifiedRecoveredArtifact{evidence: actual, hasher: hasher, final: actual.Name}
+		if isManagedPartial(actual.Name) {
+			item.partial = true
+			item.final = strings.TrimSuffix(strings.TrimPrefix(actual.Name, "."), ".partial")
+			position, seekErr := unix.Seek(int(file.Fd()), int64(actual.Size), io.SeekStart)
+			if seekErr != nil {
+				return systemError("position recovered partial artifact", seekErr)
+			}
+			if position != int64(actual.Size) {
+				return internalError("position recovered partial artifact returned an invalid offset")
+			}
+		}
+		verified = append(verified, item)
 	}
 	capacity := disposition.RemainingGrowth
 	var growthFD = -1
@@ -101,14 +124,24 @@ func (session *RecoverySession) resumePreparedLocked(
 		IDs: recovered.entry.IDs, Stage: stage,
 	}
 	for _, item := range verified {
-		file := recovered.files[item.Name]
+		file := recovered.files[item.evidence.Name]
 		artifact := &Artifact{
-			stage: stage, file: file, final: item.Name, size: int64(item.Size), written: int64(item.Size),
-			state: artifactPublished, readers: make(map[*preadCloser]struct{}), digest: item.SHA256,
+			stage: stage, file: file, final: item.final, size: int64(item.evidence.Size),
+			written: int64(item.evidence.Size), state: artifactPublished,
+			readers: make(map[*preadCloser]struct{}), digest: item.evidence.SHA256,
+		}
+		if item.partial {
+			artifact.temporary = item.evidence.Name
+			artifact.state = artifactOpen
+			artifact.hasher = item.hasher
+			artifact.growing = capacity.kind == capacityExclusiveUnknown
+			if artifact.growing {
+				stage.growingFiles++
+			}
 		}
 		stage.artifacts[artifact] = struct{}{}
-		prepared.Files = append(prepared.Files, PreparedArtifact{Evidence: item, Artifact: artifact})
-		delete(recovered.files, item.Name)
+		prepared.Files = append(prepared.Files, PreparedArtifact{Evidence: item.evidence, Artifact: artifact})
+		delete(recovered.files, item.evidence.Name)
 	}
 	recovered.rootFD, recovered.taskFD, recovered.stepFD, recovered.pointFD = -1, -1, -1, -1
 	recovered.reservationRootFD, recovered.reservationTaskFD = -1, -1

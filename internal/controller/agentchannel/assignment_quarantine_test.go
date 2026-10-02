@@ -59,6 +59,8 @@ func TestDispatchReadyQuarantinesUnrenderableRecoveredAssignment(t *testing.T) {
 	server.now = func() time.Time { return at }
 	delivered := make(map[string]string)
 	quarantined := make(map[string]string)
+	payloads := newAssignmentPayloadDelivery(stream.Context(), 2)
+	defer payloads.close()
 
 	err = server.dispatchReady(
 		stream,
@@ -68,6 +70,7 @@ func TestDispatchReadyQuarantinesUnrenderableRecoveredAssignment(t *testing.T) {
 		2,
 		delivered,
 		quarantined,
+		payloads,
 	)
 	if err != nil {
 		t.Fatalf("dispatchReady() error = %v", err)

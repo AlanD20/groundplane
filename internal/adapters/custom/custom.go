@@ -20,7 +20,7 @@ type adapter struct{}
 
 func (a *adapter) Key() string                                                     { return "custom" }
 func (a *adapter) Label() string                                                   { return "Custom" }
-func (a *adapter) DefaultImage() string                                            { return "" }
+func (a *adapter) DefaultImage() (string, error)                                   { return "", nil }
 func (a *adapter) FactsPrefix() string                                             { return "" }
 func (a *adapter) URLScheme() string                                               { return "" }
 func (a *adapter) Port() string                                                    { return "" }

@@ -18,13 +18,13 @@ func TestBackupRuntimeRepositoryPaginatesConnectorPointsAtFixedRevision(t *testi
 	source := run.Sources[0]
 	source.State = testbackupruntime.BackupSourceAttemptStaged
 	source.Phase = testbackupruntime.BackupSourcePhaseUpload
-	source.SizeBytes = 123
-	source.SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(run, &source)
 	older := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
 	newer := older
 	newer.CreatedAt = older.CreatedAt.Add(time.Second)
 	newer.ID = ids.NewAt(ids.KindRecoveryPoint, newer.CreatedAt, 902)
 	newer.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + newer.SourceID + "/" + newer.ID + "/artifact.bin"
+	newer.Object.Target.ObjectKey = newer.ObjectKey
 	newer.VerifiedAt = older.VerifiedAt.Add(time.Second)
 	olderValue, err := testbackupruntime.EncodeBackupRecoveryPointRecord(older)
 	if err != nil {
@@ -125,8 +125,7 @@ func TestBackupRuntimeRepositoryListsNinetySixPointsAtFixedRevision(t *testing.T
 		source.RecoveryPointCreatedAt = createdAt
 		source.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + source.SourceID + "/" +
 			source.RecoveryPointID + "/artifact.bin"
-		source.SizeBytes = 123
-		source.SHA256 = testBackupDigest
+		backupRuntimeCompleteSourceArtifact(run, &source)
 		point := backupRuntimeTestPoint(run, source, createdAt.Add(time.Millisecond))
 		value, err := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
 		if err != nil {
@@ -169,8 +168,7 @@ func TestBackupRuntimeRepositoryRejectsMalformedPointCursorAndChunk(t *testing.T
 		t.Fatalf("malformed point cursor error = %v", err)
 	}
 	source := run.Sources[0]
-	source.SizeBytes = 123
-	source.SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(run, &source)
 	point := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
 	seedBackupRuntimePointAuthority(t, store, point)
 	malformed := &backupRuntimeAuthorityAuditStore{hierarchyStore: store, truncateNextChunk: true}

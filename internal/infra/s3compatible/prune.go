@@ -2,10 +2,8 @@ package s3compatible
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
@@ -16,8 +14,8 @@ import (
 const pruneReconcileInterval = 250 * time.Millisecond
 
 // PruneExact removes only the Controller-sealed object. It never lists a
-// bucket: exact HEAD establishes the current provider discriminator and the
-// sealed size/hash establish that the object is the authorized artifact.
+// bucket or selects a new discriminator. Exact HEAD proves the sealed object
+// and the complete metadata set before deletion and during absence checks.
 func (adapter *Adapter) PruneExact(ctx context.Context, authority backupobject.PruneAuthority) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -26,7 +24,7 @@ func (adapter *Adapter) PruneExact(ctx context.Context, authority backupobject.P
 		return err
 	}
 
-	discriminator, present, err := adapter.headPruneAuthority(ctx, authority, nil)
+	present, err := adapter.headPruneAuthority(ctx, authority)
 	if err != nil || !present {
 		return err
 	}
@@ -34,7 +32,7 @@ func (adapter *Adapter) PruneExact(ctx context.Context, authority backupobject.P
 		Bucket: aws.String(adapter.config.Bucket),
 		Key:    aws.String(authority.Key),
 	}
-	applyDiscriminatorToDelete(input, discriminator)
+	applyDiscriminatorToDelete(input, authority.Discriminator)
 	if _, err := adapter.client.DeleteObject(ctx, input, oneAttempt); err != nil {
 		switch classifyProviderFailure(err) {
 		case providerFailureAbsent:
@@ -49,7 +47,7 @@ func (adapter *Adapter) PruneExact(ctx context.Context, authority backupobject.P
 	ticker := time.NewTicker(pruneReconcileInterval)
 	defer ticker.Stop()
 	for {
-		_, present, err := adapter.headPruneAuthority(ctx, authority, &discriminator)
+		present, err := adapter.headPruneAuthority(ctx, authority)
 		if err == nil && !present {
 			return nil
 		}
@@ -67,46 +65,40 @@ func (adapter *Adapter) PruneExact(ctx context.Context, authority backupobject.P
 func (adapter *Adapter) headPruneAuthority(
 	ctx context.Context,
 	authority backupobject.PruneAuthority,
-	expected *backupobject.Discriminator,
-) (backupobject.Discriminator, bool, error) {
+) (bool, error) {
 	input := &s3.HeadObjectInput{Bucket: aws.String(adapter.config.Bucket), Key: aws.String(authority.Key)}
-	if expected != nil {
-		applyDiscriminatorToHead(input, *expected)
-	}
+	applyDiscriminatorToHead(input, authority.Discriminator)
 	output, err := adapter.client.HeadObject(ctx, input)
 	if err != nil {
 		if classifyProviderFailure(err) == providerFailureAbsent {
-			return backupobject.Discriminator{}, false, nil
+			return false, nil
 		}
-		return backupobject.Discriminator{}, false, providerError(err)
+		return false, providerError(err)
 	}
 	if output == nil || output.ContentLength == nil || *output.ContentLength < 0 ||
 		uint64(
 			*output.ContentLength,
-		) != authority.StoredSizeBytes || !matchesStoredSHA256(output.ChecksumSHA256, output.Metadata, authority.StoredSHA256) {
-		return backupobject.Discriminator{}, false, conflictError()
+		) != authority.Evidence.StoredSizeBytes {
+		return false, conflictError()
 	}
 	discriminator, err := outputDiscriminator(output.VersionId, output.ETag)
 	if err != nil {
-		return backupobject.Discriminator{}, false, err
+		return false, err
 	}
-	if expected != nil && discriminator != *expected {
-		return backupobject.Discriminator{}, false, conflictError()
+	count, digest := backupobject.MetadataEvidence(output.Metadata)
+	if discriminator != authority.Discriminator || count != authority.MetadataCount ||
+		digest != authority.MetadataSHA256 ||
+		output.Metadata["groundplane-stored-size-bytes"] != strconv.FormatUint(
+			authority.Evidence.StoredSizeBytes,
+			10,
+		) ||
+		output.Metadata["groundplane-source-size-bytes"] != strconv.FormatUint(
+			authority.Evidence.SourceSizeBytes,
+			10,
+		) ||
+		output.Metadata["groundplane-source-sha256"] != hex.EncodeToString(authority.Evidence.SourceSHA256[:]) ||
+		output.Metadata["groundplane-stored-sha256"] != hex.EncodeToString(authority.Evidence.StoredSHA256[:]) {
+		return false, conflictError()
 	}
-	return discriminator, true, nil
-}
-
-func matchesStoredSHA256(checksum *string, metadata map[string]string, expected [sha256.Size]byte) bool {
-	hexDigest := hex.EncodeToString(expected[:])
-	base64Digest := base64.StdEncoding.EncodeToString(expected[:])
-	if checksum != nil && strings.TrimSpace(*checksum) == base64Digest {
-		return true
-	}
-	for _, value := range metadata {
-		value = strings.TrimSpace(value)
-		if strings.EqualFold(value, hexDigest) || value == base64Digest {
-			return true
-		}
-	}
-	return false
+	return true, nil
 }

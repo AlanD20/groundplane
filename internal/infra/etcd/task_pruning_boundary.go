@@ -20,6 +20,19 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	readRevision int64,
 	now time.Time,
 ) (bool, error) {
+	if held, err := repository.backupRestoreTaskPruneHeld(ctx, task, taskRevision, readRevision); held || err != nil {
+		return held, err
+	}
+	if held, err := repository.taskTerminalDeliveryPruneHeld(ctx, task, taskRevision, readRevision); held ||
+		err != nil {
+		return held, err
+	}
+	if held, err := repository.taskStagingDeliveryPruneHeld(ctx, task, taskRevision, readRevision); held || err != nil {
+		return held, err
+	}
+	if held, _, err := repository.taskOrphanCleanupPruneConditions(ctx, task, readRevision); held || err != nil {
+		return held, err
+	}
 	if held, err := repository.blueprintChildPruneHeld(ctx, task, readRevision); held || err != nil {
 		return held, err
 	}

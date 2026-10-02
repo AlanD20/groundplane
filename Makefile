@@ -13,6 +13,10 @@ AGENT_IMAGE ?= groundplane-agent:dev
 AGENT_VERSION ?= dev
 RUNNER_IMAGE ?= groundplane-runner:dev
 RUNNER_VERSION ?= $(shell cat .runner-version)
+POSTGRES16_RELEASE_BASE64 ?=
+# Hermetic test binaries need managed-image authority but never ship this catalog.
+TEST_POSTGRES16_RELEASE_BASE64 = $(shell PYTHONDONTWRITEBYTECODE=1 python3 -c 'import sys; sys.path.insert(0, "scripts"); from postgres16_test_fixture import postgres16_release_base64; print(postgres16_release_base64())')
+TEST_LDFLAGS = -X github.com/AlanD20/groundplane/internal/common/postgres16protocol.releaseIndexBase64=$(TEST_POSTGRES16_RELEASE_BASE64)
 DOCKER ?= docker
 PROTOC ?= protoc
 
@@ -28,7 +32,7 @@ controller: console
 	$(MAKE) controller-binary
 
 controller-binary: | $(BIN_DIR)
-	go build -trimpath -buildvcs=false -tags groundplane_console -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION)" -o $(BIN_DIR)/controller ./cmd/controller
+	go build -trimpath -buildvcs=false -tags groundplane_console -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION) -X github.com/AlanD20/groundplane/internal/common/postgres16protocol.releaseIndexBase64=$(POSTGRES16_RELEASE_BASE64)" -o $(BIN_DIR)/controller ./cmd/controller
 	go run ./internal/releasemeta -controller $(BIN_DIR)/controller -version "$(VERSION)" -output $(BIN_DIR)/controller-release.json
 
 controller-dev: | $(BIN_DIR)
@@ -127,7 +131,7 @@ console-release-smoke: | $(BIN_DIR)
 		"$$smoke" -test.run '^TestProductionConsoleReleaseSmoke$$'
 
 test:
-	go test ./... -count=1 -race -coverprofile="$$GROUNDPLANE_COVERAGE_FILE" -covermode=atomic
+	go test -ldflags="$(TEST_LDFLAGS)" ./... -count=1 -race -coverprofile="$$GROUNDPLANE_COVERAGE_FILE" -covermode=atomic
 	$(MAKE) component-modules-verify
 
 c15-connector-acceptance: console-toolchain
@@ -216,7 +220,7 @@ ci: console | $(BIN_DIR)
 	$(MAKE) component-modules-verify
 	GOTOOLCHAIN=go1.26.0 go tool staticcheck -tags groundplane_console ./...
 	go vet -tags groundplane_console ./...
-	go test -tags groundplane_console ./... -count=1 -race -coverprofile="$$GROUNDPLANE_COVERAGE_FILE" -covermode=atomic
+	go test -ldflags="$(TEST_LDFLAGS)" -tags groundplane_console ./... -count=1 -race -coverprofile="$$GROUNDPLANE_COVERAGE_FILE" -covermode=atomic
 	$(MAKE) backupstage-host-acceptance-compile
 	$(MAKE) controller-binary
 	$(MAKE) console-release-smoke

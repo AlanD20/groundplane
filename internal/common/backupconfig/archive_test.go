@@ -48,7 +48,7 @@ func TestEmptyArtifactMatchesGoldenVector(t *testing.T) {
 	assertHexDigest(t, sourceDigest, "0b726da4797d0420a45848a567ed63cb4798a2f8c688a3340e01f9a4fbc6904f")
 	validated, err := ValidateArtifact(ctx, bytes.NewReader(destination.bytes), SourceEvidence{
 		SizeBytes: uint64(len(destination.bytes)), SHA256: sourceDigest,
-	}, t.TempDir(), nil)
+	}, testSpoolFactory(t), nil)
 	if err != nil {
 		t.Fatalf("ValidateArtifact(): %v", err)
 	}
@@ -121,7 +121,7 @@ func TestOneEntryArtifactMatchesGoldenVectorAndStreamsPassTwo(t *testing.T) {
 	assertHexDigest(t, sourceDigest, "b3f6259f7be484008dd128fbee46917b63e3068c694df84adc3a672223c2ba3e")
 	validated, err := ValidateArtifact(ctx, bytes.NewReader(destination.bytes), SourceEvidence{
 		SizeBytes: uint64(len(destination.bytes)), SHA256: sourceDigest,
-	}, t.TempDir(), testMetadataEncoder)
+	}, testSpoolFactory(t), testMetadataEncoder)
 	if err != nil {
 		t.Fatalf("ValidateArtifact(): %v", err)
 	}
@@ -199,7 +199,7 @@ func TestValidateArtifactRejectsTamperedCanonicalRegions(t *testing.T) {
 			digest := sha256.Sum256(source)
 			if _, err := ValidateArtifact(ctx, bytes.NewReader(source), SourceEvidence{
 				SizeBytes: uint64(len(source)), SHA256: digest,
-			}, t.TempDir(), testMetadataEncoder); err == nil {
+			}, testSpoolFactory(t), testMetadataEncoder); err == nil {
 				t.Fatal("ValidateArtifact() accepted tampered source")
 			}
 		})
@@ -368,14 +368,14 @@ func TestValidationRequiresDigestAndProbesHiddenTrailingByte(t *testing.T) {
 	}
 	if _, err := ValidateArtifact(ctx, bytes.NewReader(destination.bytes), SourceEvidence{
 		SizeBytes: authority.SourceSizeBytes,
-	}, t.TempDir(), nil); err == nil {
+	}, testSpoolFactory(t), nil); err == nil {
 		t.Fatal("ValidateArtifact() accepted missing SHA-256 evidence")
 	}
 	withExtra := append(append([]byte(nil), destination.bytes...), 0)
 	digest := sha256.Sum256(destination.bytes)
 	if _, err := ValidateArtifact(ctx, bytes.NewReader(withExtra), SourceEvidence{
 		SizeBytes: authority.SourceSizeBytes, SHA256: digest,
-	}, t.TempDir(), nil); err == nil {
+	}, testSpoolFactory(t), nil); err == nil {
 		t.Fatal("ValidateArtifact() accepted hidden trailing byte")
 	}
 }
@@ -409,7 +409,7 @@ func TestPassTwoOwnsSourceRehashesAndZeroizesReader(t *testing.T) {
 	digest := sha256.Sum256(destination.bytes)
 	validated, err := ValidateArtifact(ctx, bytes.NewReader(destination.bytes), SourceEvidence{
 		SizeBytes: authority.SourceSizeBytes, SHA256: digest,
-	}, t.TempDir(), testMetadataEncoder)
+	}, testSpoolFactory(t), testMetadataEncoder)
 	if err != nil {
 		t.Fatalf("ValidateArtifact(): %v", err)
 	}
@@ -507,7 +507,7 @@ func TestPassTwoEnforcesOrderedSingleInFlightValue(t *testing.T) {
 	digest := sha256.Sum256(destination.bytes)
 	validated, err := ValidateArtifact(ctx, bytes.NewReader(destination.bytes), SourceEvidence{
 		SizeBytes: authority.SourceSizeBytes, SHA256: digest,
-	}, t.TempDir(), testMetadataEncoder)
+	}, testSpoolFactory(t), testMetadataEncoder)
 	if err != nil {
 		t.Fatalf("ValidateArtifact(): %v", err)
 	}
@@ -611,7 +611,7 @@ func TestBeginPassTwoRejectsAppendAfterSourceSize(t *testing.T) {
 	digest := sha256.Sum256(destination.bytes)
 	validated, err := ValidateArtifact(ctx, bytes.NewReader(destination.bytes), SourceEvidence{
 		SizeBytes: authority.SourceSizeBytes, SHA256: digest,
-	}, t.TempDir(), nil)
+	}, testSpoolFactory(t), nil)
 	if err != nil {
 		t.Fatalf("ValidateArtifact(): %v", err)
 	}
@@ -781,4 +781,22 @@ func (writer *memoryWriter) WriteAt(value []byte, offset int64) (int, error) {
 
 func testMetadataEncoder(_ context.Context, direction TransferDirection, ordinal uint32, entry Entry) ([]byte, error) {
 	return []byte{byte(direction), byte(ordinal), byte(len(entry.ID))}, nil
+}
+
+func testSpoolFactory(t *testing.T) SpoolFactory {
+	t.Helper()
+	directory := t.TempDir()
+	return func(ctx context.Context) (ValidationSpool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		file, err := os.CreateTemp(directory, "validated-*")
+		if err != nil {
+			return nil, err
+		}
+		if err := os.Remove(file.Name()); err != nil {
+			return nil, errors.Join(err, file.Close())
+		}
+		return file, nil
+	}
 }

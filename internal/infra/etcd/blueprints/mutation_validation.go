@@ -29,8 +29,20 @@ func ValidateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAud
 	if value.Route != nil {
 		kinds++
 	}
+	if value.ConfigRestore != nil {
+		kinds++
+	}
 	if kinds != 1 {
 		return errs.New(errs.KindValidationFailed, "desired mutation audit kind is invalid")
+	}
+	if value.ConfigRestore != nil {
+		restore := value.ConfigRestore
+		if ids.Validate(ids.KindTask, restore.BaseRevisionID) != nil ||
+			ids.Validate(ids.KindRecoveryPoint, restore.PointID) != nil ||
+			ids.Validate(ids.KindConfig, restore.GenerationID) != nil || zeroDigest(restore.SourceSHA256) {
+			return errs.New(errs.KindValidationFailed, "Config Restore audit authority is invalid")
+		}
+		return nil
 	}
 	if value.Service != nil {
 		return validateEnvironmentServiceMutationAudit(*value.Service)

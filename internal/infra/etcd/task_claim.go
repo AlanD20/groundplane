@@ -54,6 +54,7 @@ func (repository *TaskRepository) claimNextTask(
 	}
 
 	conflicts := 0
+	expiredBackups := 0
 	for {
 		candidate, found, err := repository.nextTaskClaimCandidate(ctx, executor)
 		if err != nil || !found {
@@ -69,7 +70,20 @@ func (repository *TaskRepository) claimNextTask(
 		activeKey := taskjournal.TaskActiveOperationKey(task.OperationID)
 		assignmentKey := taskjournal.TaskExecutionClaimKey(executor, agentID, task.ID)
 		assignmentIndexKey := taskjournal.TaskAssignmentIndexKey(task.ID)
-		deadline := claimAt.Add(time.Duration(task.TimeoutSeconds) * time.Second)
+		deadline := TaskForwardDeadline(task, claimAt)
+		if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
+			task.Type == taskjournal.TaskRestore {
+			if !deadline.After(claimAt) {
+				if _, err := repository.terminalizePendingBackupTask(ctx, task.ID, taskjournal.TaskStatusTimedOut, claimAt); err != nil {
+					return TaskAssignment{}, false, err
+				}
+				expiredBackups++
+				if expiredBackups == 24 {
+					return TaskAssignment{}, false, nil
+				}
+				continue
+			}
+		}
 		recoveryDeadline := deadline.Add(time.Duration(task.TimeoutSeconds) * time.Second)
 		timeoutIndexKey := taskjournal.TaskTimeoutIndexKey(task.ID, deadline)
 		companionKeys := []string{activeKey, assignmentKey, assignmentIndexKey, timeoutIndexKey}
@@ -125,13 +139,28 @@ func (repository *TaskRepository) claimNextTask(
 			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: claimAt, Deadline: deadline,
 			RecoveryDeadline: recoveryDeadline, ExecutionMode: taskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
 		}
+		backupClaim, err := repository.prepareBackupAssignmentFence(
+			ctx,
+			task,
+			assignment,
+			candidate.readRevision,
+		)
+		if err != nil {
+			return TaskAssignment{}, false, err
+		}
+		assignment.BackupAuthorityFence = backupClaim.fence
+		if backupClaim.assignmentID != "" {
+			assignment.AssignmentID = backupClaim.assignmentID
+		}
 		runningValue, err := EncodeTaskRecord(running)
 		if err != nil {
+			etcdstore.ClearMutationValues(backupClaim.mutations)
 			return TaskAssignment{}, false, err
 		}
 		assignmentValue, err := taskassignments.EncodeTaskAssignment(assignment)
 		if err != nil {
 			clear(runningValue)
+			etcdstore.ClearMutationValues(backupClaim.mutations)
 			return TaskAssignment{}, false, err
 		}
 		conditions := []etcdstore.Condition{
@@ -150,6 +179,8 @@ func (repository *TaskRepository) claimNextTask(
 			{Type: etcdstore.MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
 		}
 		conditions = append(conditions, childConditions...)
+		conditions = append(conditions, backupClaim.conditions...)
+		mutations = append(mutations, backupClaim.mutations...)
 		mutations = append(mutations, childMutations...)
 		hookInputConditions, err := repository.backingHookInputClaimConditions(ctx, task, candidate.readRevision)
 		if err != nil {

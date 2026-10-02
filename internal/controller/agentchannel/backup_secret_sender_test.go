@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -31,8 +32,8 @@ func TestSendTaskAssignmentFramesAndClearsBackupSecretSlots(t *testing.T) {
 		authorizedAuthenticator(), NewRegistry(), nil, &fakePlanResolver{plan: plan}, nil, resolver,
 	)
 	stream := &snapshotBackupSecretStream{}
-	if err := server.sendTaskAssignment(stream, controllerMaterializationClaim(task)); err != nil {
-		t.Fatalf("sendTaskAssignment() error = %v", err)
+	if err := sendTestTaskAssignment(server, stream, controllerMaterializationClaim(task)); err != nil {
+		t.Fatalf("sendTestTaskAssignment() error = %v", err)
 	}
 	if len(stream.sent) != 7 || stream.sent[0].GetTaskAssignment() == nil {
 		t.Fatalf("sent messages = %#v", stream.sent)
@@ -156,8 +157,8 @@ func TestSendTaskAssignmentDispatchesBackupPruneSecretSlotsPerStep(t *testing.T)
 		authorizedAuthenticator(), NewRegistry(), nil, &fakePlanResolver{plan: plan}, nil, resolver,
 	)
 	stream := &snapshotBackupSecretStream{}
-	if err := server.sendTaskAssignment(stream, controllerMaterializationClaim(task)); err != nil {
-		t.Fatalf("sendTaskAssignment() error = %v", err)
+	if err := sendTestTaskAssignment(server, stream, controllerMaterializationClaim(task)); err != nil {
+		t.Fatalf("sendTestTaskAssignment() error = %v", err)
 	}
 	assignment := stream.sent[0].GetTaskAssignment()
 	if assignment == nil ||
@@ -232,34 +233,48 @@ func TestSendBackupSecretSlotClearsOwnedBufferOnSendFailure(t *testing.T) {
 	}
 }
 
-// Rationale: capture encrypts with the public recipient and prune does not
-// decrypt, so both current operations must receive only the two S3 credentials.
+// Rationale: the sealed encryption authority selects the exact identity slot:
+// age capture receives the current identity, while unencrypted capture and
+// prune receive only the S3 credential pair.
 func TestExpectedBackupSecretSlotPurposesAreLeastPrivilege(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		step *agentpb.ExecutionStep
+		want []agentpb.BackupSecretSlotPurpose
 	}{
 		{
 			name: "age capture",
-			step: &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_BackupSourceCapture{
-				BackupSourceCapture: &agentpb.BackupSourceCapture{
-					Encryption: agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
-				},
-			}},
+			step: backupSecretPurposeCaptureStep(&agentpb.BackupEncryptionAuthority{
+				Kind:         agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
+				SecretSlotId: backupsecret.CurrentAgeIdentitySlotID,
+			}),
+			want: []agentpb.BackupSecretSlotPurpose{
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY,
+			},
 		},
 		{
 			name: "unencrypted capture",
-			step: &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_BackupSourceCapture{
-				BackupSourceCapture: &agentpb.BackupSourceCapture{
-					Encryption: agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
-				},
-			}},
+			step: backupSecretPurposeCaptureStep(&agentpb.BackupEncryptionAuthority{
+				Kind: agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
+			}),
+			want: []agentpb.BackupSecretSlotPurpose{
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
+			},
 		},
 		{
 			name: "prune",
-			step: &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_BackupArtifactPrune{
-				BackupArtifactPrune: &agentpb.BackupArtifactPrune{},
+			step: &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_BackupStep{
+				BackupStep: &agentpb.BackupStepAuthority{Operation: &agentpb.BackupStepAuthority_Prune{
+					Prune: &agentpb.BackupPruneAuthority{},
+				}},
 			}},
+			want: []agentpb.BackupSecretSlotPurpose{
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
+			},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -267,16 +282,12 @@ func TestExpectedBackupSecretSlotPurposesAreLeastPrivilege(t *testing.T) {
 			if err != nil {
 				t.Fatalf("expectedBackupSecretSlotPurposes() error = %v", err)
 			}
-			want := []agentpb.BackupSecretSlotPurpose{
-				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
-				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
+			if len(purposes) != len(test.want) {
+				t.Fatalf("purposes = %v, want %v", purposes, test.want)
 			}
-			if len(purposes) != len(want) {
-				t.Fatalf("purposes = %v, want %v", purposes, want)
-			}
-			for index := range want {
-				if purposes[index] != want[index] {
-					t.Fatalf("purposes = %v, want %v", purposes, want)
+			for index := range test.want {
+				if purposes[index] != test.want[index] {
+					t.Fatalf("purposes = %v, want %v", purposes, test.want)
 				}
 			}
 		})
@@ -284,8 +295,8 @@ func TestExpectedBackupSecretSlotPurposesAreLeastPrivilege(t *testing.T) {
 }
 
 // Rationale: a resolver is not trusted to choose privilege. Returning either
-// restore-only identity for capture or prune must fail before any frame is sent
-// and still relinquish every plaintext buffer.
+// identity when the sealed step selected none must fail before any frame is
+// sent and still relinquish every plaintext buffer.
 func TestSendBackupSecretSlotsRejectsRestoreIdentityPurposes(t *testing.T) {
 	for _, stepKind := range []string{"capture", "prune"} {
 		for _, purpose := range []agentpb.BackupSecretSlotPurpose{
@@ -294,11 +305,11 @@ func TestSendBackupSecretSlotsRejectsRestoreIdentityPurposes(t *testing.T) {
 		} {
 			t.Run(stepKind+"/"+purpose.String(), func(t *testing.T) {
 				task, plan := controllerBackupSecretTask(t)
-				step := plan.GetSteps()[0]
+				step := backupSecretPurposeCaptureStep(&agentpb.BackupEncryptionAuthority{
+					Kind: agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
+				})
 				if stepKind == "prune" {
-					step.Payload = &agentpb.ExecutionStep_BackupArtifactPrune{
-						BackupArtifactPrune: &agentpb.BackupArtifactPrune{},
-					}
+					step = plan.GetSteps()[0]
 				}
 				accessSource := []byte("access")
 				secretSource := []byte("secret")
@@ -367,12 +378,20 @@ func (resolver *sequentialBackupSecretResolver) ResolveBackupSecretSlots(
 	return slots, nil
 }
 
+func (resolver *sequentialBackupSecretResolver) ReleaseRestoreIdentity(context.Context, string) error {
+	return nil
+}
+
 func (resolver *fakeBackupSecretResolver) ResolveBackupSecretSlots(
 	_ context.Context,
 	request backupsecret.Request,
 ) (map[agentpb.BackupSecretSlotPurpose][]byte, error) {
 	resolver.requests = append(resolver.requests, request)
 	return resolver.slots, nil
+}
+
+func (resolver *fakeBackupSecretResolver) ReleaseRestoreIdentity(context.Context, string) error {
+	return nil
 }
 
 type failingBackupSecretStream struct {
@@ -407,44 +426,16 @@ func controllerBackupSecretTask(t *testing.T) (etcd.TaskRecord, *agentpb.Executi
 		stepID        = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	)
+	step := controllerBackupPruneSecretStep(
+		t, stepID, "01ARZ3NDEKTSV4RRFFQ69G5FAV", 1,
+		"rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		"con_01ARZ3NDEKTSV4RRFFQ69G5FAV", "https://objects.example.test",
+		"groundplane-backups", "production/", true,
+	)
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion, PlanId: planID,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP, TargetId: environmentID,
-		Steps: []*agentpb.ExecutionStep{
-			{
-				StepId:         stepID,
-				TimeoutSeconds: 60,
-				Payload: &agentpb.ExecutionStep_BackupSourceCapture{
-					BackupSourceCapture: &agentpb.BackupSourceCapture{
-						SourceId:          "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-						SourceRevision:    2,
-						TargetId:          "att_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-						TargetRevision:    3,
-						PointId:           "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-						ConnectorId:       "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-						ConnectorRevision: 4,
-						SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
-						Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
-						Upload: &agentpb.BackupUploadAuthority{
-							ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "groundplane-backups",
-							ConnectorPrefix: "production/", ConnectorRegion: "auto",
-							ConnectorAddressing: agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
-							ProtectedObjectKey: "production/" + environmentID +
-								"/spt_01ARZ3NDEKTSV4RRFFQ69G5FAV/rp_01ARZ3NDEKTSV4RRFFQ69G5FAV/artifact.bin",
-							ImmutableCreate: true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
-						},
-						Source: &agentpb.BackupSourceCapture_Attach{
-							Attach: &agentpb.BackupAttachSource{
-								BackingServiceId:       "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-								BackingServiceRevision: 5,
-								Database:               "application",
-								Role:                   "application_owner",
-							},
-						},
-					},
-				},
-			},
-		},
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE, TargetId: environmentID,
+		BackupScope: controllerBackupSecretScope(), Steps: []*agentpb.ExecutionStep{step},
 	})
 	if err != nil {
 		t.Fatalf("seal backup plan: %v", err)
@@ -454,7 +445,7 @@ func controllerBackupSecretTask(t *testing.T) (etcd.TaskRecord, *agentpb.Executi
 		OperationID:       operationID,
 		PlanID:            planID,
 		PlanHash:          hex.EncodeToString(plan.PlanHash),
-		Type:              testtaskjournal.TaskBackup,
+		Type:              testtaskjournal.TaskBackupPrune,
 		Target:            environmentID,
 		Steps:             []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}},
 		TimeoutSeconds:    120,
@@ -475,30 +466,27 @@ func controllerBackupPruneSecretTask(t *testing.T) (etcd.TaskRecord, *agentpb.Ex
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion, PlanId: planID,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE, TargetId: environmentID,
+		BackupScope: controllerBackupSecretScope(),
 		Steps: []*agentpb.ExecutionStep{
 			controllerBackupPruneSecretStep(
-				"step_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-				1,
-				operationID,
+				t, "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", "01ARZ3NDEKTSV4RRFFQ69G5FAV", 1,
 				"rp_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				"con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				"https://objects.example.test",
 				"groundplane-backups",
 				"production/",
-				agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
+				true,
 			),
 			controllerBackupPruneSecretStep(
-				"step_01ARZ3NDEKTSV4RRFFQ69G5FAW",
-				2,
-				operationID,
+				t, "step_01ARZ3NDEKTSV4RRFFQ69G5FAW", "01ARZ3NDEKTSV4RRFFQ69G5FAW", 2,
 				"rp_01ARZ3NDEKTSV4RRFFQ69G5FAW",
 				"spt_01ARZ3NDEKTSV4RRFFQ69G5FAW",
 				"con_01ARZ3NDEKTSV4RRFFQ69G5FAW",
 				"https://archive.example.test",
 				"groundplane-archive",
 				"archive/",
-				agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_VIRTUAL_HOSTED_STYLE,
+				false,
 			),
 		},
 	})
@@ -524,43 +512,78 @@ func controllerBackupPruneSecretTask(t *testing.T) (etcd.TaskRecord, *agentpb.Ex
 }
 
 func controllerBackupPruneSecretStep(
+	t *testing.T,
 	stepID string,
+	executionID string,
 	ordinal uint32,
-	operationID string,
 	pointID string,
 	sourceID string,
 	connectorID string,
 	endpoint string,
 	bucket string,
 	prefix string,
-	addressing agentpb.BackupS3Addressing,
+	pathStyle bool,
 ) *agentpb.ExecutionStep {
+	t.Helper()
+	digest := bytes.Repeat([]byte{byte(ordinal)}, sha256.Size)
+	authority, err := executionplan.SealBackupStepAuthority(&agentpb.BackupStepAuthority{
+		StepId: stepID, ExecutionId: executionID,
+		StepDeadlineUnixNano: uint64(time.Date(2026, time.August, 24, 12, 30, 0, 0, time.UTC).UnixNano()),
+		Operation: &agentpb.BackupStepAuthority_Prune{Prune: &agentpb.BackupPruneAuthority{
+			RetentionPolicy: controllerBackupSecretRevision(20, 20),
+			Objects: []*agentpb.BackupPruneObject{{
+				Ordinal: ordinal, PointId: pointID,
+				Point: controllerBackupSecretRevision(int64(30+ordinal), byte(30+ordinal)),
+				Evidence: &agentpb.BackupArtifactEvidence{
+					SourceSizeBytes: 4096, SourceSha256: append([]byte(nil), digest...),
+					StoredSizeBytes: 4096, StoredSha256: append([]byte(nil), digest...),
+				},
+				Object: &agentpb.BackupObjectIdentity{
+					Connector: &agentpb.BackupConnectorAuthority{
+						ConnectorId: connectorID, Connector: controllerBackupSecretRevision(40, 40),
+						CanonicalEndpointUrl: endpoint, Region: "auto", PathStyle: &pathStyle, Prefix: prefix,
+						AccessKeySlotId: backupsecret.AccessKeySlotID, SecretKeySlotId: backupsecret.SecretKeySlotID,
+						AccessKeySlot: controllerBackupSecretRevision(41, 41),
+						SecretKeySlot: controllerBackupSecretRevision(42, 42),
+					},
+					Bucket:        bucket,
+					ObjectKey:     prefix + "env_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + sourceID + "/" + pointID + "/artifact.bin",
+					Discriminator: &agentpb.BackupObjectIdentity_Etag{Etag: &agentpb.BackupS3ETag{Value: "etag"}},
+				},
+				MetadataCount: 10, MetadataSha256: bytes.Repeat([]byte{50}, sha256.Size),
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SealBackupStepAuthority() error = %v", err)
+	}
 	return &agentpb.ExecutionStep{
 		StepId:         stepID,
 		TimeoutSeconds: executionplan.MaximumBackupPruneStepTimeoutSeconds,
-		Payload: &agentpb.ExecutionStep_BackupArtifactPrune{
-			BackupArtifactPrune: &agentpb.BackupArtifactPrune{
-				Ordinal:             ordinal,
-				PruneOperationId:    operationID,
-				PruneRevision:       uint64(100 + ordinal),
-				PointId:             pointID,
-				PointRevision:       uint64(200 + ordinal),
-				SourceId:            sourceID,
-				SourceRevision:      uint64(300 + ordinal),
-				EnvironmentId:       "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-				EnvironmentRevision: 400,
-				ConnectorId:         connectorID,
-				ConnectorRevision:   uint64(500 + ordinal),
-				ConnectorEndpoint:   endpoint,
-				ConnectorBucket:     bucket,
-				ConnectorPrefix:     prefix,
-				ConnectorRegion:     "auto",
-				ConnectorAddressing: addressing,
-				ProtectedObjectKey:  prefix + "env_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + sourceID + "/" + pointID + "/artifact.bin",
-				StoredSizeBytes:     4096,
-				StoredSha256:        bytes.Repeat([]byte{byte(ordinal)}, 32),
-			},
-		},
+		Payload:        &agentpb.ExecutionStep_BackupStep{BackupStep: authority},
+	}
+}
+
+func controllerBackupSecretScope() *agentpb.BackupPlanScope {
+	return &agentpb.BackupPlanScope{
+		ProjectId: "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV", Project: controllerBackupSecretRevision(1, 1),
+		EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Environment: controllerBackupSecretRevision(2, 2),
+		TaskAttempt: 1,
+	}
+}
+
+func controllerBackupSecretRevision(revision int64, fill byte) *agentpb.RevisionDigest {
+	return &agentpb.RevisionDigest{ModRevision: revision, Sha256: bytes.Repeat([]byte{fill}, sha256.Size)}
+}
+
+func backupSecretPurposeCaptureStep(encryption *agentpb.BackupEncryptionAuthority) *agentpb.ExecutionStep {
+	return &agentpb.ExecutionStep{
+		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: &agentpb.BackupStepAuthority{
+			Operation: &agentpb.BackupStepAuthority_Capture{Capture: &agentpb.BackupCaptureAuthority{
+				Encryption: encryption,
+			}},
+		}},
 	}
 }
 

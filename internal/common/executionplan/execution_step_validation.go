@@ -183,11 +183,14 @@ func validateStep(
 			return errs.New(errs.KindValidationFailed, "Script step requires release or Blueprint reconcile authority")
 		}
 		return nil
-	case *agentpb.ExecutionStep_BackupArtifactPrune:
-		if operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE {
-			return errs.New(errs.KindValidationFailed, "backup artifact prune requires a backup prune operation")
+	case *agentpb.ExecutionStep_BackupStep:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_RESTORE {
+			return errs.New(errs.KindValidationFailed, "backup step requires Backup operation authority")
 		}
-		return validateBackupArtifactPrune("", payload.BackupArtifactPrune.GetOrdinal(), payload.BackupArtifactPrune)
+		_, err := ValidateBackupStepAuthority(payload.BackupStep)
+		return err
 	default:
 		return errs.New(errs.KindValidationFailed, "execution step payload is unsupported")
 	}

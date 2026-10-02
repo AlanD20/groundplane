@@ -31,7 +31,10 @@ def main() -> None:
     scope = os.environ.get("RELEASE_SCOPE", "both")
     if scope not in {"agent", "controller", "both"}:
         raise ValueError("invalid release scope")
-    for kind in (("agent",) if scope == "agent" else ("runner",) if scope == "controller" else ("agent", "runner")):
+    kinds = ("agent",) if scope == "agent" else ("runner", "postgres16")
+    if scope == "both":
+        kinds = ("agent", *kinds)
+    for kind in kinds:
         repository = f"{root}-{kind}"
         children = {arch: Path(f".tmp/release-images/{kind}-{arch}").read_text().strip()
                     for arch in ("amd64", "arm64")}
@@ -46,6 +49,23 @@ def main() -> None:
             raise ValueError("registry did not return an index digest")
         ref = f"{repository}@{digest}"
         checked_index(json.loads(output("docker", "manifest", "inspect", ref)), children)
+        if kind == "postgres16":
+            natives = {}
+            for arch in ("amd64", "arm64"):
+                native = json.loads(Path(f".tmp/release-images/postgres16-{arch}.json").read_bytes())
+                if (set(native) != {"repository_digest", "image_id", "manifest"}
+                        or native["repository_digest"] != children[arch]
+                        or native["manifest"]["architecture"] != arch
+                        or native["manifest"]["os"] != "linux"
+                        or not re.fullmatch(r"sha256:[0-9a-f]{64}", native["image_id"])):
+                    raise ValueError("managed PostgreSQL native release identity changed")
+                remote = json.loads(output("docker", "manifest", "inspect", children[arch]))
+                if remote.get("config", {}).get("digest") != native["image_id"]:
+                    raise ValueError("managed PostgreSQL native manifest configuration changed")
+                natives[arch] = native
+            catalog = {"schema": 1, "image": ref, "images": [natives["amd64"], natives["arm64"]]}
+            with Path(".tmp/release-images/postgres16-release.json").open("x") as catalog_file:
+                catalog_file.write(json.dumps(catalog, separators=(",", ":")) + "\n")
         with open(os.environ["GITHUB_OUTPUT"], "a") as result:
             result.write(f"{kind}={ref}\n")
 

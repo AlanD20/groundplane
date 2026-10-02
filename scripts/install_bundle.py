@@ -30,7 +30,7 @@ def validate(bundle: Path, version: str, arch: str) -> dict:
             raise ValueError("unsafe bundle member")
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise ValueError(f"bundle member checksum mismatch: {name}")
-    for role in ("agent_image", "runner_image"):
+    for role in ("agent_image", "runner_image", "postgres_image"):
         if role == "agent_image" and manifest[role] is None:
             continue
         if not re.fullmatch(r"[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}", manifest[role]):
@@ -39,6 +39,13 @@ def validate(bundle: Path, version: str, arch: str) -> dict:
     if (metadata["controller_version"] != f"controller/v{version}" or metadata["controller_sha256"] !=
             "sha256:" + hashlib.sha256((bundle / "controller").read_bytes()).hexdigest()):
         raise ValueError("Controller does not match its release descriptor")
+    postgres_catalog = bundle / "postgres16-release.json"
+    if postgres_catalog.name not in manifest["files"] or postgres_catalog.stat().st_size > 16384:
+        raise ValueError("managed PostgreSQL catalog is missing or exceeds its bound")
+    postgres = json.loads(postgres_catalog.read_bytes())
+    if (postgres.get("schema") != 1 or postgres.get("image") != manifest["postgres_image"]
+            or [image["manifest"]["architecture"] for image in postgres.get("images", [])] != ["amd64", "arm64"]):
+        raise ValueError("managed PostgreSQL catalog does not match the bundle")
     return manifest
 
 
@@ -70,10 +77,18 @@ def install(bundle: Path, args, manifest: dict, layout: Layout) -> None:
         (bundle / "controller.yaml.example").write_bytes(configuration.read_bytes())
     if mode != "native":
         subprocess.run(["sh", str(bundle / "setup-host.sh")], check=True)
-    # Native updates do not pull or replace Runner, CLI, config, keys or etcd.
-    roles = ("agent_image",) if mode == "native" else ("agent_image", "runner_image")
+    # Preload the new managed database artifact without replacing any running
+    # database. Existing Backings and their retained recovery images stay pinned.
+    roles = ("agent_image", "postgres_image") if mode == "native" else ("agent_image", "runner_image", "postgres_image")
     for role in roles:
         install_agent.pull_image(manifest[role])
+    postgres = json.loads((bundle / "postgres16-release.json").read_bytes())
+    expected = next(image for image in postgres["images"] if image["manifest"]["architecture"] == manifest["arch"])
+    observed = json.loads(subprocess.check_output(
+        ["docker", "image", "inspect", manifest["postgres_image"]], text=True, timeout=30))[0]
+    if (observed["Id"] != expected["image_id"] or observed["Os"] != "linux"
+            or observed["Architecture"] != manifest["arch"]):
+        raise ValueError("pulled PostgreSQL image differs from the authenticated bundle")
     subprocess.run(["sh", str(bundle / "install-runtime.sh"), str(bundle), args.version,
                      manifest["agent_image"], manifest["runner_image"], args.listen_ip,
                      "1" if args.stage_only else "0", "0"], check=True)

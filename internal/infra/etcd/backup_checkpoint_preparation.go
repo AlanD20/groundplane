@@ -10,6 +10,8 @@ import (
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"google.golang.org/protobuf/proto"
+	"time"
 )
 
 func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
@@ -18,7 +20,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 	revision int64,
 	binding backupCheckpointBinding,
 ) (backupCheckpointPlan, error) {
-	digest, err := backupruntime.BackupCheckpointDigest(input.Payload)
+	digest, err := backupruntime.BackupCheckpointDigest(input)
 	if err != nil || backupruntime.ValidateBackupCheckpointInput(input) != nil ||
 		validateBackupCheckpointBinding(binding) != nil || revision <= 0 {
 		return backupCheckpointPlan{}, errs.New(
@@ -51,7 +53,9 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		)
 	}
 	if task.Type != binding.taskType || int(binding.ordinal) >= len(task.Steps) ||
-		task.Steps[binding.ordinal].ID != input.StepID || input.Payload.PointID != binding.pointID {
+		task.Steps[binding.ordinal].ID != input.StepID ||
+		(backupruntime.BackupCheckpointPointID(input.Request) != "" &&
+			backupruntime.BackupCheckpointPointID(input.Request) != binding.pointID) {
 		return backupCheckpointPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup checkpoint step binding is invalid",
@@ -101,6 +105,10 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup task assignment changed",
 		)
 	}
+	if !assignment.BackupAuthorityFence.MatchesCheckpoint(input.AssignmentGeneration,
+		input.StepID, input.ExecutionID, input.AuthoritySHA256) {
+		return backupCheckpointPlan{}, errs.New(errs.KindStateConflict, "backup checkpoint authority changed")
+	}
 	timeoutRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskjournal.TaskTimeoutIndexKey(input.TaskID, assignment.Deadline)}, Revision: revision,
 	})
@@ -121,7 +129,8 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		cursor, decodeErr := backupruntime.DecodeBackupCheckpointCursorRecord(assignmentRead.Values[2].Value)
 		if decodeErr != nil || cursor.TaskID != input.TaskID ||
 			cursor.AssignmentID != input.AssignmentID ||
-			cursor.StepID != input.StepID {
+			cursor.StepID != input.StepID || cursor.ExecutionID != input.ExecutionID ||
+			cursor.AssignmentGeneration != input.AssignmentGeneration || cursor.AuthoritySHA256 != input.AuthoritySHA256 {
 			return backupCheckpointPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		nextSequence = cursor.NextSequence
@@ -130,7 +139,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		cursorValue := assignmentRead.Values[2]
 		dedupValue := assignmentRead.Values[3]
 		if cursorValue == nil || dedupValue.Version != 1 || cursorValue.ModRevision <= 0 ||
-			dedupValue.ModRevision != cursorValue.ModRevision {
+			dedupValue.ModRevision <= 0 || dedupValue.ModRevision > cursorValue.ModRevision {
 			return backupCheckpointPlan{}, errs.New(
 				errs.KindStateConflict,
 				"backup checkpoint replay evidence changed",
@@ -141,7 +150,11 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			dedup.AssignmentID != input.AssignmentID ||
 			dedup.StepID != input.StepID ||
 			dedup.Sequence != input.Sequence ||
-			dedup.Kind != input.Payload.Kind {
+			dedup.CheckpointTag != backupruntime.BackupCheckpointTag(
+				input.Request,
+			) || dedup.ExecutionID != input.ExecutionID ||
+			dedup.AssignmentGeneration != input.AssignmentGeneration || dedup.AuthoritySHA256 != input.AuthoritySHA256 ||
+			dedup.PrecedingCheckpointRevision != input.PrecedingCheckpointRevision {
 			return backupCheckpointPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		if dedup.PayloadSHA256 != digest {
@@ -150,7 +163,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 				"backup checkpoint digest changed",
 			)
 		}
-		if input.Sequence == ^uint64(0) || nextSequence != input.Sequence+1 {
+		if input.Sequence == ^uint64(0) || nextSequence < input.Sequence+1 {
 			return backupCheckpointPlan{}, errs.New(
 				errs.KindStateConflict,
 				"backup checkpoint sequence changed",
@@ -161,20 +174,38 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			digest: digest, duplicate: true,
 		}, nil
 	}
+	if !time.Now().UTC().Before(assignment.Deadline) {
+		return backupCheckpointPlan{}, errs.New(errs.KindStateConflict, "backup assignment deadline has expired")
+	}
 	if input.Sequence != nextSequence {
 		return backupCheckpointPlan{}, errs.New(
 			errs.KindStateConflict,
 			"backup checkpoint sequence changed",
 		)
 	}
+	if input.Sequence == ^uint64(0) ||
+		(input.Sequence == 1 && (input.PrecedingCheckpointRevision != 0 || assignmentRead.Values[2] != nil)) ||
+		(input.Sequence > 1 && (assignmentRead.Values[2] == nil ||
+			input.PrecedingCheckpointRevision != assignmentRead.Values[2].ModRevision)) {
+		return backupCheckpointPlan{}, errs.New(errs.KindStateConflict, "backup checkpoint predecessor changed")
+	}
 	cursor := backupruntime.BackupCheckpointCursorRecord{
 		TaskID: input.TaskID, AssignmentID: input.AssignmentID, StepID: input.StepID,
-		NextSequence: input.Sequence + 1,
+		ExecutionID: input.ExecutionID, AssignmentGeneration: input.AssignmentGeneration,
+		AuthoritySHA256: input.AuthoritySHA256,
+		NextSequence:    input.Sequence + 1,
 	}
 	dedup := backupruntime.BackupCheckpointDedupRecord{
 		TaskID: input.TaskID, AssignmentID: input.AssignmentID, StepID: input.StepID,
-		Sequence: input.Sequence, Kind: input.Payload.Kind, PayloadSHA256: digest,
+		Sequence: input.Sequence, CheckpointTag: backupruntime.BackupCheckpointTag(input.Request), PayloadSHA256: digest,
+		ExecutionID: input.ExecutionID, AssignmentGeneration: input.AssignmentGeneration,
+		AuthoritySHA256: input.AuthoritySHA256, PrecedingCheckpointRevision: input.PrecedingCheckpointRevision,
 	}
+	dedup.Request, err = (proto.MarshalOptions{Deterministic: true}).Marshal(input.Request)
+	if err != nil {
+		return backupCheckpointPlan{}, errs.Wrap(errs.KindInternal, err)
+	}
+	defer clear(dedup.Request)
 	cursorValue, err := backupruntime.EncodeBackupCheckpointCursorRecord(cursor)
 	if err != nil {
 		return backupCheckpointPlan{}, err
@@ -213,7 +244,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 }
 
 func validateBackupCheckpointBinding(binding backupCheckpointBinding) error {
-	if (binding.taskType != taskjournal.TaskBackup && binding.taskType != taskjournal.TaskBackupPrune) ||
+	if (binding.taskType != taskjournal.TaskBackup && binding.taskType != taskjournal.TaskBackupPrune && binding.taskType != taskjournal.TaskRestore) ||
 		recordcodec.ValidateID(ids.KindRecoveryPoint, binding.pointID) != nil {
 		return errs.New(errs.KindValidationFailed, "backup checkpoint binding is invalid")
 	}

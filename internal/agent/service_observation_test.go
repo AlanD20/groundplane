@@ -129,7 +129,8 @@ func TestServiceObservationClientStream(t *testing.T) {
 				t.Fatal("observer changed after start")
 			}
 			sent := stream.sentMessages()
-			if len(sent) != 2 || sent[0].GetAuthenticate() == nil || sent[1].GetReady().GetCapacity() != 2 {
+			if len(sent) != 3 || sent[0].GetAuthenticate() == nil || sent[1].GetReady().GetCapacity() != 2 ||
+				sent[2].GetBackupStagingInventory() == nil {
 				t.Fatalf("observation changed Task capacity or traffic: %v", sent)
 			}
 		})

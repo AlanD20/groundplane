@@ -325,8 +325,7 @@ func TestBackupRuntimeRepositoryRequiresCleanupCheckpointBeforeSuccess(t *testin
 	cleanupPending.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
 	cleanupPending.Sources[0].State = testbackupruntime.BackupSourceAttemptCleanupPending
 	cleanupPending.Sources[0].Phase = testbackupruntime.BackupSourcePhaseCleanup
-	cleanupPending.Sources[0].SizeBytes = 123
-	cleanupPending.Sources[0].SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(cleanupPending, &cleanupPending.Sources[0])
 	cleanupPending.UpdatedAt = run.UpdatedAt.Add(time.Second)
 	cleanupVersion, err := repository.replaceBackupRunForTest(
 		context.Background(), created, cleanupPending,
@@ -348,10 +347,9 @@ func TestBackupRuntimeRepositoryRequiresCleanupCheckpointBeforeSuccess(t *testin
 		t.Fatalf("prepareBackupRunTerminal(uncheckpointed cleanup) error = %v", err)
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload = testbackupruntime.BackupCheckpointPayload{
-		Kind:    testbackupruntime.BackupCheckpointSourceCleanupCompleted,
-		PointID: cleanupPending.Sources[0].RecoveryPointID,
-	}
+	checkpoint = backupSourceCleanupCheckpoint(
+		t, checkpoint, cleanupPending.Sources[0].RecoveryPointID, cleanupPending.Sources[0].Evidence,
+	)
 	succeeded := cleanupPending
 	succeeded.Sources = append(
 		[]testbackupruntime.BackupRunSourceAttemptRecord(nil),
@@ -415,8 +413,7 @@ func TestBackupRuntimeRepositoryTerminalizesUploadIntentWithOrphan(t *testing.T)
 			staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
 			staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
 			staged.Sources[0].Phase = test.phase
-			staged.Sources[0].SizeBytes = 123
-			staged.Sources[0].SHA256 = testBackupDigest
+			backupRuntimeSetSourceArtifact(staged, &staged.Sources[0])
 			staged.UpdatedAt = run.UpdatedAt.Add(time.Second)
 			stagedVersion, err := repository.replaceBackupRunForTest(
 				context.Background(), created, staged,
@@ -449,14 +446,13 @@ func TestBackupRuntimeRepositoryTerminalizesUploadIntentWithOrphan(t *testing.T)
 				run  func(*testbackupruntime.BackupRunSourceAttemptRecord)
 			}{
 				{name: "empty", run: func(source *testbackupruntime.BackupRunSourceAttemptRecord) {
-					source.SizeBytes = 0
-					source.SHA256 = ""
+					source.Evidence = testbackupruntime.BackupArtifactEvidence{}
 				}},
 				{name: "malformed", run: func(source *testbackupruntime.BackupRunSourceAttemptRecord) {
-					source.SHA256 = "not-a-sha256"
+					source.Evidence.StoredSHA256 = "not-a-sha256"
 				}},
 				{name: "substituted", run: func(source *testbackupruntime.BackupRunSourceAttemptRecord) {
-					source.SizeBytes++
+					source.Evidence.StoredSizeBytes++
 				}},
 			} {
 				changed := terminal
@@ -533,10 +529,7 @@ func TestBackupRuntimeRepositoryTerminalRetainsExactExistingOrphan(t *testing.T)
 			orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 			orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 			point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-			orphan := testbackupruntime.BackupOrphanRecord{
-				Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
-				CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
-			}
+			orphan := testbackupruntime.BackupOrphanRecordFromRun(orphaned, 0)
 			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
 			orphanedVersion, err := repository.CreateBackupOrphan(
 				context.Background(),
@@ -590,6 +583,7 @@ func TestBackupRuntimeRepositoryTerminalRetainsExactExistingOrphan(t *testing.T)
 			if mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)) != nil {
 				t.Fatal("retained orphan terminal kept its Environment lock")
 			}
+			storedOrphan = seedBackupOrphanAcknowledgedCleanup(t, store, storedOrphan)
 			deleting := storedOrphan.Record
 			deleting.State = testbackupruntime.BackupOrphanDelete
 			deleting.UpdatedAt = deleting.UpdatedAt.Add(time.Second)
@@ -619,10 +613,7 @@ func TestBackupRuntimeRepositoryAdoptsOrphanAfterOriginTaskPruned(t *testing.T) 
 	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := testbackupruntime.BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
-		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
-	}
+	orphan := testbackupruntime.BackupOrphanRecordFromRun(orphaned, 0)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
 	orphanedVersion, err := repository.CreateBackupOrphan(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint),
@@ -635,6 +626,7 @@ func TestBackupRuntimeRepositoryAdoptsOrphanAfterOriginTaskPruned(t *testing.T) 
 	if err != nil || !found {
 		t.Fatalf("GetBackupOrphan() = %#v/%v/%v", storedOrphan, found, err)
 	}
+	storedOrphan = seedBackupOrphanAcknowledgedCleanup(t, store, storedOrphan)
 	pruned, err := store.Transact(context.Background(), []testkeyvalue.Condition{
 		{Key: testbackupruntime.BackupRunKey(run.TaskID), ModRevision: orphanedVersion.Revision},
 	}, []testkeyvalue.Mutation{
@@ -647,9 +639,10 @@ func TestBackupRuntimeRepositoryAdoptsOrphanAfterOriginTaskPruned(t *testing.T) 
 	point.VerifiedAt = storedOrphan.Record.UpdatedAt.Add(time.Second)
 	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID,
-		Keep:     storedOrphan.Record.Reconciliation.RetentionKeep,
-		Revision: storedOrphan.Record.Reconciliation.PolicyRevision,
-		State:    testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
+		Keep:         storedOrphan.Record.Reconciliation.RetentionKeep,
+		Revision:     storedOrphan.Record.Reconciliation.PolicyRevision,
+		PolicySHA256: storedOrphan.Record.Reconciliation.PolicySHA256,
+		State:        testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 	}
 	adopted, err := repository.AdoptReconciledBackupOrphan(
 		context.Background(), storedOrphan, point, sweep,
@@ -680,10 +673,7 @@ func TestBackupRuntimeRepositoryRejectsRewrittenRetainedOrphanCompanion(t *testi
 	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := testbackupruntime.BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
-		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
-	}
+	orphan := testbackupruntime.BackupOrphanRecordFromRun(orphaned, 0)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
 	orphanedVersion, err := repository.CreateBackupOrphan(
 		context.Background(),

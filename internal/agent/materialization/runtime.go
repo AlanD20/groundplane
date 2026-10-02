@@ -72,6 +72,22 @@ func (runtime *Runtime) runStep(
 			return err
 		}
 	}
+	return runtime.runFile(ctx, artifact.GetAuthorizedVolumeDir(), payload, verifyOnly)
+}
+
+// RunConfigRestoreFile uses the ordinary descriptor-confined helper. The caller
+// has proved the header against the sealed Config Restore file plan, not against
+// current desired state or a generic command supplied by an operator.
+func (runtime *Runtime) RunConfigRestoreFile(ctx context.Context, volumeDir string,
+	header entrymaterialization.Header, source io.ReadCloser, verifyOnly bool,
+) error {
+	if runtime == nil || runtime.helper == nil || source == nil {
+		return CloseSourceWithError(source, "agent: Config restore materializer is unavailable")
+	}
+	return runtime.runFile(ctx, volumeDir, Payload{Header: header, Source: source}, verifyOnly)
+}
+
+func (runtime *Runtime) runFile(ctx context.Context, volumeDir string, payload Payload, verifyOnly bool) error {
 	reader, writer := io.Pipe()
 	encoded := make(chan error, 1)
 	go func() {
@@ -92,7 +108,7 @@ func (runtime *Runtime) runStep(
 		encoded <- encodeErr
 	}()
 	helperErr := runtime.helper.Run(ctx, materializerrunner.Request{
-		VolumeDir: artifact.GetAuthorizedVolumeDir(), Stream: reader, VerifyOnly: verifyOnly,
+		VolumeDir: volumeDir, Stream: reader, VerifyOnly: verifyOnly,
 	})
 	readerCloseErr := reader.Close()
 	encodeErr := <-encoded

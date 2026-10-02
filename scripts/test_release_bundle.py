@@ -16,6 +16,7 @@ import unittest
 from unittest import mock
 
 import install_bundle
+from postgres16_test_fixture import postgres16_catalog
 import release_bundle
 
 
@@ -26,6 +27,8 @@ class BundleTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.agent = "ghcr.io/test/agent@sha256:" + "a" * 64
         self.runner = "ghcr.io/test/runner@sha256:" + "b" * 64
+        self.postgres_catalog = postgres16_catalog()
+        self.postgres = json.loads(self.postgres_catalog)
         self.sources = self.root / "sources"
         self.sources.mkdir()
         binary = b"test controller bytes"
@@ -39,7 +42,10 @@ class BundleTests(unittest.TestCase):
             patcher = mock.patch.object(release_bundle.deploy, constant, self.sources / name)
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.files = release_bundle.payload("1.2.3", self.agent, self.runner, "amd64")
+        self.files = release_bundle.payload(
+            "1.2.3", self.agent, self.runner, "amd64", self.postgres_catalog,
+        )
+        (self.root / "postgres16-release.json").write_bytes(self.postgres_catalog)
         script = (release_bundle.ROOT / "install.sh").read_text()
         archive_section = script.split("# Validate the complete archive", 1)[1]
         self.extractor = archive_section.split("python3 -c '\n", 1)[1].split("\n' \"$deploy_dir\"", 1)[0]
@@ -95,7 +101,9 @@ class BundleTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         (self.sources / "controller").write_bytes(b"wrong binary")
         with self.assertRaisesRegex(ValueError, "bytes differ"):
-            release_bundle.payload("1.2.3", self.agent, self.runner, "amd64")
+            release_bundle.payload(
+                "1.2.3", self.agent, self.runner, "amd64", self.postgres_catalog,
+            )
 
     def test_archive_is_repeatable_and_refuses_overwrite(self):
         first, second = self.root / "a.tar.gz", self.root / "b.tar.gz"
@@ -110,20 +118,31 @@ class BundleTests(unittest.TestCase):
                                   controller_only=mode == "native", agent_tag=None)
         layout = mock.Mock()
         layout.mode.return_value = mode
-        manifest = {"agent_image": self.agent, "runner_image": self.runner}
+        manifest = {
+            "agent_image": self.agent,
+            "runner_image": self.runner,
+            "postgres_image": self.postgres["image"],
+            "arch": "amd64",
+        }
+        native = self.postgres["images"][0]
         with mock.patch.object(install_bundle.subprocess, "run") as run, \
+                mock.patch.object(install_bundle.subprocess, "check_output", return_value=json.dumps([{
+                    "Id": native["image_id"], "Os": "linux", "Architecture": "amd64",
+                }])) as inspect, \
                 mock.patch.object(install_bundle.os, "execvp") as execute, \
                 mock.patch.object(install_bundle.install_agent, "installed_image", return_value=self.agent), \
                 mock.patch.object(install_bundle.shutil, "disk_usage") as capacity:
             capacity.return_value.free = 3 * 1024**3
             install_bundle.install(self.root, args, manifest, layout)
+        inspect.assert_called_once()
         return run, execute
 
     def test_native_update_only_pulls_agent_and_uses_guarded_activation(self):
         for stage in (False, True):
             run, execute = self.invoke("native", stage)
             run.assert_any_call(["docker", "pull", self.agent], check=True, timeout=600)
-            self.assertEqual(run.call_count, 2)
+            run.assert_any_call(["docker", "pull", self.postgres["image"]], check=True, timeout=600)
+            self.assertEqual(run.call_count, 3)
             argv = run.call_args.args[0]
             self.assertEqual(argv[1], str(self.root / "install-runtime.sh"))
             self.assertEqual(argv[-2:], ["1" if stage else "0", "0"])
@@ -131,10 +150,11 @@ class BundleTests(unittest.TestCase):
     def test_fresh_install_provisions_and_pulls_both_images(self):
         with mock.patch.object(install_bundle.Path, "exists", return_value=False):
             run, _ = self.invoke("bootstrap")
-        self.assertEqual(run.call_args_list[:3], [
+        self.assertEqual(run.call_args_list[:4], [
             mock.call(["sh", str(self.root / "setup-host.sh")], check=True),
             mock.call(["docker", "pull", self.agent], check=True, timeout=600),
-            mock.call(["docker", "pull", self.runner], check=True, timeout=600)])
+            mock.call(["docker", "pull", self.runner], check=True, timeout=600),
+            mock.call(["docker", "pull", self.postgres["image"]], check=True, timeout=600)])
 
     def test_stage_on_fresh_host_and_config_on_native_refuse(self):
         with self.assertRaisesRegex(ValueError, "existing native"):
@@ -146,7 +166,12 @@ class BundleTests(unittest.TestCase):
         args = argparse.Namespace(version="1.2.3", stage_only=False, config=None, listen_ip="127.0.0.1",
                                   controller_only=True, agent_tag=None)
         layout = mock.Mock()
-        manifest = {"agent_image": self.agent, "runner_image": self.runner}
+        manifest = {
+            "agent_image": self.agent,
+            "runner_image": self.runner,
+            "postgres_image": self.postgres["image"],
+            "arch": "amd64",
+        }
         with mock.patch.object(install_bundle.subprocess, "run") as run, \
                 mock.patch.object(install_bundle.os, "execvp") as execute, \
                 mock.patch.object(install_bundle.shutil, "disk_usage") as capacity:

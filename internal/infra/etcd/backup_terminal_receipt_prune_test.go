@@ -70,6 +70,7 @@ func TestBackupTerminalReceiptPruneFinalizationResumesAfterPrimaryDeletion(t *te
 		TaskID: taskID, TaskRevision: receiptRevision,
 		BackupCheckpointCursorsComplete:        true,
 		BackupCheckpointDeduplicationsComplete: true,
+		BackupConfigTransfersComplete:          true,
 		TaskPrimaryDeleted:                     true,
 		BackupTerminalReceiptRevision:          receiptRevision,
 	}
@@ -170,7 +171,7 @@ func backupTerminalReceiptPruneFixture(
 	current.Params = nil
 	current.Materializations = nil
 	current.Steps = nil
-	current.TimeoutSeconds = backupTaskTimeoutSeconds
+	current.TimeoutSeconds = backupTaskTimeout(current.Type)
 	startedAt := now.Add(time.Second)
 	current.Status = testtaskjournal.TaskStatusRunning
 	current.StartedAt = &startedAt
@@ -183,14 +184,16 @@ func backupTerminalReceiptPruneFixture(
 		t.Fatal(err)
 	}
 	terminal.Result = &testtaskjournal.TaskResultRecord{
-		Kind:       testtaskjournal.TaskResultCompose,
-		ExitCode:   1,
-		Diagnostic: testtaskjournal.TaskResultDiagnosticComposeFailed,
+		Kind:           testtaskjournal.TaskResultBackup,
+		ExitCode:       1,
+		Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+		ExecutionEpoch: 1, AssignmentGeneration: 1,
 	}
 	terminal.TerminalAssignment = &testtaskjournal.TaskTerminalAssignmentRecord{
-		AssignmentID:    ids.NewAt(ids.KindAssignment, now, 7204),
-		AgentID:         ids.NewAt(ids.KindAgent, now, 7205),
-		AgentGeneration: 1,
+		AssignmentID:         ids.NewAt(ids.KindAssignment, now, 7204),
+		AgentID:              ids.NewAt(ids.KindAgent, now, 7205),
+		AgentGeneration:      1,
+		AssignmentGeneration: 1,
 	}
 	dispatch := testbackupruntime.BackupRecoveryPointPruneDispatchRecord{
 		TaskID:           taskID,
@@ -201,13 +204,14 @@ func backupTerminalReceiptPruneFixture(
 	}
 	assigned := testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{
 		Record: testbackupruntime.BackupRecoveryPointPruneRecord{
-			Point:         point,
-			PointRevision: 19,
-			OperationID:   operationID,
-			State:         testbackupruntime.BackupPruneAssigned,
-			TaskID:        taskID,
-			CreatedAt:     now,
-			UpdatedAt:     startedAt,
+			Point:          point,
+			PointRevision:  19,
+			PolicyRevision: 17, PolicySHA256: testBackupDigest,
+			OperationID: operationID,
+			State:       testbackupruntime.BackupPruneAssigned,
+			TaskID:      taskID,
+			CreatedAt:   now,
+			UpdatedAt:   startedAt,
 		},
 		Revision: 18,
 	}

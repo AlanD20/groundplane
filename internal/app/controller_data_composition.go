@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
+	"github.com/AlanD20/groundplane/internal/controller/backup"
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	backingrecords "github.com/AlanD20/groundplane/internal/infra/etcd/backingservices"
@@ -53,9 +53,9 @@ type controllerDataComposition struct {
 	backupPolicyRecords           *etcd.BackupPolicyRepository
 	backupKeyRecords              *backuppolicy.KeyRepository
 	backupRuntimeRecords          *etcd.BackupRuntimeRepository
-	backupCheckpoints             *backupcapability.BackupCheckpointService
+	backupCheckpoints             *backup.BackupCheckpointService
 	scriptCheckpoints             *taskcheckpoint.ScriptCheckpointService
-	backupPolicyRepository        *backupcapability.PolicyRepository
+	backupPolicyRepository        *backup.PolicyRepository
 }
 
 func newControllerDataComposition(
@@ -231,12 +231,12 @@ func newControllerDataComposition(
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backup key repository: %w", err)
 	}
-	backupRuntimeRecords, err := etcd.NewBackupRuntimeRepository(store)
+	backupRuntime, err := etcd.NewBackupRuntimeRepository(store)
 	if err != nil {
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backup runtime repository: %w", err)
 	}
-	backupCheckpoints, err := backupcapability.NewBackupCheckpointService(backupRuntimeRecords)
+	backupCheckpoints, err := backup.NewBackupCheckpointService(backupRuntime, store, authority.intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Backup checkpoint service: %w", err)
@@ -246,7 +246,7 @@ func newControllerDataComposition(
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script checkpoint service: %w", err)
 	}
-	backupPolicyRepository, err := backupcapability.NewDurableBackupPolicyRepository(backupPolicyRecords)
+	backupPolicyRepository, err := backup.NewDurableBackupPolicyRepository(backupPolicyRecords)
 	if err != nil {
 		closeErr := store.Close()
 		return controllerDataComposition{}, errs.Wrap(errs.KindInternal, errors.Join(
@@ -278,7 +278,7 @@ func newControllerDataComposition(
 		volumeReads:                   volumeReads,
 		backupPolicyRecords:           backupPolicyRecords,
 		backupKeyRecords:              backupKeyRecords,
-		backupRuntimeRecords:          backupRuntimeRecords,
+		backupRuntimeRecords:          backupRuntime,
 		backupCheckpoints:             backupCheckpoints,
 		scriptCheckpoints:             scriptCheckpoints,
 		backupPolicyRepository:        backupPolicyRepository,

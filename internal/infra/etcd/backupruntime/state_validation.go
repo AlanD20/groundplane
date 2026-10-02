@@ -1,6 +1,7 @@
 package backupruntime
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/backupformat"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -49,7 +50,9 @@ func backupFailureCodeMatchesPhase(code BackupFailureCode, phase BackupSourceAtt
 }
 
 func validBackupArtifact(value BackupArtifactEvidence) bool {
-	return value.SizeBytes > 0 && recordcodec.ValidSHA256(value.SHA256)
+	return value.SourceSizeBytes > 0 && value.StoredSizeBytes > 0 &&
+		value.SourceSizeBytes <= backupformat.MaxStoredBytes && value.StoredSizeBytes <= backupformat.MaxStoredBytes &&
+		recordcodec.ValidSHA256(value.SourceSHA256) && recordcodec.ValidSHA256(value.StoredSHA256)
 }
 
 func ValidBackupRuntimeInstant(value time.Time) bool {
@@ -210,17 +213,6 @@ func restoreStateRequiresArtifact(state BackupRestoreState) bool {
 		BackupRestoreApplyingDeletes, BackupRestoreApplyingUpserts, BackupRestoreCanonicalComplete,
 		BackupRestoreMaterializing, BackupRestoreVerified, BackupRestoreCompleted,
 		BackupRestoreRecoveryRequired:
-		return true
-	default:
-		return false
-	}
-}
-
-func configRestoreStateRequiresManifest(state BackupRestoreState) bool {
-	switch state {
-	case BackupRestoreStaged, BackupRestoreApplyingDeletes, BackupRestoreApplyingUpserts,
-		BackupRestoreCanonicalComplete, BackupRestoreMaterializing, BackupRestoreVerified,
-		BackupRestoreCompleted, BackupRestoreRecoveryRequired:
 		return true
 	default:
 		return false

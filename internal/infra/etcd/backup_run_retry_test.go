@@ -2,13 +2,18 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
@@ -23,15 +28,15 @@ func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
 			attempt.RecoveryPointID + "/artifact.bin"
 		attempt.State = state
 		attempt.Phase = testbackupruntime.BackupSourcePhaseCapture
-		attempt.SizeBytes = 0
-		attempt.SHA256 = ""
+		attempt.Evidence = testbackupruntime.BackupArtifactEvidence{}
+		attempt.Upload = testbackupruntime.BackupUploadOutcome{}
+		attempt.Object = testbackupruntime.BackupObjectIdentity{}
 		attempt.FailureCode = ""
 		return attempt
 	}
 	succeeded := makeAttempt(0, testbackupruntime.BackupSourceAttemptSucceeded)
 	succeeded.Phase = testbackupruntime.BackupSourcePhaseRetention
-	succeeded.SizeBytes = 1
-	succeeded.SHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	backupRuntimeCompleteSourceArtifact(run, &succeeded)
 	failed := makeAttempt(1, testbackupruntime.BackupSourceAttemptFailed)
 	failed.FailureCode = testbackupruntime.BackupFailureCapture
 	unstarted := makeAttempt(2, testbackupruntime.BackupSourceAttemptUnstarted)
@@ -55,7 +60,9 @@ func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
 			source.TargetID != prior.TargetID || source.SourceRevision != prior.SourceRevision ||
 			source.TargetRevision != prior.TargetRevision || source.RecoveryPointID == prior.RecoveryPointID ||
 			source.State != testbackupruntime.BackupSourceAttemptPending || source.Phase != testbackupruntime.BackupSourcePhaseCapture ||
-			source.SizeBytes != 0 || source.SHA256 != "" || source.FailureCode != "" {
+			source.Evidence != (testbackupruntime.BackupArtifactEvidence{}) ||
+			source.Object != (testbackupruntime.BackupObjectIdentity{}) ||
+			source.Upload != (testbackupruntime.BackupUploadOutcome{}) || source.FailureCode != "" {
 			t.Fatalf("retry source %d = %#v, prior = %#v", index, source, prior)
 		}
 	}
@@ -64,6 +71,9 @@ func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
 func TestPrepareBackupRunRetryPublishesAtomicAttempt(t *testing.T) {
 	runtime, store, tasks, run, claim := publishBackupTerminalLifecycleTask(t)
 	result := completedComposeTaskResult()
+	result.Kind = testtaskjournal.TaskResultBackup
+	result.ExecutionEpoch = claim.Assignment.Record.ExecutionEpoch
+	result.AssignmentGeneration = claim.Assignment.Record.BackupAuthorityFence.AssignmentGeneration
 	result.ExitCode = 1
 	terminalAt := claim.Assignment.Record.AssignedAt.Add(time.Second)
 	failed, err := tasks.AcknowledgeTask(
@@ -79,11 +89,19 @@ func TestPrepareBackupRunRetryPublishesAtomicAttempt(t *testing.T) {
 	}
 	retryAt := terminalAt.Add(time.Second)
 	retryTaskID := ids.NewAt(ids.KindTask, retryAt, 5300)
-	prepared, err := runtime.PrepareBackupRunRetry(context.Background(), BackupRunRetryInput{
+	retryInput := BackupRunRetryInput{
 		SourceTaskID: run.TaskID,
 		TaskID:       retryTaskID,
 		CreatedAt:    retryAt,
-	})
+	}
+	if _, err := runtime.PrepareBackupRunRetry(context.Background(), retryInput); !errors.Is(
+		err,
+		errs.New(errs.KindResourceInUse, ""),
+	) {
+		t.Fatalf("retry before PostgreSQL helper cleanup = %v", err)
+	}
+	acknowledgeRetryPostgresCleanup(t, tasks, failed.Record, run.Sources[0].RecoveryPointID)
+	prepared, err := runtime.PrepareBackupRunRetry(context.Background(), retryInput)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,6 +112,19 @@ func TestPrepareBackupRunRetryPublishesAtomicAttempt(t *testing.T) {
 		t.Fatalf("prepared retry = %#v", prepared.Run)
 	}
 	task, sealed, marker, _ := backupRuntimePublicationTask(t, store, prepared.Run)
+	sealed.PlanHash = nil
+	sealed.BackupScope = prepared.Scope
+	sealed.Artifacts = prepared.Artifacts
+	for index, authority := range prepared.Authority {
+		sealed.Steps[index].StepId = authority.StepId
+		sealed.Steps[index].Payload = &agentpb.ExecutionStep_BackupStep{BackupStep: authority}
+		task.Steps[index].ID = authority.StepId
+	}
+	sealed, err = executionplan.Seal(sealed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
 	task.RetryOf = run.TaskID
 	task.IdempotencyKey = failed.Record.IdempotencyKey
 	marker.Locator.Route = "/tasks/{id}/retry"
@@ -120,5 +151,57 @@ func TestPrepareBackupRunRetryPublishesAtomicAttempt(t *testing.T) {
 	lock, err := testbackupruntime.DecodeBackupOperationLockRecord(lockEntry.Value)
 	if err != nil || lock.TaskID != retryTaskID || lock.OperationID != run.OperationID {
 		t.Fatalf("retry Environment lock = %#v, %v", lock, err)
+	}
+}
+
+func acknowledgeRetryPostgresCleanup(t *testing.T, tasks *TaskRepository, task TaskRecord, pointID string) {
+	t.Helper()
+	assignment := task.TerminalAssignment
+	key, err := executionplan.BackupStagingRecoveryKey(task.ID, task.Steps[0].ID, pointID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := tasks.ReadBackupStagingSource(
+		context.Background(),
+		assignment.AgentID,
+		assignment.AgentGeneration,
+		key,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory := &agentpb.BackupStagingInventory{Entries: []*agentpb.BackupRecoveredStage{{
+		RecoveryKeySha256: key, PostgresExecution: true,
+	}}}
+	digest, err := executionplan.BackupStagingInventorySHA256(inventory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := &agentpb.BackupStagingRecoveryPlan{
+		InventorySha256: digest,
+		Dispositions: []*agentpb.BackupStagingDisposition{{
+			RecoveryKeySha256: key,
+			Disposition: &agentpb.BackupStagingDisposition_DiscardRecovered{
+				DiscardRecovered: &agentpb.BackupDiscardRecovered{},
+			},
+			PostgresGuard: &agentpb.BackupPostgresStagingGuard{TaskId: task.ID, Step: source.Step,
+				TerminalCleanup: true, DatabaseService: source.Plan.BackupScope.Services[0], DatabaseArtifact: source.Plan.Artifacts[0]},
+		}},
+	}
+	process := [16]byte{1}
+	if err := tasks.PublishBackupStagingDelivery(context.Background(), testbackupruntime.BackupStagingDeliveryRecord{
+		AgentID: assignment.AgentID, AgentGeneration: assignment.AgentGeneration, ProcessGeneration: process,
+		Inventory: inventory, Plan: plan,
+	}, []BackupStagingSource{source}); err != nil {
+		t.Fatal(err)
+	}
+	planDigest, err := executionplan.BackupStagingRecoveryPlanSHA256(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tasks.ApplyBackupStagingDelivery(context.Background(), assignment.AgentID, assignment.AgentGeneration,
+		process, &agentpb.BackupStagingRecoveryAck{InventorySha256: digest, AppliedPlanSha256: planDigest,
+			AppliedDispositionCount: 1}); err != nil {
+		t.Fatal(err)
 	}
 }

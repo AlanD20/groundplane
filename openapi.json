@@ -4585,6 +4585,37 @@
         ],
         "type": "object"
       },
+      "RestoreRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RestoreRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "age_identity": {
+            "maxLength": 4096,
+            "type": "string",
+            "writeOnly": true
+          },
+          "recovery_point_id": {
+            "pattern": "^rp_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "source_id": {
+            "pattern": "^spt_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id"
+        ],
+        "type": "object"
+      },
       "RollbackRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10070,6 +10101,76 @@
         "summary": "Rename an environment",
         "tags": [
           "Environment"
+        ]
+      }
+    },
+    "/environments/{id}/restore": {
+      "post": {
+        "operationId": "backup.restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Restore the selected Recovery Point to its original target",
+        "tags": [
+          "Backup"
         ]
       }
     },

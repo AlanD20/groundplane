@@ -48,82 +48,15 @@ func WriteTransferTranscript(
 	metadata []MetadataFrame,
 	values []ValueFrame,
 ) error {
-	if err := checkContext(ctx); err != nil {
+	writer, err := NewTransferTranscriptWriter(ctx, destination, direction, authority, metadata, values)
+	if err != nil {
 		return err
 	}
-	if destination == nil || (direction != TransferCapture && direction != TransferRestore) {
-		return archiveError("transfer transcript destination or direction is invalid")
-	}
-	if authority.EntryCount > MaxEntries || authority.ManifestSizeBytes < 47 ||
-		authority.TotalSelectedValueBytes > MaxTotalSelectedValueBytes ||
-		authority.ManifestSizeBytes > MaxManifestBytes ||
-		authority.SourceSizeBytes < 2*TarBlockBytes || authority.SourceSizeBytes > MaxSourceBytes ||
-		len(metadata) != int(authority.EntryCount) || len(values) != int(authority.EntryCount) {
-		return archiveError("transfer transcript authority or frame counts are invalid")
-	}
-	if err := validateTranscriptFrames(authority, metadata, values); err != nil {
-		return err
-	}
-	if err := writeBytes(ctx, destination, []byte(transcriptDomain)); err != nil {
-		return err
-	}
-	if err := writeBytes(ctx, destination, []byte{0}); err != nil {
-		return err
-	}
-	if err := writeUint32(ctx, destination, uint32(direction)); err != nil {
-		return err
-	}
-	if err := writeBytes(ctx, destination, authority.ManifestSHA256[:]); err != nil {
-		return err
-	}
-	if err := writeUint64(ctx, destination, authority.ManifestSizeBytes); err != nil {
-		return err
-	}
-	if err := writeUint64(ctx, destination, authority.SourceSizeBytes); err != nil {
-		return err
-	}
-	if err := writeUint32(ctx, destination, authority.EntryCount); err != nil {
-		return err
-	}
-	if err := writeUint64(ctx, destination, authority.TotalSelectedValueBytes); err != nil {
-		return err
-	}
-
-	for _, frame := range metadata {
-		if err := checkContext(ctx); err != nil {
-			return err
-		}
-		if err := writeUint32(ctx, destination, frame.Ordinal); err != nil {
-			return err
-		}
-		if err := writeUint32(ctx, destination, uint32(len(frame.CanonicalEntry))); err != nil {
-			return err
-		}
-		if err := writeBytes(ctx, destination, frame.CanonicalEntry); err != nil {
-			return err
-		}
-	}
-
-	var total uint64
 	buffer := make([]byte, TransferChunkBytes)
 	defer clearBytes(buffer)
 	for _, frame := range values {
-		if err := checkContext(ctx); err != nil {
-			return err
-		}
-		total += frame.SizeBytes
-		chunkCount := frame.SizeBytes / TransferChunkBytes
-		if frame.SizeBytes%TransferChunkBytes != 0 {
-			chunkCount++
-		}
-		if err := writeUint32(ctx, destination, frame.Ordinal); err != nil {
-			return err
-		}
-		if err := writeUint32(ctx, destination, uint32(chunkCount)); err != nil {
-			return err
-		}
-		if err := writeUint64(ctx, destination, frame.SizeBytes); err != nil {
-			return err
+		if frame.Reader == nil {
+			return writer.fail(archiveError("transfer transcript value reader is nil"))
 		}
 		remaining := frame.SizeBytes
 		for remaining != 0 {
@@ -138,7 +71,7 @@ func WriteTransferTranscript(
 			if err := readFull(ctx, frame.Reader, chunk); err != nil {
 				return err
 			}
-			if err := writeBytes(ctx, destination, chunk); err != nil {
+			if err := writer.WriteValueChunk(ctx, frame.Ordinal, frame.SizeBytes-remaining, chunk); err != nil {
 				return err
 			}
 			remaining -= length
@@ -148,17 +81,19 @@ func WriteTransferTranscript(
 			return err
 		}
 		count, err := frame.Reader.Read(extra[:])
+		clearBytes(extra[:])
 		if count != 0 || err == nil {
 			return archiveError("transfer transcript value is longer than declared")
 		}
 		if err != io.EOF {
 			return archiveCause("transfer transcript value EOF probe failed", err)
 		}
+		if err := writer.EndValue(ctx, frame.Ordinal); err != nil {
+			return err
+		}
 	}
-	if total != authority.TotalSelectedValueBytes {
-		return archiveError("transfer transcript value total does not match authority")
-	}
-	return nil
+	_, err = writer.Finish(ctx)
+	return err
 }
 
 func TransferTranscriptSHA256(
@@ -195,6 +130,9 @@ func writeBytes(ctx context.Context, destination io.Writer, value []byte) error 
 			return err
 		}
 		count, err := destination.Write(value)
+		if count < 0 || count > len(value) {
+			return archiveError("transfer transcript destination returned an invalid write count")
+		}
 		if count > 0 {
 			value = value[count:]
 		}
@@ -291,7 +229,7 @@ func validateTranscriptFrames(authority ContentAuthority, metadata []MetadataFra
 			ids.Validate(ids.KindEnvEntry, frame.EntryID) != nil || value.EntryID != frame.EntryID ||
 			(index > 0 && metadata[index-1].EntryID >= frame.EntryID) ||
 			len(frame.CanonicalEntry) == 0 || len(frame.CanonicalEntry) > MaxCanonicalEntryBytes ||
-			value.SizeBytes > MaxSelectedValueBytes || value.Reader == nil {
+			value.SizeBytes > MaxSelectedValueBytes {
 			return archiveError("transfer transcript frame binding is invalid")
 		}
 		aggregate += uint64(len(frame.CanonicalEntry))

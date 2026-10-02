@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -33,7 +34,11 @@ func (c *Client) runSession(
 	}()
 
 	authToken := append([]byte(nil), token[:]...)
-	authenticate := &agentpb.Authenticate{AgentId: c.agentID, Token: authToken}
+	authenticate := &agentpb.Authenticate{
+		AgentId: c.agentID, Token: authToken,
+		ExecutionPlanSchema: executionplan.SchemaVersion,
+		ProcessGeneration:   append([]byte(nil), c.processGeneration[:]...),
+	}
 	message := &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Authenticate{Authenticate: authenticate}}
 	if err := stream.Send(message); err != nil {
 		clear(authToken)
@@ -57,13 +62,32 @@ func (c *Client) runSession(
 
 	pullInterval := time.Duration(config.PullIntervalSeconds) * time.Second
 	config = proto.Clone(config).(*agentpb.AgentConfig)
+	staging, err := c.openStaging(streamCtx, c.stagingJournal)
+	if err != nil {
+		return false, err
+	}
+	c.staging = staging
+	defer func() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer closeCancel()
+		if closeErr := staging.close(closeCtx); closeErr != nil {
+			c.logger.Error("agent: close Backup staging", "error", closeErr)
+		}
+		c.staging = nil
+	}()
 	poolCancel, workersDone := c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
 	defer func() {
 		poolCancel()
 		<-workersDone
 	}()
+	if err := c.replayTerminalDelivery(streamCtx, stream); err != nil {
+		return agentChannelTransportResult(ctx, err, "agent: replay terminal delivery", false)
+	}
 	if err := c.sendReady(stream); err != nil {
 		return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
+	}
+	if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupStagingInventory{BackupStagingInventory: proto.CloneOf(staging.inventory)}}); err != nil {
+		return agentChannelTransportResult(ctx, err, "agent: send startup staging inventory", false)
 	}
 
 	ticker := time.NewTicker(pullInterval)
@@ -74,18 +98,39 @@ func (c *Client) runSession(
 	observations := newObservationSession(c.observer)
 	defer observations.Close()
 	receiveNext(streamCtx, stream, received)
+	controlBurst := 0
 	for {
-		select {
-		case <-ctx.Done():
+		// PostgreSQL execution markers outlive source-file cleanup. Drain
+		// existing work and finish terminal delivery before
+		// reopening the normal startup handshake; do not advertise Ready first.
+		if staging.reinspect.Load() && c.pool.Capacity() == int(config.MaxConcurrentTasks) {
+			clean, err := c.terminalDeliveryClean()
+			if err != nil {
+				return false, err
+			}
+			if clean {
+				return true, nil
+			}
+		}
+		event := nextSessionEvent(ctx, c.pool, observations, images, received, c.logs.Outputs(), ticker.C, controlBurst)
+		controlBurst = min(controlBurst+1, maximumControlBurst)
+		switch event.kind {
+		case sessionEnded:
 			return false, nil
-		case output := <-observations.outputs:
+		case sessionBulk:
+			if err := c.pool.sendBackupBulkFrame(stream, event.bulk); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send Config Restore frame", false)
+			}
+			controlBurst = 0
+		case sessionObservation:
 			if err := observations.Close(); err != nil {
 				return false, err
 			}
-			if err := sendServiceObservation(streamCtx, stream, output); err != nil {
+			if err := sendServiceObservation(streamCtx, stream, event.observation); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send service observation", false)
 			}
-		case output := <-images.outputs:
+		case sessionImage:
+			output := event.image
 			images.busy = false
 			if output.err != nil {
 				return agentChannelTransportResult(ctx, output.err, "agent: resolve workload images", true)
@@ -96,13 +141,28 @@ func (c *Client) runSession(
 			if err := stream.Send(message); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send workload image result", false)
 			}
-		case <-ticker.C:
+		case sessionReadiness:
 			if err := c.sendReady(stream); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
 			}
-		case result := <-received:
+		case sessionReceived:
+			result := event.received
 			if result.err != nil {
 				return agentChannelTransportResult(ctx, result.err, "agent: receive Controller message", true)
+			}
+			if handled, err := c.handleBackupStagingDelivery(streamCtx, stream, result.message); handled {
+				if err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: startup staging delivery", false)
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if handled, err := c.handleTerminalDelivery(streamCtx, stream, result.message); handled {
+				if err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: terminal delivery", false)
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
 			}
 			if handled, err := observations.handle(streamCtx, stream, result.message); handled {
 				if err != nil {
@@ -186,24 +246,21 @@ func (c *Client) runSession(
 				return false, nil
 			}
 			receiveNext(streamCtx, stream, received)
-		case output := <-c.pool.Outputs():
+		case sessionWorker:
+			output := event.worker
+			if err := output.validate(); err != nil {
+				return false, err
+			}
+			if output.Error != nil {
+				return false, output.Error
+			}
 			if output.BackingHookCheckpoint != nil {
-				if output.VolumeCheckpoint != nil || output.ScriptCheckpoint != nil || output.BackupCheckpoint != nil ||
-					output.Progress != nil || output.Result != nil {
-					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
-				}
 				if err := c.sendBackingHookCheckpoint(stream, output.BackingHookCheckpoint); err != nil {
 					return agentChannelTransportResult(ctx, err, "agent: send backing hook checkpoint", false)
 				}
 				continue
 			}
 			if output.VolumeCheckpoint != nil {
-				if output.BackingHookCheckpoint != nil || output.ScriptCheckpoint != nil ||
-					output.BackupCheckpoint != nil ||
-					output.Progress != nil ||
-					output.Result != nil {
-					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
-				}
 				if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_VolumeRemovalCheckpointRequest{
 					VolumeRemovalCheckpointRequest: output.VolumeCheckpoint,
 				}}); err != nil {
@@ -212,35 +269,38 @@ func (c *Client) runSession(
 				continue
 			}
 			if output.ScriptCheckpoint != nil {
-				if output.BackupCheckpoint != nil ||
-					output.Progress != nil || output.Result != nil {
-					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
-				}
 				if err := c.sendScriptCheckpoint(stream, output.ScriptCheckpoint); err != nil {
 					return agentChannelTransportResult(ctx, err, "agent: send Script checkpoint", false)
 				}
 				continue
 			}
 			if output.BackupCheckpoint != nil {
-				if output.Progress != nil || output.Result != nil || output.ScriptCheckpoint != nil {
-					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
-				}
 				if err := c.sendBackupCheckpoint(stream, output.BackupCheckpoint); err != nil {
 					return agentChannelTransportResult(ctx, err, "agent: send Backup checkpoint", false)
 				}
 				continue
 			}
-			if output.Progress != nil {
-				if output.Result != nil {
-					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+			if output.BackupConfigCredit != nil {
+				if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupConfigCredit{
+					BackupConfigCredit: output.BackupConfigCredit,
+				}}); err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: send Config credit", false)
 				}
+				continue
+			}
+			if output.BackupVolumeCredit != nil {
+				if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupVolumeManifestAckCredit{
+					BackupVolumeManifestAckCredit: output.BackupVolumeCredit,
+				}}); err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: send Volume manifest credit", false)
+				}
+				continue
+			}
+			if output.Progress != nil {
 				if err := c.sendTaskEvent(stream, *output.Progress); err != nil {
 					return agentChannelTransportResult(ctx, err, "agent: send task event", false)
 				}
 				continue
-			}
-			if output.Result == nil {
-				return false, errs.New(errs.KindInternal, "agent: worker returned an empty output")
 			}
 			if err := c.sendTaskAck(stream, *output.Result); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send task acknowledgement", false)
@@ -248,8 +308,8 @@ func (c *Client) runSession(
 			if err := c.sendReady(stream); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
 			}
-		case message := <-c.logs.Outputs():
-			if err := stream.Send(message); err != nil {
+		case sessionLog:
+			if err := stream.Send(event.log); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send log message", false)
 			}
 		}

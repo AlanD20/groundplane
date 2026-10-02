@@ -24,6 +24,8 @@ func backingComposeProject(
 	service := composetypes.ServiceConfig{
 		Name: spec.ServiceName, Image: spec.Image, Command: composetypes.ShellCommand(backingComposeShell(spec.Command)),
 		Expose: composetypes.StringOrNumberList(spec.Expose), Restart: "unless-stopped",
+		CapAdd: append([]string(nil), spec.CapAdd...), CapDrop: append([]string(nil), spec.CapDrop...),
+		SecurityOpt: append([]string(nil), spec.SecurityOpt...),
 		Networks: map[string]*composetypes.ServiceNetworkConfig{
 			zone.Name: {Aliases: []string{backingendpoint.New(serviceID)}},
 		},

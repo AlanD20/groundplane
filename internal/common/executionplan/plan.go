@@ -123,11 +123,15 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if plan.Schema != SchemaVersion {
 		return errs.New(errs.KindValidationFailed, "execution plan schema is unsupported")
 	}
+	if !backupOperation(plan.Operation) && plan.BackupScope != nil {
+		return errs.New(errs.KindValidationFailed, "non-Backup plan carries Backup scope")
+	}
 	if err := validateID(ids.KindPlan, plan.PlanId); err != nil {
 		return err
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP ||
-		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE {
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE ||
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_RESTORE {
 		if plan.RenderGeneration != 0 {
 			return errs.New(errs.KindValidationFailed, "backup execution plan cannot carry a render generation")
 		}
@@ -163,6 +167,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE {
 		return validateBackupPrunePlan(plan)
+	}
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_RESTORE {
+		return validateBackupExecutionPlan(plan, agentpb.PlanOperation_PLAN_OPERATION_RESTORE)
 	}
 	if len(plan.Artifacts) == 0 && (plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
 		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH) {
@@ -395,7 +402,8 @@ func validOperation(operation agentpb.PlanOperation) bool {
 		agentpb.PlanOperation_PLAN_OPERATION_ATTACH,
 		agentpb.PlanOperation_PLAN_OPERATION_DETACH,
 		agentpb.PlanOperation_PLAN_OPERATION_BACKUP,
-		agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE:
+		agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE,
+		agentpb.PlanOperation_PLAN_OPERATION_RESTORE:
 		return true
 	default:
 		return false

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -12,12 +13,19 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	current etcdstore.Versioned[taskjournal.PruneIntent],
 ) (etcdstore.Versioned[taskjournal.PruneIntent], error) {
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskjournal.TaskStorageKey(current.Record.TaskID)},
+		Keys: []string{
+			taskjournal.TaskStorageKey(current.Record.TaskID),
+			backupruntime.BackupExecutionPlanKey(current.Record.TaskID),
+			taskjournal.TaskTerminalReceiptKey(
+				current.Record.TaskID,
+			),
+			taskjournal.TaskTerminalDeliveryKey(current.Record.TaskID),
+		},
 	})
 	if err != nil {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
 	}
-	if taskResult == nil || taskResult.ReadRevision <= 0 || len(taskResult.Values) != 1 ||
+	if taskResult == nil || taskResult.ReadRevision <= 0 || len(taskResult.Values) != 4 ||
 		taskResult.Values[0] == nil ||
 		taskResult.Values[0].ModRevision != current.Record.TaskRevision {
 		if taskResult != nil {
@@ -56,6 +64,52 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskStorageKey(current.Record.TaskID)},
 	}
+	if held, err := terminalDeliveryPruneAuthority(task, current.Record.TaskRevision, taskResult.Values[2:]); held ||
+		err != nil {
+		if err != nil {
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
+		}
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
+	}
+	for _, value := range taskResult.Values[2:] {
+		if value != nil {
+			conditions = append(conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: value.Key})
+		}
+	}
+	procedure := taskResult.Values[1]
+	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
+		task.Type == taskjournal.TaskRestore {
+		if procedure == nil || procedure.Version != 1 || procedure.ModRevision <= 0 {
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
+		}
+		sealed, err := backupruntime.DecodeBackupExecutionPlan(procedure.Value)
+		if err != nil || sealed.PlanId != task.PlanID || hex.EncodeToString(sealed.PlanHash) != task.PlanHash ||
+			sealed.TargetId != task.Target {
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
+		}
+		stagingConditions, stagingMutations, err := repository.backupStagingPruneIndexes(
+			ctx,
+			task,
+			sealed,
+			taskResult.ReadRevision,
+		)
+		if err != nil {
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
+		}
+		conditions = append(conditions, stagingConditions...)
+		mutations = append(mutations, stagingMutations...)
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: backupruntime.BackupExecutionPlanKey(task.ID), ModRevision: procedure.ModRevision},
+		)
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: backupruntime.BackupExecutionPlanKey(task.ID)},
+		)
+	} else if procedure != nil {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
+	}
 	for index, key := range ownerKeys {
 		value := ownerResult.Values[index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 || string(value.Value) != task.ID {
@@ -64,6 +118,15 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
+	held, orphanConditions, err := repository.taskOrphanCleanupPruneConditions(ctx, task, taskResult.ReadRevision)
+	if err != nil {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
+	}
+	if held {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{},
+			taskjournal.CorruptPruneIntent()
+	}
+	conditions = append(conditions, orphanConditions...)
 	next := current.Record
 	next.TaskPrimaryDeleted = true
 	return repository.advanceTaskPruneIntent(

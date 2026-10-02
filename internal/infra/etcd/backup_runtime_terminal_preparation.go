@@ -6,6 +6,7 @@ import (
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresbackingguard"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -183,6 +184,48 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	if err != nil {
 		return backupRunPublicationPlan{}, err
 	}
+	releaseBackingEnvironmentIDs, retainBackingEnvironmentIDs, err :=
+		backupruntime.PostgresBackingEnvironmentTerminalGuards(
+			next,
+			current.Record.State == backupruntime.BackupRunQueued,
+		)
+	if err != nil {
+		return backupRunPublicationPlan{}, err
+	}
+	releasedBackingGuards, err := postgresbackingguard.PrepareOwnership(
+		ctx,
+		repository.store,
+		releaseBackingEnvironmentIDs,
+		current.Record.EnvironmentID,
+		postgresbackingguard.Owner(
+			backupruntime.BackupOperationBackup,
+			current.Record.OperationID,
+			current.Record.TaskID,
+		),
+		anchor.ReadRevision,
+		true,
+	)
+	if err != nil {
+		return backupRunPublicationPlan{}, err
+	}
+	defer releasedBackingGuards.Clear()
+	retainedBackingGuards, err := postgresbackingguard.PrepareOwnership(
+		ctx,
+		repository.store,
+		retainBackingEnvironmentIDs,
+		current.Record.EnvironmentID,
+		postgresbackingguard.Owner(
+			backupruntime.BackupOperationBackup,
+			current.Record.OperationID,
+			current.Record.TaskID,
+		),
+		anchor.ReadRevision,
+		false,
+	)
+	if err != nil {
+		return backupRunPublicationPlan{}, err
+	}
+	defer retainedBackingGuards.Clear()
 	value, err := backupruntime.EncodeBackupRunRecord(next)
 	if err != nil {
 		return backupRunPublicationPlan{}, err
@@ -223,8 +266,8 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 			return backupRunPublicationPlan{}, encodeErr
 		}
 		connectorIndex, keyErr := backupruntime.BackupOrphanConnectorIndexKey(
-			orphan.Point.ConnectorID,
-			orphan.Point.ID,
+			orphan.Target.ConnectorID,
+			orphan.Target.ID,
 		)
 		if keyErr != nil {
 			clear(orphanValue)
@@ -232,15 +275,15 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 			return backupRunPublicationPlan{}, keyErr
 		}
 		environmentIndex, keyErr := backupruntime.BackupOrphanEnvironmentIndexKey(
-			orphan.Point.EnvironmentID,
-			orphan.Point.ID,
+			orphan.Target.EnvironmentID,
+			orphan.Target.ID,
 		)
 		if keyErr != nil {
 			clear(orphanValue)
 			etcdstore.ClearMutationValues(mutations)
 			return backupRunPublicationPlan{}, keyErr
 		}
-		orphanKey := backupruntime.BackupOrphanKey(orphan.Point.ID)
+		orphanKey := backupruntime.BackupOrphanKey(orphan.Target.ID)
 		conditions = append(
 			conditions,
 			etcdstore.Condition{Key: orphanKey},
@@ -250,12 +293,14 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		mutations = append(
 			mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: orphanKey, Value: orphanValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(orphan.Point.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(orphan.Point.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(orphan.Target.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(orphan.Target.ID)},
 		)
 	}
 	conditions = append(conditions, evidence.TransactionConditions()...)
 	conditions = append(conditions, checkpointPlan.conditions...)
+	conditions = append(conditions, releasedBackingGuards.Conditions...)
+	conditions = append(conditions, retainedBackingGuards.Conditions...)
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(current.Record.EnvironmentID),
 	})
@@ -265,6 +310,11 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		return backupRunPublicationPlan{}, err
 	}
 	mutations = append(mutations, epoch)
+	for _, mutation := range releasedBackingGuards.Mutations {
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...),
+		})
+	}
 	for _, mutation := range checkpointPlan.mutations {
 		mutations = append(mutations, etcdstore.Mutation{
 			Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...),

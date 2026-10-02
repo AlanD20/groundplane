@@ -32,7 +32,8 @@ func (repository *TaskRepository) acknowledgeSpecializedTask(
 		)
 		return acknowledged, true, err
 	}
-	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune {
+	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
+		task.Type == taskjournal.TaskRestore {
 		if executor != taskjournal.TaskExecutorAgent || result == nil {
 			return etcdstore.Versioned[TaskRecord]{}, true, errs.New(
 				errs.KindStateConflict,

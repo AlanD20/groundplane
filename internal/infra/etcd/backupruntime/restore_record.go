@@ -3,60 +3,84 @@ package backupruntime
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/oklog/ulid/v2"
 	"time"
 )
 
 type BackupRestoreTargetSnapshot struct {
-	Postgres *BackupPostgresSourceSnapshot `json:"postgres,omitempty"`
-	Volume   *BackupVolumeSourceSnapshot   `json:"volume,omitempty"`
-	Config   *BackupRestoreConfigTarget    `json:"config,omitempty"`
+	Postgres *BackupRestorePostgresTarget `json:"postgres,omitempty"`
+	Volume   *BackupVolumeSourceSnapshot  `json:"volume,omitempty"`
+	Config   *BackupRestoreConfigTarget   `json:"config,omitempty"`
 }
 
 type BackupRestoreConfigTarget struct {
-	EnvironmentID       string `json:"environment_id"`
-	EnvironmentRevision int64  `json:"environment_revision"`
+	EnvironmentID        string `json:"environment_id"`
+	EnvironmentRevision  int64  `json:"environment_revision"`
+	BaselineRevisionID   string `json:"baseline_revision_id"`
+	BaselineHeadRevision int64  `json:"baseline_head_revision"`
+	RenderGeneration     uint64 `json:"render_generation"`
+	FileContextSHA256    string `json:"file_context_sha256"`
 }
 
 type BackupRestoreConfigProgress struct {
-	CurrentEntryOrdinal        uint32 `json:"current_entry_ordinal"`
-	NextDescriptorChunkOrdinal uint32 `json:"next_descriptor_chunk_ordinal"`
-	NextValueChunkOrdinal      uint32 `json:"next_value_chunk_ordinal"`
-	FinalizedEntryCount        uint32 `json:"finalized_entry_count"`
-	DescriptorChunkCount       uint32 `json:"descriptor_chunk_count"`
-	ValueChunkCount            uint32 `json:"value_chunk_count"`
-	PlainValueBytes            uint64 `json:"plain_value_bytes"`
-	DescriptorChainSHA256      string `json:"descriptor_chain_sha256,omitempty"`
-	StoredValueChainSHA256     string `json:"stored_value_chain_sha256,omitempty"`
-	StoredManifestSHA256       string `json:"stored_manifest_sha256,omitempty"`
-	DeleteCursor               string `json:"delete_cursor,omitempty"`
-	UpsertEntryOrdinal         uint32 `json:"upsert_entry_ordinal"`
-	MaterializationGeneration  uint64 `json:"materialization_generation"`
+	RevisionRootSHA256            string `json:"revision_root_sha256,omitempty"`
+	RevisionRootRevision          int64  `json:"revision_root_revision"`
+	ProjectionSHA256              string `json:"projection_sha256,omitempty"`
+	IdentitiesSHA256              string `json:"identities_sha256,omitempty"`
+	ExpectedMaterializationSHA256 string `json:"expected_materialization_sha256,omitempty"`
+	DeleteEntryCount              uint32 `json:"delete_entry_count"`
+	DeleteEntryOrdinal            uint32 `json:"delete_entry_ordinal"`
+	UpsertEntryOrdinal            uint32 `json:"upsert_entry_ordinal"`
+	PublishedHeadRevision         int64  `json:"published_head_revision"`
+	MaterializationSHA256         string `json:"materialization_sha256,omitempty"`
+	SourceCleanupCompleted        bool   `json:"source_cleanup_completed"`
+}
+
+type BackupRestoreVolumeProgress struct {
+	OldEntryCount            uint64 `json:"old_entry_count"`
+	OldContentManifestSHA256 string `json:"old_content_manifest_sha256,omitempty"`
+	OldFullTreeSHA256        string `json:"old_full_tree_sha256,omitempty"`
+	ConstructionCursor       uint64 `json:"construction_cursor"`
+	FinalizationCursor       uint64 `json:"finalization_cursor"`
+	DeletionCursor           uint64 `json:"deletion_cursor"`
+	PendingConstruction      uint64 `json:"pending_construction"`
+	PendingFinalization      uint64 `json:"pending_finalization"`
+	PendingDeletion          uint64 `json:"pending_deletion"`
+	ExchangeIntent           bool   `json:"exchange_intent"`
+	Exchanged                bool   `json:"exchanged"`
+	OldRemoved               bool   `json:"old_removed"`
+	ServiceMutationStarted   bool   `json:"service_mutation_started"`
+	ConsumersStopped         bool   `json:"consumers_stopped"`
+	ServiceCursor            uint32 `json:"service_cursor"`
+	ServicesRecovered        bool   `json:"services_recovered"`
 }
 
 type BackupRestoreRecord struct {
-	TaskID                        string                       `json:"task_id"`
-	OperationID                   string                       `json:"operation_id"`
-	EnvironmentID                 string                       `json:"environment_id"`
-	RestoreGenerationID           string                       `json:"restore_generation_id,omitempty"`
-	RecoveryPointRevision         int64                        `json:"recovery_point_revision"`
-	Point                         BackupRecoveryPointSnapshot  `json:"point"`
-	SourceRevision                int64                        `json:"source_revision"`
-	CurrentTarget                 BackupRestoreTargetSnapshot  `json:"current_target"`
-	ConnectorRevision             int64                        `json:"connector_revision"`
-	ConnectorHasDirectCredentials bool                         `json:"connector_has_direct_credentials"`
-	ConnectorCredentialsRevision  int64                        `json:"connector_credentials_revision"`
-	ExpectedKeyRecordRevision     int64                        `json:"expected_key_record_revision,omitempty"`
-	ExpectedKeyValueRevision      int64                        `json:"expected_key_value_revision,omitempty"`
-	UsesOldIdentity               bool                         `json:"uses_old_identity"`
-	Artifact                      *BackupArtifactEvidence      `json:"artifact,omitempty"`
-	StagedTreeManifestSHA256      string                       `json:"staged_tree_manifest_sha256,omitempty"`
-	State                         BackupRestoreState           `json:"state"`
-	MutationStarted               bool                         `json:"mutation_started"`
-	ServiceCount                  uint32                       `json:"service_count"`
-	ConfigProgress                *BackupRestoreConfigProgress `json:"config_progress,omitempty"`
-	Verification                  BackupVerificationState      `json:"verification"`
-	CreatedAt                     time.Time                    `json:"created_at"`
-	UpdatedAt                     time.Time                    `json:"updated_at"`
+	TaskID                        string                         `json:"task_id"`
+	OperationID                   string                         `json:"operation_id"`
+	EnvironmentID                 string                         `json:"environment_id"`
+	RestoreGenerationID           string                         `json:"restore_generation_id,omitempty"`
+	RecoveryPointRevision         int64                          `json:"recovery_point_revision"`
+	Point                         BackupRecoveryPointSnapshot    `json:"point"`
+	SourceRevision                int64                          `json:"source_revision"`
+	CurrentTarget                 BackupRestoreTargetSnapshot    `json:"current_target"`
+	ConnectorRevision             int64                          `json:"connector_revision"`
+	ConnectorHasDirectCredentials bool                           `json:"connector_has_direct_credentials"`
+	ConnectorCredentialsRevision  int64                          `json:"connector_credentials_revision"`
+	ExpectedKeyRecordRevision     int64                          `json:"expected_key_record_revision,omitempty"`
+	ExpectedKeyValueRevision      int64                          `json:"expected_key_value_revision,omitempty"`
+	UsesOldIdentity               bool                           `json:"uses_old_identity"`
+	Artifact                      *BackupArtifactEvidence        `json:"artifact,omitempty"`
+	StagedTreeManifestSHA256      string                         `json:"staged_tree_manifest_sha256,omitempty"`
+	State                         BackupRestoreState             `json:"state"`
+	MutationStarted               bool                           `json:"mutation_started"`
+	ServiceCount                  uint32                         `json:"service_count"`
+	ConfigProgress                *BackupRestoreConfigProgress   `json:"config_progress,omitempty"`
+	VolumeProgress                *BackupRestoreVolumeProgress   `json:"volume_progress,omitempty"`
+	PostgresProgress              *BackupRestorePostgresProgress `json:"postgres_progress,omitempty"`
+	Verification                  BackupVerificationState        `json:"verification"`
+	CreatedAt                     time.Time                      `json:"created_at"`
+	UpdatedAt                     time.Time                      `json:"updated_at"`
 }
 
 type BackupRestoreServiceRecord struct {
@@ -67,7 +91,7 @@ type BackupRestoreServiceRecord struct {
 	PriorIntent     BackupServiceRuntimeIntent `json:"prior_intent"`
 }
 
-func validateBackupRestoreRecord(record BackupRestoreRecord) error {
+func ValidateBackupRestoreRecord(record BackupRestoreRecord) error {
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
@@ -92,6 +116,10 @@ func validateBackupRestoreRecord(record BackupRestoreRecord) error {
 		if recordcodec.ValidateID(ids.KindConfig, record.RestoreGenerationID) != nil {
 			return invalidBackupRuntimeRecord("config restore generation id is invalid")
 		}
+	} else if record.Point.SourceKind == BackupRuntimeSourceVolume || record.Point.SourceKind == BackupRuntimeSourceAttach {
+		if _, err := ulid.ParseStrict(record.RestoreGenerationID); err != nil {
+			return invalidBackupRuntimeRecord("restore generation id is invalid")
+		}
 	} else if record.RestoreGenerationID != "" {
 		return invalidBackupRuntimeRecord("non-config restore cannot carry a restore generation id")
 	}
@@ -100,8 +128,7 @@ func validateBackupRestoreRecord(record BackupRestoreRecord) error {
 	}
 	if record.Artifact != nil {
 		if !validBackupArtifact(*record.Artifact) ||
-			record.Artifact.SizeBytes != record.Point.SizeBytes ||
-			record.Artifact.SHA256 != record.Point.SHA256 {
+			*record.Artifact != record.Point.Evidence {
 			return invalidBackupRuntimeRecord(
 				"backup restore artifact evidence does not match its point",
 			)
@@ -132,8 +159,7 @@ func validateBackupRestoreTarget(
 	}
 	switch point.SourceKind {
 	case BackupRuntimeSourceAttach:
-		if target.Postgres == nil || validateBackupPostgresSnapshot(*target.Postgres) != nil ||
-			target.Postgres.ConsumerEnvironmentID != point.EnvironmentID || target.Postgres.AttachID != point.TargetID {
+		if target.Postgres == nil || validateBackupRestorePostgresTarget(*target.Postgres, point) != nil {
 			return invalidBackupRuntimeRecord("postgres restore target is invalid")
 		}
 	case BackupRuntimeSourceVolume:
@@ -145,6 +171,9 @@ func validateBackupRestoreTarget(
 		if target.Config == nil ||
 			recordcodec.ValidateID(ids.KindEnvironment, target.Config.EnvironmentID) != nil ||
 			target.Config.EnvironmentRevision <= 0 ||
+			recordcodec.ValidateID(ids.KindTask, target.Config.BaselineRevisionID) != nil ||
+			target.Config.BaselineHeadRevision <= 0 || target.Config.RenderGeneration == 0 ||
+			!recordcodec.ValidSHA256(target.Config.FileContextSHA256) ||
 			target.Config.EnvironmentID != point.TargetID {
 			return invalidBackupRuntimeRecord("config restore target is invalid")
 		}
@@ -160,30 +189,30 @@ func validateBackupRestoreStateTable(record BackupRestoreRecord) error {
 	switch record.Point.SourceKind {
 	case BackupRuntimeSourceAttach:
 		switch record.State {
-		case BackupRestoreQueued, BackupRestoreDownloading, BackupRestoreArtifactVerified,
-			BackupRestoreConsumersStopped, BackupRestoreFailedSafe:
+		case BackupRestoreQueued, BackupRestoreDownloading, BackupRestoreArtifactVerified, BackupRestoreFailedSafe:
 			allowed = true
+		case BackupRestoreConsumersStopped:
+			allowed, expectedMutation = true, record.MutationStarted
 		case BackupRestoreRestoring, BackupRestoreConsumersRestored, BackupRestoreVerified,
 			BackupRestoreCompleted, BackupRestoreRecoveryRequired:
 			allowed, expectedMutation = true, true
 		}
 	case BackupRuntimeSourceVolume:
 		switch record.State {
-		case BackupRestoreQueued, BackupRestoreDownloading, BackupRestoreArtifactVerified,
-			BackupRestoreConsumersStopped, BackupRestoreRestoring, BackupRestoreTreeValidated,
-			BackupRestoreExchangeReady, BackupRestoreFailedSafe:
+		case BackupRestoreQueued, BackupRestoreDownloading, BackupRestoreArtifactVerified, BackupRestoreFailedSafe:
 			allowed = true
-		case BackupRestoreExchanged, BackupRestoreConsumersRestored, BackupRestoreVerified,
+		case BackupRestoreConsumersStopped, BackupRestoreRestoring, BackupRestoreTreeValidated,
+			BackupRestoreExchangeReady, BackupRestoreExchanged, BackupRestoreConsumersRestored, BackupRestoreVerified,
 			BackupRestoreCompleted, BackupRestoreRecoveryRequired:
 			allowed, expectedMutation = true, true
 		}
 	case BackupRuntimeSourceConfig:
 		switch record.State {
 		case BackupRestoreQueued, BackupRestoreDownloading, BackupRestoreArtifactVerified,
-			BackupRestoreReceiving, BackupRestoreStaged, BackupRestoreApplyingDeletes,
-			BackupRestoreApplyingUpserts, BackupRestoreFailedSafe:
+			BackupRestoreReceiving, BackupRestoreStaged, BackupRestoreFailedSafe:
 			allowed = true
-		case BackupRestoreCanonicalComplete, BackupRestoreMaterializing, BackupRestoreVerified,
+		case BackupRestoreApplyingDeletes, BackupRestoreApplyingUpserts,
+			BackupRestoreCanonicalComplete, BackupRestoreMaterializing, BackupRestoreVerified,
 			BackupRestoreCompleted, BackupRestoreRecoveryRequired:
 			allowed, expectedMutation = true, true
 		}
@@ -210,12 +239,17 @@ func validateBackupRestoreVolumeManifest(record BackupRestoreRecord) error {
 	}
 	switch record.State {
 	case BackupRestoreTreeValidated, BackupRestoreExchangeReady, BackupRestoreExchanged,
-		BackupRestoreConsumersRestored, BackupRestoreVerified, BackupRestoreCompleted,
-		BackupRestoreRecoveryRequired:
+		BackupRestoreConsumersRestored, BackupRestoreVerified, BackupRestoreCompleted:
 		if record.StagedTreeManifestSHA256 == "" {
 			return invalidBackupRuntimeRecord(
 				"Volume restore state requires a staged-tree manifest",
 			)
+		}
+	case BackupRestoreRecoveryRequired:
+		if record.VolumeProgress != nil &&
+			record.VolumeProgress.FinalizationCursor == record.Point.VolumeArchive.EntryCount &&
+			record.StagedTreeManifestSHA256 == "" {
+			return invalidBackupRuntimeRecord("Volume recovery lost a finalized hidden-tree manifest")
 		}
 	}
 	return nil
@@ -248,7 +282,7 @@ func validateBackupRestoreProgress(record BackupRestoreRecord) error {
 		if record.ServiceCount != 0 || record.ConfigProgress == nil {
 			return invalidBackupRuntimeRecord("config restore progress is invalid")
 		}
-		return validateBackupRestoreConfigProgress(record.State, *record.ConfigProgress)
+		return validateBackupRestoreConfigProgress(record)
 	}
 	if record.ConfigProgress != nil {
 		return invalidBackupRuntimeRecord("non-config restore cannot carry config progress")
@@ -259,67 +293,107 @@ func validateBackupRestoreProgress(record BackupRestoreRecord) error {
 			"volume restore service count does not match its snapshot",
 		)
 	}
+	if record.Point.SourceKind == BackupRuntimeSourceVolume {
+		return validateBackupRestoreVolumeProgress(record)
+	}
+	if record.VolumeProgress != nil {
+		return invalidBackupRuntimeRecord("non-Volume Restore cannot carry Volume progress")
+	}
+	if record.Point.SourceKind == BackupRuntimeSourceAttach {
+		return validateBackupRestorePostgresProgress(record)
+	}
+	if record.PostgresProgress != nil {
+		return invalidBackupRuntimeRecord("non-postgres Restore cannot carry PostgreSQL progress")
+	}
 	return nil
 }
 
-func validateBackupRestoreConfigProgress(
-	state BackupRestoreState,
-	progress BackupRestoreConfigProgress,
-) error {
-	if progress.NextDescriptorChunkOrdinal > progress.DescriptorChunkCount ||
-		progress.NextValueChunkOrdinal > progress.ValueChunkCount {
-		return invalidBackupRuntimeRecord("config restore chunk cursor exceeds received chunks")
+func validateBackupRestoreConfigProgress(record BackupRestoreRecord) error {
+	progress := *record.ConfigProgress
+	if progress.SourceCleanupCompleted &&
+		(progress.MaterializationSHA256 == "" || (record.State != BackupRestoreVerified && record.State != BackupRestoreCompleted && record.State != BackupRestoreRecoveryRequired)) {
+		return invalidBackupRuntimeRecord("config restore cleanup precedes verified materialization")
 	}
-	if progress.MaterializationGeneration == 0 ||
-		progress.CurrentEntryOrdinal != progress.FinalizedEntryCount ||
-		(progress.FinalizedEntryCount > 0 && progress.DescriptorChunkCount < progress.FinalizedEntryCount) ||
-		!optionalDigestMatchesCount(
-			progress.DescriptorChainSHA256,
-			progress.DescriptorChunkCount,
-		) ||
-		!optionalDigestMatchesCount(progress.StoredValueChainSHA256, progress.ValueChunkCount) ||
-		(progress.StoredManifestSHA256 != "" && !recordcodec.ValidSHA256(progress.StoredManifestSHA256)) {
-		return invalidBackupRuntimeRecord("config restore progress digest is invalid")
+	if record.State == BackupRestoreCompleted && !progress.SourceCleanupCompleted {
+		return invalidBackupRuntimeRecord("completed config restore lacks source cleanup evidence")
 	}
-	if progress.DeleteCursor != "" &&
-		recordcodec.ValidateID(ids.KindEnvEntry, progress.DeleteCursor) != nil {
-		return invalidBackupRuntimeRecord("config restore delete cursor is invalid")
+	if progress.DeleteEntryCount > 512 || progress.DeleteEntryOrdinal > progress.DeleteEntryCount ||
+		progress.UpsertEntryOrdinal > record.Point.ConfigArchive.EntryCount || progress.RevisionRootRevision < 0 ||
+		progress.PublishedHeadRevision < 0 ||
+		(progress.RevisionRootSHA256 == "") != (progress.RevisionRootRevision == 0) ||
+		(progress.RevisionRootRevision == 0 && (progress.ProjectionSHA256 != "" || progress.IdentitiesSHA256 != "" || progress.ExpectedMaterializationSHA256 != "")) ||
+		(progress.RevisionRootSHA256 != "" && !recordcodec.ValidSHA256(progress.RevisionRootSHA256)) ||
+		(progress.MaterializationSHA256 != "" && !recordcodec.ValidSHA256(progress.MaterializationSHA256)) {
+		return invalidBackupRuntimeRecord("config restore publication progress is invalid")
 	}
-	if configRestoreStateRequiresManifest(state) && progress.StoredManifestSHA256 == "" {
-		return invalidBackupRuntimeRecord("config restore state requires a manifest digest")
+	prePublication := record.State == BackupRestoreQueued || record.State == BackupRestoreDownloading ||
+		record.State == BackupRestoreArtifactVerified || record.State == BackupRestoreReceiving
+	if prePublication {
+		if progress != (BackupRestoreConfigProgress{}) {
+			return invalidBackupRuntimeRecord("config restore has publication progress before staging")
+		}
+		return nil
 	}
-	preManifest := state == BackupRestoreQueued || state == BackupRestoreDownloading ||
-		state == BackupRestoreArtifactVerified || state == BackupRestoreReceiving
-	if preManifest && progress.StoredManifestSHA256 != "" {
-		return invalidBackupRuntimeRecord("config restore has a premature manifest digest")
+	if record.State == BackupRestoreFailedSafe {
+		if progress.DeleteEntryOrdinal != 0 || progress.UpsertEntryOrdinal != 0 ||
+			progress.PublishedHeadRevision != 0 || progress.MaterializationSHA256 != "" ||
+			(progress.RevisionRootRevision == 0 && progress.DeleteEntryCount != 0) ||
+			(progress.RevisionRootRevision > 0 && (!recordcodec.ValidSHA256(progress.ProjectionSHA256) ||
+				!recordcodec.ValidSHA256(progress.IdentitiesSHA256) || !recordcodec.ValidSHA256(progress.ExpectedMaterializationSHA256))) {
+			return invalidBackupRuntimeRecord("failed-safe config restore has live mutation progress")
+		}
+		return nil
 	}
-	if state != BackupRestoreReceiving &&
-		(progress.NextDescriptorChunkOrdinal != 0 || progress.NextValueChunkOrdinal != 0) {
-		return invalidBackupRuntimeRecord("config restore has an out-of-phase chunk cursor")
+	if progress.RevisionRootRevision == 0 {
+		return invalidBackupRuntimeRecord("config restore publication lacks its immutable revision root")
 	}
-	if (state == BackupRestoreQueued || state == BackupRestoreDownloading || state == BackupRestoreArtifactVerified) &&
-		(progress.FinalizedEntryCount != 0 || progress.DescriptorChunkCount != 0 || progress.ValueChunkCount != 0 ||
-			progress.PlainValueBytes != 0 || progress.DescriptorChainSHA256 != "" ||
-			progress.StoredValueChainSHA256 != "" || progress.DeleteCursor != "" ||
-			progress.UpsertEntryOrdinal != 0) {
-		return invalidBackupRuntimeRecord("config restore has progress before receiving")
+	if !recordcodec.ValidSHA256(progress.ProjectionSHA256) || !recordcodec.ValidSHA256(progress.IdentitiesSHA256) ||
+		!recordcodec.ValidSHA256(progress.ExpectedMaterializationSHA256) {
+		return invalidBackupRuntimeRecord("config restore publication lacks its complete metadata seals")
 	}
-	if (state == BackupRestoreReceiving || state == BackupRestoreStaged) &&
-		(progress.DeleteCursor != "" || progress.UpsertEntryOrdinal != 0) {
-		return invalidBackupRuntimeRecord("config restore has an out-of-phase apply cursor")
+	if progress.UpsertEntryOrdinal > 0 && progress.DeleteEntryOrdinal != progress.DeleteEntryCount {
+		return invalidBackupRuntimeRecord("config restore started upserts before completing deletes")
 	}
-	if state == BackupRestoreApplyingDeletes && progress.UpsertEntryOrdinal != 0 {
-		return invalidBackupRuntimeRecord("config restore started upserts before deletes completed")
+	complete := progress.DeleteEntryOrdinal == progress.DeleteEntryCount &&
+		progress.UpsertEntryOrdinal == record.Point.ConfigArchive.EntryCount
+	if progress.PublishedHeadRevision != 0 &&
+		(!complete || progress.PublishedHeadRevision <= record.CurrentTarget.Config.BaselineHeadRevision ||
+			progress.PublishedHeadRevision <= progress.RevisionRootRevision) {
+		return invalidBackupRuntimeRecord("config restore head switch precedes complete publication")
 	}
-	if progress.UpsertEntryOrdinal > progress.FinalizedEntryCount {
-		return invalidBackupRuntimeRecord("config restore upsert cursor exceeds staged Entries")
+	switch record.State {
+	case BackupRestoreStaged:
+		if progress.DeleteEntryOrdinal != 0 || progress.UpsertEntryOrdinal != 0 || progress.PublishedHeadRevision != 0 {
+			return invalidBackupRuntimeRecord("staged config restore has live publication progress")
+		}
+	case BackupRestoreApplyingDeletes:
+		if progress.UpsertEntryOrdinal != 0 || progress.PublishedHeadRevision != 0 {
+			return invalidBackupRuntimeRecord("config restore delete phase has later publication progress")
+		}
+	case BackupRestoreApplyingUpserts:
+		if progress.DeleteEntryOrdinal != progress.DeleteEntryCount || progress.PublishedHeadRevision != 0 {
+			return invalidBackupRuntimeRecord("config restore upsert phase has contradictory progress")
+		}
+	case BackupRestoreCanonicalComplete, BackupRestoreMaterializing, BackupRestoreVerified, BackupRestoreCompleted:
+		if !complete || progress.PublishedHeadRevision == 0 {
+			return invalidBackupRuntimeRecord("config restore canonical publication is incomplete")
+		}
+	case BackupRestoreRecoveryRequired:
+		// An interrupted live publication may be only partly deleted/upserted.
+		// The durable cursor remains authoritative; recovery cannot invent completion.
+	default:
+		return invalidBackupRuntimeRecord("config restore publication state is invalid")
 	}
-	if (state == BackupRestoreCanonicalComplete || state == BackupRestoreMaterializing ||
-		state == BackupRestoreVerified || state == BackupRestoreCompleted ||
-		state == BackupRestoreRecoveryRequired) && progress.UpsertEntryOrdinal != progress.FinalizedEntryCount {
-		return invalidBackupRuntimeRecord(
-			"config restore canonical switch precedes complete upserts",
-		)
+	if record.State == BackupRestoreVerified || record.State == BackupRestoreCompleted {
+		if progress.MaterializationSHA256 == "" ||
+			progress.MaterializationSHA256 != progress.ExpectedMaterializationSHA256 {
+			return invalidBackupRuntimeRecord("verified config restore lacks materialization evidence")
+		}
+	} else if record.State != BackupRestoreRecoveryRequired && progress.MaterializationSHA256 != "" {
+		return invalidBackupRuntimeRecord("config restore has premature materialization evidence")
+	}
+	if progress.MaterializationSHA256 != "" && progress.PublishedHeadRevision == 0 {
+		return invalidBackupRuntimeRecord("config restore materialization precedes head publication")
 	}
 	return nil
 }

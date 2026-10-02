@@ -53,6 +53,7 @@ class DeployConnectionArgumentsTest(unittest.TestCase):
             expose_port=None,
             known_hosts=Path("/etc/groundplane/known_hosts"),
             stage_only=False,
+            postgres16_release=Path("/srv/releases/postgres16-release.json"),
         )
 
         commands = (

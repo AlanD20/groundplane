@@ -1,7 +1,5 @@
 package backupruntime
 
-import ()
-
 func BackupRunReadyForSuccessfulTerminal(current BackupRunRecord, next BackupRunRecord) bool {
 	if len(current.Sources) != len(next.Sources) {
 		return false
@@ -56,30 +54,20 @@ func BackupRunRequiresTerminalOrphan(run BackupRunRecord) bool {
 
 func BackupOrphanRecordFromRun(run BackupRunRecord, ordinal uint32) BackupOrphanRecord {
 	source := run.Sources[ordinal]
-	return BackupOrphanRecord{
-		Point: BackupRecoveryPointSnapshot{
-			ID:              source.RecoveryPointID,
-			EnvironmentID:   run.EnvironmentID,
-			SourceID:        source.SourceID,
-			SourceKind:      source.Kind,
-			TargetID:        source.TargetID,
-			ConnectorID:     run.ConnectorID,
-			ConnectorPrefix: run.ConnectorPrefix,
-			ObjectKey:       source.ObjectKey,
-			SourceFormat:    source.Format,
-			Encryption:      run.Encryption,
-			KeyEra:          run.KeyEra,
-			Recipient:       run.Recipient,
-			SizeBytes:       source.SizeBytes,
-			SHA256:          source.SHA256,
-			CreatedAt:       source.RecoveryPointCreatedAt,
-		},
-		TaskID: run.TaskID,
+	orphan := BackupOrphanRecord{
+		Target: backupSourceTarget(run, source), Evidence: source.Evidence, ConfigArchive: source.ConfigArchive,
+		VolumeArchive: source.VolumeArchive,
+		Upload:        source.Upload, Object: source.Object, Phase: source.Phase, TaskID: run.TaskID,
 		Reconciliation: BackupOrphanReconciliationAuthority{
-			OperationID:    run.OperationID,
-			PolicyRevision: run.PolicyRevision,
-			RetentionKeep:  run.RetentionKeep,
+			OperationID: run.OperationID, PolicyRevision: run.PolicyRevision, PolicySHA256: run.PolicySHA256, RetentionKeep: run.RetentionKeep,
 		},
 		State: BackupOrphanInspect, CreatedAt: run.UpdatedAt, UpdatedAt: run.UpdatedAt,
 	}
+	if source.Snapshot.Postgres != nil {
+		postgres := source.Snapshot.Postgres
+		orphan.Postgres = BackupPostgresPointIdentity{Database: postgres.Database, Role: postgres.Role,
+			BackingEnvironmentID: postgres.BackingEnvironmentID,
+			BackingServiceID:     postgres.BackingServiceID, ConsumerServiceID: postgres.ConsumerServiceID}
+	}
+	return orphan
 }

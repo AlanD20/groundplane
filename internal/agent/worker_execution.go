@@ -92,8 +92,32 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 					Complete: stepResult.Complete, ResponseSha256: append([]byte(nil), stepResult.ResponseSHA256...),
 				}
 			}
-		} else if step.GetBackupArtifactPrune() != nil {
+		} else if step.GetBackupStep().GetPrune() != nil {
 			err = p.executeBackupArtifactPrune(stepCtx, reservation.assignment, step)
+		} else if step.GetBackupStep().GetCapture().GetConfig() != nil {
+			err = p.executeBackupConfigCapture(stepCtx, reservation.assignment, step)
+		} else if step.GetBackupStep().GetCapture().GetVolume() != nil {
+			err = p.executeBackupVolumeCapture(stepCtx, reservation.assignment, step)
+		} else if step.GetBackupStep().GetCapture().GetPostgres() != nil {
+			err = p.executeBackupPostgresCapture(stepCtx, reservation.assignment, step)
+			if p.backupStaging != nil {
+				p.backupStaging.reinspect.Store(true)
+			}
+		} else if step.GetBackupStep().GetRestore().GetConfig() != nil {
+			var restoreMutation bool
+			restoreMutation, err = p.executeBackupConfigRestore(stepCtx, reservation.assignment, step)
+			mutationAttempted = mutationAttempted || restoreMutation
+		} else if step.GetBackupStep().GetRestore().GetVolume() != nil {
+			var restoreMutation bool
+			restoreMutation, err = p.executeBackupVolumeRestore(stepCtx, reservation.assignment, step)
+			mutationAttempted = mutationAttempted || restoreMutation
+		} else if step.GetBackupStep().GetRestore().GetPostgres() != nil {
+			var restoreMutation bool
+			restoreMutation, err = p.executeBackupPostgresRestore(stepCtx, reservation.assignment, step)
+			mutationAttempted = mutationAttempted || restoreMutation
+			if p.backupStaging != nil {
+				p.backupStaging.reinspect.Store(true)
+			}
 		} else if step.GetComponentApply() != nil {
 			var payload componentaction.ManagedConfigPayload
 			if reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
@@ -209,7 +233,13 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		ExitCode: exitCode, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
 		ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
 	}
-	if environmentDirectoryTask {
+	if reservation.assignment.BackupAuthority != nil {
+		result.Backup = &agentpb.BackupTaskResult{
+			FailedStepId:     failedStepID,
+			RecoveryRequired: proto.Bool(reconciliationRequired),
+		}
+		result.AssignmentGeneration = reservation.assignment.AssignmentGeneration
+	} else if environmentDirectoryTask {
 		result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{FailedStepId: failedStepID}
 		if environmentDirectoryResult != nil {
 			result.EnvironmentDirectory.NextCursor = environmentDirectoryResult.NextCursor

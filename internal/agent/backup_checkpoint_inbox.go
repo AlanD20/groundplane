@@ -13,16 +13,24 @@ func (p *WorkerPool) CheckpointBackup(
 	ctx context.Context,
 	request *agentpb.BackupCheckpointRequest,
 ) error {
+	_, err := p.commitBackupCheckpoint(ctx, request)
+	return err
+}
+
+func (p *WorkerPool) commitBackupCheckpoint(
+	ctx context.Context,
+	request *agentpb.BackupCheckpointRequest,
+) (*agentpb.BackupCheckpointAck, error) {
 	if ctx == nil || p == nil || p.backupCheckpoints == nil {
-		return errs.New(errs.KindInternal, "agent: Backup checkpoint transport is not configured")
+		return nil, errs.New(errs.KindInternal, "agent: Backup checkpoint transport is not configured")
 	}
-	validated, err := executionplan.ValidateBackupCheckpointRequest(request, request.GetSequence())
+	validated, err := executionplan.ValidateBackupCheckpointRequest(request, request.GetCheckpointSequence())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	acknowledged, abandon, err := p.backupCheckpoints.Register(validated)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	select {
 	case p.outputs <- WorkerOutput{
@@ -30,14 +38,14 @@ func (p *WorkerPool) CheckpointBackup(
 	}:
 	case <-ctx.Done():
 		abandon()
-		return ctx.Err()
+		return nil, ctx.Err()
 	}
 	select {
-	case <-acknowledged:
-		return nil
+	case ack := <-acknowledged:
+		return ack, nil
 	case <-ctx.Done():
 		abandon()
-		return ctx.Err()
+		return nil, ctx.Err()
 	}
 }
 

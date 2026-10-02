@@ -17,7 +17,8 @@ func prepareBackupTerminalReceiptPruneCompanion(
 	taskRevision int64,
 	value *etcdstore.KeyValue,
 ) (backupTerminalReceiptPruneCompanion, error) {
-	if task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune {
+	if task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune &&
+		task.Type != taskjournal.TaskRestore {
 		return backupTerminalReceiptPruneCompanion{}, errs.New(
 			errs.KindInternal,
 			"ordinary Task requested a Backup terminal receipt",

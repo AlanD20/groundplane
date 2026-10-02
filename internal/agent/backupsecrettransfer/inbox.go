@@ -5,6 +5,7 @@ import (
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"sync"
 
+	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -82,18 +83,11 @@ func backupSecretSlotPurposes(
 	if step == nil {
 		return nil, false, errs.New(errs.KindInternal, "agent: Backup secret slot step is required")
 	}
-	if capture := step.GetBackupSourceCapture(); capture != nil {
-		if capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE &&
-			capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
-			return nil, false, errs.New(errs.KindInternal, "agent: Backup source encryption is invalid")
-		}
-	} else if step.GetBackupArtifactPrune() == nil {
+	if step.GetBackupStep() == nil {
 		return nil, false, nil
 	}
-	return []agentpb.BackupSecretSlotPurpose{
-		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
-		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
-	}, true, nil
+	purposes, err := backupsecret.Purposes(step)
+	return purposes, true, err
 }
 
 func (inbox *Inbox) Accept(

@@ -12,12 +12,31 @@ import (
 // WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
 // each Task's terminal step progress is emitted before its final result.
 type WorkerOutput struct {
+	Error                 error
 	Progress              *TaskProgress
 	Result                *TaskResult
 	BackupCheckpoint      *agentpb.BackupCheckpointRequest
+	BackupConfigCredit    *agentpb.BackupConfigCredit
+	BackupVolumeCredit    *agentpb.BackupVolumeManifestAckCredit
 	ScriptCheckpoint      *agentpb.ScriptCheckpointRequest
 	BackingHookCheckpoint *agentpb.BackingHookCheckpointRequest
 	VolumeCheckpoint      *agentpb.VolumeRemovalCheckpointRequest
+}
+
+func (output WorkerOutput) validate() error {
+	var count int
+	for _, present := range []bool{output.Error != nil, output.Progress != nil, output.Result != nil,
+		output.BackupCheckpoint != nil, output.BackupConfigCredit != nil, output.BackupVolumeCredit != nil,
+		output.ScriptCheckpoint != nil,
+		output.BackingHookCheckpoint != nil, output.VolumeCheckpoint != nil} {
+		if present {
+			count++
+		}
+	}
+	if count != 1 {
+		return errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+	}
+	return nil
 }
 
 func (p *WorkerPool) CheckpointVolumeRemoval(

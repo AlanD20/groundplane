@@ -7,11 +7,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 )
 
-// Rationale: removing the unsafe uid-70 runtime must leave an explicit stable
-// fail-closed result rather than accidentally accepting any public request.
-func TestMainFailsClosedUntilConfinementRuntimeExists(t *testing.T) {
+// Rationale: a helper built without authenticated release measurements must
+// reject execution before opening a client or accepting a public request.
+func TestMainRejectsMissingReleaseMeasurements(t *testing.T) {
 	code, err := Main(context.Background(), []string{"run"})
-	if code != postgres16protocol.ExitInternalFailure || err == nil {
-		t.Fatalf("Main() = %d, %v; want internal_failure and an internal error", code, err)
+	if code != postgres16protocol.ExitEnvironmentInvalid || err == nil {
+		t.Fatalf("Main() = %d, %v; want environment_invalid and an error", code, err)
 	}
 }

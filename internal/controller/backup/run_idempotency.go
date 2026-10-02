@@ -101,7 +101,17 @@ func (service *durableBackupRunIdempotency) NewMarker(
 	taskID string,
 	now time.Time,
 ) (idempotencyrecord.IdempotencyMarker, error) {
-	intent, err := evidence.candidate.DurableRecord()
+	return newBackupTaskMarker(evidence.candidate, locator, response, taskID, now)
+}
+
+func newBackupTaskMarker(
+	candidate requestidempotency.ProtectedEvidence,
+	locator idempotencyrecord.IdempotencyLocator,
+	response idempotencyrecord.IdempotencyResponse,
+	taskID string,
+	now time.Time,
+) (idempotencyrecord.IdempotencyMarker, error) {
+	intent, err := candidate.DurableRecord()
 	if err != nil {
 		return idempotencyrecord.IdempotencyMarker{}, err
 	}

@@ -95,6 +95,7 @@ type TaskResultKind string
 const (
 	TaskResultCompose              TaskResultKind = "compose"
 	TaskResultEnvironmentDirectory TaskResultKind = "environment_directory"
+	TaskResultBackup               TaskResultKind = "backup"
 )
 
 type TaskResultDiagnostic string

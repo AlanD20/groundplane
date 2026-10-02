@@ -3,6 +3,7 @@ package backupsecrets
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: evidence ownership ends explicitly, so every returned encrypted
@@ -266,10 +268,11 @@ func TestBackupSecretConfigCaptureBindsSealedSnapshotAtLaterAssignmentRevision(t
 	)
 	dynamic := newBackupSecretDynamicRead()
 	dynamic.add(testhierarchy.EnvironmentKey(environmentID))
+	environmentValue := []byte("sealed-config-capture-environment")
 	result := &testkeyvalue.GetManyResult{
 		ReadRevision: assignmentRevision,
 		Values: []*testkeyvalue.KeyValue{{
-			Key: testhierarchy.EnvironmentKey(environmentID), ModRevision: targetRevision,
+			Key: testhierarchy.EnvironmentKey(environmentID), Value: environmentValue, ModRevision: targetRevision,
 		}},
 	}
 	run := &testbackupruntime.BackupRunRecord{TaskID: taskID, EnvironmentID: environmentID}
@@ -279,15 +282,22 @@ func TestBackupSecretConfigCaptureBindsSealedSnapshotAtLaterAssignmentRevision(t
 			ConfigSnapshotID: taskID, ReadRevision: snapshotRevision,
 		}},
 	}
-	step := &agentpb.BackupSourceCapture{Source: &agentpb.BackupSourceCapture_Config{
-		Config: &agentpb.BackupConfigSource{SnapshotRevision: uint64(snapshotRevision)},
-	}}
+	step := &agentpb.BackupCaptureAuthority{
+		Resource: &agentpb.BackupResourceIdentity{
+			Kind:       agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ENVIRONMENT,
+			ResourceId: environmentID,
+			Resource:   backupSecretFixtureRevision(targetRevision, environmentValue),
+		},
+		Source: &agentpb.BackupCaptureAuthority_Config{Config: &agentpb.BackupConfigCaptureAuthority{
+			MetadataSnapshotRevision: snapshotRevision,
+		}},
+	}
 	reader := &Reader{}
 	if err := reader.validateCaptureTargetEvidence(result, dynamic, run, source, step); err != nil {
 		t.Fatalf("later assignment fixed revision rejected immutable config snapshot: %v", err)
 	}
 
-	step.GetConfig().SnapshotRevision++
+	step.GetConfig().MetadataSnapshotRevision++
 	if err := reader.validateCaptureTargetEvidence(result, dynamic, run, source, step); err == nil {
 		t.Fatal("mismatched sealed config snapshot revision was accepted")
 	}
@@ -389,39 +399,70 @@ func newDeadlineBoundaryFixture(
 	connectorID := ids.NewAt(ids.KindConnector, createdAt, 8)
 	agentID := ids.NewAt(ids.KindAgent, createdAt, 9)
 	assignmentID := ids.NewAt(ids.KindAssignment, createdAt, 10)
+	projectID := ids.NewAt(ids.KindProject, createdAt, 11)
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
 		t.Fatal(err)
 	}
-	capture := &agentpb.BackupSourceCapture{
-		SourceId: sourceID, SourceRevision: 11,
-		TargetId: environmentID, TargetRevision: 12,
-		PointId: pointID, ConnectorId: connectorID, ConnectorRevision: 13,
-		SourceFormat: agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1,
-		Encryption:   agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
-		KeyEra:       2, AgeRecipient: identity.Recipient().String(),
-		Upload: &agentpb.BackupUploadAuthority{
-			ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "groundplane-backups",
-			ConnectorPrefix: "production/", ConnectorRegion: "auto",
-			ConnectorAddressing: agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
-			ProtectedObjectKey:  "production/" + environmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
-			ImmutableCreate:     true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
-		},
-		Source: &agentpb.BackupSourceCapture_Config{Config: &agentpb.BackupConfigSource{SnapshotRevision: 14}},
+	assignedAt := createdAt.Add(time.Second)
+	deadline := createdAt.Add(6 * time.Hour)
+	pathStyle := true
+	recipientDigest := sha256.Sum256([]byte(identity.Recipient().String()))
+	fixtureRevision := func(revision int64, fill byte) *agentpb.RevisionDigest {
+		return &agentpb.RevisionDigest{ModRevision: revision, Sha256: bytes.Repeat([]byte{fill}, sha256.Size)}
 	}
-	sealed, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: executionplan.SchemaVersion, PlanId: planID,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP, TargetId: environmentID,
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: stepID, TimeoutSeconds: 600,
-			Payload: &agentpb.ExecutionStep_BackupSourceCapture{BackupSourceCapture: capture},
+	authority, err := executionplan.SealBackupStepAuthority(&agentpb.BackupStepAuthority{
+		StepId: stepID, ExecutionId: ids.NewULID(), StepDeadlineUnixNano: uint64(deadline.UnixNano()),
+		Operation: &agentpb.BackupStepAuthority_Capture{Capture: &agentpb.BackupCaptureAuthority{
+			PointId: pointID,
+			Resource: &agentpb.BackupResourceIdentity{
+				Kind:       agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ENVIRONMENT,
+				ResourceId: environmentID, Resource: fixtureRevision(12, 12),
+			},
+			Target: &agentpb.BackupObjectTarget{
+				Connector: &agentpb.BackupConnectorAuthority{
+					ConnectorId: connectorID, Connector: fixtureRevision(13, 13),
+					CanonicalEndpointUrl: "https://objects.example.test", Region: "auto",
+					PathStyle: &pathStyle, Prefix: "production/",
+					AccessKeySlotId: backupsecret.AccessKeySlotID, SecretKeySlotId: backupsecret.SecretKeySlotID,
+					AccessKeySlot: fixtureRevision(15, 15), SecretKeySlot: fixtureRevision(16, 16),
+				},
+				Bucket:    "groundplane-backups",
+				ObjectKey: "production/" + environmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
+			},
+			Encryption: &agentpb.BackupEncryptionAuthority{
+				Kind:         agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
+				SecretSlotId: backupsecret.CurrentAgeIdentitySlotID, SecretSlot: fixtureRevision(17, 17),
+				RecipientSha256: recipientDigest[:], KeyEra: proto.Uint64(2),
+			},
+			Source: &agentpb.BackupCaptureAuthority_Config{Config: &agentpb.BackupConfigCaptureAuthority{
+				EnvironmentId: environmentID, MetadataSnapshotRevision: 14,
+				Content: &agentpb.BackupConfigContentAuthority{
+					ManifestSha256:         bytes.Repeat([]byte{18}, sha256.Size),
+					MetadataSnapshotSha256: bytes.Repeat([]byte{19}, sha256.Size),
+					ManifestSizeBytes:      128, SourceSizeBytes: 1024,
+				},
+			}},
 		}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignedAt := createdAt.Add(time.Second)
-	deadline := assignedAt.Add(6 * time.Hour)
+	sealed, err := executionplan.Seal(&agentpb.ExecutionPlan{
+		Schema: executionplan.SchemaVersion, PlanId: planID,
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP, TargetId: environmentID,
+		BackupScope: &agentpb.BackupPlanScope{
+			ProjectId: projectID, Project: fixtureRevision(10, 10),
+			EnvironmentId: environmentID, Environment: fixtureRevision(12, 12), TaskAttempt: 1,
+		},
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: stepID, TimeoutSeconds: 6 * 60 * 60,
+			Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: authority},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	task := base.TaskRecord{
 		ID: taskID, OperationID: operationID, Owner: testtaskjournal.PlatformTaskOwner(),
 		Actor: testtaskjournal.TaskActorOperator, Executor: testtaskjournal.TaskExecutorAgent,
@@ -453,4 +494,9 @@ func newDeadlineBoundaryFixture(
 	return &deadlineBoundaryStore{
 		revision: 41, taskValue: taskValue, assignmentValue: assignmentValue,
 	}, request, deadline
+}
+
+func backupSecretFixtureRevision(revision int64, value []byte) *agentpb.RevisionDigest {
+	digest := sha256.Sum256(value)
+	return &agentpb.RevisionDigest{ModRevision: revision, Sha256: digest[:]}
 }

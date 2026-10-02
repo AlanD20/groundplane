@@ -1,19 +1,27 @@
 """Rationale: low checkout capacity must fail before builds or target writes."""
 import ipaddress
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 import deploy
+from postgres16_test_fixture import postgres16_catalog
 
 
 def target():
     return deploy.Deployment(Path("/keys/qa"), ipaddress.ip_address("192.0.2.42"),
-                             "0.0.1", False, None, None, False)
+                             "0.0.1", False, None, None, False, Path("/srv/releases/postgres16-release.json"))
 
 
 class DeploymentCapacityTest(unittest.TestCase):
+    def setUp(self):
+        catalog = postgres16_catalog()
+        loader = patch.object(deploy, "load_catalog", return_value=(catalog, json.loads(catalog)))
+        loader.start()
+        self.addCleanup(loader.stop)
+
     # Delivery: build sequencing with fake commands, not compilation success.
     # Rationale: capacity consumed by the first build must be rechecked before the next.
     def test_space_is_rechecked_before_an_uncached_image_build(self):

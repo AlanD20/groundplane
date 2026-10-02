@@ -92,8 +92,8 @@ func backupTerminalRunOutcomes(run backupruntime.BackupRunRecord) []backupruntim
 			Ordinal: source.Ordinal, SourceID: source.SourceID, Kind: source.Kind,
 			TargetID: source.TargetID, RecoveryPointID: source.RecoveryPointID,
 			RecoveryPointCreatedAt: source.RecoveryPointCreatedAt,
-			State:                  source.State, Phase: source.Phase, SizeBytes: source.SizeBytes,
-			SHA256: source.SHA256, FailureCode: source.FailureCode,
+			State:                  source.State, Phase: source.Phase, Evidence: source.Evidence,
+			Upload: source.Upload, Object: source.Object, FailureCode: source.FailureCode,
 		}
 	}
 	return outcomes

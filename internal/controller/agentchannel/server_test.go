@@ -10,6 +10,7 @@ import (
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	etcd "github.com/AlanD20/groundplane/internal/infra/etcd"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
@@ -41,8 +42,10 @@ type pausedAuthenticator struct {
 }
 
 type fakeTaskStore struct {
+	channelStartupStore
 	assignments     []etcd.TaskAssignment
 	claims          []etcd.TaskAssignment
+	claimed         map[string]etcd.TaskAssignment
 	tasks           map[string]testkeyvalue.Versioned[etcd.TaskRecord]
 	ackAgentID      string
 	ackGeneration   uint64
@@ -93,7 +96,14 @@ func (store *wakeTaskStore) ClaimNextTask(
 	store.calls++
 	claim := *store.claim
 	store.claim = nil
+	store.retainClaim(claim)
 	return claim, true, nil
+}
+
+func (store *wakeTaskStore) GetTaskAssignment(ctx context.Context, taskID string) (etcd.TaskAssignment, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.fakeTaskStore.GetTaskAssignment(ctx, taskID)
 }
 
 func (store *wakeTaskStore) enqueue(claim etcd.TaskAssignment) {
@@ -169,7 +179,27 @@ func (store *fakeTaskStore) ClaimNextTask(
 	}
 	claim := store.claims[0]
 	store.claims = store.claims[1:]
+	store.retainClaim(claim)
 	return claim, true, nil
+}
+
+func (store *fakeTaskStore) retainClaim(claim etcd.TaskAssignment) {
+	if store.claimed == nil {
+		store.claimed = make(map[string]etcd.TaskAssignment)
+	}
+	store.claimed[claim.Assignment.Record.TaskID] = claim
+}
+
+func (store *fakeTaskStore) GetTaskAssignment(_ context.Context, taskID string) (etcd.TaskAssignment, error) {
+	if assignment, ok := store.claimed[taskID]; ok {
+		return assignment, nil
+	}
+	for _, assignment := range store.assignments {
+		if assignment.Assignment.Record.TaskID == taskID {
+			return assignment, nil
+		}
+	}
+	return etcd.TaskAssignment{}, errs.New(errs.KindTaskNotFound, "missing assignment")
 }
 
 func (store *fakeTaskStore) GetTask(
@@ -246,6 +276,9 @@ func TestAcknowledgeEnvironmentRemovalAcceptsDirectoryResult(t *testing.T) {
 			PlanHash: hex.EncodeToString(planHash[:]), Status: testtaskjournal.TaskStatusRunning,
 		}},
 	}}
+	store.retainClaim(etcd.TaskAssignment{Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+		Record: testtaskassignments.TaskAssignmentRecord{TaskID: taskID, AssignmentID: assignmentID, ExecutionEpoch: 1},
+	}, Task: store.tasks[taskID]})
 	server := &Server{tasks: store, plans: &fakePlanResolver{plan: &agentpb.ExecutionPlan{
 		Steps: []*agentpb.ExecutionStep{{Payload: &agentpb.ExecutionStep_EnvironmentDirectoryRemove{
 			EnvironmentDirectoryRemove: &agentpb.EnvironmentDirectoryRemove{},
@@ -341,6 +374,7 @@ func (a *fakeAuthenticator) Authenticate(_ context.Context, id string, token Tok
 }
 
 type scriptedStream struct {
+	startup  channelStartupExchange
 	ctx      context.Context
 	messages []*agentpb.AgentMessage
 	recvErr  error
@@ -348,15 +382,21 @@ type scriptedStream struct {
 }
 
 func (s *scriptedStream) Send(message *agentpb.ControllerMessage) error {
+	if handled, err := channelStartupResponse(message); handled {
+		return err
+	}
 	s.sent = append(s.sent, message)
 	return nil
 }
 
 func (s *scriptedStream) Recv() (*agentpb.AgentMessage, error) {
+	if message := s.startup.next(); message != nil {
+		return message, nil
+	}
 	if len(s.messages) != 0 {
 		message := s.messages[0]
 		s.messages = s.messages[1:]
-		return message, nil
+		return s.startup.receive(message)
 	}
 	if s.recvErr != nil {
 		err := s.recvErr
@@ -379,6 +419,7 @@ func (s *scriptedStream) SendMsg(any) error { return errors.New("unexpected Send
 func (s *scriptedStream) RecvMsg(any) error { return errors.New("unexpected RecvMsg") }
 
 type liveStream struct {
+	startup  channelStartupExchange
 	ctx      context.Context
 	received chan *agentpb.AgentMessage
 	sent     chan *agentpb.ControllerMessage
@@ -391,6 +432,9 @@ func newLiveStream(ctx context.Context) *liveStream {
 }
 
 func (s *liveStream) Send(message *agentpb.ControllerMessage) error {
+	if handled, err := channelStartupResponse(message); handled {
+		return err
+	}
 	select {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
@@ -400,11 +444,14 @@ func (s *liveStream) Send(message *agentpb.ControllerMessage) error {
 }
 
 func (s *liveStream) Recv() (*agentpb.AgentMessage, error) {
+	if message := s.startup.next(); message != nil {
+		return message, nil
+	}
 	select {
 	case <-s.ctx.Done():
 		return nil, s.ctx.Err()
 	case message := <-s.received:
-		return message, nil
+		return s.startup.receive(message)
 	}
 }
 
@@ -608,6 +655,9 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 	tasks := &fakeTaskStore{tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{taskID: {Record: etcd.TaskRecord{
 		ID: taskID, PlanHash: hex.EncodeToString(planHash), Status: testtaskjournal.TaskStatusRunning,
 	}}}}
+	tasks.retainClaim(etcd.TaskAssignment{Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+		Record: testtaskassignments.TaskAssignmentRecord{TaskID: taskID, AssignmentID: assignmentID, ExecutionEpoch: 1},
+	}, Task: tasks.tasks[taskID]})
 	result := make(chan error, 1)
 	go func() {
 		result <- New(
@@ -725,20 +775,24 @@ func authorizedAuthenticator() *fakeAuthenticator {
 		Config: &agentpb.AgentConfig{
 			PullIntervalSeconds: 5,
 			MaxConcurrentTasks:  4,
-			Labels:              map[string]string{"role": "local"},
+			Labels:              []*agentpb.AgentLabel{{Key: "role", Value: "local"}},
 		},
 	}}
 }
 
 func authenticateMessage(id string, token []byte) *agentpb.AgentMessage {
 	return &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Authenticate{
-		Authenticate: &agentpb.Authenticate{AgentId: id, Token: token},
+		Authenticate: &agentpb.Authenticate{
+			AgentId: id, Token: token, ExecutionPlanSchema: executionplan.SchemaVersion,
+			ProcessGeneration: bytes.Repeat([]byte{1}, 16),
+		},
 	}}
 }
 
 func readyMessage(capacity int32) *agentpb.AgentMessage {
+	clean := true
 	return &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Ready{
-		Ready: &agentpb.Ready{Capacity: capacity, Version: "v0.4.2"},
+		Ready: &agentpb.Ready{Capacity: capacity, Version: "v0.4.2", TerminalDeliveryClean: &clean},
 	}}
 }
 

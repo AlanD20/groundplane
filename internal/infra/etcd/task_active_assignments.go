@@ -113,7 +113,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 		if task.ID != record.TaskID || task.Status != taskjournal.TaskStatusRunning ||
 			task.StartedAt == nil || !task.StartedAt.Equal(record.AssignedAt) ||
-			!record.Deadline.Equal(record.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
+			!record.Deadline.Equal(TaskForwardDeadline(task, record.AssignedAt)) ||
 			!record.RecoveryDeadline.Equal(record.Deadline.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
 			taskValue.ModRevision < assignmentValue.ModRevision ||
 			task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
@@ -238,7 +238,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 	if task.ID != claim.TaskID || task.Executor != taskjournal.TaskExecutorController ||
 		task.Status != taskjournal.TaskStatusRunning || task.StartedAt == nil ||
 		!task.StartedAt.Equal(claim.AssignedAt) ||
-		!claim.Deadline.Equal(claim.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
+		!claim.Deadline.Equal(TaskForwardDeadline(task, claim.AssignedAt)) ||
 		taskValue.ModRevision < claimValue.ModRevision || task.idempotencyMarker == nil {
 		return nil, errs.New(errs.KindInternal, "controller Task claim and Task are inconsistent")
 	}

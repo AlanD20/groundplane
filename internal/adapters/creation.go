@@ -22,6 +22,9 @@ type CreationSpec struct {
 	Expose        []string
 	HealthTCP     string
 	Environment   []CreationEnvironment
+	CapAdd        []string
+	CapDrop       []string
+	SecurityOpt   []string
 }
 
 // CreationEnvironment declares one generated environment entry. Entries with
@@ -57,7 +60,10 @@ func BackingCreationSpec(key string, authentication core.BackingAuthentication) 
 		return CreationSpec{}, err
 	}
 	spec := creator.CreationSpec(authentication)
-	spec.Image = adapter.DefaultImage()
+	spec.Image, err = adapter.DefaultImage()
+	if err != nil {
+		return CreationSpec{}, err
+	}
 	if err := validateCreationSpec(spec); err != nil {
 		return CreationSpec{}, err
 	}
@@ -120,5 +126,8 @@ func cloneCreationSpec(spec CreationSpec) CreationSpec {
 	spec.HealthCommand = append([]string(nil), spec.HealthCommand...)
 	spec.Expose = append([]string(nil), spec.Expose...)
 	spec.Environment = append([]CreationEnvironment(nil), spec.Environment...)
+	spec.CapAdd = append([]string(nil), spec.CapAdd...)
+	spec.CapDrop = append([]string(nil), spec.CapDrop...)
+	spec.SecurityOpt = append([]string(nil), spec.SecurityOpt...)
 	return spec
 }

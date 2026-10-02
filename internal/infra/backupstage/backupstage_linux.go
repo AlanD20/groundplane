@@ -94,7 +94,7 @@ func NoGrowth() CapacityMode {
 // RecoveryID identifies one boot-inventory entry.
 type RecoveryID string
 
-// ArtifactEvidence binds a retained final name to its verified bytes.
+// ArtifactEvidence binds a retained staged name to its verified bytes.
 type ArtifactEvidence struct {
 	Name   string
 	Size   uint64
@@ -124,7 +124,7 @@ type ResumeDisposition struct {
 	RemainingGrowth CapacityMode
 }
 
-// PreparedArtifact retains one verified recovered final descriptor.
+// PreparedArtifact retains one verified recovered descriptor.
 type PreparedArtifact struct {
 	Evidence ArtifactEvidence
 	Artifact *Artifact
@@ -201,6 +201,7 @@ type Stage struct {
 	poisoned             bool
 	ids                  IDs
 	artifacts            map[*Artifact]struct{}
+	validationSpools     map[*ValidationSpool]struct{}
 	closed               bool
 	cleaned              bool
 }

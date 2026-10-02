@@ -2,6 +2,7 @@
 !.dockerignore
 !Dockerfile.agent
 !Dockerfile.runner
+!Dockerfile.postgres16
 !go.mod
 !go.sum
 !cmd/

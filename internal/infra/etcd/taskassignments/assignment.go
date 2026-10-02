@@ -29,6 +29,7 @@ type TaskAssignmentRecord struct {
 	RestorationAuthority        *ReleaseRestorationAuthority
 	RestorationAuthoritySHA256  string
 	ReleaseRecoveryRecordSHA256 string
+	BackupAuthorityFence        *BackupAuthorityFence
 }
 
 type ReleaseRecoveryDirective struct {
@@ -56,6 +57,7 @@ type taskAssignmentJSON struct {
 	RestorationAuthority        *ReleaseRestorationAuthority `json:"restoration_authority,omitempty"`
 	RestorationAuthoritySHA256  string                       `json:"restoration_authority_sha256,omitempty"`
 	ReleaseRecoveryRecordSHA256 string                       `json:"release_recovery_record_sha256,omitempty"`
+	BackupAuthorityFence        *BackupAuthorityFence        `json:"backup_authority_fence,omitempty"`
 }
 
 func EncodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
@@ -79,6 +81,7 @@ func EncodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 		RestorationAuthority:        cloneReleaseRestorationAuthority(record.RestorationAuthority),
 		RestorationAuthoritySHA256:  record.RestorationAuthoritySHA256,
 		ReleaseRecoveryRecordSHA256: record.ReleaseRecoveryRecordSHA256,
+		BackupAuthorityFence:        cloneBackupAuthorityFence(record.BackupAuthorityFence),
 	})
 }
 
@@ -120,6 +123,7 @@ func DecodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 		RestorationAuthority:        cloneReleaseRestorationAuthority(data.RestorationAuthority),
 		RestorationAuthoritySHA256:  data.RestorationAuthoritySHA256,
 		ReleaseRecoveryRecordSHA256: data.ReleaseRecoveryRecordSHA256,
+		BackupAuthorityFence:        cloneBackupAuthorityFence(data.BackupAuthorityFence),
 	}
 	if err := validateTaskAssignment(record); err != nil {
 		return TaskAssignmentRecord{}, CorruptTaskAssignment()
@@ -170,7 +174,7 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 			return CorruptTaskAssignment()
 		}
 	}
-	return nil
+	return validateBackupAuthorityFence(record.BackupAuthorityFence)
 }
 
 func CorruptTaskAssignment() error {

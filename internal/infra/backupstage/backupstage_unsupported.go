@@ -5,10 +5,16 @@ package backupstage
 import (
 	"context"
 	"crypto/sha256"
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"io"
+	"os"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+const AgentRoot = agentprotocol.StatePath + "/task-stage"
+
+func PrepareAgentRoot(context.Context) error { return unsupported() }
 
 type Config struct{ Root string }
 type IDs struct{ Task, Step, Point string }
@@ -72,6 +78,19 @@ type Stager struct{}
 type RecoverySession struct{}
 type Stage struct{}
 type Artifact struct{}
+type ArtifactReader struct{}
+type ValidationSpool struct{}
+
+func (*Stage) CreateValidationSpool(context.Context, uint64) (*ValidationSpool, error) {
+	return nil, unsupported()
+}
+func (*ValidationSpool) Write([]byte) (int, error)          { return 0, unsupported() }
+func (*ValidationSpool) ReadAt([]byte, int64) (int, error)  { return 0, unsupported() }
+func (*ValidationSpool) WriteAt([]byte, int64) (int, error) { return 0, unsupported() }
+func (*ValidationSpool) Stat() (os.FileInfo, error)         { return nil, unsupported() }
+func (*ValidationSpool) Sync() error                        { return unsupported() }
+func (*ValidationSpool) Truncate(int64) error               { return unsupported() }
+func (*ValidationSpool) Close() error                       { return unsupported() }
 
 func OpenRecovery(context.Context, Config) (*RecoverySession, error) { return nil, unsupported() }
 func (*RecoverySession) Inventory() []Recovered                      { return nil }
@@ -79,6 +98,9 @@ func (*RecoverySession) ResumePrepared(context.Context, ResumeDisposition) error
 	return unsupported()
 }
 func (*RecoverySession) DiscardRecovered(context.Context, RecoveryID, string) error {
+	return unsupported()
+}
+func (*RecoverySession) DiscardResumedFile(context.Context, RecoveryID, ArtifactEvidence) error {
 	return unsupported()
 }
 func (*RecoverySession) Complete(context.Context) (*Stager, []*PreparedStage, error) {
@@ -90,14 +112,28 @@ func (*Stager) Prepare(context.Context, IDs, CapacityMode) (*Stage, error) {
 }
 func (*Stager) Close(context.Context) error                          { return unsupported() }
 func (*Stage) Close(context.Context) error                           { return unsupported() }
+func (*Stage) Suspend(context.Context) error                         { return unsupported() }
 func (*Stage) CreateFile(context.Context, string) (*Artifact, error) { return nil, unsupported() }
 func (*Stage) Cleanup(context.Context) error                         { return unsupported() }
 func (*Artifact) Write(context.Context, []byte) (int, error)         { return 0, unsupported() }
+func (*Artifact) SyncPartial(context.Context) (ArtifactEvidence, error) {
+	return ArtifactEvidence{}, unsupported()
+}
 func (*Artifact) Publish(context.Context) (ArtifactEvidence, error) {
 	return ArtifactEvidence{}, unsupported()
 }
 func (*Artifact) Open(context.Context) (io.ReadCloser, error) { return nil, unsupported() }
-func (*Artifact) Abort(context.Context) error                 { return unsupported() }
+func (*Artifact) OpenPrefix(context.Context) (*ArtifactReader, error) {
+	return nil, unsupported()
+}
+func (*Artifact) Abort(context.Context) error { return unsupported() }
+func (*ArtifactReader) Read([]byte) (int, error) {
+	return 0, unsupported()
+}
+func (*ArtifactReader) ReadAt([]byte, int64) (int, error) {
+	return 0, unsupported()
+}
+func (*ArtifactReader) Close() error { return unsupported() }
 
 func unsupported() error {
 	return errs.New(errs.KindNotImplemented, "backup stage is only supported on Linux")

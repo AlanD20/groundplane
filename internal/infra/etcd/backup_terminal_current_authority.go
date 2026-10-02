@@ -19,6 +19,9 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 	terminalRevision int64,
 	receipt backupruntime.BackupTerminalReceiptRecord,
 ) error {
+	if receipt.Task.TaskType == taskjournal.TaskRestore {
+		return repository.validateCurrentRestoreTerminalAuthority(ctx, task, terminalRevision, receipt)
+	}
 	environmentID := receipt.Task.Owner.EnvironmentID
 	keys := []string{
 		hierarchyrecord.EnvironmentKey(environmentID),
@@ -34,7 +37,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		if err != nil {
 			return err
 		}
-		exclusionKeys, err = backupTerminalExclusionKeys(receipt.Sources)
+		exclusionKeys, err = backupruntime.TerminalExclusionKeys(receipt.Sources)
 		if err != nil {
 			return err
 		}
@@ -48,7 +51,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 	authorityEnd := len(keys)
 	pointsStart := len(keys)
 	for _, outcome := range receipt.Points {
-		pointKeys, err := backupPruneAuthorityKeys(outcome.Point)
+		pointKeys, err := backupruntime.BackupPruneAuthorityKeys(outcome.Point)
 		if err != nil {
 			return err
 		}
@@ -171,7 +174,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 				!prune.UpdatedAt.Equal(receipt.Task.FinishedAt) {
 				return errs.New(errs.KindInternal, "same-revision backup prune outcome is invalid")
 			}
-			if err := validatePendingBackupPruneAuthority(
+			if err := backupruntime.ValidatePendingBackupPruneAuthority(
 				values,
 				etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
 					Record:   prune,
@@ -188,7 +191,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		if prune.Point != outcome.Point || prune.CreatedAt != outcome.CreatedAt {
 			return errs.New(errs.KindStateConflict, "terminal backup prune successor changed")
 		}
-		if err := validatePendingBackupPruneAuthority(
+		if err := backupruntime.ValidatePendingBackupPruneAuthority(
 			values,
 			etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
 				Record: prune, Revision: values[0].ModRevision,
@@ -235,34 +238,4 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		}
 	}
 	return nil
-}
-
-func backupTerminalExclusionKeys(
-	sources []backupruntime.BackupTerminalSourceOutcome,
-) ([]string, error) {
-	byKey := make(map[string]struct{})
-	for _, source := range sources {
-		var kind backupruntime.BackupSourceTargetKind
-		switch source.Kind {
-		case backupruntime.BackupRuntimeSourceAttach:
-			kind = backupruntime.BackupSourceTargetAttach
-		case backupruntime.BackupRuntimeSourceVolume:
-			kind = backupruntime.BackupSourceTargetVolume
-		case backupruntime.BackupRuntimeSourceConfig:
-			continue
-		default:
-			return nil, errs.New(errs.KindInternal, "backup terminal source kind is invalid")
-		}
-		key, err := backupruntime.BackupSourceTargetExclusionKey(kind, source.TargetID)
-		if err != nil {
-			return nil, err
-		}
-		byKey[key] = struct{}{}
-	}
-	keys := make([]string, 0, len(byKey))
-	for key := range byKey {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	return keys, nil
 }

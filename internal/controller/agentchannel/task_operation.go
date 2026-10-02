@@ -69,6 +69,8 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP
 	case taskjournal.TaskBackupPrune:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE
+	case taskjournal.TaskRestore:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_RESTORE
 	default:
 		return false
 	}

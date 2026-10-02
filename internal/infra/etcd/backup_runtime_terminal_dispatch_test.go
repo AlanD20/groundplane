@@ -7,12 +7,15 @@ import (
 	testing "testing"
 	time "time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: future manual Task publication must be able to commit the Task,
@@ -84,10 +87,20 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("taskIdempotencyPlan(generic Backup Params) error = %v", err)
 	}
-	fabricatedRun := run
-	fabricatedRun.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
-	fabricatedRun.Sources[0].SourceRevision++
-	fabricated := backupRuntimeSealedRunPlan(t, fabricatedRun, task.PlanID)
+	fabricated := proto.Clone(sealed).(*agentpb.ExecutionPlan)
+	fabricated.PlanHash = nil
+	fabricatedStep := fabricated.Steps[0].GetBackupStep()
+	fabricatedStep.GetCapture().Resource.Resource.ModRevision++
+	fabricatedStep.StepDigest = nil
+	fabricatedStep, err = executionplan.SealBackupStepAuthority(fabricatedStep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fabricated.Steps[0].Payload = &agentpb.ExecutionStep_BackupStep{BackupStep: fabricatedStep}
+	fabricated, err = executionplan.Seal(fabricated)
+	if err != nil {
+		t.Fatal(err)
+	}
 	fabricatedTask := task
 	fabricatedTask.PlanHash = hex.EncodeToString(fabricated.PlanHash)
 	if _, err := runPlan.taskIdempotencyPlan(
@@ -122,7 +135,8 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 	if err != nil || !found || claim.Task.Record.ID != run.TaskID {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
 	}
-	failedResult := completedComposeTaskResult()
+	failedResult := testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultBackup,
+		Diagnostic: testtaskjournal.TaskResultDiagnosticNone, ExecutionEpoch: 1, AssignmentGeneration: 1}
 	failedResult.ExitCode = 1
 	terminal, err := tasks.AcknowledgeTask(
 		context.Background(),
@@ -283,8 +297,7 @@ func TestBackupRuntimeRepositoryRoutesCompletedAcknowledgement(t *testing.T) {
 	running.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), current.Record.Sources...)
 	running.Sources[0].State = testbackupruntime.BackupSourceAttemptSucceeded
 	running.Sources[0].Phase = testbackupruntime.BackupSourcePhaseCleanup
-	running.Sources[0].SizeBytes = 123
-	running.Sources[0].SHA256 = testBackupDigest
+	backupRuntimeCompleteSourceArtifact(running, &running.Sources[0])
 	running.UpdatedAt = run.CreatedAt.Add(2 * time.Second)
 	value, err := testbackupruntime.EncodeBackupRunRecord(running)
 	if err != nil {
@@ -308,7 +321,8 @@ func TestBackupRuntimeRepositoryRoutesCompletedAcknowledgement(t *testing.T) {
 		run.TaskID,
 		claim.Assignment.Record.AssignmentID,
 		testtaskjournal.TaskStatusCompleted,
-		completedComposeTaskResult(),
+		testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultBackup,
+			Diagnostic: testtaskjournal.TaskResultDiagnosticNone, ExecutionEpoch: 1, AssignmentGeneration: 1},
 		run.CreatedAt.Add(3*time.Second),
 	)
 	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
@@ -451,8 +465,8 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 					terminal, err = tasks.AcknowledgeTask(
 						context.Background(), agentID, 1, run.TaskID, assignmentID,
 						test.status, testtaskjournal.TaskResultRecord{
-							Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
-							ReconciliationRequired: true, ExecutionEpoch: 1,
+							Kind: testtaskjournal.TaskResultBackup, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+							ReconciliationRequired: true, ExecutionEpoch: 1, AssignmentGeneration: 1,
 						}, run.CreatedAt.Add(2*time.Second),
 					)
 				}
@@ -479,8 +493,8 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 				}
 			} else {
 				result := testtaskjournal.TaskResultRecord{
-					Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
-					ReconciliationRequired: true, ExecutionEpoch: 1,
+					Kind: testtaskjournal.TaskResultBackup, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+					ReconciliationRequired: true, ExecutionEpoch: 1, AssignmentGeneration: 1,
 				}
 				replay, replayErr := tasks.AcknowledgeTask(
 					context.Background(), agentID, 1, run.TaskID, assignmentID,
@@ -661,8 +675,8 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 					terminal, err = tasks.AcknowledgeTask(
 						context.Background(), agentID, 1, dispatch.TaskID, assignmentID,
 						test.status, testtaskjournal.TaskResultRecord{
-							Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
-							ReconciliationRequired: true, ExecutionEpoch: 1,
+							Kind: testtaskjournal.TaskResultBackup, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+							ReconciliationRequired: true, ExecutionEpoch: 1, AssignmentGeneration: 1,
 						}, dispatch.CreatedAt.Add(2*time.Second),
 					)
 				}
@@ -696,8 +710,8 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 				}
 			} else {
 				result := testtaskjournal.TaskResultRecord{
-					Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
-					ReconciliationRequired: true, ExecutionEpoch: 1,
+					Kind: testtaskjournal.TaskResultBackup, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+					ReconciliationRequired: true, ExecutionEpoch: 1, AssignmentGeneration: 1,
 				}
 				replay, replayErr := tasks.AcknowledgeTask(
 					context.Background(), agentID, 1, dispatch.TaskID, assignmentID,

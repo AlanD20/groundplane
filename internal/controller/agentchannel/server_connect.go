@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/codes"
@@ -54,6 +55,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		return status.Error(codes.FailedPrecondition, "agent session is not current")
 	}
 	defer session.Close()
+	if err := session.RecordProcessAuthentication(authenticate); err != nil {
+		return status.Error(codes.FailedPrecondition, "agent session authentication is not current")
+	}
 	delivered := make(map[string]string, authorization.Config.MaxConcurrentTasks)
 	quarantined := make(map[string]string, authorization.Config.MaxConcurrentTasks)
 
@@ -66,16 +70,14 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		return err
 	}
 
-	type receiveResult struct {
-		message *agentpb.AgentMessage
-		err     error
-	}
-	received := make(chan receiveResult, 1)
+	payloads := newAssignmentPayloadDelivery(session.ctx, authorization.Config.MaxConcurrentTasks)
+	defer payloads.close()
+	received := make(chan agentReceiveResult, 1)
 	go func() {
 		for {
 			message, recvErr := stream.Recv()
 			select {
-			case received <- receiveResult{message: message, err: recvErr}:
+			case received <- agentReceiveResult{message: message, err: recvErr}:
 			case <-session.Done():
 				return
 			}
@@ -86,19 +88,32 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	}()
 
 	observations := &observationExchange{}
+	staging := &backupStagingSession{}
+	controlBurst := 0
 	for {
-		select {
-		case <-session.Done():
+		event := nextConnectEvent(session, observations, received, payloads, controlBurst)
+		controlBurst = min(controlBurst+1, maximumControlBurst)
+		switch event.kind {
+		case connectEnded:
 			return nil
-		case <-observations.done():
+		case connectPayloadFailed:
+			return taskStoreStatus(event.err)
+		case connectPayloadFrame:
+			controlBurst = 0
+			if err := payloads.deliver(stream, event.frame); err != nil {
+				return taskStoreStatus(err)
+			}
+		case connectObservationExpired:
 			if err := observations.cancel(session.ctx, stream); err != nil {
 				return err
 			}
-		case command := <-session.state.observationCommands:
+		case connectObservationCommand:
+			command := event.observation
 			if err := observations.send(session.ctx, stream, session, command); err != nil {
 				return err
 			}
-		case command := <-session.state.imageCommands:
+		case connectImageCommand:
+			command := event.image
 			if !session.imageCommandCurrent(command) {
 				continue
 			}
@@ -107,25 +122,35 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}}); err != nil {
 				return err
 			}
-		case abort := <-session.taskAborts():
+		case connectTaskAbort:
+			abort := event.abort
+			message, resolveErr := s.taskAbortMessage(
+				stream.Context(),
+				authenticate.AgentId,
+				authorization.Generation,
+				abort,
+			)
+			if resolveErr != nil {
+				abort.result <- resolveErr
+				continue
+			}
 			sendErr := stream.Send(&agentpb.ControllerMessage{
-				Payload: &agentpb.ControllerMessage_TaskAbort{TaskAbort: &agentpb.TaskAbort{
-					TaskId: abort.taskID, AssignmentId: abort.assignmentID,
-					Reason: abort.reason,
-				}},
+				Payload: &agentpb.ControllerMessage_TaskAbort{TaskAbort: message},
 			})
 			if sendErr != nil {
 				abort.result <- errs.New(errs.KindStorageUnavailable, "Agent Task abort delivery failed")
 				return sendErr
 			}
 			abort.result <- nil
-		case command := <-session.logMessages():
+			payloads.stop(abort.assignmentID)
+		case connectLogCommand:
+			command := event.log
 			if err := stream.Send(command.message); err != nil {
 				command.result <- errs.New(errs.KindStorageUnavailable, "Agent log command delivery failed")
 				return err
 			}
 			command.result <- nil
-		case <-session.taskDispatchWake():
+		case connectDispatchWake:
 			capacity, ready := session.dispatchCapacity()
 			if !ready || capacity == 0 {
 				continue
@@ -141,10 +166,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				capacity,
 				delivered,
 				quarantined,
+				payloads,
 			); err != nil {
 				return taskStoreStatus(err)
 			}
-		case result := <-received:
+		case connectReceived:
+			result := event.received
 			if result.err != nil {
 				if errors.Is(result.err, io.EOF) || errors.Is(result.err, context.Canceled) {
 					return nil
@@ -156,6 +183,57 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}
 			if result.message.GetAuthenticate() != nil {
 				return unauthenticated()
+			}
+			if frame := result.message.GetBackupConfigTransfer(); frame != nil {
+				if executionplan.RejectUnknown(result.message) != nil {
+					clear(frame.GetValueChunk().GetContent())
+					return status.Error(codes.InvalidArgument, "Config restore envelope is invalid")
+				}
+				err := payloads.acceptConfigRestoreFrame(frame)
+				clear(frame.GetValueChunk().GetContent())
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if credit := result.message.GetBackupConfigCredit(); credit != nil {
+				if executionplan.RejectUnknown(result.message) != nil {
+					return status.Error(codes.InvalidArgument, "Config credit envelope is invalid")
+				}
+				if err := payloads.acceptConfigCredit(credit); err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if frame := result.message.GetBackupVolumeManifestTransfer(); frame != nil {
+				if executionplan.RejectUnknown(result.message) != nil {
+					return status.Error(codes.InvalidArgument, "Volume manifest envelope is invalid")
+				}
+				if err := payloads.acceptVolumeManifestFrame(frame); err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if credit := result.message.GetBackupVolumeManifestAckCredit(); credit != nil {
+				if executionplan.RejectUnknown(result.message) != nil {
+					return status.Error(codes.InvalidArgument, "Volume manifest credit envelope is invalid")
+				}
+				if err := payloads.acceptVolumeManifestCredit(credit); err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if handled, err := s.handleBackupStagingDelivery(stream, session, authenticate.AgentId, authorization.Generation, result.message, staging); handled {
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if handled, err := s.handleTaskTerminalDelivery(stream, session, authenticate.AgentId, authorization.Generation, result.message, delivered, quarantined); handled {
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
 			}
 			if result.message.GetWorkloadImageResolutionResult() != nil {
 				session.acceptImageResult(result.message)
@@ -200,6 +278,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}
 
 			if ready := result.message.GetReady(); ready != nil {
+				if executionplan.RejectUnknown(ready) != nil || ready.TerminalDeliveryClean == nil ||
+					(!ready.GetTerminalDeliveryClean() && ready.Capacity != 0) {
+					return status.Error(codes.InvalidArgument, "agent Ready terminal delivery state is invalid")
+				}
 				if err := validateReady(ready.Capacity, ready.Version); err != nil {
 					return status.Error(codes.InvalidArgument, "agent Ready is invalid")
 				}
@@ -208,6 +290,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 						codes.InvalidArgument,
 						"agent Ready capacity exceeds configuration",
 					)
+				}
+				if !staging.ready {
+					if ready.Capacity != 0 || ready.GetTerminalDeliveryClean() {
+						return status.Error(codes.FailedPrecondition, "Agent startup staging is not reconciled")
+					}
+					continue
 				}
 				if err := session.RecordReady(s.now(), ready.Capacity, ready.Version); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
@@ -231,7 +319,8 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					if !session.invalidateReady() {
 						return status.Error(codes.FailedPrecondition, "agent session is not current")
 					}
-					if ready.Capacity != authorization.Config.MaxConcurrentTasks {
+					if ready.Capacity != authorization.Config.MaxConcurrentTasks ||
+						!payloads.resize(currentConfig.MaxConcurrentTasks) {
 						continue
 					}
 					nextConfig := proto.Clone(currentConfig).(*agentpb.AgentConfig)
@@ -258,6 +347,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					ready.Capacity,
 					delivered,
 					quarantined,
+					payloads,
 				); err != nil {
 					return taskStoreStatus(err)
 				}
@@ -274,6 +364,23 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					acknowledgement,
 				)
 				if err != nil {
+					if kind, _ := errs.KindOf(err); kind == errs.KindStateConflict &&
+						acknowledgement.GetBackupResult() != nil {
+						handled, deliveryErr := s.sendRejectedBackupTaskTerminal(
+							stream,
+							session,
+							authenticate.AgentId,
+							authorization.Generation,
+							acknowledgement,
+						)
+						if deliveryErr != nil {
+							return taskStoreStatus(deliveryErr)
+						}
+						if handled {
+							payloads.stop(acknowledgement.AssignmentId)
+							continue
+						}
+					}
 					if quarantineTaskReportConflict(stage, err, acknowledgement, delivered, quarantined) {
 						slog.Warn(
 							"controller: quarantine rejected Agent Task report",
@@ -291,11 +398,19 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					)
 					return taskStoreStatus(err)
 				}
+				if acknowledgement.GetBackupResult() != nil {
+					payloads.stop(acknowledgement.AssignmentId)
+					if err := s.sendTaskTerminalReceipt(stream, session, authenticate.AgentId, authorization.Generation, acknowledgement, false); err != nil {
+						return taskStoreStatus(err)
+					}
+					continue
+				}
 				if err := session.RecordTaskTerminal(
 					acknowledgement.TaskId, acknowledgement.AssignmentId,
 				); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
 				}
+				payloads.stop(acknowledgement.AssignmentId)
 				delete(delivered, acknowledgement.TaskId)
 				delete(quarantined, acknowledgement.TaskId)
 				continue
