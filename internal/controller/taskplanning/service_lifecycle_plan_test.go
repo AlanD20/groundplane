@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 // Rationale: lifecycle planning must select the sealed runtime represented by
@@ -107,20 +109,71 @@ func TestServiceLifecyclePlanSelectsAppliedSealedAddressableRuntime(t *testing.T
 		},
 		Steps: []testtaskjournal.TaskStepRecord{
 			{Kind: testtaskjournal.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+			{Kind: testtaskjournal.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAX"},
 		},
+		CreatedAt:        time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
 		RenderGeneration: int32(reader.projection.RenderGeneration),
 	}
 	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// SVC-06: the stable proxy retains an older plan than the current workload.
+	priorProxyPlan := "plan_01ARZ3NDEKTSV4RRFFQ69G5FAY"
+	var document yaml.Node
+	if err := yaml.Unmarshal(source.CanonicalYaml, &document); err != nil {
+		t.Fatal(err)
+	}
+	var replaceProxyOwner func(*yaml.Node)
+	replaceProxyOwner = func(node *yaml.Node) {
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			if node.Content[index].Value == "com.groundplane.plan-id" {
+				node.Content[index+1].Value = priorProxyPlan
+			}
+		}
+		for _, child := range node.Content {
+			replaceProxyOwner(child)
+		}
+	}
+	// Change only api's labels, never the serving singleton's ownership.
+	root := document.Content[0]
+	for index := 0; index+1 < len(root.Content); index += 2 {
+		if root.Content[index].Value != "services" {
+			continue
+		}
+		services := root.Content[index+1]
+		for member := 0; member+1 < len(services.Content); member += 2 {
+			if services.Content[member].Value == "api" {
+				replaceProxyOwner(services.Content[member+1])
+			}
+		}
+	}
+	source.CanonicalYaml, err = yaml.Marshal(&document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(source.CanonicalYaml)
+	source.YamlSha256 = digest[:]
+	for _, member := range source.Services {
+		if member.ComposeName == "api" {
+			for _, label := range member.ExpectedLabels {
+				if label.Key == "com.groundplane.plan-id" {
+					label.Value = priorProxyPlan
+				}
+			}
+		}
+	}
+	runtime := lifecycleRuntimeFixture(t, task, source, releaseID)
+	input.AcknowledgedRuntime, input.AcknowledgedRuntimeRevision = &runtime, 24
 	plan, err := resolver.buildServiceLifecyclePlan(context.Background(), task, input)
 	if err != nil {
 		t.Fatalf("buildServiceLifecyclePlan() error = %v", err)
 	}
 	services := make(map[string]*agentpb.ComposeService, len(plan.GetArtifacts()[0].GetServices()))
-	for _, service := range plan.GetArtifacts()[0].GetServices() {
-		services[service.GetComposeName()] = service
+	for _, artifact := range plan.GetArtifacts() {
+		for _, service := range artifact.GetServices() {
+			services[service.GetComposeName()] = service
+		}
 	}
 	if len(services) != 2 || services["api"] == nil ||
 		services["api"].GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY ||
@@ -128,7 +181,12 @@ func TestServiceLifecyclePlanSelectsAppliedSealedAddressableRuntime(t *testing.T
 		services["api--singleton"].GetImageReference() != seal.LocalImageID {
 		t.Fatalf("lifecycle selected services = %#v", services)
 	}
-	assertRemovalSelectsAcknowledgedMembers(t, resolver, task, plan.Artifacts[0])
+	for _, authority := range plan.ServiceLifecycleProcedure.Sources {
+		if authority.ComposeNames[0] == "api" && authority.SourcePlanId != priorProxyPlan {
+			t.Fatal("lifecycle replaced the acknowledged proxy owner")
+		}
+	}
+	assertRemovalSelectsAcknowledgedMembers(t, resolver, task, source)
 }
 
 func TestServiceLifecycleProcedureUsesTargetedComposeOperations(t *testing.T) {
@@ -173,7 +231,7 @@ func TestServiceLifecycleProcedureUsesTargetedComposeOperations(t *testing.T) {
 	}
 }
 
-func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *testing.T) {
+func TestServiceLifecyclePlanPinsAcknowledgedRuntimeAcrossRestart(t *testing.T) {
 	t.Parallel()
 	reader, _ := blueprintPlanTestState(t)
 	const (
@@ -264,6 +322,33 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
+	task.CreatedAt = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	task.RenderGeneration = int32(reader.projection.RenderGeneration)
+	selected := project.Services["api"]
+	selected.Image, selected.DependsOn = workload.LocalImageID, nil
+	project.Services["api"] = selected
+	acknowledged, err := testcomposerender.RenderCompose(testcomposerender.ComposeRenderInput{
+		Project: project, ArtifactID: input.ArtifactID,
+		ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant,
+		TenantID:         input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+		PlanID: input.Release.Current.PlanID, RenderGeneration: reader.projection.RenderGeneration,
+		AuthorizedVolumeDir: input.AuthorizedVolumeDir,
+		Identities:          mustComposeIdentitySnapshotFromProjection(t, reader.projection),
+		Releases: map[string]testcomposerender.ComposeReleaseIdentity{apiID: {
+			ReleaseID: input.Release.ServingReleaseID, Target: domain.WorkloadSingleton,
+			Image: workload.LocalImageID, ServingReleaseID: input.Release.ServingReleaseID,
+			ServingTarget: domain.WorkloadSingleton, Strategy: domain.StrategyRecreate,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	acknowledged, err = pruneServiceLifecycleArtifact(acknowledged, map[string]bool{"api": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := lifecycleRuntimeFixture(t, task, acknowledged, input.Release.ServingReleaseID)
+	input.AcknowledgedRuntime, input.AcknowledgedRuntimeRevision = &runtime, 24
 	prepared, err := firstResolver.PrepareServiceLifecycleTask(
 		context.Background(), task, input, []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 	)

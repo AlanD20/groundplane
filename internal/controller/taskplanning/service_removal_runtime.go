@@ -15,16 +15,20 @@ import (
 
 // Preserve each physical member's acknowledged bytes and ownership. The stable
 // proxy and the two workload slots can belong to different historical plans.
-func serviceRemovalRuntimeArtifacts(
+func serviceRuntimeArtifacts(
 	task etcd.TaskRecord,
-	intent environmentchanges.ServiceRemovalIntent,
+	serviceID string,
+	runtime *serviceruntimerecord.Record,
 ) ([]*agentpb.ComposeArtifact, error) {
-	if err := serviceruntimerecord.Validate(*intent.AcknowledgedRuntime); err != nil {
+	if runtime == nil {
+		return nil, errs.New(errs.KindInternal, "Service acknowledged runtime is missing")
+	}
+	if err := serviceruntimerecord.Validate(*runtime); err != nil {
 		return nil, err
 	}
 	var artifacts []*agentpb.ComposeArtifact
 	seen := make(map[string]bool)
-	for _, raw := range [][]byte{intent.AcknowledgedRuntime.Runtime.CurrentArtifact, intent.AcknowledgedRuntime.Runtime.RetainedPriorArtifact} {
+	for _, raw := range [][]byte{runtime.Runtime.CurrentArtifact, runtime.Runtime.RetainedPriorArtifact} {
 		if len(raw) == 0 {
 			continue
 		}
@@ -33,7 +37,7 @@ func serviceRemovalRuntimeArtifacts(
 			return nil, errs.New(errs.KindInternal, "Service removal runtime artifact is corrupt")
 		}
 		for _, member := range source.Services {
-			if seen[member.ComposeName] || member.ServiceId != intent.ServiceID {
+			if seen[member.ComposeName] || member.ServiceId != serviceID {
 				return nil, errs.New(errs.KindStateConflict, "Service removal physical member is duplicated or foreign")
 			}
 			seen[member.ComposeName] = true
@@ -55,7 +59,7 @@ func (resolver *TaskPlanResolver) buildAcknowledgedServiceRemovalPlan(
 	task etcd.TaskRecord,
 	intent environmentchanges.ServiceRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
-	artifacts, err := serviceRemovalRuntimeArtifacts(task, intent)
+	artifacts, err := serviceRuntimeArtifacts(task, intent.ServiceID, intent.AcknowledgedRuntime)
 	if err != nil {
 		return nil, err
 	}
@@ -65,21 +69,9 @@ func (resolver *TaskPlanResolver) buildAcknowledgedServiceRemovalPlan(
 	sources := make([]*agentpb.ServiceLifecycleSource, len(artifacts))
 	steps := make([]*agentpb.ExecutionStep, len(artifacts))
 	for index, artifact := range artifacts {
-		member := artifact.Services[0]
-		source := &agentpb.ServiceLifecycleSource{
-			ArtifactId: artifact.ArtifactId, ServiceId: intent.ServiceID,
-			ComposeNames: []string{member.ComposeName}, StepId: task.Steps[index].ID,
-		}
-		for _, label := range member.ExpectedLabels {
-			switch label.Key {
-			case "com.groundplane.plan-id":
-				source.SourcePlanId = label.Value
-			case "com.groundplane.render-generation":
-				source.SourceRenderGeneration, err = strconv.ParseUint(label.Value, 10, 64)
-				if err != nil {
-					return nil, errs.New(errs.KindInternal, "Service removal runtime generation is invalid")
-				}
-			}
+		source, sourceErr := serviceRuntimeSource(artifact, task.Steps[index].ID)
+		if sourceErr != nil {
+			return nil, sourceErr
 		}
 		sources[index] = source
 		steps[index] = &agentpb.ExecutionStep{
@@ -97,4 +89,25 @@ func (resolver *TaskPlanResolver) buildAcknowledgedServiceRemovalPlan(
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: intent.ServiceID,
 		Artifacts: artifacts, Steps: steps, ServiceLifecycleProcedure: &agentpb.ServiceLifecycleProcedure{Sources: sources},
 	})
+}
+
+func serviceRuntimeSource(artifact *agentpb.ComposeArtifact, stepID string) (*agentpb.ServiceLifecycleSource, error) {
+	member := artifact.Services[0]
+	source := &agentpb.ServiceLifecycleSource{
+		ArtifactId: artifact.ArtifactId, ServiceId: member.ServiceId,
+		ComposeNames: []string{member.ComposeName}, StepId: stepID,
+	}
+	for _, label := range member.ExpectedLabels {
+		switch label.Key {
+		case "com.groundplane.plan-id":
+			source.SourcePlanId = label.Value
+		case "com.groundplane.render-generation":
+			generation, err := strconv.ParseUint(label.Value, 10, 64)
+			if err != nil {
+				return nil, errs.New(errs.KindInternal, "Service runtime generation is invalid")
+			}
+			source.SourceRenderGeneration = generation
+		}
+	}
+	return source, nil
 }

@@ -3,6 +3,7 @@ package releaserender
 import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -33,10 +34,12 @@ type ServiceLifecycleRenderInput struct {
 	HookConfiguration   *backinghook.Configuration `json:"hook_configuration,omitempty"`
 	// Projection is present only in lifecycle records written before the
 	// applied-generation witness replaced the redundant full projection.
-	Projection                *projectionrecord.EnvironmentComposeProjection `json:"projection,omitempty"`
-	AppliedRenderGeneration   uint64                                         `json:"applied_render_generation,omitempty"`
-	AppliedProjectionRevision int64                                          `json:"applied_projection_revision"`
-	Release                   ServiceLifecycleRelease                        `json:"release"`
+	Projection                  *projectionrecord.EnvironmentComposeProjection `json:"projection,omitempty"`
+	AppliedRenderGeneration     uint64                                         `json:"applied_render_generation,omitempty"`
+	AppliedProjectionRevision   int64                                          `json:"applied_projection_revision"`
+	Release                     ServiceLifecycleRelease                        `json:"release"`
+	AcknowledgedRuntime         *serviceruntimerecord.Record                   `json:"acknowledged_runtime"`
+	AcknowledgedRuntimeRevision int64                                          `json:"acknowledged_runtime_revision"`
 }
 
 // ServiceLifecycleRelease freezes the exact serving runtime sources used by a
@@ -80,6 +83,15 @@ func DecodeServiceLifecycleRenderInput(value []byte) (ServiceLifecycleRenderInpu
 }
 
 func ValidateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) error {
+	if input.AcknowledgedRuntime == nil || input.AcknowledgedRuntimeRevision <= 0 ||
+		serviceruntimerecord.Validate(*input.AcknowledgedRuntime) != nil ||
+		input.AcknowledgedRuntime.EnvironmentID != input.EnvironmentID ||
+		input.AcknowledgedRuntime.Runtime.ServiceID != input.ServiceID ||
+		input.AcknowledgedRuntime.Runtime.ReleaseID != input.Release.ServingReleaseID ||
+		input.AcknowledgedRuntime.Runtime.Target != string(input.Release.Current.CandidateTarget) ||
+		(len(input.AcknowledgedRuntime.Runtime.RetainedPriorArtifact) != 0) != (input.Release.RetainedPrior != nil) {
+		return errs.New(errs.KindValidationFailed, "Service lifecycle acknowledged runtime is invalid")
+	}
 	if ids.Validate(ids.KindPlan, input.PlanID) != nil ||
 		ids.Validate(ids.KindService, input.ServiceID) != nil ||
 		ids.Validate(ids.KindProject, input.ProjectID) != nil ||
@@ -131,6 +143,17 @@ func (input ServiceLifecycleRenderInput) RenderGeneration() uint64 {
 	return 0
 }
 
+func (input ServiceLifecycleRenderInput) RuntimeMemberCount() int {
+	count := 1
+	if len(input.Release.Current.ProxyPorts) != 0 {
+		count++
+	}
+	if input.Release.RetainedPrior != nil {
+		count++
+	}
+	return count
+}
+
 func ValidateServiceLifecycleRelease(authority ServiceLifecycleRelease, input ServiceLifecycleRenderInput) error {
 	if ids.Validate(ids.KindDeployment, authority.ServingReleaseID) != nil ||
 		authority.ProjectionRevision <= 0 || authority.IntentRevision <= 0 || authority.RenderRevision <= 0 ||
@@ -166,6 +189,13 @@ func cloneServiceLifecycleRenderInput(source ServiceLifecycleRenderInput) Servic
 		clone.Projection = &projection
 	}
 	clone.Release.Current = CloneReleaseRenderInput(source.Release.Current)
+	if source.AcknowledgedRuntime != nil {
+		runtime := *source.AcknowledgedRuntime
+		runtime.Runtime.CurrentArtifact = append([]byte(nil), runtime.Runtime.CurrentArtifact...)
+		runtime.Runtime.RetainedPriorArtifact = append([]byte(nil), runtime.Runtime.RetainedPriorArtifact...)
+		runtime.Runtime.ProxyConfigSHA256 = append([]byte(nil), runtime.Runtime.ProxyConfigSHA256...)
+		clone.AcknowledgedRuntime = &runtime
+	}
 	if source.Release.RetainedPrior != nil {
 		prior := CloneReleaseRenderInput(*source.Release.RetainedPrior)
 		clone.Release.RetainedPrior = &prior

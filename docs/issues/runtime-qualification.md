@@ -15,12 +15,10 @@ the live qualification below.
 
 ## Live logs and observations
 
-The last recorded Environment follow stream closed after 23 events. The bounded
-queue could cancel a normal tail burst; a local backpressure correction has
-behavioral evidence, but the live rerun remains outstanding (LOG-02).
-
-Closure: use an explicitly authorized running workload to prove Service and
-Environment tail/follow, continued delivery, stop/reopen and cancellation cleanup.
+The bounded live rerun [H82](../acceptance.md#bounded-logs-and-blue-green-failure-check)
+passed Service and Environment tail/follow, continuing output, client cancellation,
+reopen and a CLI tail sample. It closes the earlier 23-event burst failure for
+that private synthetic path, not Console or public-ingress streaming.
 Script output remains intentionally discarded, not a broken workload log source.
 Also qualify serving health freshness, unavailable states and Route reachability
 through the real Console/CLI/API; desired state is not live-health evidence.
@@ -47,6 +45,14 @@ Blue-green Start/Stop/Destroy, conversion back to recreate, failed-switch recove
 and held WebSockets still need selected live proof. [H81](../acceptance.md#blue-green-retention-and-both-slot-cleanup)
 qualifies predecessor retention, inactive-slot replacement, a held HTTP stream
 and both-slot Zone/Service cleanup, not those remaining variants.
+
+H82 reproduced two blockers on that candidate: Stop rebuilt stable-proxy ownership
+from the newer Release and rejected the actual proxy; a failed candidate start
+replaced the inactive slot, but recovery required a completed forward step before
+authorizing compensation. The serving process and data remained intact while the
+Task stayed nonterminal. Exact acknowledged-member planning and durable
+mutation-based compensation have local repairs; integration and live retesting
+remain pending. Do not weaken ownership checks or rewrite the original Task.
 
 ## Installation, upgrades and reboot
 

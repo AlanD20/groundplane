@@ -42,6 +42,22 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	if err != nil {
 		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
 	}
+	runtime, err := service.repository.GetServiceRemovalRuntime(
+		ctx,
+		environment.Record.ID,
+		current.Record.Desired.ID,
+		projection.ReadRevision,
+	)
+	if err != nil {
+		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
+	}
+	if runtime.ReadRevision != projection.ReadRevision || runtime.Revision <= 0 ||
+		runtime.Revision > projection.ReadRevision {
+		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, errs.New(
+			errs.KindStateConflict,
+			"Service lifecycle runtime snapshot changed",
+		)
+	}
 	found := false
 	for _, candidate := range projection.Record.DesiredServices {
 		if candidate.Desired.ID == current.Record.Desired.ID {
@@ -57,11 +73,13 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 		PlanID: task.PlanID, ServiceID: current.Record.Desired.ID,
 		ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
 		EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
-		AuthorizedVolumeDir:       environment.Record.VolumeDir,
-		ArtifactID:                releaseAuthority.Current.ArtifactID,
-		AppliedRenderGeneration:   projection.Record.RenderGeneration,
-		AppliedProjectionRevision: projection.Revision,
-		Release:                   releaseAuthority,
+		AuthorizedVolumeDir:         environment.Record.VolumeDir,
+		ArtifactID:                  releaseAuthority.Current.ArtifactID,
+		AppliedRenderGeneration:     projection.Record.RenderGeneration,
+		AppliedProjectionRevision:   projection.Revision,
+		Release:                     releaseAuthority,
+		AcknowledgedRuntime:         &runtime.Record,
+		AcknowledgedRuntimeRevision: runtime.Revision,
 	}
 	if tenant != nil {
 		input.TenantID, input.TenantSlug = tenant.Record.ID, tenant.Record.Slug
@@ -99,8 +117,8 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	if task.TimeoutSeconds < serviceLifecycleAgentTimeoutSeconds {
 		task.TimeoutSeconds = serviceLifecycleAgentTimeoutSeconds
 	}
-	stepIDs := []string{ids.New(ids.KindStep)}
-	if input.Release.RetainedPrior != nil {
+	stepIDs := make([]string, 0, input.RuntimeMemberCount()+1)
+	for range input.RuntimeMemberCount() {
 		stepIDs = append(stepIDs, ids.New(ids.KindStep))
 	}
 	if input.HookConfiguration != nil {

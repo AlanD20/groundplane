@@ -2,8 +2,15 @@ package taskplanning
 
 import (
 	"context"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -17,7 +24,102 @@ func (resolver *TaskPlanResolver) RenderRetainedServiceRuntime(
 	ctx context.Context,
 	source releaserender.ServiceLifecycleRelease,
 ) ([]*agentpb.ComposeArtifact, error) {
-	return resolver.renderServiceLifecycleArtifacts(ctx, releaserender.ServiceLifecycleRenderInput{Release: source}, "")
+	return resolver.renderRetainedServiceRuntimeArtifacts(ctx, source)
+}
+func (resolver *TaskPlanResolver) renderRetainedServiceRuntimeArtifacts(
+	ctx context.Context,
+	source releaserender.ServiceLifecycleRelease,
+) ([]*agentpb.ComposeArtifact, error) {
+	current, err := resolver.renderRetainedServiceRuntimeArtifact(ctx, source.Current, "", true)
+	if err != nil {
+		return nil, err
+	}
+	artifacts := []*agentpb.ComposeArtifact{current}
+	if source.RetainedPrior != nil {
+		prior, renderErr := resolver.renderRetainedServiceRuntimeArtifact(ctx, *source.RetainedPrior, "", false)
+		if renderErr != nil {
+			return nil, renderErr
+		}
+		artifacts = append(artifacts, prior)
+	}
+	return artifacts, nil
+}
+
+func (resolver *TaskPlanResolver) renderRetainedServiceRuntimeArtifact(
+	ctx context.Context,
+	source releaserender.ReleaseRenderInput,
+	phase core.ServiceLifecyclePhase,
+	includeProxy bool,
+) (*agentpb.ComposeArtifact, error) {
+	projection := releaseWorkloadProjection(source.Projection)
+	selected := make([]servicerecord.EnvironmentServiceProjection, 0, 1)
+	for _, service := range projection.DesiredServices {
+		if service.Desired.ID == source.ServiceID {
+			selected = append(selected, service)
+		}
+	}
+	projection.DesiredServices = selected
+	if len(selected) != 1 {
+		return nil, errs.New(errs.KindInternal, "lifecycle source projection does not contain selected Service")
+	}
+	sourceTask := etcd.TaskRecord{PlanID: source.PlanID, RenderGeneration: int32(source.Projection.RenderGeneration)}
+	identity := composerender.ComposeReleaseIdentity{
+		ProxyAddresses: source.ProxyAddresses,
+		ProxyImage:     source.ProxyImage, ReleaseID: source.ReleaseID, Target: source.CandidateTarget,
+		Image: source.CandidateWorkload.LocalImageID, ServingReleaseID: source.ReleaseID,
+		ServingTarget: source.CandidateTarget, ServingProxyGeneration: source.ProxyGeneration,
+		Strategy: source.Strategy,
+	}
+	artifact, err := resolver.renderPinnedEnvironmentArtifactForPhaseWithReleases(
+		ctx,
+		sourceTask,
+		pinnedEnvironmentIdentity{
+			TenantID: source.TenantID, TenantSlug: source.TenantSlug,
+			ProjectID: source.ProjectID, ProjectSlug: source.ProjectSlug,
+			EnvironmentID: source.EnvironmentID, EnvironmentName: source.EnvironmentName,
+			AuthorizedVolumeDir: source.AuthorizedVolumeDir,
+		},
+		projection.RevisionID,
+		source.ArtifactID,
+		projection,
+		phase,
+		func(project *composetypes.Project, _ projectionrecord.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
+			if err := projectReleaseWorkloadServices(project, projection); err != nil {
+				return nil, err
+			}
+			service, active := project.Services[source.ServiceName]
+			if !active {
+				service = project.DisabledServices[source.ServiceName]
+			}
+			service.DependsOn = nil
+			if err := composerender.ApplySealedWorkload(&service, source.CandidateWorkload); err != nil {
+				return nil, err
+			}
+			if active {
+				project.Services[source.ServiceName] = service
+			} else {
+				project.DisabledServices[source.ServiceName] = service
+			}
+			return managedAttachExternalNetworks(project)
+		},
+		map[string]composerender.ComposeReleaseIdentity{source.ServiceID: identity},
+	)
+	if err != nil {
+		return nil, err
+	}
+	allowed := map[string]bool{}
+	workloadName, err := domain.WorkloadComposeName(source.ServiceName, source.CandidateTarget)
+	if err != nil {
+		return nil, err
+	}
+	if len(source.ProxyPorts) == 0 {
+		workloadName = source.ServiceName
+	}
+	allowed[workloadName] = true
+	if includeProxy && len(source.ProxyPorts) != 0 {
+		allowed[source.ServiceName] = true
+	}
+	return pruneServiceLifecycleArtifact(artifact, allowed)
 }
 
 // RetainBlueprintNativeRuntimeSources merges all physical members before

@@ -46,7 +46,6 @@ func validateServiceLifecyclePlan(plan *agentpb.ExecutionPlan) error {
 			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_DESTROY &&
 			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) ||
 		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > 3 ||
-		plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_REMOVE && len(procedure.GetSources()) > 2 ||
 		len(procedure.GetSources()) != len(plan.GetArtifacts()) || len(procedure.GetSources()) != len(plan.GetSteps()) {
 		return errs.New(errs.KindValidationFailed, "service lifecycle procedure shape is invalid")
 	}

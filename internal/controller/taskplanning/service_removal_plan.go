@@ -52,7 +52,7 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 	}
 	prepared.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}
 	if intent.AcknowledgedRuntime != nil {
-		artifacts, err := serviceRemovalRuntimeArtifacts(prepared, intent)
+		artifacts, err := serviceRuntimeArtifacts(prepared, intent.ServiceID, intent.AcknowledgedRuntime)
 		if err != nil {
 			return etcd.TaskRecord{}, err
 		}

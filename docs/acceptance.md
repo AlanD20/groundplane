@@ -419,6 +419,40 @@ backing consumers and concurrent/interrupted removal were not exercised live.
 Historical application, Tunnel and Runner journeys were not repeated. No reset,
 manual repair, compatibility path or release tag was used.
 
+## Bounded logs and blue-green failure check
+
+**H82 — LOG-01/02 selected variants PASS; lifecycle and recovery FAIL, 2026-10-01.**
+An isolated Python HTTP Service on candidate `539922bff` emitted a 300-line
+stdout burst and continuing background ticks. Service and Environment follow
+streams each delivered the requested tail and later ticks during two bounded
+sessions, with client cancellation and successful reopening. A CLI tail sample
+returned actual workload output. This is private API/CLI evidence, not browser,
+public-ingress, memory-growth or source-cleanup qualification.
+
+The Service had a stable proxy and two retained blue-green slots. Stop failed
+before mutation because its reconstructed proxy owner differed from the actual
+older proxy. A subsequent successful image-only Deploy served Python 3.14.
+An Alpine candidate could not execute the Python command: its start failed after
+replacing the inactive slot. The durable recovery record contained Running but
+not Completed mutation evidence. Recovery incorrectly omitted compensation
+eligibility, leaving the original Task running beyond the 180-second observation
+window. Independent HTTP still reached the same serving process, its background
+counter advanced and the persistent sentinel remained intact; the inactive slot
+was not restored, so recovery did not pass.
+
+Local repairs pin each acknowledged physical member's original bytes and owner,
+compare the runtime revision at publication and retain compensation eligibility
+for a durably started mutation that fails. Targeted race checks passed, including
+untouched-member refusal. Full local CI passed on 2026-10-02. The owner approved
+a 75,000-line root-etcd ceiling and QA repair/reset; deployment and live retesting
+remain pending. During the 2026-10-01 run, no manual repair, reset,
+Task-history change or tag was performed. Start, Destroy, historical rollback,
+normal upgrade under traffic and owned-resource cleanup were blocked or unrun.
+On 2026-10-02, repeated recovery had exhausted etcd's storage quota and prevented
+Controller startup. The approved disposable host reset removed that runtime and
+data after retaining incident evidence. This reset does not prove recovery of the
+original failed Task; a fresh fault-injected run is required.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

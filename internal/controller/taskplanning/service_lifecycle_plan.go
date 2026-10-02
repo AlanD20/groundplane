@@ -4,25 +4,18 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
-	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -79,10 +72,7 @@ func (resolver *TaskPlanResolver) prepareServiceLifecycleTask(
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	stepIDs []string,
 ) (etcd.TaskRecord, error) {
-	wantSteps := 1
-	if input.Release.RetainedPrior != nil {
-		wantSteps++
-	}
+	wantSteps := input.RuntimeMemberCount()
 	if _, definition := serviceLifecycleHook(input, task.Type); definition != nil {
 		wantSteps++
 	}
@@ -150,10 +140,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 ) (*agentpb.ExecutionPlan, error) {
 	event, definition := serviceLifecycleHook(input, task.Type)
-	wantSteps := 1
-	if input.Release.RetainedPrior != nil {
-		wantSteps++
-	}
+	wantSteps := input.RuntimeMemberCount()
 	if definition != nil {
 		wantSteps++
 	}
@@ -162,11 +149,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 		task.Params[taskjournal.TaskComposeArtifactParam] != input.ArtifactID {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle Task procedure changed")
 	}
-	phase := core.ServiceLifecyclePhase("")
-	if task.Type == taskjournal.TaskStart {
-		phase = core.ServiceLifecycleStart
-	}
-	artifacts, err := resolver.renderServiceLifecycleArtifacts(ctx, input, phase)
+	artifacts, err := serviceRuntimeArtifacts(task, input.ServiceID, input.AcknowledgedRuntime)
 	if err != nil {
 		return nil, err
 	}
@@ -222,20 +205,10 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 		}()
 	}
 	sources := make([]*agentpb.ServiceLifecycleSource, len(artifacts))
-	renders := []releaserender.ReleaseRenderInput{input.Release.Current}
-	if input.Release.RetainedPrior != nil {
-		renders = append(renders, *input.Release.RetainedPrior)
-	}
 	for index, artifact := range artifacts {
-		names := make([]string, len(artifact.Services))
-		for serviceIndex, service := range artifact.Services {
-			names[serviceIndex] = service.ComposeName
-		}
-		sort.Strings(names)
-		sources[index] = &agentpb.ServiceLifecycleSource{
-			ArtifactId: artifact.ArtifactId, SourcePlanId: renders[index].PlanID,
-			SourceRenderGeneration: renders[index].Projection.RenderGeneration,
-			ServiceId:              input.ServiceID, ComposeNames: names, StepId: steps[index].StepId,
+		sources[index], err = serviceRuntimeSource(artifact, composeSteps[index].StepId)
+		if err != nil {
+			return nil, err
 		}
 	}
 	return taskplan.Build(taskplan.BuildInput{
@@ -261,103 +234,6 @@ func serviceLifecycleHook(
 	default:
 		return "", nil
 	}
-}
-
-func (resolver *TaskPlanResolver) renderServiceLifecycleArtifacts(
-	ctx context.Context,
-	input releaserender.ServiceLifecycleRenderInput,
-	phase core.ServiceLifecyclePhase,
-) ([]*agentpb.ComposeArtifact, error) {
-	current, err := resolver.renderServiceLifecycleArtifact(ctx, input.Release.Current, phase, true)
-	if err != nil {
-		return nil, err
-	}
-	artifacts := []*agentpb.ComposeArtifact{current}
-	if input.Release.RetainedPrior != nil {
-		prior, renderErr := resolver.renderServiceLifecycleArtifact(ctx, *input.Release.RetainedPrior, phase, false)
-		if renderErr != nil {
-			return nil, renderErr
-		}
-		artifacts = append(artifacts, prior)
-	}
-	return artifacts, nil
-}
-
-func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
-	ctx context.Context,
-	source releaserender.ReleaseRenderInput,
-	phase core.ServiceLifecyclePhase,
-	includeProxy bool,
-) (*agentpb.ComposeArtifact, error) {
-	projection := releaseWorkloadProjection(source.Projection)
-	selected := make([]servicerecord.EnvironmentServiceProjection, 0, 1)
-	for _, service := range projection.DesiredServices {
-		if service.Desired.ID == source.ServiceID {
-			selected = append(selected, service)
-		}
-	}
-	projection.DesiredServices = selected
-	if len(selected) != 1 {
-		return nil, errs.New(errs.KindInternal, "lifecycle source projection does not contain selected Service")
-	}
-	sourceTask := etcd.TaskRecord{PlanID: source.PlanID, RenderGeneration: int32(source.Projection.RenderGeneration)}
-	identity := composerender.ComposeReleaseIdentity{
-		ProxyAddresses: source.ProxyAddresses,
-		ProxyImage:     source.ProxyImage, ReleaseID: source.ReleaseID, Target: source.CandidateTarget,
-		Image: source.CandidateWorkload.LocalImageID, ServingReleaseID: source.ReleaseID,
-		ServingTarget: source.CandidateTarget, ServingProxyGeneration: source.ProxyGeneration,
-		Strategy: source.Strategy,
-	}
-	artifact, err := resolver.renderPinnedEnvironmentArtifactForPhaseWithReleases(
-		ctx,
-		sourceTask,
-		pinnedEnvironmentIdentity{
-			TenantID: source.TenantID, TenantSlug: source.TenantSlug,
-			ProjectID: source.ProjectID, ProjectSlug: source.ProjectSlug,
-			EnvironmentID: source.EnvironmentID, EnvironmentName: source.EnvironmentName,
-			AuthorizedVolumeDir: source.AuthorizedVolumeDir,
-		},
-		projection.RevisionID,
-		source.ArtifactID,
-		projection,
-		phase,
-		func(project *composetypes.Project, _ projectionrecord.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
-			if err := projectReleaseWorkloadServices(project, projection); err != nil {
-				return nil, err
-			}
-			service, active := project.Services[source.ServiceName]
-			if !active {
-				service = project.DisabledServices[source.ServiceName]
-			}
-			service.DependsOn = nil
-			if err := composerender.ApplySealedWorkload(&service, source.CandidateWorkload); err != nil {
-				return nil, err
-			}
-			if active {
-				project.Services[source.ServiceName] = service
-			} else {
-				project.DisabledServices[source.ServiceName] = service
-			}
-			return managedAttachExternalNetworks(project)
-		},
-		map[string]composerender.ComposeReleaseIdentity{source.ServiceID: identity},
-	)
-	if err != nil {
-		return nil, err
-	}
-	allowed := map[string]bool{}
-	workloadName, err := domain.WorkloadComposeName(source.ServiceName, source.CandidateTarget)
-	if err != nil {
-		return nil, err
-	}
-	if len(source.ProxyPorts) == 0 {
-		workloadName = source.ServiceName
-	}
-	allowed[workloadName] = true
-	if includeProxy && len(source.ProxyPorts) != 0 {
-		allowed[source.ServiceName] = true
-	}
-	return pruneServiceLifecycleArtifact(artifact, allowed)
 }
 
 func pruneServiceLifecycleArtifact(

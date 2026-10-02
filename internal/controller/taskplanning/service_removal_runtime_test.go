@@ -24,27 +24,8 @@ func assertRemovalSelectsAcknowledgedMembers(
 	artifact *agentpb.ComposeArtifact,
 ) {
 	t.Helper()
-	raw, err := proto.Marshal(artifact)
-	if err != nil {
-		t.Fatal(err)
-	}
+	record := lifecycleRuntimeFixture(t, task, artifact, "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV")
 	at := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
-	runtime := executionplan.CandidateRuntime{
-		ServiceID: task.Target, ReleaseID: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", Target: "singleton",
-		CurrentArtifact: raw, ProxyGeneration: 4,
-	}
-	for _, member := range artifact.Services {
-		if member.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-			runtime.ProxyConfigSHA256 = member.ProxyConfigSha256
-		}
-	}
-	record := serviceruntimerecord.Record{EnvironmentID: artifact.OwnerId, Runtime: runtime,
-		Source: serviceruntimerecord.Acknowledgement{
-			TaskID: ids.NewAt(ids.KindTask, at, 1), PlanID: task.PlanID, StepID: task.Steps[0].ID,
-			AgentID: ids.NewAt(ids.KindAgent, at, 2), AssignmentID: ids.NewAt(ids.KindAssignment, at, 3),
-			ExecutionEpoch: 1, RenderGeneration: uint64(task.RenderGeneration),
-			PlanHash: strings.Repeat("a", 64), EffectDigest: strings.Repeat("b", 64), AcknowledgedAt: at,
-		}}
 	task.Type, task.CreatedAt = taskjournal.TaskRemove, at
 	task.Steps = []taskjournal.TaskStepRecord{
 		{ID: ids.NewAt(ids.KindStep, at, 4), Kind: taskjournal.TaskStepOperation},
@@ -71,4 +52,39 @@ func assertRemovalSelectsAcknowledgedMembers(
 	if names["api"] != 1 || names["api--singleton"] != 2 {
 		t.Fatalf("removal selected %v, want proxy and both deployed replicas", names)
 	}
+}
+
+func lifecycleRuntimeFixture(
+	t *testing.T,
+	task etcd.TaskRecord,
+	artifact *agentpb.ComposeArtifact,
+	releaseID string,
+) serviceruntimerecord.Record {
+	t.Helper()
+	raw, err := proto.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	runtime := executionplan.CandidateRuntime{
+		ServiceID: task.Target, ReleaseID: releaseID, Target: "singleton",
+		CurrentArtifact: raw,
+	}
+	for _, member := range artifact.Services {
+		if member.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			runtime.ProxyGeneration = 4
+			runtime.ProxyConfigSHA256 = member.ProxyConfigSha256
+		}
+	}
+	record := serviceruntimerecord.Record{EnvironmentID: artifact.OwnerId, Runtime: runtime,
+		Source: serviceruntimerecord.Acknowledgement{
+			TaskID: ids.NewAt(ids.KindTask, at, 1), PlanID: task.PlanID, StepID: ids.NewAt(ids.KindStep, at, 6),
+			AgentID: ids.NewAt(ids.KindAgent, at, 2), AssignmentID: ids.NewAt(ids.KindAssignment, at, 3),
+			ExecutionEpoch: 1, RenderGeneration: uint64(task.RenderGeneration),
+			PlanHash: strings.Repeat("a", 64), EffectDigest: strings.Repeat("b", 64), AcknowledgedAt: at,
+		}}
+	if err := serviceruntimerecord.Validate(record); err != nil {
+		t.Fatal(err)
+	}
+	return record
 }

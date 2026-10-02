@@ -31,6 +31,8 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 	projection := serviceRecordTestProjection(t, ids.NewAt(ids.KindEnvironment, at, 5), desired)
 	projection.RenderGeneration = 9
 	current := portlessReleaseRenderInput(domain.StrategyRecreate)
+	runtime := nativeAttachRuntimeFixture(t, projection.EnvironmentID, serviceID)
+	current.ReleaseID = runtime.Runtime.ReleaseID
 	current.ServiceID, current.ServiceName = serviceID, desired.Name
 	current.TenantID, current.TenantSlug = ids.NewAt(ids.KindTenant, at, 3), "acme"
 	current.ProjectID, current.ProjectSlug = ids.NewAt(ids.KindProject, at, 4), "shop"
@@ -45,7 +47,8 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 5), EnvironmentName: "production",
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		ArtifactID:          current.ArtifactID,
-		Projection:          &projection, AppliedProjectionRevision: 20,
+		AcknowledgedRuntime: &runtime, AcknowledgedRuntimeRevision: 24,
+		Projection: &projection, AppliedProjectionRevision: 20,
 		Release: testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID: current.ReleaseID, ProjectionRevision: 21, IntentRevision: 22,
 			RenderRevision: 23, Current: current,

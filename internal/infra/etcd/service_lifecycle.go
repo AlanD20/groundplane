@@ -18,6 +18,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -215,6 +216,10 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 				Key:         releases.ReleaseRenderInputStagingKey("", renderInput.Release.ServingReleaseID),
 				ModRevision: renderInput.Release.RenderRevision,
 			},
+			etcdstore.Condition{
+				Key:         serviceruntimerecord.Key(renderInput.ServiceID),
+				ModRevision: renderInput.AcknowledgedRuntimeRevision,
+			},
 		)
 		if renderInput.Release.RetainedPrior != nil {
 			conditions = append(conditions, etcdstore.Condition{
@@ -384,10 +389,7 @@ func validateServiceLifecycleProjection(
 		task.Params[taskjournal.TaskComposeArtifactParam] != input.ArtifactID {
 		return errs.New(errs.KindValidationFailed, "applied Service lifecycle Task is invalid")
 	}
-	wantSteps := 1
-	if input.Release.RetainedPrior != nil {
-		wantSteps = 2
-	}
+	wantSteps := input.RuntimeMemberCount()
 	if serviceLifecycleHookConfigured(*input, task.Type) {
 		wantSteps++
 	} else if input.HookConfiguration != nil {
@@ -443,7 +445,7 @@ func classifyServiceLifecycleStartConflict(
 		expected := deletionEnd
 		applied := input != nil
 		if applied {
-			expected += 5
+			expected += 6
 			if input.Release.RetainedPrior != nil {
 				expected++
 			}

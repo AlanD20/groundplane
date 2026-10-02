@@ -99,7 +99,16 @@ func (observer *Observer) Observe(
 	if artifact == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Compose observation artifact is not in the plan")
 	}
-	return observer.observeArtifact(ctx, artifact, nil)
+	var companions []*agentpb.ComposeService
+	if ownedPlan.GetServiceLifecycleProcedure() != nil &&
+		ownedPlan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_REMOVE {
+		for _, captured := range ownedPlan.GetArtifacts() {
+			if captured.GetArtifactId() != artifactID {
+				companions = append(companions, captured.GetServices()...)
+			}
+		}
+	}
+	return observer.observeArtifact(ctx, artifact, companions)
 }
 
 // ObserveReleaseRestoration opens the original plan's declared recovery pair.

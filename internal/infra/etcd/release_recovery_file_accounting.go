@@ -40,14 +40,14 @@ func releaseApplicableCompensationStepIDs(
 	}
 	for index := len(procedure.GetMembers()) - 1; index >= 0; index-- {
 		member := procedure.GetMembers()[index]
-		completed := false
+		touched := false
 		for _, stepID := range member.GetForwardStepIds() {
-			if byStep[stepID].Completed {
-				completed = true
+			if byStep[stepID].Running {
+				touched = true
 				break
 			}
 		}
-		if !completed {
+		if !touched {
 			continue
 		}
 		switch candidates[index].Target {
