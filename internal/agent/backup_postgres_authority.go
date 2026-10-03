@@ -25,6 +25,7 @@ type postgresStepAuthority struct {
 	serviceID     string
 	artifactID    string
 	labelsSHA256  []byte
+	labelCount    uint32
 	repositorySHA []byte
 	imageID       string
 	maxPlaintext  uint64
@@ -108,22 +109,39 @@ func postgresSourceAuthority(step *agentpb.BackupStepAuthority, services []*agen
 		return postgresStepAuthority{}, invalidAgentStaging()
 	}
 	labels, err := postgresLabelMap(selected.ExpectedLabels)
-	if err != nil || labels["com.docker.compose.project"] != selectedArtifact.ProjectName ||
-		labels["com.docker.compose.service"] != selected.ComposeName {
+	if err != nil || selectedArtifact.ProjectName == "" || selected.ComposeName == "" {
 		return postgresStepAuthority{}, invalidAgentStaging()
 	}
+	if value, present := labels["com.docker.compose.project"]; present && value != selectedArtifact.ProjectName {
+		return postgresStepAuthority{}, invalidAgentStaging()
+	}
+	if value, present := labels["com.docker.compose.service"]; present && value != selected.ComposeName {
+		return postgresStepAuthority{}, invalidAgentStaging()
+	}
+	// Compose adds these runtime labels; the sealed GP label digest excludes them.
+	labels["com.docker.compose.project"] = selectedArtifact.ProjectName
+	labels["com.docker.compose.service"] = selected.ComposeName
 	volume, err := postgresDataVolume(selectedArtifact, selected)
 	if err != nil {
 		return postgresStepAuthority{}, invalidAgentStaging()
 	}
 	volumeLabels, err := postgresLabelMap(volume.ExpectedLabels)
-	if err != nil || volumeLabels["com.docker.compose.project"] != selectedArtifact.ProjectName {
+	if err != nil {
 		return postgresStepAuthority{}, invalidAgentStaging()
 	}
+	if value, present := volumeLabels["com.docker.compose.project"]; present && value != selectedArtifact.ProjectName {
+		return postgresStepAuthority{}, invalidAgentStaging()
+	}
+	if value, present := volumeLabels["com.docker.compose.volume"]; present && value != volume.ComposeName {
+		return postgresStepAuthority{}, invalidAgentStaging()
+	}
+	volumeLabels["com.docker.compose.project"] = selectedArtifact.ProjectName
+	volumeLabels["com.docker.compose.volume"] = volume.ComposeName
 	return postgresStepAuthority{
 		index: index, selection: postgres16execution.Selection{Labels: labels,
 			VolumeName: volume.DockerName, VolumeLabels: volumeLabels},
 		serviceID: serviceID, artifactID: selectedArtifact.ArtifactId, labelsSHA256: labelsSHA,
+		labelCount:    fact.RequiredLabelCount,
 		repositorySHA: repositorySHA, imageID: "sha256:" + hex.EncodeToString(fact.LocalImageIdSha256),
 		maxPlaintext: maxPlaintext,
 		database:     database, role: role,
@@ -204,7 +222,7 @@ func postgresContainerCheckpoint(authority postgresStepAuthority,
 	value := &agentpb.BackupPostgresContainerObserved{
 		ServiceId: authority.serviceID, ContainerId: container.ID,
 		RepositoryDigest:     append([]byte(nil), authority.repositorySHA...),
-		ObservedLabelCount:   uint32(len(authority.selection.Labels)),
+		ObservedLabelCount:   authority.labelCount,
 		ObservedLabelsSha256: append([]byte(nil), authority.labelsSHA256...),
 	}
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(value)
