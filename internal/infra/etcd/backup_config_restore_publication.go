@@ -15,9 +15,9 @@ import (
 )
 
 // PublishConfigRestore advances a single complete, already verified candidate.
-// Each live Entry mutation commits with its native ordinal. The ordinary head
-// moves only after those records and indexes are complete; host materialization
-// remains a separate proof, so canonical publication is not Restore completion.
+// Each prepared Entry commits with its native ordinal. The ordinary head moves
+// only after values and lookup indexes are complete. Removed values are retired
+// after that atomic switch; host materialization remains a separate proof.
 func (repository *BackupRuntimeRepository) PublishConfigRestore(
 	ctx context.Context,
 	generation etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord],
@@ -143,7 +143,7 @@ func (repository *BackupRuntimeRepository) PublishConfigRestore(
 			}
 		case backupruntime.BackupRestoreCanonicalComplete, backupruntime.BackupRestoreMaterializing,
 			backupruntime.BackupRestoreVerified, backupruntime.BackupRestoreCompleted:
-			return nil
+			return repository.cleanupConfigRestoreEntries(ctx, generation, deleted)
 		default:
 			return configTransferAuthorityConflict()
 		}
