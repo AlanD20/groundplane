@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -217,17 +218,16 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
+			intentMutation, err := servicerecord.RunningRuntimeMutation(task.Owner.EnvironmentID, member.ServiceID)
+			if err != nil {
+				return false, err
+			}
 			// This full replacement consumes no prior runtime receipt. The owning
 			// Blueprint terminal envelope fences the held Environment writer and
 			// epoch; another runtime writer cannot publish under that ownership.
-			mutations = append(
-				mutations,
-				etcdstore.Mutation{
-					Type:  etcdstore.MutationPut,
-					Key:   serviceruntimerecord.Key(member.ServiceID),
-					Value: runtimeValue,
-				},
-			)
+			mutations = append(mutations, intentMutation, etcdstore.Mutation{
+				Type: etcdstore.MutationPut, Key: serviceruntimerecord.Key(member.ServiceID), Value: runtimeValue,
+			})
 		}
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
