@@ -88,22 +88,35 @@ func backupRuntimeRunPlanDraft(
 		switch source.Kind {
 		case testbackupruntime.BackupRuntimeSourceAttach:
 			snapshot := source.Snapshot.Postgres
-			labels := []*agentpb.LabelPair{{Key: "groundplane.service", Value: snapshot.BackingServiceID}}
+			projectName := "gp-" + strings.ToLower(snapshot.BackingEnvironmentID)
+			image := "registry.example.test/postgres@sha256:" + testBackupDigest
+			labels := []*agentpb.LabelPair{
+				{Key: "com.docker.compose.project", Value: projectName},
+				{Key: "com.docker.compose.service", Value: "postgres"},
+				{Key: "com.groundplane.environment-id", Value: snapshot.BackingEnvironmentID},
+				{Key: "com.groundplane.kind", Value: "service"},
+				{Key: "com.groundplane.managed", Value: "true"},
+				{Key: "com.groundplane.plan-id", Value: planID},
+				{Key: "com.groundplane.project-id", Value: snapshot.BackingProjectID},
+				{Key: "com.groundplane.render-generation", Value: "1"},
+				{Key: "com.groundplane.service-id", Value: snapshot.BackingServiceID},
+			}
 			labelsDigest, labelErr := backupservicefact.LabelsDigest(labels)
 			if labelErr != nil {
 				t.Fatal(labelErr)
 			}
 			if len(plan.Artifacts) == 0 {
-				yaml := []byte("services: {}\n")
+				yaml := []byte("services:\n  postgres:\n    image: " + image + "\n")
 				yamlDigest := sha256.Sum256(yaml)
 				plan.Artifacts = append(plan.Artifacts, &agentpb.ComposeArtifact{
 					ArtifactId: ids.NewAt(ids.KindConfig, run.CreatedAt, 2700),
 					OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 					OwnerId:    snapshot.BackingEnvironmentID, CanonicalYaml: yaml, YamlSha256: yamlDigest[:],
+					ProjectName: projectName,
 					Services: []*agentpb.ComposeService{{
 						ServiceId: snapshot.BackingServiceID, ComposeName: "postgres",
-						Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
-						ExpectedLabels: labels, ImageReference: "registry.example.test/postgres@sha256:" + testBackupDigest,
+						ExpectedReplicas: 1,
+						ExpectedLabels:   labels, ImageReference: image,
 					}},
 				})
 			}
@@ -120,7 +133,7 @@ func backupRuntimeRunPlanDraft(
 					Kind:   agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
 					Intent: revision(snapshot.BackingServiceRevision),
 				},
-				RequiredLabelCount: 1, RequiredLabelsSha256: labelsDigest,
+				RequiredLabelCount: uint32(len(labels)), RequiredLabelsSha256: labelsDigest,
 				LocalImageIdSha256: append([]byte(nil), digest...),
 			})
 		case testbackupruntime.BackupRuntimeSourceConfig:

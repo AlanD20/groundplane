@@ -123,6 +123,7 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 		return EntryMutationRuntime{}, err
 	}
 	projection := current.Record
+	projection.BackingRuntime = nil
 	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(baseline)
 	if err != nil {
 		return EntryMutationRuntime{}, errs.Wrap(errs.KindInternal, err)

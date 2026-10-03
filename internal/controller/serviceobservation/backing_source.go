@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -23,6 +24,18 @@ func captureBacking(
 	if err != nil || !found || applied.ReadRevision != service.ReadRevision || applied.Revision <= 0 ||
 		applied.Revision > service.ReadRevision || applied.Record.EnvironmentID != environmentID {
 		return source{}, false
+	}
+	if service.Record.Desired.Adapter == "postgres:16" {
+		_, workload, err := environmentprojection.SelectBackingRuntime(applied.Record, serviceID)
+		if err != nil {
+			return source{}, false
+		}
+		receipt := applied.Record.BackingRuntime
+		return source{
+			target: &agentpb.ServiceObservationTarget{EnvironmentId: environmentID, ServiceId: serviceID,
+				PlanId: receipt.PlanID, RenderGeneration: receipt.RenderGeneration, ComposeName: workload.ComposeName, RuntimeRole: "backing"},
+			expected: workload.ExpectedReplicas, runtimeRevision: servicerecord.ServiceRuntimeRevision(service), projectionRevision: applied.Revision,
+		}, true
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if proto.Unmarshal(applied.Record.ComposeArtifact, artifact) != nil ||

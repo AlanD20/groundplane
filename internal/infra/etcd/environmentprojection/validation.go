@@ -66,6 +66,9 @@ func ValidateEnvironmentProjection(projection EnvironmentComposeProjection, kind
 	if err := validateEnvironmentProjectionArtifact(projection, kind); err != nil {
 		return err
 	}
+	if err := ValidateBackingRuntimeReceipt(projection); err != nil {
+		return err
+	}
 	if err := validateEnvironmentRouteProjections(projection.EnvironmentID, projection.DesiredRoutes); err != nil {
 		return err
 	}

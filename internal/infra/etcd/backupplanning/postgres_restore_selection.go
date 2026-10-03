@@ -14,9 +14,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/servicefactauthority"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -166,8 +166,16 @@ func (repository *Planner) PreparePostgresRestoreSelection(ctx context.Context,
 	if err != nil {
 		return zero, err
 	}
-	databaseService, err := snapshotPostgresRestoreService(ctx, snapshot, scope,
-		current.BackingServiceID, current.BackingEnvironmentID, databaseArtifact, anchor.ReadRevision)
+	databaseService, err := snapshotPostgresRestoreService(
+		ctx,
+		snapshot,
+		scope,
+		current.BackingServiceID,
+		current.BackingEnvironmentID,
+		databaseArtifact,
+		anchor.ReadRevision,
+		servicefactauthority.BackingRuntime,
+	)
 	if err != nil {
 		return zero, err
 	}
@@ -181,8 +189,16 @@ func (repository *Planner) PreparePostgresRestoreSelection(ctx context.Context,
 		if err := appendBackupArtifact(&artifacts, artifact); err != nil {
 			return zero, err
 		}
-		service, err := snapshotPostgresRestoreService(ctx, snapshot, scope,
-			identity.ServiceID, identity.EnvironmentID, artifact, anchor.ReadRevision)
+		service, err := snapshotPostgresRestoreService(
+			ctx,
+			snapshot,
+			scope,
+			identity.ServiceID,
+			identity.EnvironmentID,
+			artifact,
+			anchor.ReadRevision,
+			servicefactauthority.ReleaseRuntime,
+		)
 		if err != nil {
 			return zero, err
 		}
@@ -244,7 +260,7 @@ func (repository *Planner) PreparePostgresRestoreSelection(ctx context.Context,
 
 func snapshotPostgresRestoreService(ctx context.Context, snapshot *restoreSnapshot,
 	scope *agentpb.BackupPlanScope, serviceID, environmentID string, artifact *agentpb.ComposeArtifact,
-	revision int64,
+	revision int64, kind servicefactauthority.Kind,
 ) (backupruntime.BackupRestorePostgresServiceSnapshot, error) {
 	var zero backupruntime.BackupRestorePostgresServiceSnapshot
 	fact := backupScopeService(scope, serviceID)
@@ -253,7 +269,7 @@ func snapshotPostgresRestoreService(ctx context.Context, snapshot *restoreSnapsh
 		return zero, errs.New(errs.KindStateConflict, "PostgreSQL Restore Service fact is unavailable")
 	}
 	keys := []string{blueprints.EnvironmentBlueprintHeadKey(environmentID),
-		services.ServiceRuntimeKey(serviceID), serviceruntimerecord.Key(serviceID)}
+		services.ServiceRuntimeKey(serviceID), servicefactauthority.Key(kind, environmentID, serviceID)}
 	read, err := snapshot.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return zero, err
@@ -264,6 +280,10 @@ func snapshotPostgresRestoreService(ctx context.Context, snapshot *restoreSnapsh
 		!serviceDigestMatches(read.Values[2], fact.Compose) ||
 		fact.PriorRuntimeIntent == nil {
 		return zero, errs.New(errs.KindStateConflict, "PostgreSQL Restore Service fact changed at the selected view")
+	}
+	applied, err := servicefactauthority.ReadApplied(read.Values[2], kind, environmentID, serviceID)
+	if err != nil || !proto.Equal(applied.Artifact, artifact) {
+		return zero, errs.New(errs.KindStateConflict, "PostgreSQL Restore applied Service artifact changed")
 	}
 	prior := backupruntime.BackupServiceIntentAbsent
 	switch fact.PriorRuntimeIntent.Kind {

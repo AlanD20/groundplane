@@ -50,6 +50,7 @@ type EnvironmentComposeProjection struct {
 	RevisionID                     string                                       `json:"blueprint_revision_id"`
 	RenderGeneration               uint64                                       `json:"render_generation"`
 	ComposeArtifact                []byte                                       `json:"compose_artifact"`
+	BackingRuntime                 *BackingRuntimeReceipt                       `json:"backing_runtime,omitempty"`
 	NormalizedCompose              []byte                                       `json:"normalized_compose"`
 	RuntimeFiles                   []core.BlueprintFile                         `json:"runtime_files,omitempty"`
 	ServiceExtensions              map[string]core.ServiceExtensionSpec         `json:"service_extensions,omitempty"`

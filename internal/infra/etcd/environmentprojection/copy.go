@@ -12,6 +12,10 @@ func CloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	clone.ServiceDependencyPlans = source.ServiceDependencyPlans.Clone()
 	clone.BlueprintRequirements = source.BlueprintRequirements.Clone()
 	clone.ComposeArtifact = append([]byte(nil), source.ComposeArtifact...)
+	if source.BackingRuntime != nil {
+		receipt := *source.BackingRuntime
+		clone.BackingRuntime = &receipt
+	}
 	clone.NormalizedCompose = append([]byte(nil), source.NormalizedCompose...)
 	if source.RuntimeFiles != nil {
 		clone.RuntimeFiles = make([]core.BlueprintFile, len(source.RuntimeFiles))

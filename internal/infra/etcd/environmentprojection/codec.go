@@ -5,6 +5,13 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// EncodePreparedEnvironmentComposeProjectionStorage excludes execution receipts
+// from desired/effective input without changing the caller's applied candidate.
+func EncodePreparedEnvironmentComposeProjectionStorage(projection EnvironmentComposeProjection) ([]byte, error) {
+	projection.BackingRuntime = nil
+	return EncodeEnvironmentComposeProjectionStorage(projection)
+}
+
 func EncodeEnvironmentComposeProjectionStorage(projection EnvironmentComposeProjection) ([]byte, error) {
 	if err := ValidateEnvironmentComposeProjection(projection); err != nil {
 		return nil, err

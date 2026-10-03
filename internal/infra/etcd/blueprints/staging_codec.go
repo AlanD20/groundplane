@@ -188,7 +188,7 @@ func EnvironmentBlueprintDependencyDigest(
 func EnvironmentBlueprintProjectionEvidence(
 	projection projectionrecord.EnvironmentComposeProjection,
 ) ([sha256.Size]byte, uint64, error) {
-	value, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
+	value, err := projectionrecord.EncodePreparedEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		return [sha256.Size]byte{}, 0, err
 	}

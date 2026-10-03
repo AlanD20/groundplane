@@ -4,6 +4,7 @@ import (
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,6 +19,7 @@ type TaskResultData struct {
 	Diagnostic                      TaskResultDiagnostic                `json:"diagnostic"`
 	ReconciliationRequired          bool                                `json:"reconciliation_required"`
 	Projects                        []taskObservedProjectSummaryData    `json:"projects,omitempty"`
+	BackingObservations             []backingruntimefact.Observation    `json:"backing_observations,omitempty"`
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
@@ -42,7 +44,8 @@ func TaskResultToData(result *TaskResultRecord) *TaskResultData {
 		AssignmentGeneration: result.AssignmentGeneration,
 		ExecutionEpoch:       result.ExecutionEpoch, ReleaseRecoveryRecordSHA256: result.ReleaseRecoveryRecordSHA256,
 		Kind: result.Kind, ExitCode: result.ExitCode, FailedStepID: result.FailedStepID,
-		Diagnostic: result.Diagnostic, ReconciliationRequired: result.ReconciliationRequired,
+		BackingObservations: backingruntimefact.CloneObservations(result.BackingObservations),
+		Diagnostic:          result.Diagnostic, ReconciliationRequired: result.ReconciliationRequired,
 		Projects:                 make([]taskObservedProjectSummaryData, len(result.Projects)),
 		ProxyEvidence:            append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
 		RecreateEvidence:         append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
@@ -70,7 +73,8 @@ func TaskResultFromData(data *TaskResultData) (*TaskResultRecord, error) {
 		AssignmentGeneration: data.AssignmentGeneration,
 		ExecutionEpoch:       data.ExecutionEpoch, ReleaseRecoveryRecordSHA256: data.ReleaseRecoveryRecordSHA256,
 		Kind: data.Kind, ExitCode: data.ExitCode, FailedStepID: data.FailedStepID,
-		Diagnostic: data.Diagnostic, ReconciliationRequired: data.ReconciliationRequired,
+		BackingObservations: backingruntimefact.CloneObservations(data.BackingObservations),
+		Diagnostic:          data.Diagnostic, ReconciliationRequired: data.ReconciliationRequired,
 		Projects:                 make([]TaskObservedProjectSummary, len(data.Projects)),
 		ProxyEvidence:            append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
 		RecreateEvidence:         append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),

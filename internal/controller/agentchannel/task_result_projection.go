@@ -55,6 +55,7 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) taskjournal.Task
 		Kind: taskjournal.TaskResultCompose, ExitCode: acknowledgement.GetExitCode(),
 		FailedStepID: result.GetFailedStepId(), Diagnostic: diagnostic,
 		ReconciliationRequired: result.GetReconciliationRequired(),
+		BackingObservations:    durableBackingObservations(result.GetProjects()),
 		Projects:               make([]taskjournal.TaskObservedProjectSummary, len(result.GetProjects())),
 		ProxyEvidence:          make([]taskjournal.TaskProxyEvidence, len(result.GetProxyEvidence())),
 		RecreateEvidence:       make([]taskjournal.TaskRecreateEvidence, len(result.GetRecreateEvidence())),

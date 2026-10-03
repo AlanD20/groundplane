@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
+	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/backupservicefact"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -40,9 +41,15 @@ func markBackupPostgresArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.Back
 			}
 			matches := 0
 			for _, candidate := range artifact.Services {
-				if candidate == nil || candidate.ServiceId != serviceID || candidate.ComposeName != fact.CurrentName ||
-					(candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON &&
-						candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT) {
+				if candidate == nil || candidate.ServiceId != serviceID || candidate.ComposeName != fact.CurrentName {
+					continue
+				}
+				if serviceID == databaseID {
+					if _, err := backingruntimefact.SelectWorkload(artifact, serviceID); err != nil {
+						return invalidBackupPostgresArtifact()
+					}
+				} else if candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON &&
+					candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
 					continue
 				}
 				digest, err := backupservicefact.LabelsDigest(candidate.ExpectedLabels)

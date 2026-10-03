@@ -109,7 +109,7 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 	default:
 		return errs.New(errs.KindStateConflict, "Blueprint runtime projection Project kind changed")
 	}
-	value, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
+	value, err := projectionrecord.EncodePreparedEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		return err
 	}

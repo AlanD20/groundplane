@@ -40,6 +40,7 @@ func buildZoneCreationProjection(
 		}
 	}
 	candidate := current
+	candidate.BackingRuntime = nil
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
 	candidate.DesiredZones = append(append([]projectionrecord.EnvironmentZoneProjection(nil), current.DesiredZones...),

@@ -63,7 +63,7 @@ func prepareEnvironmentDesiredIdentityPublication(
 			return environmentDesiredIdentityPublication{}, err
 		}
 	}
-	effectiveValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
+	effectiveValue, err := projectionrecord.EncodePreparedEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		return environmentDesiredIdentityPublication{}, err
 	}

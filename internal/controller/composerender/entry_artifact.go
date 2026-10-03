@@ -63,6 +63,8 @@ func ProjectEnvironmentEntryMutation(
 		return projectionrecord.EnvironmentComposeProjection{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
 	candidate := current
+	// Candidate files are prepared input; only terminal execution can acknowledge them.
+	candidate.BackingRuntime = nil
 	candidate.RevisionID = mutation.RevisionID
 	candidate.RenderGeneration = mutation.RenderGeneration
 	candidate.ComposeArtifact = artifactValue

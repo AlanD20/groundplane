@@ -155,7 +155,7 @@ func ReadEffectiveProjectionRevisionAt(
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[1].Value)
 	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID ||
-		projection.RenderGeneration != seal.RenderGeneration {
+		projection.RenderGeneration != seal.RenderGeneration || projection.BackingRuntime != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{

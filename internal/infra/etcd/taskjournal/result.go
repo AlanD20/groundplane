@@ -1,6 +1,9 @@
 package taskjournal
 
-import "time"
+import (
+	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
+	"time"
+)
 
 type TaskObservedProjectSummary struct {
 	ProjectName    string    `json:"project_name"`
@@ -50,6 +53,7 @@ type TaskResultRecord struct {
 	Diagnostic                      TaskResultDiagnostic                `json:"diagnostic"`
 	ReconciliationRequired          bool                                `json:"reconciliation_required"`
 	Projects                        []TaskObservedProjectSummary        `json:"projects,omitempty"`
+	BackingObservations             []backingruntimefact.Observation    `json:"backing_observations,omitempty"`
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`

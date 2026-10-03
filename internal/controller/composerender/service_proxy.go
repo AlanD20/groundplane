@@ -71,6 +71,7 @@ func renderServiceProxyTopology(
 				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
 				HasHealthcheck:   authored.HealthCheck != nil && !authored.HealthCheck.Disable,
+				ImageReference:   authored.Image,
 			}
 			if err := bindEnvironmentComponentImage(input.Identities.Services, authored, service); err != nil {
 				return nil, err

@@ -40,7 +40,7 @@ func prepareConfigRestoreMetadata(generation etcdstore.Versioned[backupconfigura
 	if err != nil || digest != root.DependencyDigest {
 		return result, configTransferAuthorityConflict()
 	}
-	result.projection, err = environmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
+	result.projection, err = environmentprojection.EncodePreparedEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		return result, err
 	}

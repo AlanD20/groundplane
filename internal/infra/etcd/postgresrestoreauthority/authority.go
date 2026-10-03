@@ -15,8 +15,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/servicefactauthority"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -85,6 +85,10 @@ func Read(
 		target.Consumers...,
 	)
 	for _, service := range serviceSnapshots {
+		kind := servicefactauthority.ReleaseRuntime
+		if service.ServiceID == target.DatabaseService.ServiceID {
+			kind = servicefactauthority.BackingRuntime
+		}
 		facts := []struct {
 			key   string
 			value keyExpectation
@@ -98,7 +102,7 @@ func Read(
 				keyExpectation{service.IntentRevision, service.IntentSHA256},
 			},
 			{
-				serviceruntimerecord.Key(service.ServiceID),
+				servicefactauthority.Key(kind, service.EnvironmentID, service.ServiceID),
 				keyExpectation{service.ComposeRevision, service.ComposeSHA256},
 			},
 		}

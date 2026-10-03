@@ -169,7 +169,7 @@ func prepareRouteHeadPublication(
 	publication.mutations = append(publication.mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID), Value: rootValue,
 	})
-	effectiveValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(candidate)
+	effectiveValue, err := projectionrecord.EncodePreparedEnvironmentComposeProjectionStorage(candidate)
 	if err != nil {
 		clearRouteHeadPublication(publication)
 		return routeHeadPublication{}, err

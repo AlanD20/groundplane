@@ -8,16 +8,14 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backupservicefact"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/workloadimage"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/servicefactauthority"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 // NewBackupServiceFactResolver pins desired, intent, and acknowledged applied
@@ -37,26 +35,33 @@ func NewBackupServiceFactResolver(store etcdstore.Store) backupplanning.BackupSe
 		if !found || projection.ReadRevision != input.ReadRevision {
 			return nil, errs.New(errs.KindStateConflict, "backup Service desired projection is unavailable")
 		}
-		member := false
+		var kind servicefactauthority.Kind
 		for _, desired := range projection.Record.DesiredServices {
 			if desired.Desired.ID == input.ServiceID && desired.EnvironmentID == input.EnvironmentID {
-				member = true
+				kind, err = servicefactauthority.KindForService(desired)
+				if err != nil {
+					return nil, err
+				}
 				break
 			}
 		}
-		if !member {
+		if kind == 0 {
 			return nil, errs.New(errs.KindStateConflict, "backup Service is absent from the selected Environment")
 		}
 
-		read, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
+		keys := []string{
 			blueprints.EnvironmentBlueprintHeadKey(input.EnvironmentID),
 			services.ServiceRuntimeKey(input.ServiceID),
-			serviceruntimerecord.Key(input.ServiceID),
-		}, Revision: input.ReadRevision})
+			servicefactauthority.Key(kind, input.EnvironmentID, input.ServiceID),
+		}
+		if kind == servicefactauthority.BackingRuntime {
+			keys = append(keys, backingpostgresrelease.Key(input.EnvironmentID, input.ServiceID))
+		}
+		read, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: input.ReadRevision})
 		if err != nil {
 			return nil, err
 		}
-		if read == nil || read.ReadRevision != input.ReadRevision || len(read.Values) != 3 {
+		if read == nil || read.ReadRevision != input.ReadRevision || len(read.Values) != len(keys) {
 			return nil, errs.New(errs.KindInternal, "backup Service fact fixed-revision read is incomplete")
 		}
 		defer etcdstore.ClearValues(read.Values)
@@ -82,33 +87,17 @@ func NewBackupServiceFactResolver(store etcdstore.Store) backupplanning.BackupSe
 			return nil, errs.New(errs.KindStateConflict, "backup Service runtime intent is invalid")
 		}
 
-		acknowledged, err := releases.DecodeReleaseRecord[serviceruntimerecord.Record](
-			applied.Value, "service-acknowledged-runtime",
-		)
-		if err != nil || acknowledged.EnvironmentID != input.EnvironmentID ||
-			acknowledged.Runtime.ServiceID != input.ServiceID || serviceruntimerecord.Validate(acknowledged) != nil {
-			return nil, errs.New(errs.KindStateConflict, "backup Service applied Compose runtime is invalid")
+		selected, err := servicefactauthority.ReadApplied(applied, kind, input.EnvironmentID, input.ServiceID)
+		if err != nil {
+			return nil, err
 		}
-		artifact := &agentpb.ComposeArtifact{}
-		if proto.Unmarshal(acknowledged.Runtime.CurrentArtifact, artifact) != nil {
-			return nil, errs.New(errs.KindStateConflict, "backup Service applied Compose artifact is invalid")
-		}
-		var workload *agentpb.ComposeService
-		for _, candidate := range artifact.GetServices() {
-			if candidate.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
-				candidate.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
-				if workload != nil || candidate.GetServiceId() != input.ServiceID {
-					return nil, errs.New(errs.KindStateConflict, "backup Service applied Compose workload is ambiguous")
-				}
-				workload = candidate
+		if kind == servicefactauthority.BackingRuntime {
+			if err := validateBackupBackingCatalog(read.Values[3], selected, input); err != nil {
+				return nil, err
 			}
 		}
-		if workload == nil || workload.GetComposeName() == "" ||
-			!workloadimage.LocalIDValid(workload.GetImageReference()) ||
-			len(workload.GetExpectedLabels()) == 0 {
-			return nil, errs.New(errs.KindStateConflict, "backup Service applied Compose workload is incomplete")
-		}
-		localImageID, err := hex.DecodeString(strings.TrimPrefix(workload.GetImageReference(), "sha256:"))
+		artifact, workload := selected.Artifact, selected.Workload
+		localImageID, err := hex.DecodeString(strings.TrimPrefix(selected.LocalImageID, "sha256:"))
 		if err != nil || len(localImageID) != sha256.Size {
 			return nil, errs.New(errs.KindStateConflict, "backup Service applied local image ID is invalid")
 		}

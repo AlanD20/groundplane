@@ -3,6 +3,7 @@ package taskjournal
 import (
 	"crypto/sha512"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,6 +12,9 @@ import (
 )
 
 func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
+	if err := validateBackingObservations(result); err != nil {
+		return err
+	}
 	if result.Kind != TaskResultCompose && result.Kind != TaskResultEnvironmentDirectory &&
 		result.Kind != TaskResultBackup {
 		return errs.New(errs.KindValidationFailed, "task result kind is invalid")
@@ -153,6 +157,7 @@ func CloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 		return nil
 	}
 	cloned := *result
+	cloned.BackingObservations = backingruntimefact.CloneObservations(result.BackingObservations)
 	cloned.Projects = append([]TaskObservedProjectSummary(nil), result.Projects...)
 	cloned.ProxyEvidence = append([]TaskProxyEvidence(nil), result.ProxyEvidence...)
 	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
