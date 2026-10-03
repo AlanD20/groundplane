@@ -41,31 +41,10 @@ func (repository *Repository) Read(
 	owner Owner,
 	revision int64,
 ) (etcdstore.Versioned[Cursor], bool, error) {
-	var zero etcdstore.Versioned[Cursor]
-	if repository == nil || repository.store == nil || owner.Validate() != nil || revision < 0 {
-		return zero, false, invalidLedger()
+	if repository == nil {
+		return etcdstore.Versioned[Cursor]{}, false, invalidLedger()
 	}
-	key := CursorKey(owner.Binding)
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
-	if err != nil {
-		return zero, false, err
-	}
-	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 1 ||
-		(revision > 0 && read.ReadRevision != revision) {
-		return zero, false, invalidLedger()
-	}
-	zero.ReadRevision = read.ReadRevision
-	defer etcdstore.ClearValues(read.Values)
-	value := read.Values[0]
-	if value == nil {
-		return zero, false, nil
-	}
-	cursor, err := decodeCursor(value.Value)
-	if err != nil || value.Key != key || value.ModRevision <= 0 || cursor.Owner != owner {
-		return zero, false, invalidLedger()
-	}
-	return etcdstore.Versioned[Cursor]{Record: cursor, Revision: value.ModRevision,
-		ReadRevision: read.ReadRevision}, true, nil
+	return ReadCursor(ctx, repository.store, owner, revision)
 }
 
 // Open durably publishes the first grant. Reopen returns the actual latest

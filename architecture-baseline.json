@@ -8,7 +8,7 @@
   "package_totals": [
     {
       "path": "internal/app",
-      "lines": 3708
+      "lines": 3691
     },
     {
       "path": "internal/infra/etcd",

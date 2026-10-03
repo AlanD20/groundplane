@@ -32,6 +32,13 @@ const (
 	ActionReservationRelease        ActionKind = "reservation.release"
 	ActionRecoveryPointRemove       ActionKind = "recovery-point.remove"
 	ActionOrphanObjectRemove        ActionKind = "orphan-object.remove"
+	ActionBackupSourceFinalize      ActionKind = "backup-source.finalize"
+	ActionBackupScheduleFinalize    ActionKind = "backup-schedule.finalize"
+	ActionBackupDueFinalize         ActionKind = "backup-due.finalize"
+	ActionBackupRetentionFinalize   ActionKind = "backup-retention.finalize"
+	ActionBackupRunDetach           ActionKind = "backup-run.detach"
+	ActionBackupRestoreDetach       ActionKind = "backup-restore.detach"
+	ActionBackupKeyRotationDetach   ActionKind = "backup-key-rotation.detach"
 	ActionConnectorFinalize         ActionKind = "connector.finalize"
 	ActionEnvironmentFinalize       ActionKind = "environment.finalize"
 	ActionRunnerLocalRemove         ActionKind = "runner.local-remove"
@@ -64,6 +71,13 @@ func (k ActionKind) Valid() bool {
 		ActionReservationRelease,
 		ActionRecoveryPointRemove,
 		ActionOrphanObjectRemove,
+		ActionBackupSourceFinalize,
+		ActionBackupScheduleFinalize,
+		ActionBackupDueFinalize,
+		ActionBackupRetentionFinalize,
+		ActionBackupRunDetach,
+		ActionBackupRestoreDetach,
+		ActionBackupKeyRotationDetach,
 		ActionConnectorFinalize,
 		ActionEnvironmentFinalize,
 		ActionRunnerLocalRemove,
@@ -101,6 +115,13 @@ const (
 	ActionTargetReservation     ActionTargetKind = "reservation"
 	ActionTargetRecoveryPoint   ActionTargetKind = "recovery-point"
 	ActionTargetOrphanObject    ActionTargetKind = "orphan-object"
+	ActionTargetBackupSource    ActionTargetKind = "backup-source"
+	ActionTargetBackupSchedule  ActionTargetKind = "backup-schedule"
+	ActionTargetBackupDue       ActionTargetKind = "backup-due"
+	ActionTargetBackupRetention ActionTargetKind = "backup-retention"
+	ActionTargetBackupRun       ActionTargetKind = "backup-run"
+	ActionTargetBackupRestore   ActionTargetKind = "backup-restore"
+	ActionTargetBackupRotation  ActionTargetKind = "backup-key-rotation"
 	ActionTargetConnector       ActionTargetKind = "connector"
 	ActionTargetRunner          ActionTargetKind = "runner"
 	ActionTargetSecret          ActionTargetKind = "secret"
@@ -129,6 +150,13 @@ func (k ActionTargetKind) Valid() bool {
 		ActionTargetReservation,
 		ActionTargetRecoveryPoint,
 		ActionTargetOrphanObject,
+		ActionTargetBackupSource,
+		ActionTargetBackupSchedule,
+		ActionTargetBackupDue,
+		ActionTargetBackupRetention,
+		ActionTargetBackupRun,
+		ActionTargetBackupRestore,
+		ActionTargetBackupRotation,
 		ActionTargetConnector,
 		ActionTargetRunner,
 		ActionTargetSecret,
@@ -194,31 +222,38 @@ var agentProcedures = map[ActionKind]string{
 	ActionMaterializationRemove:     "materialization.remove",
 	ActionVolumeAgentCleanup:        "volume.cleanup",
 	ActionNetworkRemove:             "network.remove",
-	ActionRecoveryPointRemove:       "recovery-point.remove",
-	ActionOrphanObjectRemove:        "orphan-object.remove",
 	ActionBackingRuntimeReconstruct: "backing.runtime-reconstruct",
 }
 
 var controllerFinalizers = map[ActionKind]string{
-	ActionServiceRemove:          "service.remove",
-	ActionEntryRemove:            "entry.remove",
-	ActionRouteRemove:            "route.remove",
-	ActionComponentRemove:        "component.remove",
-	ActionScriptRemove:           "script.remove",
-	ActionReleaseGroupRemove:     "release-group.remove",
-	ActionReleaseFinalize:        "release.finalize",
-	ActionBackupPolicyFinalize:   "backup-policy.finalize",
-	ActionKeyMaterialRemove:      "key-material.remove",
-	ActionVolumeFinalize:         "volume.finalize",
-	ActionZoneRemove:             "zone.remove",
-	ActionReservationRelease:     "reservation.release",
-	ActionConnectorFinalize:      "connector.finalize",
-	ActionEnvironmentFinalize:    "environment.finalize",
-	ActionRunnerLocalRemove:      "runner.remove",
-	ActionProjectSecretRemove:    "secret.remove",
-	ActionBackingServiceFinalize: "backing.finalize",
-	ActionProjectFinalize:        "project.finalize",
-	ActionTenantFinalize:         "tenant.finalize",
+	ActionServiceRemove:           "service.remove",
+	ActionEntryRemove:             "entry.remove",
+	ActionRouteRemove:             "route.remove",
+	ActionComponentRemove:         "component.remove",
+	ActionScriptRemove:            "script.remove",
+	ActionReleaseGroupRemove:      "release-group.remove",
+	ActionReleaseFinalize:         "release.finalize",
+	ActionBackupPolicyFinalize:    "backup-policy.finalize",
+	ActionKeyMaterialRemove:       "key-material.remove",
+	ActionRecoveryPointRemove:     "recovery-point.remove",
+	ActionOrphanObjectRemove:      "orphan-object.remove",
+	ActionBackupSourceFinalize:    "backup-source.finalize",
+	ActionBackupScheduleFinalize:  "backup-schedule.finalize",
+	ActionBackupDueFinalize:       "backup-due.finalize",
+	ActionBackupRetentionFinalize: "backup-retention.finalize",
+	ActionBackupRunDetach:         "backup-run.detach",
+	ActionBackupRestoreDetach:     "backup-restore.detach",
+	ActionBackupKeyRotationDetach: "backup-key-rotation.detach",
+	ActionVolumeFinalize:          "volume.finalize",
+	ActionZoneRemove:              "zone.remove",
+	ActionReservationRelease:      "reservation.release",
+	ActionConnectorFinalize:       "connector.finalize",
+	ActionEnvironmentFinalize:     "environment.finalize",
+	ActionRunnerLocalRemove:       "runner.remove",
+	ActionProjectSecretRemove:     "secret.remove",
+	ActionBackingServiceFinalize:  "backing.finalize",
+	ActionProjectFinalize:         "project.finalize",
+	ActionTenantFinalize:          "tenant.finalize",
 }
 
 func (p ProcedureInput) Validate(

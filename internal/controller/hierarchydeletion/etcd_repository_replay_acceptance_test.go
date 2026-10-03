@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -58,7 +59,7 @@ func TestEtcdRepositoryReplayAfterRetryRejectsCorruptTaskLocator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repository, err := NewEtcdRepository(journal, idempotency, coordinator, fixedClock{now: now})
+	repository, err := NewEtcdRepository(journal, idempotency, coordinator, fixedClock{now: now}, replayBackupCleanup{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +174,7 @@ func TestEtcdRepositoryRejectsSameTenantDifferentProjectReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repository, err := NewEtcdRepository(journal, idempotency, coordinator, fixedClock{now: now})
+	repository, err := NewEtcdRepository(journal, idempotency, coordinator, fixedClock{now: now}, replayBackupCleanup{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,6 +260,14 @@ func etcdAcceptanceStore(t *testing.T, ctx context.Context, endpoint, prefix str
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	return store
+}
+
+type replayBackupCleanup struct{}
+
+func (replayBackupCleanup) Execute(context.Context, deletionrecord.HierarchyDeletionOperation,
+	deletionrecord.HierarchyDeletionAction,
+) error {
+	return errs.New(errs.KindInternal, "replay fixture has no remote Backup objects")
 }
 
 var _ secretvalue.Sealer = controllerReplayCipher{}

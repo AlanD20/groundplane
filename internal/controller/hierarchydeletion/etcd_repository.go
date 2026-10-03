@@ -16,10 +16,16 @@ import (
 )
 
 type EtcdRepository struct {
-	journal     *etcdinfra.HierarchyDeletionRepository
-	idempotency *etcdinfra.IdempotencyRepository
-	coordinator *requestidempotency.Coordinator
-	clock       Clock
+	journal       *etcdinfra.HierarchyDeletionRepository
+	idempotency   *etcdinfra.IdempotencyRepository
+	coordinator   *requestidempotency.Coordinator
+	clock         Clock
+	backupCleanup BackupCleanupExecutor
+}
+
+type BackupCleanupExecutor interface {
+	Execute(context.Context, hierarchydeletion.HierarchyDeletionOperation,
+		hierarchydeletion.HierarchyDeletionAction) error
 }
 
 func NewEtcdRepository(
@@ -27,12 +33,14 @@ func NewEtcdRepository(
 	idempotency *etcdinfra.IdempotencyRepository,
 	coordinator *requestidempotency.Coordinator,
 	clock Clock,
+	backupCleanup BackupCleanupExecutor,
 ) (*EtcdRepository, error) {
-	if journal == nil || idempotency == nil || coordinator == nil || clock == nil {
+	if journal == nil || idempotency == nil || coordinator == nil || clock == nil || backupCleanup == nil {
 		return nil, errs.New(errs.KindInternal, "hierarchy deletion etcd adapter dependencies are required")
 	}
 	return &EtcdRepository{
 		journal: journal, idempotency: idempotency, coordinator: coordinator, clock: clock,
+		backupCleanup: backupCleanup,
 	}, nil
 }
 
@@ -256,6 +264,11 @@ func (repository *EtcdRepository) CompleteControllerAction(
 	operation Operation,
 	action Action,
 ) (Operation, error) {
+	if action.Kind == ActionRecoveryPointRemove || action.Kind == ActionOrphanObjectRemove {
+		if err := repository.backupCleanup.Execute(ctx, operationToEtcd(operation), actionToEtcd(action)); err != nil {
+			return Operation{}, err
+		}
+	}
 	updated, err := repository.journal.CompleteControllerAction(
 		ctx, operationToEtcd(operation), actionToEtcd(action), repository.clock.Now().UTC(),
 	)

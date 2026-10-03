@@ -118,6 +118,15 @@ func (repository *Planner) freezeEnvironmentMembership(
 		return nil, err
 	}
 	for _, descriptor := range descriptors {
+		if descriptor.actionKind == hierarchydeletion.HierarchyDeletionConnectorFinalize {
+			backupNodes, backupErr := repository.freezeEnvironmentBackupMembership(
+				ctx, operation, environmentID, terminalHierarchyDeletionNodes(nodes),
+			)
+			if backupErr != nil {
+				return nil, backupErr
+			}
+			nodes = append(nodes, backupNodes...)
+		}
 		part, err := repository.freezeIndexedResource(ctx, operation, environmentID, descriptor)
 		if err != nil {
 			return nil, err

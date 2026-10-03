@@ -4,6 +4,7 @@ import (
 	"context"
 
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumecleanup"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -54,7 +55,9 @@ func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 		Evidence:                          current.Record.Evidence, Object: current.Record.Object,
 		VolumeArchive: current.Record.VolumeArchive,
 	}
-	cleanupConditions, cleanupMutations, err := repository.prepareVolumeManifestCleanup(ctx, point, anchor.ReadRevision)
+	cleanupConditions, cleanupMutations, err := backupvolumecleanup.Prepare(
+		ctx, repository.store, point, anchor.ReadRevision,
+	)
 	if err != nil {
 		return err
 	}
@@ -76,7 +79,14 @@ func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 		{Type: etcdstore.MutationDelete, Key: keys[2]},
 	}
 	mutations = append(mutations, cleanupMutations...)
-	result, err := repository.TransactRuntime(ctx, conditions, mutations)
+	binding, err := repository.Writer.BindBackupOrphanMutation(
+		ctx, current.Record.Target.EnvironmentID, anchor.ReadRevision, conditions, mutations,
+	)
+	if err != nil {
+		return err
+	}
+	defer binding.Clear()
+	result, err := repository.TransactRuntime(ctx, binding.Conditions(), binding.Mutations())
 	if err != nil {
 		return err
 	}

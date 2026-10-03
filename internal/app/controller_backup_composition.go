@@ -19,8 +19,6 @@ import (
 
 // controllerBackupComposition aggregates the services consumed by the root.
 // HTTP and scheduler wiring share these exact instances.
-// Product decisions remain in the capability packages.
-// Child-package construction details do not leak into other root modules.
 type controllerBackupComposition struct {
 	policyKeys backupkey.KeyFactory
 	policies   *backupcapability.PolicyService
@@ -29,18 +27,11 @@ type controllerBackupComposition struct {
 	restores   *backupcapability.RestoreService
 	retention  *backupcapability.BackupPruneService
 	orphans    *backupcapability.BackupOrphanReconciliationService
+	cleanup    *backupcapability.DeletionCleanup
 	schedules  *backupcapability.BackupScheduleService
 	keys       *backupkey.Service
 }
 
-// newControllerBackupComposition preserves the established initialization order.
-// The foundation stops immediately before Backup key mutation construction.
-// Key mutation consumes the same policy key factory returned by the foundation.
-// Restore construction remains last because it depends on the completed runtime.
-// Each failure stage retains ownership of closing the store.
-// Selected early stages preserve a store-close error in the returned error.
-// Later stages keep their established best-effort close behavior.
-// No handler, scheduler or task runner starts while this function is executing.
 func newControllerBackupComposition(
 	store etcdstore.Store,
 	logger *slog.Logger,
@@ -57,9 +48,6 @@ func newControllerBackupComposition(
 	backupSecrets *backupcapability.BackupSecretResolver,
 	volumeRoot string,
 ) (*controllerBackupComposition, error) {
-	// The foundation owns policy, read, run and maintenance construction.
-	// It returns only concrete services needed by later root wiring.
-	// Its constructor preserves the pre-key failure cleanup sequence.
 	foundation, err := controllerbackup.NewFoundation(
 		store,
 		logger,
@@ -75,9 +63,6 @@ func newControllerBackupComposition(
 	if err != nil {
 		return nil, err
 	}
-	// Key mutation remains in the root because the native task runner consumes it.
-	// It shares the foundation's policy-key implementation.
-	// Its initialization failure preserves the joined store-close error.
 	backupKeys, err := backupkey.NewService(
 		backupPolicyRecords,
 		backupKeyRecords,
@@ -93,9 +78,6 @@ func newControllerBackupComposition(
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	// Restore is composed after the key path, matching the established order.
-	// It shares runtime persistence and the Attach fact resolver with Backup runs.
-	// The root returns only after every Backup service is ready for wiring.
 	backupRestores, err := backupcapability.NewRestoreService(
 		backupRuntimeRecords,
 		intentCoordinator,
@@ -117,6 +99,7 @@ func newControllerBackupComposition(
 		restores:   backupRestores,
 		retention:  foundation.Retention,
 		orphans:    foundation.Orphans,
+		cleanup:    foundation.Cleanup,
 		schedules:  foundation.Schedules,
 		keys:       backupKeys,
 	}, nil

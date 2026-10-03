@@ -20,6 +20,9 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	readRevision int64,
 	now time.Time,
 ) (bool, error) {
+	if held, err := repository.backupHierarchyDeletionTaskPruneHeld(ctx, task, readRevision); held || err != nil {
+		return held, err
+	}
 	if held, err := repository.backupRestoreTaskPruneHeld(ctx, task, taskRevision, readRevision); held || err != nil {
 		return held, err
 	}

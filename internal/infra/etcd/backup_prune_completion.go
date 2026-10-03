@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumecleanup"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -137,8 +138,8 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	for _, key := range keys[2:] {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
-	cleanupConditions, cleanupMutations, err := repository.prepareVolumeManifestCleanup(
-		ctx, current.Record.Point, anchor.ReadRevision)
+	cleanupConditions, cleanupMutations, err := backupvolumecleanup.Prepare(
+		ctx, repository.store, current.Record.Point, anchor.ReadRevision)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}

@@ -152,11 +152,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize release operation service: %w", err)
 	}
-	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, authority.idempotency, authority.intentCoordinator)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)
-	}
 	backups, err := newControllerBackupComposition(
 		store,
 		bootstrap.logger,
@@ -174,6 +169,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	)
 	if err != nil {
 		return nil, err
+	}
+	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, authority, backups.cleanup)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)
 	}
 	networkRecords, err := networketcd.NewRepository(
 		authority.hierarchyRecords,

@@ -2,7 +2,6 @@ package backup
 
 import (
 	"context"
-	"encoding/hex"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
@@ -74,7 +73,7 @@ func (service *BackupOrphanReconciliationService) Tick(ctx context.Context, afte
 			current.Record.State != backupruntime.BackupOrphanInspect {
 			return next, false, nil
 		}
-		artifact, err := backupOrphanArtifact(current.Record)
+		artifact, err := backupObjectArtifact(backupOrphanSnapshot(current.Record))
 		if err != nil {
 			return next, false, err
 		}
@@ -175,46 +174,13 @@ func backupOrphanObjectAuthority(orphan backupruntime.BackupOrphanRecord,
 		return backupobject.Artifact{}, backupobject.PruneAuthority{},
 			errs.New(errs.KindStateConflict, "backup orphan selected object changed")
 	}
-	artifact, err := backupOrphanArtifact(orphan)
-	if err != nil {
-		return backupobject.Artifact{}, backupobject.PruneAuthority{}, err
-	}
-	discriminator := backupobject.Discriminator{Kind: identity.Discriminator.Kind, Value: identity.Discriminator.Value}
-	count, digest := artifact.MetadataEvidence()
-	authority := backupobject.PruneAuthority{Key: artifact.Key, EnvironmentID: artifact.EnvironmentID,
-		SourceID: artifact.SourceID, RecoveryPointID: artifact.RecoveryPointID,
-		Evidence: artifact.Evidence, Discriminator: discriminator, MetadataCount: count, MetadataSHA256: digest}
-	if err := authority.Validate(target.ConnectorPrefix); err != nil {
-		return backupobject.Artifact{}, backupobject.PruneAuthority{}, err
-	}
-	return artifact, authority, nil
+	return backupObjectAuthority(backupOrphanSnapshot(orphan), identity)
 }
 
-func backupOrphanArtifact(orphan backupruntime.BackupOrphanRecord) (backupobject.Artifact, error) {
-	target := orphan.Target
-	sourceDigest, err := hex.DecodeString(orphan.Evidence.SourceSHA256)
-	if err != nil || len(sourceDigest) != 32 {
-		return backupobject.Artifact{}, backupruntime.CorruptBackupRuntimeRecord()
+func backupOrphanSnapshot(orphan backupruntime.BackupOrphanRecord) backupruntime.BackupRecoveryPointSnapshot {
+	return backupruntime.BackupRecoveryPointSnapshot{
+		BackupRecoveryPointTargetSnapshot: orphan.Target,
+		Evidence:                          orphan.Evidence, Object: orphan.Object, Postgres: orphan.Postgres,
+		ConfigArchive: orphan.ConfigArchive, VolumeArchive: orphan.VolumeArchive,
 	}
-	storedDigest, err := hex.DecodeString(orphan.Evidence.StoredSHA256)
-	if err != nil || len(storedDigest) != 32 {
-		return backupobject.Artifact{}, backupruntime.CorruptBackupRuntimeRecord()
-	}
-	artifact := backupobject.Artifact{Key: target.ObjectKey, EnvironmentID: target.EnvironmentID,
-		SourceID: target.SourceID, RecoveryPointID: target.ID,
-		SourceFormat: backupobject.SourceFormat(
-			target.SourceFormat,
-		), Encryption: backupobject.Encryption(target.Encryption),
-		Evidence: backupobject.Evidence{SourceSizeBytes: orphan.Evidence.SourceSizeBytes,
-			StoredSizeBytes: orphan.Evidence.StoredSizeBytes}}
-	copy(artifact.Evidence.SourceSHA256[:], sourceDigest)
-	copy(artifact.Evidence.StoredSHA256[:], storedDigest)
-	if target.Encryption == backupruntime.BackupRuntimeEncryptionAge {
-		era := uint64(target.KeyEra)
-		artifact.KeyEra = &era
-	}
-	if err := artifact.Validate(); err != nil || artifact.ExpectedKey(target.ConnectorPrefix) != target.ObjectKey {
-		return backupobject.Artifact{}, backupruntime.CorruptBackupRuntimeRecord()
-	}
-	return artifact, nil
 }

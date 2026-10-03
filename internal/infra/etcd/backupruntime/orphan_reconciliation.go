@@ -73,11 +73,19 @@ func (repository *Writer) TransitionReconciledBackupOrphan(
 		{Key: keys[1], ModRevision: current.Revision},
 		{Key: keys[2], ModRevision: current.Revision},
 	}
-	result, err := repository.TransactRuntime(ctx, conditions, []etcdstore.Mutation{
+	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: keys[0], Value: value},
 		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(next.Target.ID)},
 		{Type: etcdstore.MutationPut, Key: keys[2], Value: []byte(next.Target.ID)},
-	})
+	}
+	binding, err := repository.BindBackupOrphanMutation(
+		ctx, next.Target.EnvironmentID, anchor.ReadRevision, conditions, mutations,
+	)
+	if err != nil {
+		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+	}
+	defer binding.Clear()
+	result, err := repository.TransactRuntime(ctx, binding.Conditions(), binding.Mutations())
 	if err != nil {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, err
 	}
@@ -130,15 +138,24 @@ func (repository *Writer) DeleteReconciledBackupOrphan(
 	if err := ValidateBackupOrphanCompanionEvidence(anchor.Values, current.Record); err != nil {
 		return err
 	}
-	result, err := repository.TransactRuntime(ctx, []etcdstore.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: keys[0], ModRevision: current.Revision},
 		{Key: keys[1], ModRevision: current.Revision},
 		{Key: keys[2], ModRevision: current.Revision},
-	}, []etcdstore.Mutation{
+	}
+	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: keys[0]},
 		{Type: etcdstore.MutationDelete, Key: keys[1]},
 		{Type: etcdstore.MutationDelete, Key: keys[2]},
-	})
+	}
+	binding, err := repository.BindBackupOrphanMutation(
+		ctx, current.Record.Target.EnvironmentID, anchor.ReadRevision, conditions, mutations,
+	)
+	if err != nil {
+		return err
+	}
+	defer binding.Clear()
+	result, err := repository.TransactRuntime(ctx, binding.Conditions(), binding.Mutations())
 	if err != nil {
 		return err
 	}
@@ -257,7 +274,7 @@ func (repository *Writer) AdoptReconciledBackupOrphan(
 		}
 		conditions = append(conditions, condition)
 	}
-	result, err := repository.TransactRuntime(ctx, conditions, []etcdstore.Mutation{
+	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: keys[0]},
 		{Type: etcdstore.MutationDelete, Key: keys[1]},
 		{Type: etcdstore.MutationDelete, Key: keys[2]},
@@ -266,7 +283,15 @@ func (repository *Writer) AdoptReconciledBackupOrphan(
 		{Type: etcdstore.MutationPut, Key: keys[5], Value: []byte(point.ID)},
 		{Type: etcdstore.MutationPut, Key: keys[6], Value: []byte(point.ID)},
 		{Type: etcdstore.MutationPut, Key: keys[7], Value: sweepValue},
-	})
+	}
+	binding, err := repository.BindBackupOrphanMutation(
+		ctx, point.EnvironmentID, anchor.ReadRevision, conditions, mutations,
+	)
+	if err != nil {
+		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+	}
+	defer binding.Clear()
+	result, err := repository.TransactRuntime(ctx, binding.Conditions(), binding.Mutations())
 	if err != nil {
 		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
 	}

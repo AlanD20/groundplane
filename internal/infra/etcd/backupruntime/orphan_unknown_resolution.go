@@ -62,11 +62,19 @@ func (repository *Writer) ResolveReconciledBackupOrphanUpload(ctx context.Contex
 		{Key: keys[1], ModRevision: current.Revision},
 		{Key: keys[2], ModRevision: current.Revision},
 	}
-	result, err := repository.TransactRuntime(ctx, conditions, []etcdstore.Mutation{
+	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: keys[0], Value: value},
 		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(next.Target.ID)},
 		{Type: etcdstore.MutationPut, Key: keys[2], Value: []byte(next.Target.ID)},
-	})
+	}
+	binding, err := repository.BindBackupOrphanMutation(
+		ctx, next.Target.EnvironmentID, anchor.ReadRevision, conditions, mutations,
+	)
+	if err != nil {
+		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+	}
+	defer binding.Clear()
+	result, err := repository.TransactRuntime(ctx, binding.Conditions(), binding.Mutations())
 	if err != nil {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, err
 	}

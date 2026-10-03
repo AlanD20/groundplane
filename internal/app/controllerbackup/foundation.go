@@ -17,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionbackupcleanup"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -31,6 +32,7 @@ type Foundation struct {
 	Runs       *backupcapability.BackupRunService
 	Retention  *backupcapability.BackupPruneService
 	Orphans    *backupcapability.BackupOrphanReconciliationService
+	Cleanup    *backupcapability.DeletionCleanup
 	Schedules  *backupcapability.BackupScheduleService
 }
 
@@ -111,6 +113,13 @@ func NewFoundation(
 		_ = store.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
+	backupCleanup, err := backupcapability.NewDeletionCleanup(
+		hierarchydeletionbackupcleanup.NewRepository(store),
+		orphanCredentials,
+	)
+	if err != nil {
+		return nil, closeStoreError(store, "initialize backup deletion cleanup", err)
+	}
 	backupSchedules, err := backupcapability.NewBackupScheduleService(backupscheduling.New(store), backupRuns, logger)
 	if err != nil {
 		_ = store.Close()
@@ -123,6 +132,7 @@ func NewFoundation(
 		Runs:       backupRuns,
 		Retention:  backupRetention,
 		Orphans:    backupOrphans,
+		Cleanup:    backupCleanup,
 		Schedules:  backupSchedules,
 	}, nil
 }

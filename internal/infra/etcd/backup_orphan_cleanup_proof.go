@@ -152,11 +152,19 @@ func (repository *BackupRuntimeRepository) CaptureBackupOrphanCleanupProof(ctx c
 		{Key: keys[4], ModRevision: view.Values[4].ModRevision},
 		{Key: keys[5+selected], ModRevision: view.Values[5+selected].ModRevision},
 	}
-	result, err := repository.TransactRuntime(ctx, conditions, []etcdstore.Mutation{
+	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: keys[0], Value: encoded},
 		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(updated.Target.ID)},
 		{Type: etcdstore.MutationPut, Key: keys[2], Value: []byte(updated.Target.ID)},
-	})
+	}
+	binding, err := repository.Writer.BindBackupOrphanMutation(
+		ctx, current.Record.Target.EnvironmentID, view.ReadRevision, conditions, mutations,
+	)
+	if err != nil {
+		return current, false, err
+	}
+	defer binding.Clear()
+	result, err := repository.TransactRuntime(ctx, binding.Conditions(), binding.Mutations())
 	if err != nil {
 		return current, false, err
 	}

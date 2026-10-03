@@ -20,6 +20,24 @@ func (repository *Preparer) Prepare(
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (Effects, error) {
 	switch action.ActionKind {
+	case hierarchydeletion.HierarchyDeletionRecoveryPointRemove,
+		hierarchydeletion.HierarchyDeletionOrphanObjectRemove:
+		return repository.prepareHierarchyDeletionBackupRemoteFinalizer(ctx, operation, action)
+	case hierarchydeletion.HierarchyDeletionBackupPolicyFinalize:
+		return repository.prepareHierarchyDeletionBackupPolicyFinalizer(ctx, action)
+	case hierarchydeletion.HierarchyDeletionKeyMaterialRemove:
+		return repository.prepareHierarchyDeletionBackupKeyFinalizer(ctx, action)
+	case hierarchydeletion.HierarchyDeletionBackupScheduleFinalize,
+		hierarchydeletion.HierarchyDeletionBackupRetentionFinalize:
+		return repository.prepareHierarchyDeletionBackupExactFinalizer(ctx, action)
+	case hierarchydeletion.HierarchyDeletionBackupDueFinalize:
+		return repository.prepareHierarchyDeletionBackupDueFinalizer(ctx, action)
+	case hierarchydeletion.HierarchyDeletionBackupSourceFinalize:
+		return repository.prepareHierarchyDeletionBackupSourceFinalizer(ctx, action)
+	case hierarchydeletion.HierarchyDeletionBackupRunDetach,
+		hierarchydeletion.HierarchyDeletionBackupRestoreDetach,
+		hierarchydeletion.HierarchyDeletionBackupKeyRotationDetach:
+		return repository.prepareHierarchyDeletionBackupHistoryDetach(ctx, action)
 	case hierarchydeletion.HierarchyDeletionReleaseGroupRemove:
 		return repository.prepareHierarchyDeletionReleaseGroupFinalizer(ctx, action)
 	case hierarchydeletion.HierarchyDeletionServiceRemove:

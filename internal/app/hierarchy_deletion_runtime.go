@@ -2,7 +2,6 @@ package app
 
 import (
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,8 +9,8 @@ import (
 
 func newHierarchyDeletionRuntime(
 	store etcdstore.Store,
-	idempotency *etcd.IdempotencyRepository,
-	coordinator *requestidempotency.Coordinator,
+	authority controllerAuthorityComposition,
+	backupCleanup hierarchydeletion.BackupCleanupExecutor,
 ) (*hierarchydeletion.Service, error) {
 	journal, err := etcd.NewHierarchyDeletionRepository(store)
 	if err != nil {
@@ -20,9 +19,10 @@ func newHierarchyDeletionRuntime(
 	clock := hierarchydeletion.SystemClock{}
 	repository, err := hierarchydeletion.NewEtcdRepository(
 		journal,
-		idempotency,
-		coordinator,
+		authority.idempotency,
+		authority.intentCoordinator,
 		clock,
+		backupCleanup,
 	)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
