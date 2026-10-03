@@ -156,6 +156,12 @@ Terminal Task results also use a durable receipt and explicit assignment
 retirement handshake. An Agent never treats a disconnected stream, Task state,
 or time passage as proof that terminal delivery is complete.
 
+Session teardown quiesces Backup work; it is not an operator Abort. Redispatch
+uses the retained checkpoint rather than publishing a false terminal result.
+Prune credentials are resolved only for still-owned objects. An acknowledged
+exact-object deletion retires that object's payload requirement, not the
+remaining dispatch or its validation checks.
+
 ## Managed PostgreSQL uses a closed helper and private gate
 
 Published releases carry one authenticated, dual-platform PostgreSQL 16 image

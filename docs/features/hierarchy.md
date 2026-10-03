@@ -33,6 +33,11 @@ See [network decisions](../decisions/network-and-shared-access.md).
 
 ## Removing a hierarchy
 
+**Current limit:** deletion containing an Attach can remain stuck on its internal
+cleanup Task. Hierarchy Attach execution and record finalization are incomplete;
+[H87](../acceptance.md#bounded-backup-fault-recovery) records the reproduced failure.
+The contract below remains required, not fully implemented by that path.
+
 Removal coordinates descendant cleanup and removes the parent last. It is not a
 shortcut around active child operations. A descendant already being deleted,
 including one awaiting Retry, blocks a competing parent deletion with

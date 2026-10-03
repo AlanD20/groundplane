@@ -4,6 +4,10 @@
 retention journeys have passed on disposable QA. Environment deletion now includes
 owned Backup cleanup; a retained Config/Volume deletion completed through ordinary
 Task Retry after its executor handoff was repaired.
+Deletion of an Environment containing an Attach currently stalls before Backup
+cleanup because hierarchy Attach execution/finalization is incomplete. Do not
+rely on that cascade; [H87](../acceptance.md#bounded-backup-fault-recovery) records
+the blocker and retained ownership.
 The behavior below is the accepted contract; the bounded
 [qualification record](../acceptance.md#source-restore-retention-and-deletion-boundary)
 does not establish complete recovery readiness.

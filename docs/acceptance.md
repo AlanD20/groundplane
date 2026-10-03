@@ -699,6 +699,74 @@ The earlier H85 plan remains immutable and was not retrofitted. This run does no
 qualify uncertain remote deletion, interruption, orphan variants, scheduling,
 arm64 or complete Gate B. No release tag was created.
 
+## Bounded Backup fault recovery
+
+**H87 — selected failure and interruption variants PASS; uncertain Environment
+deletion BLOCKED, 2026-10-03.** Disposable Ubuntu amd64 used separate, isolated Backup
+Environments and an S3-compatible fault gateway restricted to their owned object
+prefix. Expected results came from captured Entry values, host files, SQL rows,
+independent authenticated object HEAD requests and retained original Task ids.
+
+- A later Volume upload failure left the earlier verified Config Point intact.
+  Ordinary Retry completed without uploading that Config again. A failed HEAD
+  exposed no unverified Point and completed through ordinary Retry.
+- Corrupted Config and Volume downloads failed before overwrite; independently
+  changed target values and files remained unchanged. Interrupting the Agent
+  during download resumed the original Restore Tasks without changing their
+  source Points.
+- Volume Restore resumed after actual tree exchange but before old-tree cleanup.
+  Exact restored bytes, complete tree contents and absence of its temporary
+  sibling were independently checked.
+- Killing the Controller during Config publication first exposed a false Abort
+  on Agent session teardown. `f318b31aa` preserves durable Backup work on that
+  teardown. After ordinary Agent-only update, a separate Restore resumed the
+  same Task from Entry ordinal 1 of 17 and restored the exact complete set.
+  The original failed Restore remains recovery-required; it was not rewritten
+  or declared recovered.
+- Controller downtime caught up one scheduled occurrence; repeated live ticks
+  created no duplicate, and an overlapping Restore recorded a skipped occurrence
+  without creating a competing Backup. Existing calendar behavior checks cover
+  backward intervals and multi-day catch-up; the host clock was not changed.
+- PostgreSQL Restore admission exposed inconsistent derived runtime artifact
+  handles between planning and storage validation. `2c3dc9fb7` moves that
+  derivation into their shared reader, preserving exact artifact checks. An
+  Agent interruption during observed `pg_restore` resumed the original Task
+  and apply execution id/nonce. All 100,000 rows, their sum and ordered value
+  hash matched capture; another database and its Points were unchanged.
+- Interrupted retention first exposed a replay requirement for already retired
+  Points. The same repair skips payloads with acknowledged exact deletion and
+  validates each remaining object against its original plan. After an approved
+  Controller-only repair, the original prune Task completed. Only one Config,
+  one Volume and the unselected PostgreSQL Point remained; independent HEAD
+  proved the retired exact objects absent. Application and etcd containers,
+  protected installation files and immutable Task identity were preserved.
+  The object retained by the earlier failed HEAD verification was subsequently
+  adopted as a verified Point by ordinary orphan reconciliation. That preserved
+  its original retention intent and left four verified Points before deletion;
+  the earlier three-Point retention assertion describes its observation time.
+
+Full local `make ci` passed for `f318b31aa` and the complete `2c3dc9fb7` batch.
+No new tests were added. Earlier reconnect timeout and sandbox ownership failures
+are retained; installer safety checks were not relaxed. The final Controller
+bytes were `sha256:c4c6d44dfef5a9033062875a9c43e86d1d4a1a8746b897f04afb96b7355f62b9`;
+the Agent image was
+`sha256:b62248912ceda1ec68d14a42d9f6355cc14fbcaf3eb0a7a9f5a603e7d6a9636f`.
+The Controller repair is not normal-upgrade proof.
+
+The final Environment deletion stalled on its generated `attach.grant-revoke`
+child before any remote deletion. The hierarchy publisher emits both Attach
+grant-revoke and detach procedures, but its execution resolver implements only
+Environment cleanup; Attach record finalization is also missing. The parent and
+child Tasks remain running. Independent authenticated HEAD requests still returned
+200 for all four exact objects, and the Environment, Connector and four Recovery
+Points remained readable. The fault gateway returned to pass-through mode.
+The uncertainty fault was not reached, so this does not qualify uncertain deletion
+or recovery from it. No Task, fence, history or retained object was rewritten.
+
+This is not complete Gate B, arm64, all provider/archive/key failures or a release
+qualification. No new tests or release tag were added; earlier failures remain
+preserved.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

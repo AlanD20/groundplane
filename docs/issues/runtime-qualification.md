@@ -139,8 +139,17 @@ Environment state without orphaning data or unrelated resources.
   selected Config, Volume and PostgreSQL Restore, key-era and retention variants.
   [H86](../acceptance.md#backup-owned-environment-deletion) proves Config/Volume
   point cleanup and parent deletion through ordinary Task Retry after the executor
-  handoff repair. Scheduling, uncertain remote deletion, mutation/cleanup
-  interruption and other source failures remain unqualified.
+  handoff repair. [H87](../acceptance.md#bounded-backup-fault-recovery) adds live
+  daily catch-up/duplicate/overlap checks, upload/HEAD failures, corrupted
+  Config/Volume download and selected Config, Volume, PostgreSQL and prune
+  interruptions. Its Controller repair is not normal-upgrade proof, and the
+  original pre-fix Config incident remains recovery-required. Uncertain
+  Environment deletion is blocked before remote I/O: hierarchy Attach grant-revoke
+  and detach execution and record finalization are missing. Its parent/child
+  Tasks remain running with all four exact remote objects and Backup ownership
+  retained. Completing that Attach cascade is implementation work, not a passing
+  Backup check. Other archive/provider/checkpoint and arm64 variants remain
+  unqualified.
   Valkey's safe source and restore format are undecided.
 - A Project-owned trusted Runner completed real build/push/Fetch/Deploy, preserved
   its serving application on delivery failures, resumed after a same-boot listener
