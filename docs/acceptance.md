@@ -501,6 +501,28 @@ reboot or Backup/Restore qualification. Historical public application and Runner
 checks were not repeated. No Task-history rewrite, forced unlock, manual runtime
 repair during this run, compatibility path or release tag was used.
 
+## Config backup and key-era recovery
+
+**H84 — selected Config capture, Restore and key-era variants PASS;
+Backup/Restore qualification PARTIAL, 2026-10-03.** On disposable Ubuntu amd64,
+encrypted Config capture produced one verified Recovery Point. Restore on
+`ee0c27e57` recovered the complete four-Entry set: changed plain and secret values
+matched their independently seeded originals, and an Entry added after capture
+was removed. Earlier rejected and aborted attempts remain failed evidence.
+
+On `fa20d7eb0`, key rotation completed and an explicit export returned a different
+identity. Restoring the old point without an identity returned 422; supplying
+the new era's identity returned 409. Both requests preserved the complete Entry
+set and values. Supplying the previously exported old identity completed Restore
+and reproduced the captured values. Identities and raw transcripts remain in
+private ignored evidence, not public documentation.
+
+These results cover only the stated Config variants of BAK-06/12/14/15. Fact-derived
+values, interrupted roll-forward, transient-key persistence and generic Retry
+were not exercised. Volume capture and PostgreSQL capture remained rejected at
+admission; neither source's Restore is qualified. The disposable resources remain
+for the continuing QA run. This is not complete CI, release readiness or a tag.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or
