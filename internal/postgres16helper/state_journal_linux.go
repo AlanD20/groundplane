@@ -91,7 +91,23 @@ func openStateJournal(
 }
 
 func (journal *StateJournal) Current() (postgres16protocol.ConfinementStateShape, bool) {
-	return journal.last, journal.count != 0
+	return cloneJournalState(journal.last), journal.count != 0
+}
+
+func cloneJournalState(state postgres16protocol.ConfinementStateShape) postgres16protocol.ConfinementStateShape {
+	if state.Terminal != nil {
+		terminal := *state.Terminal
+		state.Terminal = &terminal
+	}
+	if state.GateFatal != nil {
+		fatal := *state.GateFatal
+		state.GateFatal = &fatal
+	}
+	if state.IOEvidence != nil {
+		evidence := *state.IOEvidence
+		state.IOEvidence = &evidence
+	}
+	return state
 }
 
 func (journal *StateJournal) Append(next postgres16protocol.ConfinementStateShape) error {
@@ -127,7 +143,7 @@ func (journal *StateJournal) Append(next postgres16protocol.ConfinementStateShap
 		journal.poisoned = true
 		return stateJournalError()
 	}
-	journal.last = next
+	journal.last = cloneJournalState(next)
 	journal.hash = chain
 	journal.count++
 	journal.offset += int64(len(header) + len(encoded) + len(chain))

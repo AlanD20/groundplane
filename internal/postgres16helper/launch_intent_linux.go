@@ -31,6 +31,7 @@ func (runtime Runtime) launchIntent(
 		RealGID:            postgres16protocol.PostgreSQLGID,
 		EffectiveGID:       postgres16protocol.PostgreSQLGID,
 		SavedGID:           postgres16protocol.PostgreSQLGID,
+		FilesystemGID:      postgres16protocol.PostgreSQLGID,
 		LastCapability:     lastCapability,
 		NoNewPrivileges:    true,
 		SeccompSHA256:      runtime.authority.GateSeccompSHA256,

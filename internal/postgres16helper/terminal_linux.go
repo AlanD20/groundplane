@@ -97,5 +97,6 @@ func recordTerminal(
 	if err := journal.Append(state); err != nil {
 		return postgres16protocol.ConfinementStateShape{}, err
 	}
-	return journal.last, nil
+	current, _ := journal.Current()
+	return current, nil
 }
