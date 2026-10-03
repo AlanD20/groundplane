@@ -58,17 +58,8 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 			"Service lifecycle runtime snapshot changed",
 		)
 	}
-	found := false
-	for _, candidate := range projection.Record.DesiredServices {
-		if candidate.Desired.ID == current.Record.Desired.ID {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil,
-			errs.New(errs.KindStateConflict, "Applied projection does not contain Service")
-	}
+	// The serving Release and acknowledged runtime above prove membership.
+	// Environment-wide snapshots can omit individually deployed Services.
 	input := releaserender.ServiceLifecycleRenderInput{
 		PlanID: task.PlanID, ServiceID: current.Record.Desired.ID,
 		ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,

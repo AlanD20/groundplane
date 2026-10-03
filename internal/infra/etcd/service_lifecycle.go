@@ -171,6 +171,9 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), tenant.Record.ID)},
 		}, conditions[12:]...)...)
 	}
+	if renderInput == nil {
+		conditions = append(conditions, etcdstore.Condition{Key: serviceruntimerecord.Key(task.Target)})
+	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{
@@ -390,7 +393,7 @@ func validateServiceLifecycleProjection(
 		return errs.New(errs.KindValidationFailed, "applied Service lifecycle Task is invalid")
 	}
 	wantSteps := input.RuntimeMemberCount()
-	if serviceLifecycleHookConfigured(*input, task.Type) {
+	if serviceLifecycleHooks(input.HookConfiguration, task.Type) != nil {
 		wantSteps++
 	} else if input.HookConfiguration != nil {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle hook does not match Task type")
@@ -414,13 +417,6 @@ func serviceLifecycleHooks(
 		return nil
 	}
 	return configuration
-}
-
-func serviceLifecycleHookConfigured(
-	input releaserender.ServiceLifecycleRenderInput,
-	taskType taskjournal.TaskType,
-) bool {
-	return serviceLifecycleHooks(input.HookConfiguration, taskType) != nil
 }
 
 func classifyServiceLifecycleStartConflict(

@@ -252,7 +252,19 @@ func (service *serviceLifecycleService) runOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	applied := hasProjection && serviceInComposeProjection(projection.Record, serviceID)
+	runtime, err := service.repository.GetServiceRemovalRuntime(
+		ctx, environment.Record.ID, serviceID, projection.ReadRevision,
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	applied := runtime.Revision > 0
+	if applied && !hasProjection || !applied && hasProjection &&
+		serviceInComposeProjection(projection.Record, serviceID) {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict, "Service lifecycle applied authority is incomplete",
+		)
+	}
 	var projectionInput *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	replacement, err := servicerecord.SetServiceRuntimeIntent(current.Record, intent)
 	if err != nil {
