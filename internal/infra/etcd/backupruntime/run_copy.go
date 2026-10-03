@@ -1,6 +1,6 @@
 package backupruntime
 
-import ()
+import "slices"
 
 func CloneBackupRunPublicationRecord(record BackupRunRecord) BackupRunRecord {
 	clone := record
@@ -24,11 +24,9 @@ func CloneBackupRunSourceSnapshot(snapshot BackupRunSourceSnapshot) BackupRunSou
 	}
 	if snapshot.Volume != nil {
 		volume := *snapshot.Volume
-		volume.Services = append([]BackupVolumeServiceSnapshot(nil), snapshot.Volume.Services...)
+		volume.Services = slices.Clone(snapshot.Volume.Services)
 		for index := range volume.Services {
-			volume.Services[index].MountPaths = append(
-				[]string(nil),
-				volume.Services[index].MountPaths...)
+			volume.Services[index].MountPaths = slices.Clone(volume.Services[index].MountPaths)
 		}
 		clone.Volume = &volume
 	}
