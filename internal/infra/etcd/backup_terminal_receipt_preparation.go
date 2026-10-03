@@ -80,23 +80,9 @@ func prepareBackupRunTerminalReceipt(
 	receipt := backupruntime.BackupTerminalReceiptRecord{
 		Task: evidence, PriorTaskRevision: current.Revision,
 		DomainDigest: hex.EncodeToString(domainDigest[:]),
-		Sources:      backupTerminalRunOutcomes(run),
+		Sources:      backupruntime.TerminalRunOutcomes(run),
 	}
 	return prepareBackupTerminalReceiptPlan(receipt)
-}
-
-func backupTerminalRunOutcomes(run backupruntime.BackupRunRecord) []backupruntime.BackupTerminalSourceOutcome {
-	outcomes := make([]backupruntime.BackupTerminalSourceOutcome, len(run.Sources))
-	for index, source := range run.Sources {
-		outcomes[index] = backupruntime.BackupTerminalSourceOutcome{
-			Ordinal: source.Ordinal, SourceID: source.SourceID, Kind: source.Kind,
-			TargetID: source.TargetID, RecoveryPointID: source.RecoveryPointID,
-			RecoveryPointCreatedAt: source.RecoveryPointCreatedAt,
-			State:                  source.State, Phase: source.Phase, Evidence: source.Evidence,
-			Upload: source.Upload, Object: source.Object, FailureCode: source.FailureCode,
-		}
-	}
-	return outcomes
 }
 
 func prepareBackupPruneTerminalReceipt(

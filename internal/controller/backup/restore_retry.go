@@ -41,8 +41,10 @@ func (service *RestoreService) RetryRestoreTask(ctx context.Context,
 		RetryOf: sourceTaskID, Owner: source.Task.Owner,
 		Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), Type: taskjournal.TaskRestore,
-		Target:         source.Restore.EnvironmentID,
-		Steps:          []taskjournal.TaskStepRecord{{ID: prepared.Authority.StepId, Kind: taskjournal.TaskStepOperation}},
+		Target: source.Restore.EnvironmentID,
+		Steps: []taskjournal.TaskStepRecord{
+			{ID: prepared.Authority.StepId, Kind: taskjournal.TaskStepOperation},
+		},
 		TimeoutSeconds: backupRunTaskTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: marker.CreatedAt, UpdatedAt: marker.CreatedAt}
 	sealed, err := prepared.buildPlan(task)

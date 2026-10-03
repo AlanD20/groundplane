@@ -20,7 +20,7 @@ type PreparedVolumeRestore struct {
 	Restore     backupruntime.BackupRestoreRecord
 	Scope       *agentpb.BackupPlanScope
 	Authority   *agentpb.BackupStepAuthority
-	Artifact    *agentpb.ComposeArtifact
+	Artifacts   []*agentpb.ComposeArtifact
 	Owner       taskjournal.TaskOwner
 	Publication *PreparedVolumeRestorePublication
 }
@@ -32,7 +32,7 @@ type volumeRestoreAdmissionState struct {
 	owner      taskjournal.TaskOwner
 	scope      *agentpb.BackupPlanScope
 	authority  *agentpb.BackupStepAuthority
-	artifact   *agentpb.ComposeArtifact
+	artifacts  []*agentpb.ComposeArtifact
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
 	retryOf    string
@@ -110,13 +110,13 @@ func (repository *BackupRuntimeRepository) PrepareVolumeRestore(ctx context.Cont
 		repository: repository, restore: backupruntime.CloneBackupRestoreRecord(restore), owner: selected.Owner,
 		scope: proto.CloneOf(
 			selected.Scope,
-		), authority: proto.CloneOf(authority), artifact: proto.CloneOf(selected.Artifact),
+		), authority: proto.CloneOf(authority), artifacts: cloneRestoreArtifacts(selected.Artifacts),
 		conditions: conditions, mutations: mutations}}
 	return PreparedVolumeRestore{
 		Restore:     backupruntime.CloneBackupRestoreRecord(restore),
 		Scope:       proto.CloneOf(selected.Scope),
 		Authority:   proto.CloneOf(authority),
-		Artifact:    proto.CloneOf(selected.Artifact),
+		Artifacts:   cloneRestoreArtifacts(selected.Artifacts),
 		Owner:       selected.Owner,
 		Publication: publication,
 	}, nil
@@ -137,16 +137,18 @@ func (publication *PreparedVolumeRestorePublication) Publish(ctx context.Context
 			"Volume Restore publication was already consumed",
 		)
 	}
-	repository, restore, scope, authority, artifact := state.repository, state.restore, state.scope, state.authority, state.artifact
+	repository, restore, scope, authority, artifacts := state.repository, state.restore, state.scope, state.authority, state.artifacts
 	conditions, mutations := state.conditions, state.mutations
-	state.repository, state.scope, state.authority, state.artifact = nil, nil, nil, nil
+	state.repository, state.scope, state.authority, state.artifacts = nil, nil, nil, nil
 	state.conditions, state.mutations = nil, nil
 	state.mu.Unlock()
 	defer etcdstore.ClearMutationValues(mutations)
 	if task.Owner != state.owner || task.Actor != taskjournal.TaskActorOperator || sealed == nil ||
 		!proto.Equal(sealed.BackupScope, scope) || len(sealed.Steps) != 1 ||
-		!proto.Equal(sealed.Steps[0].GetBackupStep(), authority) || len(sealed.Artifacts) != 1 ||
-		!proto.Equal(sealed.Artifacts[0], artifact) {
+		!proto.Equal(
+			sealed.Steps[0].GetBackupStep(),
+			authority,
+		) || !equalRestoreArtifacts(sealed.Artifacts, artifacts) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Volume Restore publication authority changed",
@@ -183,7 +185,7 @@ func (publication *PreparedVolumeRestorePublication) Clear() {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	etcdstore.ClearMutationValues(state.mutations)
-	state.repository, state.scope, state.authority, state.artifact = nil, nil, nil, nil
+	state.repository, state.scope, state.authority, state.artifacts = nil, nil, nil, nil
 	state.conditions, state.mutations = nil, nil
 	state.restore = backupruntime.BackupRestoreRecord{}
 }

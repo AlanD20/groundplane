@@ -90,7 +90,12 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	retries, err := taskoperations.NewRetryService(tasks, retryIntents, imageFetchUnexpectedBackup{}, imageFetchUnexpectedBackup{})
+	retries, err := taskoperations.NewRetryService(
+		tasks,
+		retryIntents,
+		imageFetchUnexpectedBackup{},
+		imageFetchUnexpectedBackup{},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

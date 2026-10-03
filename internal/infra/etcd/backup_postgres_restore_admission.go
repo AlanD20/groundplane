@@ -136,12 +136,12 @@ func (repository *BackupRuntimeRepository) PreparePostgresRestore(ctx context.Co
 		etcdstore.ClearMutationValues(mutations)
 		return zero, err
 	}
-	artifacts := clonePostgresRestoreArtifacts(selected.Artifacts)
+	artifacts := cloneRestoreArtifacts(selected.Artifacts)
 	publication := &PreparedPostgresRestorePublication{state: &postgresRestoreAdmissionState{
 		repository: repository, restore: backupruntime.CloneBackupRestoreRecord(restore), owner: selected.Owner,
 		scope: proto.CloneOf(
 			selected.Scope,
-		), authority: proto.CloneOf(authority), artifacts: clonePostgresRestoreArtifacts(artifacts),
+		), authority: proto.CloneOf(authority), artifacts: cloneRestoreArtifacts(artifacts),
 		conditions: conditions, mutations: mutations}}
 	return PreparedPostgresRestore{
 		Restore:     backupruntime.CloneBackupRestoreRecord(restore),
@@ -180,7 +180,7 @@ func (publication *PreparedPostgresRestorePublication) Publish(ctx context.Conte
 	if task.Owner != state.owner || task.Actor != taskjournal.TaskActorOperator || sealed == nil ||
 		!proto.Equal(sealed.BackupScope, scope) || len(sealed.Steps) != 1 ||
 		!proto.Equal(sealed.Steps[0].GetBackupStep(), authority) ||
-		!equalPostgresRestoreArtifacts(sealed.Artifacts, artifacts) {
+		!equalRestoreArtifacts(sealed.Artifacts, artifacts) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"PostgreSQL Restore publication authority changed",
@@ -222,7 +222,7 @@ func (publication *PreparedPostgresRestorePublication) Clear() {
 	state.restore = backupruntime.BackupRestoreRecord{}
 }
 
-func clonePostgresRestoreArtifacts(values []*agentpb.ComposeArtifact) []*agentpb.ComposeArtifact {
+func cloneRestoreArtifacts(values []*agentpb.ComposeArtifact) []*agentpb.ComposeArtifact {
 	cloned := make([]*agentpb.ComposeArtifact, len(values))
 	for index, value := range values {
 		cloned[index] = proto.CloneOf(value)
@@ -230,7 +230,7 @@ func clonePostgresRestoreArtifacts(values []*agentpb.ComposeArtifact) []*agentpb
 	return cloned
 }
 
-func equalPostgresRestoreArtifacts(left, right []*agentpb.ComposeArtifact) bool {
+func equalRestoreArtifacts(left, right []*agentpb.ComposeArtifact) bool {
 	if len(left) != len(right) {
 		return false
 	}

@@ -32,7 +32,10 @@ func (reader *Reader) PrepareBackupRetryProcedureInputs(ctx context.Context,
 	}
 	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		return nil, nil, etcdstore.Condition{}, errs.New(errs.KindTaskNotRetryable, "backup retry has no sealed source procedure")
+		return nil, nil, etcdstore.Condition{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"backup retry has no sealed source procedure",
+		)
 	}
 	plan, err := DecodeBackupExecutionPlan(read.Values[0].Value)
 	if err != nil {

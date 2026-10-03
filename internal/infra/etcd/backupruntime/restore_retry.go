@@ -52,7 +52,10 @@ func DecodeRestoreRetrySnapshot(task BackupTerminalTaskEvidence, retryTaskID str
 		receipt.Restore == nil || !BackupRestoreRecordsEqual(restore, *receipt.Restore) ||
 		ValidateRestoreExecutionPlan(restore, plan) != nil ||
 		plan.PlanId != task.PlanID || hex.EncodeToString(plan.PlanHash) != task.PlanHash {
-		return zero, errs.New(errs.KindTaskNotRetryable, "Restore retry requires a complete failed-safe terminal source")
+		return zero, errs.New(
+			errs.KindTaskNotRetryable,
+			"Restore retry requires a complete failed-safe terminal source",
+		)
 	}
 	left, leftErr := json.Marshal(task)
 	right, rightErr := json.Marshal(receipt.Task)

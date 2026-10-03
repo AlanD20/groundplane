@@ -3,7 +3,6 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func (publication *PreparedConfigRestorePublication) BindRetry(source PreparedRestoreRetrySource) error {
@@ -16,8 +15,15 @@ func (publication *PreparedConfigRestorePublication) BindRetry(source PreparedRe
 	if state.repository == nil || state.retryOf != "" {
 		return errs.New(errs.KindStateConflict, "config Restore retry publication was consumed")
 	}
-	conditions, attempt, err := backupruntime.BindRestoreRetry(source.RestoreRetrySnapshot, state.restore, state.scope, state.authority, nil,
-		state.conditions, state.mutations)
+	conditions, attempt, err := backupruntime.BindRestoreRetry(
+		source.RestoreRetrySnapshot,
+		state.restore,
+		state.scope,
+		state.authority,
+		nil,
+		state.conditions,
+		state.mutations,
+	)
 	if err != nil {
 		return err
 	}
@@ -36,8 +42,15 @@ func (publication *PreparedVolumeRestorePublication) BindRetry(source PreparedRe
 	if state.repository == nil || state.retryOf != "" {
 		return errs.New(errs.KindStateConflict, "Volume Restore retry publication was consumed")
 	}
-	conditions, attempt, err := backupruntime.BindRestoreRetry(source.RestoreRetrySnapshot, state.restore, state.scope, state.authority,
-		[]*agentpb.ComposeArtifact{state.artifact}, state.conditions, state.mutations)
+	conditions, attempt, err := backupruntime.BindRestoreRetry(
+		source.RestoreRetrySnapshot,
+		state.restore,
+		state.scope,
+		state.authority,
+		state.artifacts,
+		state.conditions,
+		state.mutations,
+	)
 	if err != nil {
 		return err
 	}
@@ -56,8 +69,15 @@ func (publication *PreparedPostgresRestorePublication) BindRetry(source Prepared
 	if state.repository == nil || state.retryOf != "" {
 		return errs.New(errs.KindStateConflict, "PostgreSQL Restore retry publication was consumed")
 	}
-	conditions, attempt, err := backupruntime.BindRestoreRetry(source.RestoreRetrySnapshot, state.restore, state.scope, state.authority,
-		state.artifacts, state.conditions, state.mutations)
+	conditions, attempt, err := backupruntime.BindRestoreRetry(
+		source.RestoreRetrySnapshot,
+		state.restore,
+		state.scope,
+		state.authority,
+		state.artifacts,
+		state.conditions,
+		state.mutations,
+	)
 	if err != nil {
 		return err
 	}

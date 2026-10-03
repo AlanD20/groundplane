@@ -67,18 +67,11 @@ func validateBackupPlanArtifacts(plan *agentpb.ExecutionPlan) error {
 			return invalidBackupVolumeArtifact()
 		}
 		for _, serviceID := range step.ConsumerServiceIds {
-			fact := backupScopeServiceFact(plan.BackupScope, serviceID)
-			matchedService := false
-			for _, candidate := range artifact.Services {
-				if candidate != nil && candidate.ServiceId == serviceID && fact != nil &&
-					candidate.ComposeName == fact.CurrentName {
-					matchedService = true
-					break
-				}
+			consumer, _, err := BackupVolumeConsumer(plan, step, serviceID)
+			if err != nil {
+				return err
 			}
-			if !matchedService {
-				return invalidBackupVolumeArtifact()
-			}
+			used[consumer.ArtifactId] = true
 		}
 	}
 	for id := range artifacts {

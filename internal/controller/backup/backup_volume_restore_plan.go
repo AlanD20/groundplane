@@ -20,7 +20,7 @@ type VolumeRestorePlanInput struct {
 	Restore   backupruntime.BackupRestoreRecord
 	Scope     *agentpb.BackupPlanScope
 	Authority *agentpb.BackupStepAuthority
-	Artifact  *agentpb.ComposeArtifact
+	Artifacts []*agentpb.ComposeArtifact
 }
 
 func BuildVolumeRestorePlan(input VolumeRestorePlanInput) (*agentpb.ExecutionPlan, error) {
@@ -37,7 +37,7 @@ func BuildVolumeRestorePlan(input VolumeRestorePlanInput) (*agentpb.ExecutionPla
 		len(task.Params) != 0 || len(task.Materializations) != 0 || len(task.Steps) != 1 ||
 		!task.CreatedAt.Equal(
 			restore.CreatedAt,
-		) || input.Scope == nil || input.Authority == nil || input.Artifact == nil {
+		) || input.Scope == nil || input.Authority == nil || len(input.Artifacts) == 0 {
 		return nil, errs.New(errs.KindValidationFailed, "Volume Restore Task authority is invalid")
 	}
 	if task.Status != taskjournal.TaskStatusPending && task.Status != taskjournal.TaskStatusRunning ||
@@ -64,7 +64,7 @@ func BuildVolumeRestorePlan(input VolumeRestorePlanInput) (*agentpb.ExecutionPla
 	sealed, err := executionplan.Seal(&agentpb.ExecutionPlan{Schema: executionplan.SchemaVersion,
 		PlanId: task.PlanID, Operation: agentpb.PlanOperation_PLAN_OPERATION_RESTORE,
 		TargetId: restore.EnvironmentID, BackupScope: proto.CloneOf(input.Scope),
-		Artifacts: []*agentpb.ComposeArtifact{proto.CloneOf(input.Artifact)},
+		Artifacts: proto.CloneOf(&agentpb.ExecutionPlan{Artifacts: input.Artifacts}).Artifacts,
 		Steps: []*agentpb.ExecutionStep{{StepId: step.ID, TimeoutSeconds: uint32(backupRunTaskTimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_BackupStep{BackupStep: proto.CloneOf(authority)}}}})
 	if err != nil {

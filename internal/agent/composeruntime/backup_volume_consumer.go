@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/backupservicefact"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -38,18 +39,9 @@ func (runtime *Runtime) ObserveBackupVolumeConsumer(ctx context.Context,
 			break
 		}
 	}
-	var service *agentpb.ComposeService
-	for _, artifact := range assignment.Plan.Artifacts {
-		if artifact.ArtifactId == volume.ArtifactId {
-			for _, candidate := range artifact.Services {
-				if candidate.ServiceId == serviceID && candidate.ComposeName == fact.GetCurrentName() {
-					if service != nil {
-						return nil, zero, invalidBackupVolumeObservation()
-					}
-					service = candidate
-				}
-			}
-		}
+	artifact, service, err := executionplan.BackupVolumeConsumer(assignment.Plan, step.GetBackupStep(), serviceID)
+	if err != nil {
+		return nil, zero, invalidBackupVolumeObservation()
 	}
 	if fact == nil || service == nil || uint32(len(service.ExpectedLabels)) != fact.RequiredLabelCount {
 		return nil, zero, invalidBackupVolumeObservation()
@@ -58,11 +50,15 @@ func (runtime *Runtime) ObserveBackupVolumeConsumer(ctx context.Context,
 	if err != nil || !bytes.Equal(labels, fact.RequiredLabelsSha256) {
 		return nil, zero, invalidBackupVolumeObservation()
 	}
-	observed, err := runtime.observer.Observe(ctx, assignment.Plan, volume.ArtifactId)
+	observed, err := runtime.observer.Observe(ctx, assignment.Plan, artifact.ArtifactId)
 	if err != nil || observed == nil || len(observed.Collisions) != 0 {
 		return observed, zero, invalidBackupVolumeObservation()
 	}
-	observed = backupConsumerObservation(observed, taskassignment.ComposeArtifact(assignment.Plan, volume.ArtifactId), serviceID)
+	observed = backupConsumerObservation(
+		observed,
+		artifact,
+		serviceID,
+	)
 	count := uint32(0)
 	for _, container := range observed.Containers {
 		if container.GetServiceId() != serviceID {

@@ -33,7 +33,7 @@ type VolumeRestoreSelection struct {
 	Connector    *agentpb.BackupConnectorAuthority
 	Encryption   *agentpb.BackupEncryptionAuthority
 	Projection   *agentpb.BackupVolumeProjectionAuthority
-	Artifact     *agentpb.ComposeArtifact
+	Artifacts    []*agentpb.ComposeArtifact
 	ReadRevision int64
 	Conditions   []etcdstore.Condition
 }
@@ -121,9 +121,14 @@ func (repository *Planner) PrepareVolumeRestoreSelection(ctx context.Context,
 	if err != nil {
 		return zero, err
 	}
+	artifacts := []*agentpb.ComposeArtifact{artifact}
 	for _, consumer := range current.Services {
-		if _, err := addBackupServiceFact(ctx, input.ResolveServiceFact, scope,
-			consumer.ServiceID, input.EnvironmentID, anchor.ReadRevision); err != nil {
+		consumerArtifact, err := addBackupServiceFact(ctx, input.ResolveServiceFact, scope,
+			consumer.ServiceID, input.EnvironmentID, anchor.ReadRevision)
+		if err != nil {
+			return zero, err
+		}
+		if err := appendBackupArtifact(&artifacts, consumerArtifact); err != nil {
 			return zero, err
 		}
 	}
@@ -172,6 +177,6 @@ func (repository *Planner) PrepareVolumeRestoreSelection(ctx context.Context,
 		return zero, err
 	}
 	return VolumeRestoreSelection{Restore: restore, Scope: scope, Owner: owner, Connector: connectorAuthority,
-		Encryption: encryption, Projection: projection, Artifact: artifact, ReadRevision: anchor.ReadRevision,
+		Encryption: encryption, Projection: projection, Artifacts: artifacts, ReadRevision: anchor.ReadRevision,
 		Conditions: snapshot.compares()}, nil
 }

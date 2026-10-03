@@ -19,7 +19,7 @@ func BuildVolumeRestoreAuthority(selected VolumeRestoreSelection) (*agentpb.Back
 		record.Point.SourceKind != backupruntime.BackupRuntimeSourceVolume ||
 		record.State != backupruntime.BackupRestoreQueued || selected.Scope == nil ||
 		selected.Connector == nil || selected.Encryption == nil || selected.Projection == nil ||
-		selected.Artifact == nil || selected.Scope.EnvironmentId != record.EnvironmentID {
+		len(selected.Artifacts) == 0 || selected.Scope.EnvironmentId != record.EnvironmentID {
 		return nil, errs.New(errs.KindValidationFailed, "Volume Restore selected authority is invalid")
 	}
 	archive, err := record.Point.VolumeArchive.Wire()

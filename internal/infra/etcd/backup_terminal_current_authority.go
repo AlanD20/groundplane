@@ -112,7 +112,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		if hex.EncodeToString(digest[:]) != receipt.DomainDigest {
 			return errs.New(errs.KindInternal, "same-revision terminal backup run digest is invalid")
 		}
-		outcomes := backupTerminalRunOutcomes(run)
+		outcomes := backupruntime.TerminalRunOutcomes(run)
 		if !slices.Equal(outcomes, receipt.Sources) {
 			return errs.New(errs.KindInternal, "same-revision terminal backup source outcomes are invalid")
 		}

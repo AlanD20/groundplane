@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"encoding/json"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -69,16 +68,5 @@ func validateBackupTerminalReceiptTaskBinding(
 	if err != nil {
 		return err
 	}
-	left, err := json.Marshal(evidence)
-	if err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	right, err := json.Marshal(receipt.Task)
-	if err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	if string(left) != string(right) {
-		return errs.New(errs.KindStateConflict, "backup terminal receipt Task binding is invalid")
-	}
-	return nil
+	return backupruntime.ValidateTerminalTaskBinding(evidence, receipt.Task)
 }

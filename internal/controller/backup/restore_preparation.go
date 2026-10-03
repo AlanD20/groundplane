@@ -32,7 +32,6 @@ type preparedRestore struct {
 	Restore     backupruntime.BackupRestoreRecord
 	Scope       *agentpb.BackupPlanScope
 	Authority   *agentpb.BackupStepAuthority
-	Artifact    *agentpb.ComposeArtifact
 	Artifacts   []*agentpb.ComposeArtifact
 	Owner       taskjournal.TaskOwner
 	Publication restorePublication
@@ -84,7 +83,7 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 			return preparedRestore{}, err
 		}
 		return preparedRestore{Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
-			Artifact: selected.Artifact, Owner: selected.Owner, Publication: selected.Publication}, nil
+			Artifacts: selected.Artifacts, Owner: selected.Owner, Publication: selected.Publication}, nil
 	case backupruntime.BackupRuntimeSourceAttach:
 		selected, err := service.runtime.PreparePostgresRestore(ctx, backupplanning.PostgresRestoreSelectionInput{
 			EnvironmentID: environmentID, SourceID: request.SourceID, RecoveryPointID: request.RecoveryPointID,
@@ -109,7 +108,7 @@ func (prepared preparedRestore) buildPlan(task etcd.TaskRecord) (*agentpb.Execut
 			Scope: prepared.Scope, Authority: prepared.Authority})
 	case backupruntime.BackupRuntimeSourceVolume:
 		return BuildVolumeRestorePlan(VolumeRestorePlanInput{Task: task, Restore: prepared.Restore,
-			Scope: prepared.Scope, Authority: prepared.Authority, Artifact: prepared.Artifact})
+			Scope: prepared.Scope, Authority: prepared.Authority, Artifacts: prepared.Artifacts})
 	case backupruntime.BackupRuntimeSourceAttach:
 		return BuildPostgresRestorePlan(PostgresRestorePlanInput{Task: task, Restore: prepared.Restore,
 			Scope: prepared.Scope, Authority: prepared.Authority, Artifacts: prepared.Artifacts})

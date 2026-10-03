@@ -1,13 +1,9 @@
 package composehelper
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"slices"
-	"strings"
 
-	"github.com/AlanD20/groundplane/internal/common/backupservicefact"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -36,12 +32,9 @@ func validateBackupVolumeConsumerRequest(request *agentpb.ComposeHelperRequest,
 	if projection == nil {
 		return nil, nil, nil, invalidBackupVolumeConsumer()
 	}
-	var artifact *agentpb.ComposeArtifact
-	for _, candidate := range plan.Artifacts {
-		if candidate.ArtifactId == projection.ArtifactId {
-			artifact = candidate
-			break
-		}
+	artifact, _, err := executionplan.BackupVolumeConsumer(plan, backup, action.ServiceId)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	var fact *agentpb.BackupServiceFact
 	for _, candidate := range plan.BackupScope.GetServices() {
@@ -52,27 +45,6 @@ func validateBackupVolumeConsumerRequest(request *agentpb.ComposeHelperRequest,
 	}
 	if artifact == nil || fact == nil || fact.PriorRuntimeIntent.GetKind() !=
 		agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING {
-		return nil, nil, nil, invalidBackupVolumeConsumer()
-	}
-	var matched *agentpb.ComposeService
-	for _, service := range artifact.Services {
-		if service.ServiceId == action.ServiceId && service.ComposeName == fact.CurrentName {
-			if matched != nil {
-				return nil, nil, nil, invalidBackupVolumeConsumer()
-			}
-			matched = service
-		}
-	}
-	if matched == nil || uint32(len(matched.ExpectedLabels)) != fact.RequiredLabelCount {
-		return nil, nil, nil, invalidBackupVolumeConsumer()
-	}
-	labelsSHA, err := backupservicefact.LabelsDigest(matched.ExpectedLabels)
-	if err != nil || !bytes.Equal(labelsSHA, fact.RequiredLabelsSha256) ||
-		!strings.HasPrefix(matched.ImageReference, "sha256:") {
-		return nil, nil, nil, invalidBackupVolumeConsumer()
-	}
-	image, err := hex.DecodeString(strings.TrimPrefix(matched.ImageReference, "sha256:"))
-	if err != nil || len(image) != sha256.Size || !bytes.Equal(image, fact.LocalImageIdSha256) {
 		return nil, nil, nil, invalidBackupVolumeConsumer()
 	}
 	derived := &agentpb.ExecutionStep{StepId: selected.StepId, TimeoutSeconds: selected.TimeoutSeconds}

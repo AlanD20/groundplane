@@ -21,7 +21,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	"github.com/AlanD20/groundplane/internal/controller/secrets"
-	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
+	taskops "github.com/AlanD20/groundplane/internal/controller/tasks"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
@@ -157,7 +157,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)
 	}
-	backupComposition, err := newControllerBackupComposition(
+	backups, err := newControllerBackupComposition(
 		store,
 		bootstrap.logger,
 		authority.hierarchyRecords,
@@ -347,12 +347,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach mutation service: %w", err)
 	}
-	taskRetryIdempotency, err := taskoperations.NewRetryIdempotency(authority.intentCoordinator, authority.idempotency)
+	retryIdempotency, err := taskops.NewRetryIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry idempotency: %w", err)
 	}
-	taskMutations, err := taskoperations.NewRetryService(authority.tasks, taskRetryIdempotency, backupComposition.runs, backupComposition.restores)
+	taskMutations, err := taskops.NewRetryService(authority.tasks, retryIdempotency, backups.runs, backups.restores)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry service: %w", err)
@@ -438,7 +438,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		entryGeneration,
 		execution.attachFactValues,
 		bootstrap.componentCatalog,
-		environmentBlueprintRepository, backupComposition.policyKeys,
+		environmentBlueprintRepository, backups.policyKeys,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -550,7 +550,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	nativeTasks := platform.etcdConfig.Dispatcher(controllerTaskHandler)
 	controllerTaskRunner, err := newControllerTaskRuntime(
-		ctx, authority.tasks, nativeTasks, backupComposition.keys, hierarchyDeletions,
+		ctx, authority.tasks, nativeTasks, backups.keys, hierarchyDeletions,
 		platform.agents, agentRuntime.Registry, platform.native, bootstrap.tick, bootstrap.logger,
 	)
 	if err != nil {
@@ -568,7 +568,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		images:                  imageDelivery,
 		agentRuntime:            agentRuntime,
 		runner:                  runnerComposition,
-		backup:                  backupComposition,
+		backup:                  backups,
 		hierarchy:               hierarchyMutations,
 		connectors:              connectorComposition,
 		backingServiceMutations: backingServiceMutations,
