@@ -523,6 +523,51 @@ were not exercised. Volume capture and PostgreSQL capture remained rejected at
 admission; neither source's Restore is qualified. The disposable resources remain
 for the continuing QA run. This is not complete CI, release readiness or a tag.
 
+## Source restore, retention and deletion boundary
+
+**H85 — selected source Restore and retention variants PASS; Environment
+deletion FAIL; Backup/Restore qualification PARTIAL, 2026-10-03.** Disposable
+Ubuntu amd64 runs used immutable local Agent and PostgreSQL helper images.
+Config restored the complete plain/secret Entry set on `ee0c27e57`.
+An unmounted Volume restored exact files, bytes, uid/gid and modes on `d72c329bf`.
+The corrected PostgreSQL helper on that Controller recovered independently seeded
+rows with running consumers. On `a97ccf3e0`, actual Stop and Restore preserved the
+same stopped containers; a separate database and the source Point stayed unchanged.
+An object-store outage failed Restore before mutation. Ordinary Task Retry after
+availability returned recovered the original pinned Point, not a new selection.
+
+On `493fa60e0`, mounted-Volume capture and Restore reproduced original host and
+container-visible files, ownership and modes. The same consumer containers
+returned to their prior running state; the source Point was unchanged. Controller
+and Agent activation used ordinary update Tasks, not a repair installation.
+The deployed Controller release was
+`sha256:90a678e9465f1acb098b4191f546229ed9f103d89f9bd64492a54e44beb76548`;
+the Agent OCI manifest digest was
+`sha256:4890d37ba94ed08ee7042cc15723113b508db478ec492ea9fed748e60dc01204`.
+
+Lowering Volume retention to one kept the newest verified Point. Independent
+authenticated object-store reads confirmed the former exact object absent and
+the retained object present. Deletion is asynchronous: an immediate post-capture
+check failed before the separate prune Task completed. A continuation-script
+anchor error also repeated one harmless capture; both failed checks remain in
+private evidence and are not product defects or independent qualification runs.
+
+Deleting this isolated Environment then failed at Connector finalization with
+retained Backup descendants. The deletion planner did not include remote Point,
+orphan, configured-policy or key cleanup before dropping Connector authority.
+The safety guard retained the Environment and credentials; this is a missing
+cleanup integration, not successful parent deletion. No manual record deletion,
+Task rewrite or VM reset was used to hide it.
+
+Full local `make ci` passed on `493fa60e0`, including generation parity,
+formatting, architecture, static analysis, race-enabled behavior checks and
+packaged Controller/Console/Agent checks. No new tests were added. These results
+cover selected BAK-06/08/11/12/13 variants and the failing BAK-17 path only.
+Scheduling faults, interrupted mutation/cleanup, other provider/archive failures,
+arm64 and complete Gate B qualification remain unproven. Earlier recovery-required
+incident state remains retained separately. There is no release tag or blanket
+production-readiness claim.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

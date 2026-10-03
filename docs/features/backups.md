@@ -1,8 +1,11 @@
 # Backups
 
-**Not operationally complete.** Policy and
-Recovery Point scaffolding is not a qualified backup system. The behavior below
-is the accepted target, not an instruction to rely on current GP for data recovery.
+**Not fully qualified.** Config, Volume and PostgreSQL capture/Restore and selected
+retention journeys have passed on disposable QA. Environment deletion with
+retained Backup authority is still blocked by missing cleanup integration.
+The behavior below is the accepted contract; the bounded
+[qualification record](../acceptance.md#source-restore-retention-and-deletion-boundary)
+does not establish complete recovery readiness.
 
 ## Scope
 

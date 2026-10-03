@@ -135,8 +135,12 @@ Environment state without orphaning data or unrelated resources.
 - The accepted same-Apply Custom hook path is not implemented: a new owner
   still requires standalone Attach before a Blueprint can use its facts.
   Hook execution and Secret retention still need live qualification.
-- Backup/Restore remains incomplete and deferred; Valkey's safe source and restore
-  format are undecided. Metadata CRUD is not recovery evidence.
+- [H84/H85](../acceptance.md#source-restore-retention-and-deletion-boundary) qualify
+  selected Config, Volume and PostgreSQL Restore, key-era and retention variants.
+  Environment deletion still omits retained Backup cleanup before Connector
+  finalization; its parent and credentials remain fenced. Scheduling,
+  mutation/cleanup interruption and other source failures remain unqualified.
+  Valkey's safe source and restore format are undecided.
 - A Project-owned trusted Runner completed real build/push/Fetch/Deploy, preserved
   its serving application on delivery failures, resumed after a same-boot listener
   stop and cleaned up its owned runtime ([H75](../acceptance.md#runner-delivery)).
