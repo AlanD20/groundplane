@@ -265,7 +265,11 @@ func (repository *EtcdRepository) CompleteControllerAction(
 	action Action,
 ) (Operation, error) {
 	if action.Kind == ActionRecoveryPointRemove || action.Kind == ActionOrphanObjectRemove {
-		if err := repository.backupCleanup.Execute(ctx, operationToEtcd(operation), actionToEtcd(action)); err != nil {
+		current, err := repository.journal.OperationByTask(ctx, operation.TaskID)
+		if err != nil {
+			return Operation{}, err
+		}
+		if err := repository.backupCleanup.Execute(ctx, current, actionToEtcd(action)); err != nil {
 			return Operation{}, err
 		}
 	}
