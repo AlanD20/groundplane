@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
@@ -71,8 +72,20 @@ func (runtime Runtime) Prepare(
 		return nil, postgres16protocol.ExitCallerIdentity, supervisorError()
 	}
 	groups, err := os.Getgroups()
-	if err != nil || len(groups) != 0 {
+	if err != nil {
 		return nil, postgres16protocol.ExitCallerIdentity, supervisorError()
+	}
+	// Docker Exec may repeat the primary root group as a supplementary group.
+	// Reject foreign groups, then establish the helper's empty group set.
+	for _, group := range groups {
+		if group != 0 {
+			return nil, postgres16protocol.ExitCallerIdentity, supervisorError()
+		}
+	}
+	if len(groups) != 0 {
+		if err := syscall.Setgroups(nil); err != nil {
+			return nil, postgres16protocol.ExitCallerIdentity, supervisorError()
+		}
 	}
 	request, err := postgres16protocol.ParseArguments(arguments)
 	if err != nil {

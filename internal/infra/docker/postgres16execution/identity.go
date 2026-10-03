@@ -109,8 +109,8 @@ func validRootProfile(host *container.HostConfig, expected Container) bool {
 		expected.NetworkMode == "host" || strings.HasPrefix(expected.NetworkMode, "container:") ||
 		string(host.PidMode) == "host" || strings.HasPrefix(string(host.PidMode), "container:") ||
 		string(host.IpcMode) == "host" || strings.HasPrefix(string(host.IpcMode), "container:") ||
-		!sameSet(host.CapDrop, []string{"ALL"}) ||
-		!sameSet(host.CapAdd, postgres16protocol.ManagedRootCapabilities()) ||
+		!sameCapabilities(host.CapDrop, []string{"ALL"}) ||
+		!sameCapabilities(host.CapAdd, postgres16protocol.ManagedRootCapabilities()) ||
 		!sameSet(host.SecurityOpt, postgres16protocol.ManagedContainerSecurityOptions()) {
 		return false
 	}
@@ -196,6 +196,15 @@ func sameSet(left, right []string) bool {
 	slices.Sort(left)
 	slices.Sort(right)
 	return slices.Equal(left, right)
+}
+
+func sameCapabilities(observed, expected []string) bool {
+	// Docker prefixes inspected Linux capability names; Compose accepts short names.
+	normalized := slices.Clone(observed)
+	for index, value := range normalized {
+		normalized[index] = strings.TrimPrefix(value, "CAP_")
+	}
+	return sameSet(normalized, expected)
 }
 
 func validDockerID(value string) bool {
