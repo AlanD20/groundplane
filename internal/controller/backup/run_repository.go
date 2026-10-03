@@ -140,6 +140,7 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 	}
 	return BackupRunPrepared{
 		Scope: prepared.Scope, Authority: prepared.Authority,
-		Run: prepared.Run, Owner: prepared.Owner, Publication: prepared.Publication,
+		Artifacts: prepared.Artifacts,
+		Run:       prepared.Run, Owner: prepared.Owner, Publication: prepared.Publication,
 	}, nil
 }
