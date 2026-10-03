@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
@@ -26,6 +25,7 @@ type restorePublication interface {
 		idempotency.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	Clear()
+	BindRetry(etcd.PreparedRestoreRetrySource) error
 }
 
 type preparedRestore struct {
@@ -38,7 +38,7 @@ type preparedRestore struct {
 	Publication restorePublication
 }
 
-func (service *RestoreService) prepareRestore(ctx context.Context, environmentID, taskID string,
+func (service *RestoreService) prepareRestore(ctx context.Context, environmentID, taskID, operationID string,
 	request apiTypes.RestoreRequest, createdAt time.Time, usesOldIdentity bool,
 ) (preparedRestore, error) {
 	// Choose the source variant at the same fixed view used by its complete
@@ -56,7 +56,6 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 	if err != nil || source.ID != request.SourceID || source.EnvironmentID != environmentID {
 		return preparedRestore{}, errs.New(errs.KindStateConflict, "Restore source does not belong to this Environment")
 	}
-	operationID := ids.New(ids.KindOperation)
 	switch backupruntime.BackupRuntimeSourceKind(source.Kind) {
 	case backupruntime.BackupRuntimeSourceConfig:
 		selected, err := service.runtime.PrepareConfigRestore(ctx, backupplanning.ConfigRestoreSelectionInput{

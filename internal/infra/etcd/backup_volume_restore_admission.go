@@ -35,6 +35,7 @@ type volumeRestoreAdmissionState struct {
 	artifact   *agentpb.ComposeArtifact
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
+	retryOf    string
 }
 
 type PreparedVolumeRestorePublication struct{ state *volumeRestoreAdmissionState }
@@ -157,7 +158,7 @@ func (publication *PreparedVolumeRestorePublication) Publish(ctx context.Context
 	}
 	plan, err := prepareBackupTaskIdempotencyPlan(backupTaskPublicationAuthority{
 		taskID: restore.TaskID, operationID: restore.OperationID, environmentID: restore.EnvironmentID,
-		taskType: taskjournal.TaskRestore, createdAt: restore.CreatedAt,
+		taskType: taskjournal.TaskRestore, retryOf: state.retryOf, createdAt: restore.CreatedAt,
 		validatePlan: func(value *agentpb.ExecutionPlan) error {
 			return backupruntime.ValidateVolumeRestoreExecutionPlan(restore, value)
 		}}, conditions, mutations, task, sealed, marker, initiation)

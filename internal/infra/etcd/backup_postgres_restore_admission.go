@@ -36,6 +36,7 @@ type postgresRestoreAdmissionState struct {
 	artifacts  []*agentpb.ComposeArtifact
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
+	retryOf    string
 }
 
 type PreparedPostgresRestorePublication struct {
@@ -191,7 +192,7 @@ func (publication *PreparedPostgresRestorePublication) Publish(ctx context.Conte
 	}
 	plan, err := prepareBackupTaskIdempotencyPlan(backupTaskPublicationAuthority{
 		taskID: restore.TaskID, operationID: restore.OperationID, environmentID: restore.EnvironmentID,
-		taskType: taskjournal.TaskRestore, createdAt: restore.CreatedAt,
+		taskType: taskjournal.TaskRestore, retryOf: state.retryOf, createdAt: restore.CreatedAt,
 		validatePlan: func(value *agentpb.ExecutionPlan) error {
 			return backupruntime.ValidatePostgresRestoreExecutionPlan(restore, value)
 		}}, conditions, mutations, task, sealed, marker, initiation)

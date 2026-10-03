@@ -47,6 +47,15 @@ type backupTaskRetryer interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
+type restoreTaskRetryer interface {
+	RetryRestoreTask(
+		context.Context,
+		string,
+		string,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+}
+
 type taskRetryEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
 	durable   idempotencyrecord.ProtectedIntentRecord
@@ -141,6 +150,7 @@ type taskRetryService struct {
 	repository  taskRetryRepository
 	idempotency taskRetryIdempotency
 	backups     backupTaskRetryer
+	restores    restoreTaskRetryer
 	now         func() time.Time
 }
 
@@ -148,14 +158,16 @@ func NewRetryService(
 	repository taskRetryRepository,
 	idempotency taskRetryIdempotency,
 	backups backupTaskRetryer,
+	restores restoreTaskRetryer,
 ) (*taskRetryService, error) {
-	if repository == nil || idempotency == nil || backups == nil {
+	if repository == nil || idempotency == nil || backups == nil || restores == nil {
 		return nil, errs.New(errs.KindInternal, "task retry service is not configured")
 	}
 	return &taskRetryService{
 		repository:  repository,
 		idempotency: idempotency,
 		backups:     backups,
+		restores:    restores,
 		now:         time.Now,
 	}, nil
 }
@@ -260,16 +272,18 @@ func (service *taskRetryService) retryTask(
 	}
 	var result etcd.IdempotencyTransactionResult
 	var retryErr error
-	if source.Record.Type == taskjournal.TaskBackup {
+	if source.Record.Type == taskjournal.TaskBackup || source.Record.Type == taskjournal.TaskRestore {
 		if initiation != nil {
 			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindTaskNotRetryable,
-				"backup Tasks do not accept system retry initiation",
+				"backup and Restore Tasks do not accept system retry initiation",
 			)
 		}
-		result, retryErr = service.backups.RetryBackupTask(
-			ctx, sourceTaskID, retryTaskID, marker,
-		)
+		if source.Record.Type == taskjournal.TaskBackup {
+			result, retryErr = service.backups.RetryBackupTask(ctx, sourceTaskID, retryTaskID, marker)
+		} else {
+			result, retryErr = service.restores.RetryRestoreTask(ctx, sourceTaskID, retryTaskID, marker)
+		}
 	} else if initiation == nil {
 		result, retryErr = service.repository.RetryTask(
 			ctx, sourceTaskID, retryTaskID, taskjournal.TaskActorOperator, marker,

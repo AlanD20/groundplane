@@ -46,6 +46,12 @@ func (retryer *fakeBackupTaskRetryer) RetryBackupTask(
 	return etcd.IdempotencyTransactionResult{}, nil
 }
 
+func (retryer *fakeBackupTaskRetryer) RetryRestoreTask(
+	ctx context.Context, sourceID, retryID string, marker testidempotency.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return retryer.RetryBackupTask(ctx, sourceID, retryID, marker)
+}
+
 func (repository *fakeTaskRetryRepository) GetTask(
 	context.Context,
 	string,
@@ -92,7 +98,7 @@ func TestTaskRetryRejectsInternalBackupPruneBeforeIntentOrMutation(t *testing.T)
 		scope: etcd.TaskRetryScope{Kind: testidempotency.IdempotencyScopeEnvironment, ID: environmentID},
 	}
 	idempotency := &fakeTaskRetryIdempotency{}
-	service, err := NewRetryService(repository, idempotency, &fakeBackupTaskRetryer{})
+	service, err := NewRetryService(repository, idempotency, &fakeBackupTaskRetryer{}, &fakeBackupTaskRetryer{})
 	if err != nil {
 		t.Fatalf("NewRetryService() error = %v", err)
 	}
@@ -171,7 +177,7 @@ func TestTaskRetryUsesSourceOwnerAndReturnsNewAttempt(t *testing.T) {
 		Kind: testidempotency.IdempotencyScopeEnvironment, ID: environmentID,
 	}}
 	idempotency := &fakeTaskRetryIdempotency{}
-	service, err := NewRetryService(repository, idempotency, &fakeBackupTaskRetryer{})
+	service, err := NewRetryService(repository, idempotency, &fakeBackupTaskRetryer{}, &fakeBackupTaskRetryer{})
 	if err != nil {
 		t.Fatalf("NewRetryService() error = %v", err)
 	}
@@ -206,7 +212,7 @@ func TestTaskRetryDelegatesBackupToDomainProtocol(t *testing.T) {
 		},
 	}
 	retryer := &fakeBackupTaskRetryer{}
-	service, err := NewRetryService(repository, &fakeTaskRetryIdempotency{}, retryer)
+	service, err := NewRetryService(repository, &fakeTaskRetryIdempotency{}, retryer, retryer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +242,7 @@ func TestSystemTaskRetryUsesImmediateSourceOwnerScope(t *testing.T) {
 		Kind: testidempotency.IdempotencyScopeProject, ID: projectID,
 	}}
 	idempotency := &fakeTaskRetryIdempotency{}
-	service, err := NewRetryService(repository, idempotency, &fakeBackupTaskRetryer{})
+	service, err := NewRetryService(repository, idempotency, &fakeBackupTaskRetryer{}, &fakeBackupTaskRetryer{})
 	if err != nil {
 		t.Fatalf("NewRetryService() error = %v", err)
 	}

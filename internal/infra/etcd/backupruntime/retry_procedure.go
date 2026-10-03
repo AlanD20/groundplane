@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"context"
@@ -8,51 +8,55 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-func (repository *BackupRuntimeRepository) backupRetryProcedureInputs(ctx context.Context, source backupRunRetrySource,
-	run backupruntime.BackupRunRecord,
+type BackupRetryProcedureSource struct {
+	TaskID       string
+	PlanID       string
+	PlanHash     string
+	ReadRevision int64
+	Run          BackupRunRecord
+}
+
+func (reader *Reader) PrepareBackupRetryProcedureInputs(ctx context.Context,
+	source BackupRetryProcedureSource, run BackupRunRecord,
 ) (*agentpb.BackupPlanScope, []*agentpb.BackupStepAuthority, etcdstore.Condition, error) {
-	key := backupruntime.BackupExecutionPlanKey(source.task.Record.ID)
-	read, err := repository.ReadFixedKeys(ctx, []string{key}, source.task.ReadRevision)
+	key := BackupExecutionPlanKey(source.TaskID)
+	read, err := reader.ReadFixedKeys(ctx, []string{key}, source.ReadRevision)
 	if err != nil {
 		return nil, nil, etcdstore.Condition{}, err
 	}
 	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		return nil, nil, etcdstore.Condition{}, errs.New(
-			errs.KindTaskNotRetryable,
-			"backup retry has no sealed source procedure",
-		)
+		return nil, nil, etcdstore.Condition{}, errs.New(errs.KindTaskNotRetryable, "backup retry has no sealed source procedure")
 	}
-	plan, err := backupruntime.DecodeBackupExecutionPlan(read.Values[0].Value)
+	plan, err := DecodeBackupExecutionPlan(read.Values[0].Value)
 	if err != nil {
 		return nil, nil, etcdstore.Condition{}, err
 	}
-	if plan.PlanId != source.task.Record.PlanID || hex.EncodeToString(plan.PlanHash) != source.task.Record.PlanHash ||
-		len(plan.Steps) != len(source.run.Record.Sources) || plan.BackupScope.TaskAttempt == math.MaxUint32 {
-		return nil, nil, etcdstore.Condition{}, backupruntime.CorruptBackupRuntimeRecord()
+	if plan.PlanId != source.PlanID || hex.EncodeToString(plan.PlanHash) != source.PlanHash ||
+		len(plan.Steps) != len(source.Run.Sources) || plan.BackupScope.TaskAttempt == math.MaxUint32 {
+		return nil, nil, etcdstore.Condition{}, CorruptBackupRuntimeRecord()
 	}
-	scope := proto.Clone(plan.BackupScope).(*agentpb.BackupPlanScope)
+	scope := proto.CloneOf(plan.BackupScope)
 	scope.TaskAttempt++
 	steps := make([]*agentpb.BackupStepAuthority, 0, len(run.Sources))
 	for _, attempt := range run.Sources {
 		var original *agentpb.BackupStepAuthority
-		for index, previous := range source.run.Record.Sources {
+		for index, previous := range source.Run.Sources {
 			if previous.SourceID == attempt.SourceID {
 				original = plan.Steps[index].GetBackupStep()
 				break
 			}
 		}
 		if original == nil || original.GetCapture() == nil {
-			return nil, nil, etcdstore.Condition{}, backupruntime.CorruptBackupRuntimeRecord()
+			return nil, nil, etcdstore.Condition{}, CorruptBackupRuntimeRecord()
 		}
-		step := proto.Clone(original).(*agentpb.BackupStepAuthority)
+		step := proto.CloneOf(original)
 		step.StepId, step.ExecutionId, step.StepDigest = ids.New(ids.KindStep), ids.NewULID(), nil
 		step.StepDeadlineUnixNano = uint64(run.CreatedAt.Add(6 * time.Hour).UnixNano())
 		step.GetCapture().PointId = attempt.RecoveryPointID

@@ -67,7 +67,7 @@ func (service *RestoreService) Restore(ctx context.Context, environmentID, idemp
 	}
 	createdAt := time.Now().UTC().Truncate(time.Millisecond)
 	taskID := ids.New(ids.KindTask)
-	prepared, err := service.prepareRestore(ctx, environmentID, taskID, request, createdAt, len(identity) != 0)
+	prepared, err := service.prepareRestore(ctx, environmentID, taskID, ids.New(ids.KindOperation), request, createdAt, len(identity) != 0)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}

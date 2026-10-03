@@ -90,7 +90,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	retries, err := taskoperations.NewRetryService(tasks, retryIntents, imageFetchUnexpectedBackup{})
+	retries, err := taskoperations.NewRetryService(tasks, retryIntents, imageFetchUnexpectedBackup{}, imageFetchUnexpectedBackup{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,4 +226,10 @@ func (imageFetchUnexpectedBackup) RetryBackupTask(
 	idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "image fetch dispatched as backup")
+}
+
+func (imageFetchUnexpectedBackup) RetryRestoreTask(
+	context.Context, string, string, idempotencyrecord.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "image fetch dispatched as Restore")
 }

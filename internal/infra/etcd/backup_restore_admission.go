@@ -33,6 +33,7 @@ type configRestoreAdmissionState struct {
 	authority  *agentpb.BackupStepAuthority
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
+	retryOf    string
 }
 
 // PreparedConfigRestorePublication owns a single atomic publication attempt.
@@ -150,7 +151,7 @@ func (publication *PreparedConfigRestorePublication) Publish(ctx context.Context
 	}
 	plan, err := prepareBackupTaskIdempotencyPlan(backupTaskPublicationAuthority{
 		taskID: restore.TaskID, operationID: restore.OperationID, environmentID: restore.EnvironmentID,
-		taskType: taskjournal.TaskRestore, createdAt: restore.CreatedAt,
+		taskType: taskjournal.TaskRestore, retryOf: state.retryOf, createdAt: restore.CreatedAt,
 		validatePlan: func(value *agentpb.ExecutionPlan) error {
 			return backupruntime.ValidateConfigRestoreExecutionPlan(restore, value)
 		}}, conditions, mutations, task, sealed, marker, initiation)

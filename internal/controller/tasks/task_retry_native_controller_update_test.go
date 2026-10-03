@@ -15,7 +15,7 @@ func TestTaskRetryRejectsNativeControllerUpdate(t *testing.T) {
 	repository := &fakeTaskRetryRepository{}
 	repository.task.ID = taskID
 	repository.task.Params = map[string]string{"resource_kind": "controller"}
-	service, err := NewRetryService(repository, &fakeTaskRetryIdempotency{}, &fakeBackupTaskRetryer{})
+	service, err := NewRetryService(repository, &fakeTaskRetryIdempotency{}, &fakeBackupTaskRetryer{}, &fakeBackupTaskRetryer{})
 	if err != nil {
 		t.Fatal(err)
 	}

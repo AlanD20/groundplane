@@ -45,7 +45,7 @@ func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
 	retryAt := run.CreatedAt.Add(time.Second)
 	retryTaskID := ids.NewAt(ids.KindTask, retryAt, 5200)
 
-	retry, err := newBackupRunRetryRecord(run, retryTaskID, retryAt)
+	retry, err := testbackupruntime.NewBackupRunRetryRecord(run, retryTaskID, retryAt)
 	if err != nil {
 		t.Fatal(err)
 	}

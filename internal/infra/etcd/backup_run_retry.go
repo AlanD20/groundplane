@@ -67,7 +67,7 @@ func (repository *BackupRuntimeRepository) PrepareBackupRunRetry(
 			"backup run retry predates its source",
 		)
 	}
-	run, err := newBackupRunRetryRecord(source.run.Record, input.TaskID, input.CreatedAt)
+	run, err := backupruntime.NewBackupRunRetryRecord(source.run.Record, input.TaskID, input.CreatedAt)
 	if err != nil {
 		return PreparedBackupRunRetry{}, err
 	}
@@ -89,7 +89,9 @@ func (repository *BackupRuntimeRepository) PrepareBackupRunRetry(
 	if err != nil {
 		return PreparedBackupRunRetry{}, err
 	}
-	scope, authority, procedureCondition, err := repository.backupRetryProcedureInputs(ctx, source, run)
+	scope, authority, procedureCondition, err := repository.Reader.PrepareBackupRetryProcedureInputs(ctx,
+		backupruntime.BackupRetryProcedureSource{TaskID: source.task.Record.ID, PlanID: source.task.Record.PlanID,
+			PlanHash: source.task.Record.PlanHash, ReadRevision: source.task.ReadRevision, Run: source.run.Record}, run)
 	if err != nil {
 		plan.clear()
 		return PreparedBackupRunRetry{}, err
@@ -181,56 +183,6 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 		},
 		receiptRevision: read.Values[2].ModRevision,
 	}, nil
-}
-
-func newBackupRunRetryRecord(
-	source backupruntime.BackupRunRecord,
-	taskID string,
-	createdAt time.Time,
-) (backupruntime.BackupRunRecord, error) {
-	retry := backupruntime.CloneBackupRunPublicationRecord(source)
-	retry.TaskID = taskID
-	retry.RetryOfTaskID = source.TaskID
-	retry.State = backupruntime.BackupRunQueued
-	retry.CreatedAt = createdAt.UTC()
-	retry.UpdatedAt = retry.CreatedAt
-	retry.Sources = retry.Sources[:0]
-	for _, sourceAttempt := range source.Sources {
-		if sourceAttempt.State == backupruntime.BackupSourceAttemptSucceeded {
-			continue
-		}
-		pointID := ids.New(ids.KindRecoveryPoint)
-		pointCreatedAt, err := ids.Timestamp(ids.KindRecoveryPoint, pointID)
-		if err != nil {
-			return backupruntime.BackupRunRecord{}, errs.Wrap(errs.KindInternal, err)
-		}
-		attempt := sourceAttempt
-		attempt.Ordinal = uint32(len(retry.Sources))
-		attempt.Snapshot = backupruntime.CloneBackupRunSourceSnapshot(sourceAttempt.Snapshot)
-		attempt.RecoveryPointID = pointID
-		attempt.RecoveryPointCreatedAt = pointCreatedAt
-		attempt.ObjectKey = retry.ConnectorPrefix + retry.EnvironmentID + "/" +
-			attempt.SourceID + "/" + pointID + "/artifact.bin"
-		attempt.State = backupruntime.BackupSourceAttemptPending
-		attempt.Phase = backupruntime.BackupSourcePhaseCapture
-		attempt.Evidence = backupruntime.BackupArtifactEvidence{}
-		attempt.ConfigArchive = backupruntime.BackupConfigArchiveEvidence{}
-		attempt.VolumeArchive = backupruntime.BackupVolumeArchiveEvidence{}
-		attempt.Upload = backupruntime.BackupUploadOutcome{}
-		attempt.Object = backupruntime.BackupObjectIdentity{}
-		attempt.FailureCode = ""
-		retry.Sources = append(retry.Sources, attempt)
-	}
-	if len(retry.Sources) == 0 {
-		return backupruntime.BackupRunRecord{}, errs.New(
-			errs.KindTaskNotRetryable,
-			"backup run has no incomplete source attempts",
-		)
-	}
-	if err := backupruntime.ValidateBackupRunRecord(retry); err != nil {
-		return backupruntime.BackupRunRecord{}, err
-	}
-	return retry, nil
 }
 
 func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
