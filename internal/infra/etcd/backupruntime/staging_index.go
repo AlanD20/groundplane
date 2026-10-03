@@ -28,6 +28,13 @@ func (record BackupStagingIndexRecord) RecoveryKey() ([]byte, error) {
 	return executionplan.BackupStagingRecoveryKey(record.TaskID, record.StepID, record.PointID)
 }
 
+// AllowsAgentGeneration keeps active execution bound to its original Agent
+// generation while permitting a replacement to reconcile terminal staging.
+func (record BackupStagingIndexRecord) AllowsAgentGeneration(generation uint64, terminal bool) bool {
+	return generation > 0 && generation >= record.AgentGeneration &&
+		(generation == record.AgentGeneration || terminal)
+}
+
 func EncodeBackupStagingIndex(record BackupStagingIndexRecord) ([]byte, error) {
 	if _, err := record.RecoveryKey(); err != nil || record.Schema != 1 ||
 		ids.Validate(ids.KindAgent, record.AgentID) != nil || record.AgentGeneration == 0 ||

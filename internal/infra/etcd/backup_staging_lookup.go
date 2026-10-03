@@ -52,7 +52,7 @@ func (repository *TaskRepository) ReadBackupStagingSource(
 	}
 	expectedKey, err := index.RecoveryKey()
 	if err != nil || !bytes.Equal(expectedKey, recoveryKey) || index.AgentID != agentID ||
-		index.AgentGeneration != agentGeneration {
+		index.AgentGeneration > agentGeneration || agentGeneration == 0 {
 		return BackupStagingSource{}, backupStagingConflict()
 	}
 	keys := []string{
@@ -79,7 +79,8 @@ func (repository *TaskRepository) ReadBackupStagingSource(
 	if err != nil {
 		return BackupStagingSource{}, err
 	}
-	if task.ID != index.TaskID || task.PlanHash != index.PlanSHA256 || sealed.PlanId != task.PlanID ||
+	if !index.AllowsAgentGeneration(agentGeneration, taskjournal.IsTerminalTaskStatus(task.Status)) ||
+		task.ID != index.TaskID || task.PlanHash != index.PlanSHA256 || sealed.PlanId != task.PlanID ||
 		hex.EncodeToString(sealed.PlanHash) != index.PlanSHA256 || sealed.TargetId != task.Target {
 		return BackupStagingSource{}, backupStagingConflict()
 	}

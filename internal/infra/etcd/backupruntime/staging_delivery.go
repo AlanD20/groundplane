@@ -27,14 +27,12 @@ type BackupStagingDeliveryRecord struct {
 	Tasks             []BackupStagingTaskReference
 }
 
-// AllowsGenerationReplacement carries no file or Task authority across an
-// Agent replacement: both inventories must be empty and the old handshake settled.
+// AllowsGenerationReplacement replaces a settled startup handshake. Publication
+// independently validates every newly inventoried stage against its native Task;
+// an old inventory is not an inventory of files created after that handshake.
 func (record BackupStagingDeliveryRecord) AllowsGenerationReplacement(next BackupStagingDeliveryRecord) bool {
 	return record.AgentID == next.AgentID && next.AgentGeneration > record.AgentGeneration &&
-		record.Ack != nil && next.Ack == nil && len(record.Tasks) == 0 && len(next.Tasks) == 0 &&
-		record.Inventory != nil && next.Inventory != nil &&
-		len(record.Inventory.Entries) == 0 && len(record.Inventory.VolumeRestores) == 0 &&
-		len(next.Inventory.Entries) == 0 && len(next.Inventory.VolumeRestores) == 0
+		record.Ack != nil && next.Ack == nil && record.Inventory != nil && next.Inventory != nil
 }
 
 type backupStagingDeliveryData struct {

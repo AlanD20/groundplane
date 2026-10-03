@@ -122,9 +122,10 @@ func (repository *TaskRepository) PublishBackupStagingDelivery(
 			inventoriedKey = record.Inventory.VolumeRestores[index-stageCount].RecoveryKeySha256
 			volumeDisposition = record.Plan.VolumeDispositions[index-stageCount]
 		}
+		terminal := taskjournal.IsTerminalTaskStatus(source.Task.Record.Status)
 		if err != nil || source.Index.Revision <= 0 || source.Task.Revision <= 0 ||
 			source.Index.Record.AgentID != record.AgentID ||
-			source.Index.Record.AgentGeneration != record.AgentGeneration ||
+			!source.Index.Record.AllowsAgentGeneration(record.AgentGeneration, terminal) ||
 			!bytes.Equal(key, inventoriedKey) ||
 			source.Task.Record.ID != source.Index.Record.TaskID ||
 			source.Task.Record.PlanHash != source.Index.Record.PlanSHA256 {
@@ -172,7 +173,7 @@ func (repository *TaskRepository) PublishBackupStagingDelivery(
 			case volumeDisposition.GetCleanup() != nil:
 				revision = volumeDisposition.GetCleanup().NativeRestoreModRevision
 				expected = volumeDisposition.GetCleanup().NativeRestoreSha256
-				requiresAuthority = !taskjournal.IsTerminalTaskStatus(source.Task.Record.Status)
+				requiresAuthority = !terminal
 			default:
 				return backupStagingConflict()
 			}
