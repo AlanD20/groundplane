@@ -104,7 +104,7 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	container, err := agentcontainer.New(ctx)
+	container, err := agentcontainer.New(ctx, cfg.Storage.VolumeRoot)
 	if err != nil {
 		return nil, err
 	}

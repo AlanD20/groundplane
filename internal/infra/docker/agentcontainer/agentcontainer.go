@@ -23,6 +23,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -105,20 +106,24 @@ type engineVersionClient interface {
 }
 
 type Manager struct {
-	client engineClient
+	client     engineClient
+	volumeRoot string
 }
 
 // New connects to the local Docker Engine socket. The current Moby client
 // negotiates the Engine API version by default.
-func New(ctx context.Context) (*Manager, error) {
+func New(ctx context.Context, volumeRoot string) (*Manager, error) {
 	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
 		return nil, err
 	}
 	engine, err := client.New(client.WithHost(dockerHost))
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("agent container: create Docker client: %w", err))
 	}
-	return &Manager{client: engine}, nil
+	return &Manager{client: engine, volumeRoot: volumeRoot}, nil
 }
 
 func (m *Manager) Close() error {
@@ -217,7 +222,7 @@ func (m *Manager) Reconcile(ctx context.Context, desired Desired) (Result, error
 	if !state.Owned {
 		return Result{}, unownedCollision()
 	}
-	if matchesDesired(inspect, desired) {
+	if m.matchesDesired(inspect, desired) {
 		if state.Running {
 			return Result{State: state, Action: ActionNone}, nil
 		}
@@ -291,7 +296,7 @@ func (m *Manager) inspect(ctx context.Context) (container.InspectResponse, bool,
 }
 
 func (m *Manager) createAndStart(ctx context.Context, desired Desired) (State, error) {
-	options := createOptions(desired)
+	options := m.createOptions(desired)
 	created, err := m.client.ContainerCreate(ctx, options)
 	if err != nil {
 		return State{}, operationError(ctx, "create container", err)
@@ -313,7 +318,7 @@ func (m *Manager) createAndStart(ctx context.Context, desired Desired) (State, e
 	}, nil
 }
 
-func createOptions(desired Desired) client.ContainerCreateOptions {
+func (m *Manager) createOptions(desired Desired) client.ContainerCreateOptions {
 	return client.ContainerCreateOptions{
 		Name: ContainerName,
 		Config: &container.Config{
@@ -330,16 +335,17 @@ func createOptions(desired Desired) client.ContainerCreateOptions {
 		HostConfig: &container.HostConfig{
 			NetworkMode:   container.NetworkMode("host"),
 			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
-			Mounts:        desiredMounts(desired),
+			Mounts:        m.desiredMounts(desired),
 		},
 	}
 }
 
-func desiredMounts(desired Desired) []mount.Mount {
+func (m *Manager) desiredMounts(desired Desired) []mount.Mount {
 	runtimePaths := runtimePaths(desired.AgentID)
 	return []mount.Mount{
 		{Type: mount.TypeBind, Source: dockerSocketPath, Target: dockerSocketPath},
 		{Type: mount.TypeBind, Source: agentStatePath, Target: agentStatePath},
+		{Type: mount.TypeBind, Source: m.volumeRoot, Target: m.volumeRoot},
 		{Type: mount.TypeBind, Source: channelPath, Target: channelPath, ReadOnly: true},
 		{Type: mount.TypeBind, Source: runtimePaths.Config, Target: agentprotocol.RuntimeConfigPath, ReadOnly: true},
 		{Type: mount.TypeBind, Source: runtimePaths.Token, Target: agentprotocol.TokenPath, ReadOnly: true},
@@ -360,7 +366,7 @@ func stateFromInspect(inspect container.InspectResponse) State {
 	return state
 }
 
-func matchesDesired(inspect container.InspectResponse, desired Desired) bool {
+func (m *Manager) matchesDesired(inspect container.InspectResponse, desired Desired) bool {
 	if inspect.Config == nil || inspect.HostConfig == nil {
 		return false
 	}
@@ -373,7 +379,7 @@ func matchesDesired(inspect container.InspectResponse, desired Desired) bool {
 		inspect.HostConfig.NetworkMode == container.NetworkMode("host") &&
 		inspect.HostConfig.RestartPolicy.Name == container.RestartPolicyDisabled &&
 		inspect.HostConfig.RestartPolicy.MaximumRetryCount == 0 &&
-		equalMounts(inspect.HostConfig.Mounts, desiredMounts(desired))
+		equalMounts(inspect.HostConfig.Mounts, m.desiredMounts(desired))
 }
 
 func hasOwnershipLabels(labels map[string]string) bool {

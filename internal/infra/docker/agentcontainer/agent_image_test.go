@@ -12,7 +12,7 @@ func TestCreateOptionsInjectsExactManagedAgentImage(t *testing.T) {
 		AgentID:    "agt_01J00000000000000000000000",
 		Generation: "7",
 	}
-	options := createOptions(desired)
+	options := (&Manager{volumeRoot: testVolumeRoot}).createOptions(desired)
 	if options.Config == nil {
 		t.Fatal("createOptions() Config = nil")
 	}

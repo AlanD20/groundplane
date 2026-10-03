@@ -16,6 +16,7 @@ import (
 )
 
 const testDigest = "registry.example/groundplane-agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const testVolumeRoot = "/srv/groundplane-volumes"
 
 func TestReconcileCreatesAndStartsMissingContainerWithExactPolicy(t *testing.T) {
 	t.Parallel()
@@ -25,7 +26,7 @@ func TestReconcileCreatesAndStartsMissingContainerWithExactPolicy(t *testing.T) 
 		inspectErr:   containerderrdefs.ErrNotFound,
 		createResult: client.ContainerCreateResult{ID: "created-id"},
 	}
-	manager := &Manager{client: fake}
+	manager := &Manager{client: fake, volumeRoot: testVolumeRoot}
 
 	result, err := manager.Reconcile(context.Background(), desired)
 	if err != nil {
@@ -48,7 +49,7 @@ func TestReconcileMatchingRunningContainerIsNoOp(t *testing.T) {
 
 	desired := testDesired()
 	fake := &fakeEngine{inspectResult: matchingInspect(desired, true)}
-	result, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
+	result, err := (&Manager{client: fake, volumeRoot: testVolumeRoot}).Reconcile(context.Background(), desired)
 	if err != nil {
 		t.Fatalf("Reconcile() error = %v", err)
 	}
@@ -63,7 +64,7 @@ func TestReconcileStartsMatchingStoppedContainer(t *testing.T) {
 
 	desired := testDesired()
 	fake := &fakeEngine{inspectResult: matchingInspect(desired, false)}
-	result, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
+	result, err := (&Manager{client: fake, volumeRoot: testVolumeRoot}).Reconcile(context.Background(), desired)
 	if err != nil {
 		t.Fatalf("Reconcile() error = %v", err)
 	}
@@ -106,7 +107,7 @@ func TestReconcileReplacesOwnedSpecDrift(t *testing.T) {
 	inspect := matchingInspect(desired, true)
 	inspect.Container.Config.Labels[labelGeneration] = "old-generation"
 	fake := &fakeEngine{inspectResult: inspect, createResult: client.ContainerCreateResult{ID: "replacement-id"}}
-	result, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
+	result, err := (&Manager{client: fake, volumeRoot: testVolumeRoot}).Reconcile(context.Background(), desired)
 	if err != nil {
 		t.Fatalf("Reconcile() error = %v", err)
 	}
@@ -128,7 +129,7 @@ func TestReconcileRefusesUnownedNameCollision(t *testing.T) {
 	inspect := matchingInspect(desired, true)
 	delete(inspect.Container.Config.Labels, labelManaged)
 	fake := &fakeEngine{inspectResult: inspect}
-	_, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
+	_, err := (&Manager{client: fake, volumeRoot: testVolumeRoot}).Reconcile(context.Background(), desired)
 	if err == nil || !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Reconcile() error = %v, want canonical internal collision", err)
 	}
@@ -260,7 +261,7 @@ func TestReconcileHonorsCanceledContextBeforeDockerCall(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	fake := &fakeEngine{}
-	_, err := (&Manager{client: fake}).Reconcile(ctx, testDesired())
+	_, err := (&Manager{client: fake, volumeRoot: testVolumeRoot}).Reconcile(ctx, testDesired())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Reconcile() error = %v, want context.Canceled", err)
 	}
@@ -297,7 +298,7 @@ func TestReconcileRejectsUnpinnedImageBeforeDockerCall(t *testing.T) {
 			desired := testDesired()
 			desired.Image = test.image
 			fake := &fakeEngine{}
-			_, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
+			_, err := (&Manager{client: fake, volumeRoot: testVolumeRoot}).Reconcile(context.Background(), desired)
 			if err == nil || !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 				t.Fatalf("Reconcile() error = %v, want validation.failed", err)
 			}
@@ -327,7 +328,7 @@ func TestReconcileRejectsInvalidAgentIDsBeforeDockerCall(t *testing.T) {
 			desired := testDesired()
 			desired.AgentID = test.agentID
 			fake := &fakeEngine{}
-			_, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
+			_, err := (&Manager{client: fake, volumeRoot: testVolumeRoot}).Reconcile(context.Background(), desired)
 			if err == nil || !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 				t.Fatalf("Reconcile() error = %v, want validation.failed", err)
 			}
@@ -364,7 +365,7 @@ func testDesired() Desired {
 }
 
 func matchingInspect(desired Desired, running bool) client.ContainerInspectResult {
-	options := createOptions(desired)
+	options := (&Manager{volumeRoot: testVolumeRoot}).createOptions(desired)
 	return client.ContainerInspectResult{Container: container.InspectResponse{
 		ID:         "existing-id",
 		Config:     options.Config,
@@ -396,6 +397,7 @@ func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions, des
 	wantMounts := []mount.Mount{
 		{Type: mount.TypeBind, Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
 		{Type: mount.TypeBind, Source: "/var/lib/groundplane/agent", Target: "/var/lib/groundplane/agent"},
+		{Type: mount.TypeBind, Source: testVolumeRoot, Target: testVolumeRoot},
 		{
 			Type:     mount.TypeBind,
 			Source:   "/run/groundplane/controller",
