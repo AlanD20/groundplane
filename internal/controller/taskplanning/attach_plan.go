@@ -72,6 +72,20 @@ func BuildAttachProvisionSteps(
 	return attachProcedureSteps(task, record, adapterKey, identity)
 }
 
+// BuildAttachDeprovisionSteps shares the ordinary Detach procedure, without a
+// Compose apply: hierarchy cleanup has already removed the consumer workloads.
+func BuildAttachDeprovisionSteps(
+	task etcd.TaskRecord,
+	record attachrecord.Record,
+	adapterKey string,
+	identity AttachPlanIdentity,
+) ([]*agentpb.ExecutionStep, error) {
+	if task.Type != taskjournal.TaskRemove || !record.OwnsCredential() {
+		return nil, errs.New(errs.KindInternal, "Attach deprovision requires an owned removal Task")
+	}
+	return attachProcedureSteps(task, record, adapterKey, identity)
+}
+
 type attachPlanServiceReader interface {
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 }

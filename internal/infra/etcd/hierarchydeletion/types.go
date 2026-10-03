@@ -44,8 +44,8 @@ const (
 type HierarchyDeletionActionKind string
 
 const (
-	HierarchyDeletionAttachGrantRevoke         HierarchyDeletionActionKind = "attach.grant-revoke"
-	HierarchyDeletionAttachDetach              HierarchyDeletionActionKind = "attach.detach"
+	HierarchyDeletionAttachDeprovision         HierarchyDeletionActionKind = "attach.deprovision"
+	HierarchyDeletionAttachFinalize            HierarchyDeletionActionKind = "attach.finalize"
 	HierarchyDeletionEnvironmentAgentCleanup   HierarchyDeletionActionKind = "environment.agent-cleanup"
 	HierarchyDeletionServiceRemove             HierarchyDeletionActionKind = "service.remove"
 	HierarchyDeletionEntryRemove               HierarchyDeletionActionKind = "entry.remove"

@@ -40,7 +40,7 @@ func terminalHierarchyDeletionNodes(nodes []HierarchyDeletionMembershipNode) []s
 
 func hierarchyDeletionAgentProcedure(action hierarchydeletion.HierarchyDeletionActionKind) string {
 	return map[hierarchydeletion.HierarchyDeletionActionKind]string{
-		hierarchydeletion.HierarchyDeletionAttachGrantRevoke: "attach.grant-revoke", hierarchydeletion.HierarchyDeletionAttachDetach: "attach.detach",
+		hierarchydeletion.HierarchyDeletionAttachDeprovision:         "attach.deprovision",
 		hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup:   "environment.cleanup",
 		hierarchydeletion.HierarchyDeletionMaterializationRemove:     "materialization.remove",
 		hierarchydeletion.HierarchyDeletionNetworkRemove:             "network.remove",
@@ -50,6 +50,7 @@ func hierarchyDeletionAgentProcedure(action hierarchydeletion.HierarchyDeletionA
 
 func HierarchyDeletionControllerFinalizer(action hierarchydeletion.HierarchyDeletionActionKind) string {
 	return map[hierarchydeletion.HierarchyDeletionActionKind]string{
+		hierarchydeletion.HierarchyDeletionAttachFinalize:  "attach.finalize",
 		hierarchydeletion.HierarchyDeletionServiceRemove:   "service.remove",
 		hierarchydeletion.HierarchyDeletionEntryRemove:     "entry.remove",
 		hierarchydeletion.HierarchyDeletionRouteRemove:     "route.remove",

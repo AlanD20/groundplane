@@ -74,6 +74,9 @@ func (repository *TaskRepository) taskRetentionCandidateBlocked(
 	if held, err := repository.blueprintChildPruneHeld(ctx, task, revision); held || err != nil {
 		return held, err
 	}
+	if held, err := repository.hierarchyDeletionChildPruneHeld(ctx, task, revision); held || err != nil {
+		return held, err
+	}
 	if task.Type != taskjournal.TaskScript {
 		return false, nil
 	}

@@ -31,7 +31,8 @@ type hierarchyDeletionStore interface {
 
 type HierarchyDeletionRepository struct {
 	*hierarchydeletionexecution.Executor
-	store hierarchyDeletionStore
+	store             hierarchyDeletionStore
+	attachPlanBuilder HierarchyDeletionAttachPlanBuilder
 }
 
 func NewHierarchyDeletionRepository(store etcdstore.Store) (*HierarchyDeletionRepository, error) {

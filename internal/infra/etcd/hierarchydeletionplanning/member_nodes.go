@@ -24,9 +24,6 @@ func hierarchyDeletionAgentNode(
 	parentOperationID string,
 ) HierarchyDeletionMembershipNode {
 	taskType := taskjournal.TaskRemove
-	if action == hierarchydeletion.HierarchyDeletionAttachDetach {
-		taskType = taskjournal.TaskDetach
-	}
 	return HierarchyDeletionMembershipNode{
 		NodeID: nodeID, TargetKind: targetKind, TargetID: targetID, ActionKind: action,
 		TargetRevision: targetRevision, PrerequisiteNodeIDs: append([]string(nil), prerequisites...),

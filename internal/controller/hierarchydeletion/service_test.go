@@ -55,14 +55,10 @@ func node(
 		ControllerFinalizer: ptr(finalizer(kind, target, id, revision, id)),
 	}
 	if typed, ok := agentProcedures[kind]; ok {
-		taskType := "remove"
-		if kind == ActionAttachDetach {
-			taskType = "detach"
-		}
 		input = ProcedureInput{
 			Kind: ProcedureAgentChild,
 			AgentChild: &AgentChildInput{
-				TaskType:       taskType,
+				TaskType:       "remove",
 				TypedProcedure: typed,
 				InputDigest:    digest(id + "/input"),
 				Timeout:        time.Minute,

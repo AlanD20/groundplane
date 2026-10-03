@@ -20,6 +20,8 @@ func (repository *Preparer) Prepare(
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (Effects, error) {
 	switch action.ActionKind {
+	case hierarchydeletion.HierarchyDeletionAttachFinalize:
+		return repository.prepareHierarchyDeletionAttachFinalizer(ctx, operation, action)
 	case hierarchydeletion.HierarchyDeletionRecoveryPointRemove,
 		hierarchydeletion.HierarchyDeletionOrphanObjectRemove:
 		return repository.prepareHierarchyDeletionBackupRemoteFinalizer(ctx, operation, action)

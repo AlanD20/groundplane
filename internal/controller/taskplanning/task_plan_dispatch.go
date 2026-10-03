@@ -38,6 +38,7 @@ type TaskPlanResolver struct {
 	configurationRecovery *configurationrecovery.Sources
 	scriptPlans           ScriptExecutionPlanReader
 	volumeRemovalPlans    volumeRemovalPlanReader
+	hierarchyAttachPlans  HierarchyAttachPlanResolver
 }
 
 type blueprintPlanStateReader interface {

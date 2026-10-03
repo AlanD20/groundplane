@@ -30,9 +30,9 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 	if childRead.Entry == nil {
 		return nil, errs.New(errs.KindStateConflict, "hierarchy deletion child dispatch is missing")
 	}
-	entry, err := decodeHierarchyDeletionChildEntry(childRead.Entry.Value)
+	entry, err := hierarchydeletionexecution.DecodeHierarchyDeletionChildEntry(childRead.Entry.Value)
 	clear(childRead.Entry.Value)
-	if err != nil || !hierarchyDeletionChildMatches(entry, operation, action) {
+	if err != nil || !hierarchydeletionexecution.HierarchyDeletionChildMatches(entry, operation, action) {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	taskRead, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(entry.CurrentTaskID))
@@ -117,7 +117,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 	task TaskRecord,
 	taskRevision int64,
 ) error {
-	terminal, err := hierarchyDeletionAgentTerminalFromTask(task.Status)
+	terminal, err := hierarchydeletionexecution.HierarchyDeletionAgentTerminalFromTask(task.Status)
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,10 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 		return err
 	}
 	defer clear(taskValue)
-	resultDigest, errorDigest, err := hierarchyDeletionTaskResultDigest(task.Result, task.Status)
+	resultDigest, errorDigest, err := hierarchydeletionexecution.HierarchyDeletionTaskResultDigest(
+		task.Result,
+		task.Status,
+	)
 	if err != nil {
 		return err
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
@@ -53,14 +52,6 @@ func (repository *Planner) freezeEnvironmentMembership(
 			},
 			primaryKey: runnerrecord.RunnerKey, stableIDKind: ids.KindRunner,
 			validateOwner: validateHierarchyDeletionRunnerOwner, controller: true,
-		},
-		{
-			targetKind:    "attach",
-			actionKind:    hierarchydeletion.HierarchyDeletionAttachGrantRevoke,
-			ownerPrefix:   attachrecord.AttachOwnerPrefix,
-			primaryKey:    attachrecord.AttachKey,
-			stableIDKind:  ids.KindAttach,
-			validateOwner: validateHierarchyDeletionAttachOwner,
 		},
 		{
 			targetKind:    "release-group",
@@ -126,6 +117,13 @@ func (repository *Planner) freezeEnvironmentMembership(
 				return nil, backupErr
 			}
 			nodes = append(nodes, backupNodes...)
+			attachNodes, attachErr := repository.freezeEnvironmentAttachMembership(
+				ctx, operation, environmentID, terminalHierarchyDeletionNodes(nodes),
+			)
+			if attachErr != nil {
+				return nil, attachErr
+			}
+			nodes = append(nodes, attachNodes...)
 		}
 		part, err := repository.freezeIndexedResource(ctx, operation, environmentID, descriptor)
 		if err != nil {
@@ -134,23 +132,6 @@ func (repository *Planner) freezeEnvironmentMembership(
 		prerequisites := terminalHierarchyDeletionNodes(nodes)
 		for index := range part {
 			part[index].PrerequisiteNodeIDs = append([]string(nil), prerequisites...)
-		}
-		if descriptor.actionKind == hierarchydeletion.HierarchyDeletionAttachGrantRevoke {
-			for _, grant := range part {
-				nodes = append(nodes, grant)
-				detach := hierarchyDeletionAgentNode(
-					"attach:"+grant.TargetID+":detach",
-					"attach",
-					grant.TargetID,
-					hierarchydeletion.HierarchyDeletionAttachDetach,
-					grant.TargetRevision,
-					[]string{grant.NodeID},
-					operation.OperationID,
-				)
-				detach.fixedInputDigest = grant.fixedInputDigest
-				nodes = append(nodes, detach)
-			}
-			continue
 		}
 		nodes = append(nodes, part...)
 		if descriptor.actionKind == hierarchydeletion.HierarchyDeletionReleaseGroupRemove {

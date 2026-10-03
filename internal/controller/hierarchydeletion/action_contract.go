@@ -12,8 +12,8 @@ import (
 type ActionKind string
 
 const (
-	ActionAttachGrantRevoke         ActionKind = "attach.grant-revoke"
-	ActionAttachDetach              ActionKind = "attach.detach"
+	ActionAttachDeprovision         ActionKind = "attach.deprovision"
+	ActionAttachFinalize            ActionKind = "attach.finalize"
 	ActionEnvironmentAgentCleanup   ActionKind = "environment.agent-cleanup"
 	ActionServiceRemove             ActionKind = "service.remove"
 	ActionEntryRemove               ActionKind = "entry.remove"
@@ -51,8 +51,8 @@ const (
 
 func (k ActionKind) Valid() bool {
 	switch k {
-	case ActionAttachGrantRevoke,
-		ActionAttachDetach,
+	case ActionAttachDeprovision,
+		ActionAttachFinalize,
 		ActionEnvironmentAgentCleanup,
 		ActionServiceRemove,
 		ActionEntryRemove,
@@ -216,8 +216,7 @@ type Procedure struct {
 }
 
 var agentProcedures = map[ActionKind]string{
-	ActionAttachGrantRevoke:         "attach.grant-revoke",
-	ActionAttachDetach:              "attach.detach",
+	ActionAttachDeprovision:         "attach.deprovision",
 	ActionEnvironmentAgentCleanup:   "environment.cleanup",
 	ActionMaterializationRemove:     "materialization.remove",
 	ActionVolumeAgentCleanup:        "volume.cleanup",
@@ -226,6 +225,7 @@ var agentProcedures = map[ActionKind]string{
 }
 
 var controllerFinalizers = map[ActionKind]string{
+	ActionAttachFinalize:          "attach.finalize",
 	ActionServiceRemove:           "service.remove",
 	ActionEntryRemove:             "entry.remove",
 	ActionRouteRemove:             "route.remove",
@@ -273,11 +273,7 @@ func (p ProcedureInput) Validate(
 		if v.TypedProcedure != agentName || !canonicalDigest(v.InputDigest) || v.Timeout <= 0 {
 			return errs.Newf(errs.KindInternal, "agent-child input for %q is incomplete", action)
 		}
-		if action == ActionAttachDetach {
-			if v.TaskType != "detach" {
-				return errs.Newf(errs.KindInternal, "action %q requires detach task", action)
-			}
-		} else if v.TaskType != "remove" {
+		if v.TaskType != "remove" {
 			return errs.Newf(errs.KindInternal, "action %q requires remove task", action)
 		}
 	case ProcedureControllerFinalizer:
@@ -313,11 +309,7 @@ func (p Procedure) Validate(action ActionKind) error {
 			v.Timeout <= 0 {
 			return errs.Newf(errs.KindInternal, "agent-child evidence for %q is incomplete", action)
 		}
-		if action == ActionAttachDetach {
-			if v.TaskType != "detach" {
-				return errs.Newf(errs.KindInternal, "action %q requires detach task", action)
-			}
-		} else if v.TaskType != "remove" {
+		if v.TaskType != "remove" {
 			return errs.Newf(errs.KindInternal, "action %q requires remove task", action)
 		}
 	case ProcedureControllerFinalizer:

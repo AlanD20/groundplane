@@ -8,6 +8,7 @@ import (
 type membershipStore interface {
 	GetMany(context.Context, keyvalue.GetManyRequest) (*keyvalue.GetManyResult, error)
 	Range(context.Context, keyvalue.RangeRequest) (*keyvalue.RangeResult, error)
+	Transact(context.Context, []keyvalue.Condition, []keyvalue.Mutation) (keyvalue.TransactionResult, error)
 }
 
 type Planner struct {

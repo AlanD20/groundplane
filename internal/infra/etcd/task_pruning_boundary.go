@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionretention"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -20,6 +21,9 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	readRevision int64,
 	now time.Time,
 ) (bool, error) {
+	if held, err := repository.hierarchyDeletionChildPruneHeld(ctx, task, readRevision); held || err != nil {
+		return held, err
+	}
 	if held, err := repository.backupHierarchyDeletionTaskPruneHeld(ctx, task, readRevision); held || err != nil {
 		return held, err
 	}
@@ -61,7 +65,8 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	if task.Type == taskjournal.TaskScript {
 		return repository.prepareManualScriptExpiry(ctx, task, taskRevision, retentionEntry, readRevision, now)
 	}
-	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
+	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion ||
+		task.Params[taskjournal.TaskHierarchyDeletionParentParam] != "" {
 		return false, nil
 	}
 	changed, ready, err := repository.prepareHierarchyDeletionTaskPrune(
@@ -75,6 +80,9 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 
 func taskSourcePruneConditions(task TaskRecord) []etcdstore.Condition {
 	pins := recoverySecretPinPruneConditions(task)
+	pins = append(pins, hierarchydeletionretention.ChildRetiredConditions(
+		task.Params[taskjournal.TaskHierarchyDeletionParentParam],
+	)...)
 	if task.Configuration != nil && task.Configuration.BackingHookInputs != nil {
 		pins = append(pins, etcdstore.Condition{Key: taskconfiguration.BackingHookTaskInputKey(task.OperationID)})
 	}

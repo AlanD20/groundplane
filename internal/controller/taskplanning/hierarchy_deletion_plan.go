@@ -16,6 +16,12 @@ func (resolver *TaskPlanResolver) resolveHierarchyDeletionPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
+	if task.Params[taskjournal.TaskHierarchyDeletionProcedureParam] == "attach.deprovision" {
+		if resolver.hierarchyAttachPlans == nil {
+			return nil, errs.New(errs.KindInternal, "hierarchy Attach plan resolver is not configured")
+		}
+		return resolver.hierarchyAttachPlans.ResolveExecutionPlan(ctx, task)
+	}
 	if resolver.blueprints == nil ||
 		task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskRemove ||
@@ -72,4 +78,16 @@ func (resolver *TaskPlanResolver) resolveHierarchyDeletionPlan(
 		return nil, err
 	}
 	return plan, nil
+}
+
+type HierarchyAttachPlanResolver interface {
+	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
+}
+
+func (resolver *TaskPlanResolver) EnableHierarchyAttachPlans(plans HierarchyAttachPlanResolver) error {
+	if resolver == nil || plans == nil || resolver.hierarchyAttachPlans != nil {
+		return errs.New(errs.KindInternal, "hierarchy Attach plan resolver is invalid")
+	}
+	resolver.hierarchyAttachPlans = plans
+	return nil
 }

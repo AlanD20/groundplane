@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -107,6 +108,16 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	terminal.TerminalAssignment = &taskjournal.TaskTerminalAssignmentRecord{
 		AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 	}
+	sourceRelease, err := repository.prepareRecoverySecretPinTerminal(ctx, terminal, read.ReadRevision)
+	if err != nil {
+		return etcdstore.Versioned[TaskRecord]{}, err
+	}
+	defer clearTaskMaterializationProjectionChange(sourceRelease)
+	attachRelease, err := repository.prepareHierarchyAttachInputTerminal(ctx, terminal, read.ReadRevision)
+	if err != nil {
+		return etcdstore.Versioned[TaskRecord]{}, err
+	}
+	defer clearTaskMaterializationProjectionChange(attachRelease)
 	if err := ValidateTaskRecord(terminal); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
@@ -145,25 +156,28 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 			"hierarchy deletion child active operation is corrupt",
 		)
 	}
-	transaction, err := repository.store.Transact(ctx,
-		[]etcdstore.Condition{
-			{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
-			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
-			{Key: taskjournal.TaskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
-			{Key: activeKey, ModRevision: companions.Values[0].ModRevision},
-			{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
-			{Key: timeoutKey, ModRevision: companions.Values[2].ModRevision},
-			{Key: retentionKey},
-		},
-		[]etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: terminalValue},
-			{Type: etcdstore.MutationDelete, Key: claimKey},
-			{Type: etcdstore.MutationDelete, Key: taskjournal.TaskAssignmentIndexKey(task.ID)},
-			{Type: etcdstore.MutationDelete, Key: activeKey},
-			{Type: etcdstore.MutationDelete, Key: timeoutKey},
-			{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
-		},
-	)
+	conditions := []etcdstore.Condition{
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
+		{Key: claimKey, ModRevision: assignmentValue.ModRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
+		{Key: activeKey, ModRevision: companions.Values[0].ModRevision},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
+		{Key: timeoutKey, ModRevision: companions.Values[2].ModRevision},
+		{Key: retentionKey},
+	}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: terminalValue},
+		{Type: etcdstore.MutationDelete, Key: claimKey},
+		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskAssignmentIndexKey(task.ID)},
+		{Type: etcdstore.MutationDelete, Key: activeKey},
+		{Type: etcdstore.MutationDelete, Key: timeoutKey},
+		{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
+	}
+	conditions = append(conditions, sourceRelease.conditions...)
+	conditions = append(conditions, attachRelease.conditions...)
+	mutations = append(mutations, sourceRelease.mutations...)
+	mutations = append(mutations, attachRelease.mutations...)
+	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
@@ -214,7 +228,7 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 	if err != nil {
 		return err
 	}
-	entry, err := decodeHierarchyDeletionChildEntry(read.Values[1].Value)
+	entry, err := hierarchydeletionexecution.DecodeHierarchyDeletionChildEntry(read.Values[1].Value)
 	if err != nil {
 		return err
 	}

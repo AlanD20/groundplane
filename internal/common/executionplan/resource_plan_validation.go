@@ -6,7 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func validateArtifactFreeAdapterPlan(plan *agentpb.ExecutionPlan) error {
+func validateArtifactFreeAttachPlan(plan *agentpb.ExecutionPlan) error {
 	if validateID(ids.KindAttach, plan.TargetId) != nil || len(plan.Steps) == 0 {
 		return errs.New(errs.KindValidationFailed, "artifact-free adapter plan shape is invalid")
 	}
@@ -16,7 +16,12 @@ func validateArtifactFreeAdapterPlan(plan *agentpb.ExecutionPlan) error {
 			return err
 		}
 		procedure := step.GetAdapterProcedure()
-		if procedure == nil || procedure.AttachId != plan.TargetId {
+		hook := step.GetBackingHookProcedure()
+		validAdapter := procedure != nil && procedure.AttachId == plan.TargetId
+		validHook := hook != nil && plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH &&
+			len(plan.Steps) == 1 && hook.GetEvent() == agentpb.BackingHookEvent_BACKING_HOOK_EVENT_DETACH &&
+			hook.GetAttachId() == plan.TargetId
+		if !validAdapter && !validHook {
 			return errs.New(errs.KindValidationFailed, "artifact-free adapter plan target is invalid")
 		}
 		if _, duplicate := stepIDs[step.StepId]; duplicate {

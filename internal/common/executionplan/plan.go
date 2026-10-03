@@ -173,7 +173,7 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	}
 	if len(plan.Artifacts) == 0 && (plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
 		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH) {
-		return validateArtifactFreeAdapterPlan(plan)
+		return validateArtifactFreeAttachPlan(plan)
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY && len(plan.Artifacts) == 0 {
 		return validateComponentApplyPlan(plan, nil)

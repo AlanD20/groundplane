@@ -209,7 +209,7 @@ func ValidateHierarchyDeletionAction(action HierarchyDeletionAction) error {
 
 func hierarchyDeletionProcedureMatchesAction(action HierarchyDeletionAction) bool {
 	agent := map[HierarchyDeletionActionKind]string{
-		HierarchyDeletionAttachGrantRevoke: "attach.grant-revoke", HierarchyDeletionAttachDetach: "attach.detach",
+		HierarchyDeletionAttachDeprovision:         "attach.deprovision",
 		HierarchyDeletionEnvironmentAgentCleanup:   "environment.cleanup",
 		HierarchyDeletionMaterializationRemove:     "materialization.remove",
 		HierarchyDeletionNetworkRemove:             "network.remove",
@@ -220,6 +220,7 @@ func hierarchyDeletionProcedureMatchesAction(action HierarchyDeletionAction) boo
 			action.AgentProcedure.TypedProcedure == expected
 	}
 	controller := map[HierarchyDeletionActionKind]string{
+		HierarchyDeletionAttachFinalize:  "attach.finalize",
 		HierarchyDeletionServiceRemove:   "service.remove",
 		HierarchyDeletionEntryRemove:     "entry.remove",
 		HierarchyDeletionRouteRemove:     "route.remove",

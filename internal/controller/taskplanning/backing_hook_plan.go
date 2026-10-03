@@ -133,6 +133,19 @@ func backingHookStep(
 	}, nil
 }
 
+// BuildDetachHookStep uses the same sealed input/output boundary as an ordinary
+// Custom Detach, without inventing network work for an already removed consumer.
+func BuildDetachHookStep(
+	step taskjournal.TaskStepRecord,
+	definition backinghook.Definition,
+	input backinghook.Input,
+) (*agentpb.ExecutionStep, error) {
+	if input.Context.Event != backinghook.Detach {
+		return nil, errs.New(errs.KindInternal, "hierarchy hook must be a Detach")
+	}
+	return backingHookStep(step, definition, input, nil)
+}
+
 func stepTimeoutSeconds(hookTimeout uint32) uint32 {
 	return hookTimeout + 15
 }

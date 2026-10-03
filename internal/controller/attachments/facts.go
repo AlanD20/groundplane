@@ -191,20 +191,7 @@ func (service *FactService) ResolveTaskIdentity(
 		return errs.New(errs.KindStateConflict, "Attach task identity is unavailable in the current lifecycle")
 	}
 	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
-		identity := taskplanning.AttachPlanIdentity{
-			Authentication: bundle.Identity.Authentication,
-			Database:       bundle.Identity.Database,
-			Role:           bundle.Identity.Role,
-			Password:       append([]byte(nil), bundle.Identity.Password...),
-			Grants:         make([]taskplanning.AttachPlanGrantIdentity, 0, len(bundle.Identity.Grants)),
-		}
-		for _, grant := range bundle.Identity.Grants {
-			identity.Grants = append(identity.Grants, taskplanning.AttachPlanGrantIdentity{
-				AttachID: grant.AttachID, Database: grant.Database,
-			})
-		}
-		defer identity.Clear()
-		return consume(identity)
+		return consumeAttachTaskIdentity(bundle, consume)
 	})
 }
 

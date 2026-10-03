@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
@@ -51,8 +50,8 @@ func (repository *HierarchyDeletionRepository) PublishOrResumeAgentAction(
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
 	if stored.Entry != nil {
-		entry, decodeErr := decodeHierarchyDeletionChildEntry(stored.Entry.Value)
-		if decodeErr != nil || !hierarchyDeletionChildMatches(entry, current, action) {
+		entry, decodeErr := hierarchydeletionexecution.DecodeHierarchyDeletionChildEntry(stored.Entry.Value)
+		if decodeErr != nil || !hierarchydeletionexecution.HierarchyDeletionChildMatches(entry, current, action) {
 			clear(stored.Entry.Value)
 			return hierarchydeletion.HierarchyDeletionChildEntry{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
@@ -80,7 +79,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	previous *hierarchydeletion.HierarchyDeletionChildEntry,
 	previousRevision int64,
 	now time.Time,
-) (hierarchydeletion.HierarchyDeletionChildEntry, error) {
+) (_ hierarchydeletion.HierarchyDeletionChildEntry, returnErr error) {
 	generation := int64(1)
 	retryOf := ""
 	if previous != nil {
@@ -106,15 +105,27 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		generation = previousGeneration + 1
 		retryOf = previous.CurrentTaskID
 	}
-	attemptID := hierarchyDeletionStableRawID(
+	attemptID := hierarchydeletionexecution.HierarchyDeletionStableRawID(
 		"attempt",
 		action.ParentOperationID,
 		action.AgentProcedure.ChildOperationID,
 		strconv.FormatInt(generation, 10),
 	)
-	taskID := hierarchyDeletionChildStableID(ids.KindTask, action.AgentProcedure.ChildOperationID, attemptID)
-	planID := hierarchyDeletionChildStableID(ids.KindPlan, action.AgentProcedure.ChildOperationID, attemptID)
-	stepID := hierarchyDeletionChildStableID(ids.KindStep, action.AgentProcedure.ChildOperationID, attemptID)
+	taskID := hierarchydeletionexecution.HierarchyDeletionChildStableID(
+		ids.KindTask,
+		action.AgentProcedure.ChildOperationID,
+		attemptID,
+	)
+	planID := hierarchydeletionexecution.HierarchyDeletionChildStableID(
+		ids.KindPlan,
+		action.AgentProcedure.ChildOperationID,
+		attemptID,
+	)
+	stepID := hierarchydeletionexecution.HierarchyDeletionChildStableID(
+		ids.KindStep,
+		action.AgentProcedure.ChildOperationID,
+		attemptID,
+	)
 	planHash := action.AgentProcedure.InputDigest
 	taskSteps := []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}
 	if action.AgentProcedure.TypedProcedure == "environment.cleanup" {
@@ -143,7 +154,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		var composeArtifact []byte
 		if found {
 			composeStepID = stepID
-			directoryStepID = hierarchyDeletionChildStableID(
+			directoryStepID = hierarchydeletionexecution.HierarchyDeletionChildStableID(
 				ids.KindStep, action.AgentProcedure.ChildOperationID, attemptID, "directory",
 			)
 			taskSteps = []taskjournal.TaskStepRecord{
@@ -207,6 +218,16 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		},
 		Steps: taskSteps, TimeoutSeconds: action.AgentProcedure.TimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	var attachPublication hierarchyAttachPublication
+	if action.ActionKind == hierarchydeletion.HierarchyDeletionAttachDeprovision {
+		attachPublication, err = repository.prepareHierarchyAttachPublication(ctx, operation, action, task, previous)
+		if err != nil {
+			return hierarchydeletion.HierarchyDeletionChildEntry{}, err
+		}
+		defer attachPublication.clear()
+		defer func() { returnErr = attachPublication.hook.finish(ctx, repository.store, returnErr) }()
+		task = attachPublication.task
 	}
 	if err := ValidateTaskRecord(task); err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
@@ -330,6 +351,8 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		},
 		{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue},
 	}
+	conditions = append(conditions, attachPublication.conditions...)
+	mutations = append(mutations, attachPublication.mutations...)
 	ownerKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
@@ -353,87 +376,4 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		)
 	}
 	return entry, nil
-}
-
-func hierarchyDeletionChildMatches(
-	entry hierarchydeletion.HierarchyDeletionChildEntry,
-	operation hierarchydeletion.HierarchyDeletionOperation,
-	action hierarchydeletion.HierarchyDeletionAction,
-) bool {
-	return entry.Schema == 1 && entry.ParentOperationID == operation.Tombstone.OperationID &&
-		entry.ChildOperationID == action.AgentProcedure.ChildOperationID &&
-		entry.RetryInputDigest == action.AgentProcedure.InputDigest && entry.CheckpointDigest != "" &&
-		entry.CurrentAttemptID != "" && entry.CurrentTaskID != ""
-}
-
-func decodeHierarchyDeletionChildEntry(value []byte) (hierarchydeletion.HierarchyDeletionChildEntry, error) {
-	var entry hierarchydeletion.HierarchyDeletionChildEntry
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(
-		value,
-		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
-		&entry,
-	) != nil ||
-		entry.Schema != 1 {
-		return hierarchydeletion.HierarchyDeletionChildEntry{}, hierarchydeletion.CorruptHierarchyDeletion()
-	}
-	return entry, nil
-}
-
-func hierarchyDeletionChildStableID(kind ids.Kind, values ...string) string {
-	return string(
-		kind,
-	) + "_" + hierarchyDeletionStableULID(
-		"gp-deletion-stable-id-v1",
-		append([]string{string(kind)}, values...)...)
-}
-
-func hierarchyDeletionStableRawID(prefix string, values ...string) string {
-	return prefix + "_" + hierarchyDeletionStableULID(
-		"gp-deletion-stable-raw-id-v1",
-		append([]string{prefix}, values...)...)
-}
-
-func hierarchyDeletionStableULID(domain string, values ...string) string {
-	operation := hierarchydeletion.HierarchyDeletionStableOperationID(append([]string{domain}, values...)...)
-	return operation[len(string(ids.KindOperation))+1:]
-}
-
-func hierarchyDeletionTaskResultDigest(
-	result *taskjournal.TaskResultRecord,
-	terminal taskjournal.TaskStatus,
-) (string, string, error) {
-	if result == nil {
-		return "", "", errs.New(errs.KindInternal, "hierarchy deletion child Task lost its result")
-	}
-	value, err := json.Marshal(result)
-	if err != nil {
-		return "", "", errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(value)
-	digest := hierarchydeletion.HierarchyDeletionBytesDigest(value)
-	if terminal == taskjournal.TaskStatusCompleted {
-		return digest, "", nil
-	}
-	return "", hierarchydeletion.HierarchyDeletionFoldDigest(
-		"gp-deletion-child-error-v1",
-		string(terminal),
-		digest,
-	), nil
-}
-
-func hierarchyDeletionAgentTerminalFromTask(
-	status taskjournal.TaskStatus,
-) (hierarchydeletion.HierarchyDeletionAgentTerminal, error) {
-	switch status {
-	case taskjournal.TaskStatusCompleted:
-		return hierarchydeletion.HierarchyDeletionAgentCompleted, nil
-	case taskjournal.TaskStatusFailed:
-		return hierarchydeletion.HierarchyDeletionAgentFailed, nil
-	case taskjournal.TaskStatusAborted:
-		return hierarchydeletion.HierarchyDeletionAgentAborted, nil
-	case taskjournal.TaskStatusTimedOut:
-		return hierarchydeletion.HierarchyDeletionAgentTimedOut, nil
-	default:
-		return "", errs.Newf(errs.KindStateConflict, "hierarchy deletion child Task is %s", status)
-	}
 }

@@ -170,7 +170,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		return nil, err
 	}
-	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, authority, backups.cleanup)
+	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, authority, execution, backups.cleanup, cfg)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)

@@ -57,6 +57,19 @@ uses durable child receipts, so Task status or a missing Docker name alone is
 not proof of cleanup. Bounded scans summarize the complete plan before the
 parent-last final transaction removes the resource and releases its slug.
 
+Consumer workloads stop before Attach deprovisioning. Backup cleanup retires its
+exact objects and source exclusions before credentials are revoked. Credential
+dependents and incoming grant sources finalize before their referenced Attach.
+Each credential owner uses one sealed Agent deprovision plan, then a Controller
+finalizer removes the exact captured record, facts and indexes. Network-only,
+no-auth and credential-sharing Attaches need only that finalizer.
+
+Deprovision plans use fixed-revision Attach facts and backing configuration,
+not a fabricated ordinary Detach lifecycle. Custom hook inputs use the existing
+operation-owned encrypted envelope and native Secret pins; Retry keeps those
+same inputs. Successful completion releases them atomically. There is no legacy
+grant-revoke/detach child path or rewrite of previously accepted invalid plans.
+
 An empty Zone reservation registry and unconfigured scheduling defaults are
 metadata, not surviving children. Finalization validates and retires them in
 the same revision-checked transaction as their Environment. Live reservations,
@@ -113,3 +126,5 @@ Aggregate planning, execution and finalization are separated into
 [`hierarchydeletionexecution`](../../internal/infra/etcd/hierarchydeletionexecution/executor.go)
 and
 [`hierarchydeletionfinalization`](../../internal/infra/etcd/hierarchydeletionfinalization/preparer.go).
+Captured Attach plans are sealed by
+[`hierarchyattachplan`](../../internal/controller/hierarchyattachplan/planner.go).
