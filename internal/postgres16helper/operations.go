@@ -30,7 +30,7 @@ func clientArguments(request postgres16protocol.Request) ([][]byte, error) {
 		arguments = []string{"pg_restore", "--list", "--no-password"}
 	case postgres16protocol.OperationTerminateDBConnections:
 		arguments = append(psqlArguments(request.Database),
-			"--command=SELECT pg_catalog.coalesce(pg_catalog.bool_and("+
+			"--command=SELECT COALESCE(pg_catalog.bool_and("+
 				"pg_catalog.pg_terminate_backend(a.pid)), true) "+
 				"FROM pg_catalog.pg_stat_activity AS a "+
 				"WHERE a.datname = pg_catalog.current_database() "+

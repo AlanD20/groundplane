@@ -136,7 +136,7 @@ func TestConfinementClientArgumentsAreExact(t *testing.T) {
 		{
 			OperationTerminateDBConnections,
 			testPSQLArguments(
-				"SELECT pg_catalog.coalesce(pg_catalog.bool_and(" +
+				"SELECT COALESCE(pg_catalog.bool_and(" +
 					"pg_catalog.pg_terminate_backend(a.pid)), true) " +
 					"FROM pg_catalog.pg_stat_activity AS a " +
 					"WHERE a.datname = pg_catalog.current_database() " +
