@@ -86,7 +86,11 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 		if err != nil {
 			return err
 		}
-		defer func() { resultErr = errs.WrapJoined(errs.KindInternal, resultErr, executor.Close()) }()
+		defer func() {
+			if closeErr := executor.Close(); closeErr != nil {
+				resultErr = errs.WrapJoined(errs.KindInternal, resultErr, closeErr)
+			}
+		}()
 		container, err := executor.ResolveContainer(ctx, authority.selection)
 		if err != nil {
 			return err
@@ -150,7 +154,11 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 			if err != nil {
 				return err
 			}
-			defer func() { resultErr = errs.WrapJoined(errs.KindInternal, resultErr, executor.Close()) }()
+			defer func() {
+				if closeErr := executor.Close(); closeErr != nil {
+					resultErr = errs.WrapJoined(errs.KindInternal, resultErr, closeErr)
+				}
+			}()
 			container, err := executor.ResolveContainer(ctx, authority.selection)
 			if err != nil || container.ID != containerID {
 				return errs.New(errs.KindStateConflict, "PostgreSQL dump container identity changed")

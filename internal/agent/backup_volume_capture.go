@@ -81,7 +81,11 @@ func (pool *WorkerPool) executeBackupVolumeCapture(ctx context.Context, assignme
 		if err != nil {
 			return err
 		}
-		defer func() { resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, volume.Close()) }()
+		defer func() {
+			if closeErr := volume.Close(); closeErr != nil {
+				resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
+			}
+		}()
 		writer := &volumeArtifactWriter{ctx: ctx, artifact: source}
 		tree, _, captured, err := volume.Capture(ctx, writer, backupvolumetransfer.EncodeEntries)
 		if err != nil {
@@ -235,7 +239,11 @@ func encryptVolumeSource(ctx context.Context, authority *agentpb.BackupEncryptio
 		if err != nil {
 			return nil, backupstage.ArtifactEvidence{}, err
 		}
-		defer func() { resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, reader.Close()) }()
+		defer func() {
+			if closeErr := reader.Close(); closeErr != nil {
+				resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
+			}
+		}()
 		proof := &volumeSourceProof{hash: sha256.New()}
 		if err := ageinfra.DecryptStream(ctx, string(identity), reader, proof,
 			sourceEvidence.SizeBytes, func() { _ = reader.Close() }); err != nil {
@@ -254,7 +262,11 @@ func encryptVolumeSource(ctx context.Context, authority *agentpb.BackupEncryptio
 	if err != nil {
 		return nil, backupstage.ArtifactEvidence{}, err
 	}
-	defer func() { resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, reader.Close()) }()
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
+		}
+	}()
 	if err := ageinfra.EncryptStream(ctx, recipient, reader,
 		&volumeArtifactWriter{ctx: ctx, artifact: stored}, func() { _ = reader.Close() }); err != nil {
 		return nil, backupstage.ArtifactEvidence{}, err

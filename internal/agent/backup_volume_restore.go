@@ -52,7 +52,11 @@ func (pool *WorkerPool) executeBackupVolumeRestore(ctx context.Context,
 	if err != nil {
 		return mutationAttempted, err
 	}
-	defer func() { resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, receiver.Close()) }()
+	defer func() {
+		if closeErr := receiver.Close(); closeErr != nil {
+			resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
+		}
+	}()
 	artifact, err := pool.downloadVolumeRestore(ctx, assignment, step, newEntries, newManifest)
 	if err != nil {
 		return mutationAttempted, err
@@ -73,7 +77,11 @@ func (pool *WorkerPool) executeBackupVolumeRestore(ctx context.Context,
 	if err != nil {
 		return mutationAttempted, err
 	}
-	defer func() { resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, volume.Close()) }()
+	defer func() {
+		if closeErr := volume.Close(); closeErr != nil {
+			resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
+		}
+	}()
 	stopped := volumeRestoreConsumersStopped(resume)
 	if !stopped {
 		mutationAttempted = true // stop intent is published before the helper call.
@@ -134,7 +142,11 @@ func (pool *WorkerPool) executeBackupVolumeRestore(ctx context.Context,
 	if err != nil {
 		return mutationAttempted, err
 	}
-	defer func() { resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, journal.Close()) }()
+	defer func() {
+		if closeErr := journal.Close(); closeErr != nil {
+			resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
+		}
+	}()
 	mutationJournal := &volumeRestoreCheckpointJournal{local: journal, publisher: publisher,
 		pointID: step.GetRestore().PointId, generationID: step.ExecutionId, newManifest: newManifestSHA}
 	state, err := journal.ReadState(ctx)
@@ -211,7 +223,11 @@ func (pool *WorkerPool) executeBackupVolumeRestore(ctx context.Context,
 		return mutationAttempted, err
 	}
 	if replacement != nil {
-		defer func() { resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, replacement.Close()) }()
+		defer func() {
+			if closeErr := replacement.Close(); closeErr != nil {
+				resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
+			}
+		}()
 	}
 	state, err = journal.ReadState(ctx)
 	if err != nil {

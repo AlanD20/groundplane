@@ -44,7 +44,9 @@ func (pool *WorkerPool) receiveBackupVolumeRestoreNew(ctx context.Context,
 	keep := false
 	defer func() {
 		if !keep {
-			resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, journal.Close())
+			if closeErr := journal.Close(); closeErr != nil {
+				resultErr = errs.WrapJoined(errs.KindStorageUnavailable, resultErr, closeErr)
+			}
 		}
 	}()
 	credit, err := journal.CurrentCredit(ctx)

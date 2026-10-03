@@ -81,7 +81,11 @@ func (pool *WorkerPool) executeBackupPostgresRestore(ctx context.Context,
 	if err != nil {
 		return mutationAttempted, err
 	}
-	defer func() { resultErr = errs.WrapJoined(errs.KindInternal, resultErr, executor.Close()) }()
+	defer func() {
+		if closeErr := executor.Close(); closeErr != nil {
+			resultErr = errs.WrapJoined(errs.KindInternal, resultErr, closeErr)
+		}
+	}()
 	container, err := executor.ResolveContainer(ctx, authority.selection)
 	if err != nil {
 		return mutationAttempted, err
