@@ -270,6 +270,7 @@ func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
 		Status: apiTypes.TaskStatus(task.Status), WorkspaceType: apiTypes.TaskWorkspaceType(task.WorkspaceType),
 		Actor: apiTypes.TaskActor(task.Actor), CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
 		StartedAt: task.StartedAt, FinishedAt: task.FinishedAt,
+		ReconciliationRequired: task.ReconciliationRequired,
 	}
 	if task.RetryOf != nil {
 		result.RetryOf = *task.RetryOf
