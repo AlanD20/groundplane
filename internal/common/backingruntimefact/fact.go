@@ -103,8 +103,6 @@ func Workload(
 		labels["com.groundplane.service-id"] != serviceID || labels["com.groundplane.environment-id"] != artifact.OwnerId ||
 		labels["com.groundplane.plan-id"] != planID ||
 		labels["com.groundplane.render-generation"] != strconv.FormatUint(generation, 10) ||
-		labels["com.docker.compose.project"] != artifact.ProjectName ||
-		labels["com.docker.compose.service"] != selected.ComposeName ||
 		labels["com.groundplane.release-id"] != "" || labels["com.groundplane.slot"] != "" ||
 		labels["com.groundplane.runtime-role"] != "" || labels["com.groundplane.component-id"] != "" ||
 		labels["com.groundplane.tenant-id"] != "" {
@@ -157,6 +155,10 @@ func MatchesObservation(value Observation, artifact *agentpb.ComposeArtifact, wo
 	labels := make(map[string]string, len(value.Labels))
 	for _, pair := range value.Labels {
 		labels[pair.Key] = pair.Value
+	}
+	if labels["com.docker.compose.project"] != artifact.ProjectName ||
+		labels["com.docker.compose.service"] != workload.ComposeName {
+		return false
 	}
 	for _, pair := range workload.ExpectedLabels {
 		if labels[pair.Key] != pair.Value {

@@ -91,8 +91,6 @@ func backupRuntimeRunPlanDraft(
 			projectName := "gp-" + strings.ToLower(snapshot.BackingEnvironmentID)
 			image := "registry.example.test/postgres@sha256:" + testBackupDigest
 			labels := []*agentpb.LabelPair{
-				{Key: "com.docker.compose.project", Value: projectName},
-				{Key: "com.docker.compose.service", Value: "postgres"},
 				{Key: "com.groundplane.environment-id", Value: snapshot.BackingEnvironmentID},
 				{Key: "com.groundplane.kind", Value: "service"},
 				{Key: "com.groundplane.managed", Value: "true"},
