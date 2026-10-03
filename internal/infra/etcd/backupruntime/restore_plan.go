@@ -12,6 +12,20 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ValidateRestoreExecutionPlan selects the exact source-specific authority.
+func ValidateRestoreExecutionPlan(record BackupRestoreRecord, plan *agentpb.ExecutionPlan) error {
+	switch record.Point.SourceKind {
+	case BackupRuntimeSourceConfig:
+		return ValidateConfigRestoreExecutionPlan(record, plan)
+	case BackupRuntimeSourceVolume:
+		return ValidateVolumeRestoreExecutionPlan(record, plan)
+	case BackupRuntimeSourceAttach:
+		return ValidatePostgresRestoreExecutionPlan(record, plan)
+	default:
+		return CorruptBackupRuntimeRecord()
+	}
+}
+
 // ValidateConfigRestoreExecutionPlan binds the immutable procedure to the
 // selected Point and current surviving target, including its exact predecessor.
 func ValidateConfigRestoreExecutionPlan(record BackupRestoreRecord, plan *agentpb.ExecutionPlan) error {

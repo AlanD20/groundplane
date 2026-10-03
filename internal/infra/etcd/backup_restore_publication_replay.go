@@ -11,7 +11,6 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresbackingguard"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // A losing publication must prove the winning Restore, not compare it with
@@ -61,7 +60,7 @@ func (repository *BackupRuntimeRepository) validateExistingRestorePublication(ct
 	plan, planErr := backupruntime.DecodeBackupExecutionPlan(read.Values[2].Value)
 	if nativeErr != nil || planErr != nil || native.TaskID != task.ID || native.OperationID != task.OperationID ||
 		native.EnvironmentID != task.Owner.EnvironmentID || !native.CreatedAt.Equal(task.CreatedAt) ||
-		validateRestorePublicationPlan(native, plan) != nil ||
+		backupruntime.ValidateRestoreExecutionPlan(native, plan) != nil ||
 		task.PlanID != plan.PlanId || task.PlanHash != hex.EncodeToString(plan.PlanHash) ||
 		read.Values[2].Version != 1 || read.Values[2].ModRevision != markerRevision ||
 		read.Values[3].Version != 1 || read.Values[3].ModRevision != markerRevision ||
@@ -118,19 +117,6 @@ func (repository *BackupRuntimeRepository) validateExistingRestorePublication(ct
 		}
 	}
 	return nil
-}
-
-func validateRestorePublicationPlan(native backupruntime.BackupRestoreRecord, plan *agentpb.ExecutionPlan) error {
-	switch native.Point.SourceKind {
-	case backupruntime.BackupRuntimeSourceConfig:
-		return backupruntime.ValidateConfigRestoreExecutionPlan(native, plan)
-	case backupruntime.BackupRuntimeSourceVolume:
-		return backupruntime.ValidateVolumeRestoreExecutionPlan(native, plan)
-	case backupruntime.BackupRuntimeSourceAttach:
-		return backupruntime.ValidatePostgresRestoreExecutionPlan(native, plan)
-	default:
-		return backupruntime.CorruptBackupRuntimeRecord()
-	}
 }
 
 func (repository *BackupRuntimeRepository) validateTerminalRestorePublication(ctx context.Context,

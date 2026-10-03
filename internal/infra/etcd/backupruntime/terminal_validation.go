@@ -79,10 +79,9 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 	case taskjournal.TaskRestore:
 		if len(record.Sources) != 0 || len(record.Points) != 0 || record.Restore == nil ||
 			ValidateBackupRestoreRecord(*record.Restore) != nil ||
-			record.Restore.Point.SourceKind != BackupRuntimeSourceConfig ||
 			record.Restore.TaskID != record.Task.TaskID || record.Restore.OperationID != record.Task.OperationID ||
 			record.Restore.EnvironmentID != record.Task.Owner.EnvironmentID ||
-			!validConfigRestoreTerminalOutcome(record.Restore.State, record.Task.Status) ||
+			!validRestoreTerminalOutcome(record.Restore.State, record.Task.Status) ||
 			!record.Restore.CreatedAt.Equal(
 				record.Task.CreatedAt,
 			) || !record.Restore.UpdatedAt.Equal(record.Task.FinishedAt) {
@@ -105,7 +104,7 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 	return nil
 }
 
-func validConfigRestoreTerminalOutcome(state BackupRestoreState, status taskjournal.TaskStatus) bool {
+func validRestoreTerminalOutcome(state BackupRestoreState, status taskjournal.TaskStatus) bool {
 	if state == BackupRestoreCompleted {
 		return status == taskjournal.TaskStatusCompleted
 	}

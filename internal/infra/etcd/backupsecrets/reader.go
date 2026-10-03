@@ -280,7 +280,7 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 			restored.State == backupruntime.BackupRestoreRecoveryRequired {
 			return Evidence{}, errs.New(errs.KindStateConflict, "backup Restore is not active")
 		}
-		if err := backupruntime.ValidateConfigRestoreExecutionPlan(restored, plan); err != nil {
+		if err := backupruntime.ValidateRestoreExecutionPlan(restored, plan); err != nil {
 			return Evidence{}, err
 		}
 		evidence.Restore = &restored
