@@ -108,7 +108,7 @@ func (observer *Observer) Observe(
 			}
 		}
 	}
-	return observer.observeArtifact(ctx, artifact, companions)
+	return observer.observeArtifact(ctx, artifact, companions, ownedPlan.BackupScope != nil)
 }
 
 // ObserveReleaseRestoration opens the original plan's declared recovery pair.
@@ -138,26 +138,27 @@ func (observer *Observer) ObserveRestoration(
 	if artifact == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Compose restoration observation is empty")
 	}
-	return observer.observeArtifact(ctx, artifact, observation.CandidateWorkloads())
+	return observer.observeArtifact(ctx, artifact, observation.CandidateWorkloads(), false)
 }
 
 func (observer *Observer) observeArtifact(
 	ctx context.Context,
 	artifact *agentpb.ComposeArtifact,
 	candidateWorkloads []*agentpb.ComposeService,
+	selectedResourcesOnly bool,
 ) (*agentpb.ObservedProject, error) {
 	observedAt := timestamppb.New(observer.now().UTC())
 	if err := observedAt.CheckValid(); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	result := &agentpb.ObservedProject{ProjectName: artifact.ProjectName, ObservedAt: observedAt}
-	if err := observer.observeContainers(ctx, artifact, candidateWorkloads, result); err != nil {
+	if err := observer.observeContainers(ctx, artifact, candidateWorkloads, selectedResourcesOnly, result); err != nil {
 		return nil, err
 	}
-	if err := observer.observeNetworks(ctx, artifact, result); err != nil {
+	if err := observer.observeNetworks(ctx, artifact, selectedResourcesOnly, result); err != nil {
 		return nil, err
 	}
-	if err := observer.observeVolumes(ctx, artifact, result); err != nil {
+	if err := observer.observeVolumes(ctx, artifact, selectedResourcesOnly, result); err != nil {
 		return nil, err
 	}
 	sort.Slice(result.Containers, func(i, j int) bool {
@@ -180,6 +181,7 @@ func (observer *Observer) observeContainers(
 	ctx context.Context,
 	artifact *agentpb.ComposeArtifact,
 	candidateWorkloads []*agentpb.ComposeService,
+	selectedResourcesOnly bool,
 	result *agentpb.ObservedProject,
 ) error {
 	listed, err := observer.engine.ContainerList(ctx, client.ContainerListOptions{All: true})
@@ -195,6 +197,10 @@ func (observer *Observer) observeContainers(
 	}
 	for _, summary := range listed.Items {
 		if summary.Labels[composeProjectLabel] != artifact.ProjectName {
+			continue
+		}
+		if selectedResourcesOnly && expected[summary.Labels[composeServiceLabel]] == nil &&
+			!artifactOwnsService(artifact, summary.Labels["com.groundplane.service-id"]) {
 			continue
 		}
 		inspected, err := observer.engine.ContainerInspect(ctx, summary.ID, client.ContainerInspectOptions{})
@@ -265,6 +271,7 @@ func (observer *Observer) observeContainers(
 func (observer *Observer) observeNetworks(
 	ctx context.Context,
 	artifact *agentpb.ComposeArtifact,
+	selectedResourcesOnly bool,
 	result *agentpb.ObservedProject,
 ) error {
 	listed, err := observer.engine.NetworkList(ctx, client.NetworkListOptions{})
@@ -281,6 +288,9 @@ func (observer *Observer) observeNetworks(
 		byName[network.DockerName] = network
 	}
 	for _, summary := range listed.Items {
+		if selectedResourcesOnly && byName[summary.Name] == nil {
+			continue
+		}
 		if summary.Labels[composeProjectLabel] != artifact.ProjectName && byName[summary.Name] == nil {
 			continue
 		}
@@ -311,6 +321,7 @@ func (observer *Observer) observeNetworks(
 func (observer *Observer) observeVolumes(
 	ctx context.Context,
 	artifact *agentpb.ComposeArtifact,
+	selectedResourcesOnly bool,
 	result *agentpb.ObservedProject,
 ) error {
 	listed, err := observer.engine.VolumeList(ctx, client.VolumeListOptions{})
@@ -330,6 +341,9 @@ func (observer *Observer) observeVolumes(
 		byName[volume.DockerName] = volume
 	}
 	for _, summary := range listed.Items {
+		if selectedResourcesOnly && byName[summary.Name] == nil {
+			continue
+		}
 		if summary.Labels[composeProjectLabel] != artifact.ProjectName && byName[summary.Name] == nil {
 			continue
 		}

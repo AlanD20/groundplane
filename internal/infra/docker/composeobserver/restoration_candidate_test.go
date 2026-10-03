@@ -57,7 +57,7 @@ func TestRestorationObservationRecognizesOnlySealedCandidate(t *testing.T) {
 			if err != nil || len(ordinary.GetCollisions()) != 1 {
 				t.Fatalf("ordinary observation lost collision: %v %v", ordinary, err)
 			}
-			observed, err := observer.observeArtifact(context.Background(), prior, []*agentpb.ComposeService{candidate})
+			observed, err := observer.observeArtifact(context.Background(), prior, []*agentpb.ComposeService{candidate}, false)
 			if err != nil {
 				t.Fatal(err)
 			}

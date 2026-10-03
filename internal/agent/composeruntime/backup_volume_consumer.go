@@ -62,6 +62,7 @@ func (runtime *Runtime) ObserveBackupVolumeConsumer(ctx context.Context,
 	if err != nil || observed == nil || len(observed.Collisions) != 0 {
 		return observed, zero, invalidBackupVolumeObservation()
 	}
+	observed = backupConsumerObservation(observed, taskassignment.ComposeArtifact(assignment.Plan, volume.ArtifactId), serviceID)
 	count := uint32(0)
 	for _, container := range observed.Containers {
 		if container.GetServiceId() != serviceID {

@@ -55,6 +55,7 @@ func (runtime *Runtime) ObservePostgresConsumer(ctx context.Context,
 	if err != nil || observed == nil || len(observed.Collisions) != 0 {
 		return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer observation is unavailable")
 	}
+	observed = backupConsumerObservation(observed, artifact, serviceID)
 	count := uint32(0)
 	for _, container := range observed.Containers {
 		if container.GetServiceId() != serviceID {
