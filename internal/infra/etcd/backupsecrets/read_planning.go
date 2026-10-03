@@ -111,42 +111,41 @@ func (reader *Reader) planDynamicKeys(
 		if len(plan.Steps) != len(evidence.Dispatch.RecoveryPointIDs) {
 			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune sealed step count changed")
 		}
-		pointKeys := make([]string, len(evidence.Dispatch.RecoveryPointIDs))
-		for index, pointID := range evidence.Dispatch.RecoveryPointIDs {
-			pointKeys[index] = backupruntime.BackupRecoveryPointKey(pointID)
+		if stepIndex < 0 || stepIndex >= len(plan.Steps) {
+			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune selected step is unavailable")
 		}
+		pointID := evidence.Dispatch.RecoveryPointIDs[stepIndex]
+		pointKeys := []string{backupruntime.BackupRecoveryPointKey(pointID)}
 		points, err := reader.readFixed(ctx, pointKeys, evidence.ReadRevision)
 		if err != nil {
 			return "", nil, nil, err
 		}
 		defer etcdstore.ClearValues(points.Values)
-		for index, pointID := range evidence.Dispatch.RecoveryPointIDs {
-			dynamic.points[pointID] = dynamic.add(backupruntime.BackupRecoveryPointKey(pointID))
-			dynamic.prunes[pointID] = dynamic.add(backupruntime.BackupRecoveryPointPruneKey(pointID))
-			prune := plan.Steps[index].GetBackupStep().GetPrune()
-			if prune == nil || len(prune.Objects) != 1 || prune.Objects[0].Ordinal != uint32(index+1) ||
-				prune.Objects[0].PointId != pointID || points.Values[index] == nil {
-				return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune sealed point authority changed")
-			}
-			point, err := backupruntime.DecodeBackupRecoveryPointRecord(points.Values[index].Value)
-			if err != nil || point.ID != pointID || point.EnvironmentID != environmentID {
-				return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune point evidence changed")
-			}
-			authority := prune.Objects[0].GetObject().GetConnector()
-			if authority.GetConnectorId() != point.ConnectorID {
-				return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune Connector identity changed")
-			}
-			if previous := dynamic.connectorAuthorities[point.ConnectorID]; previous != nil && !proto.Equal(previous, authority) {
-				return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune Connector authorities disagree")
-			}
-			dynamic.connectorAuthorities[point.ConnectorID] = authority
-			sourcePosition := dynamic.add(backuppolicy.BackupSourceKey(point.SourceID))
-			sourceIDs[point.SourceID] = sourcePosition
-			dynamic.sources[point.SourceID] = sourcePosition
-			connectorPosition := dynamic.add(connectorrecord.RecordKey(point.ConnectorID))
-			connectorIDs[point.ConnectorID] = connectorPosition
-			dynamic.connectors[point.ConnectorID] = connectorPosition
+		dynamic.points[pointID] = dynamic.add(backupruntime.BackupRecoveryPointKey(pointID))
+		dynamic.prunes[pointID] = dynamic.add(backupruntime.BackupRecoveryPointPruneKey(pointID))
+		prune := plan.Steps[stepIndex].GetBackupStep().GetPrune()
+		if prune == nil || len(prune.Objects) != 1 || prune.Objects[0].Ordinal != uint32(stepIndex+1) ||
+			prune.Objects[0].PointId != pointID || points.Values[0] == nil {
+			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune sealed point authority changed")
 		}
+		point, err := backupruntime.DecodeBackupRecoveryPointRecord(points.Values[0].Value)
+		if err != nil || point.ID != pointID || point.EnvironmentID != environmentID {
+			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune point evidence changed")
+		}
+		authority := prune.Objects[0].GetObject().GetConnector()
+		if authority.GetConnectorId() != point.ConnectorID {
+			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune Connector identity changed")
+		}
+		if previous := dynamic.connectorAuthorities[point.ConnectorID]; previous != nil && !proto.Equal(previous, authority) {
+			return "", nil, nil, errs.New(errs.KindStateConflict, "backup prune Connector authorities disagree")
+		}
+		dynamic.connectorAuthorities[point.ConnectorID] = authority
+		sourcePosition := dynamic.add(backuppolicy.BackupSourceKey(point.SourceID))
+		sourceIDs[point.SourceID] = sourcePosition
+		dynamic.sources[point.SourceID] = sourcePosition
+		connectorPosition := dynamic.add(connectorrecord.RecordKey(point.ConnectorID))
+		connectorIDs[point.ConnectorID] = connectorPosition
+		dynamic.connectors[point.ConnectorID] = connectorPosition
 	}
 	if environmentID == "" || stepIndex < 0 || stepIndex >= len(plan.Steps) {
 		return "", nil, nil, errs.New(errs.KindInternal, "backup secret resolution scope is incomplete")

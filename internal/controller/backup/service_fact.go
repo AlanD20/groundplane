@@ -97,17 +97,6 @@ func NewBackupServiceFactResolver(store etcdstore.Store) backupplanning.BackupSe
 			}
 		}
 		artifact, workload := selected.Artifact, selected.Workload
-		if kind == servicefactauthority.ReleaseRuntime {
-			at, err := ids.Timestamp(ids.KindConfig, artifact.ArtifactId)
-			if err != nil {
-				return nil, err
-			}
-			// Acknowledged member projections can share their original candidate
-			// ID while containing different bytes. Give each exact retained value
-			// a stable operation handle; labels and persisted authority stay intact.
-			artifact.ArtifactId = ids.DeriveAt(ids.KindConfig, at,
-				hex.EncodeToString(backupServiceRevisionDigest(applied).Sha256), "backup-runtime:"+input.ServiceID)
-		}
 		localImageID, err := hex.DecodeString(strings.TrimPrefix(selected.LocalImageID, "sha256:"))
 		if err != nil || len(localImageID) != sha256.Size {
 			return nil, errs.New(errs.KindStateConflict, "backup Service applied local image ID is invalid")

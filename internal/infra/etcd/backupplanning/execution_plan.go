@@ -229,40 +229,59 @@ func ValidateBackupPruneExecutionPlan(
 		return errs.New(errs.KindValidationFailed, "backup prune execution plan is invalid")
 	}
 	for index, item := range evidence {
-		step := plan.Steps[index]
-		if step == nil || step.GetBackupStep().GetStepId() != step.GetStepId() {
-			return errs.New(errs.KindValidationFailed, "backup prune step binding is invalid")
-		}
-		authority, err := executionplan.ValidateBackupStepAuthority(step.GetBackupStep())
-		if err != nil {
+		if err := ValidateBackupPruneExecutionStep(dispatch, item, plan, index); err != nil {
 			return err
 		}
-		prune := authority.GetPrune()
-		point := item.Prune.Point
-		if prune == nil || len(prune.Objects) != 1 || !proto.Equal(prune.RetentionPolicy, item.RetentionPolicy) ||
-			item.Prune.OperationID != dispatch.OperationID || item.PruneRevision <= 0 || item.SourceRevision <= 0 ||
-			point.EnvironmentID != dispatch.EnvironmentID || dispatch.RecoveryPointIDs[index] != point.ID ||
-			plan.GetBackupScope().GetEnvironment().GetModRevision() != item.EnvironmentRevision ||
-			authority.StepDeadlineUnixNano != uint64(dispatch.CreatedAt.Add(30*time.Minute).UnixNano()) {
-			return errs.New(errs.KindValidationFailed, "backup prune snapshot authority is invalid")
-		}
-		object := prune.Objects[0]
-		connector := object.GetObject().GetConnector()
-		metadataCount, metadataDigest, err := backupPointMetadataEvidence(point)
-		if err != nil || object.Ordinal != uint32(index+1) || object.PointId != point.ID ||
-			object.GetPoint().
-				GetModRevision() !=
-				item.PointRevision || !bytes.Equal(object.GetPoint().GetSha256(), item.PointSHA256) ||
-			!backupPointArtifactMatches(point.Evidence, object.Evidence) ||
-			!backupPointObjectMatches(point.Object, object.Object) ||
-			!proto.Equal(connector, item.ConnectorAuthority) ||
-			connector.GetConnector().GetModRevision() != item.ConnectorRevision ||
-			connector.GetCanonicalEndpointUrl() != item.ConnectorEndpoint || object.Object.Bucket != item.ConnectorBucket ||
-			connector.GetPrefix() != item.ConnectorPrefix || connector.GetRegion() != item.ConnectorRegion ||
-			connector.GetPathStyle() != item.ConnectorPathStyle ||
-			object.MetadataCount != metadataCount || !bytes.Equal(object.MetadataSha256, metadataDigest[:]) {
-			return errs.New(errs.KindValidationFailed, "backup prune point plan evidence is invalid")
-		}
+	}
+	return nil
+}
+
+// ValidateBackupPruneExecutionStep checks one still-owned object against its
+// immutable dispatch and plan. Earlier verified-absent points are already retired.
+func ValidateBackupPruneExecutionStep(
+	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
+	item PruneExecutionEvidence,
+	plan *agentpb.ExecutionPlan,
+	index int,
+) error {
+	if plan == nil || plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE ||
+		plan.TargetId != dispatch.EnvironmentID || plan.GetBackupScope().GetEnvironmentId() != dispatch.EnvironmentID ||
+		len(plan.Steps) != len(dispatch.RecoveryPointIDs) || index < 0 || index >= len(plan.Steps) {
+		return errs.New(errs.KindValidationFailed, "backup prune execution plan is invalid")
+	}
+	step := plan.Steps[index]
+	if step == nil || step.GetBackupStep().GetStepId() != step.GetStepId() {
+		return errs.New(errs.KindValidationFailed, "backup prune step binding is invalid")
+	}
+	authority, err := executionplan.ValidateBackupStepAuthority(step.GetBackupStep())
+	if err != nil {
+		return err
+	}
+	prune := authority.GetPrune()
+	point := item.Prune.Point
+	if prune == nil || len(prune.Objects) != 1 || !proto.Equal(prune.RetentionPolicy, item.RetentionPolicy) ||
+		item.Prune.OperationID != dispatch.OperationID || item.PruneRevision <= 0 || item.SourceRevision <= 0 ||
+		point.EnvironmentID != dispatch.EnvironmentID || dispatch.RecoveryPointIDs[index] != point.ID ||
+		plan.GetBackupScope().GetEnvironment().GetModRevision() != item.EnvironmentRevision ||
+		authority.StepDeadlineUnixNano != uint64(dispatch.CreatedAt.Add(30*time.Minute).UnixNano()) {
+		return errs.New(errs.KindValidationFailed, "backup prune snapshot authority is invalid")
+	}
+	object := prune.Objects[0]
+	connector := object.GetObject().GetConnector()
+	metadataCount, metadataDigest, err := backupPointMetadataEvidence(point)
+	if err != nil || object.Ordinal != uint32(index+1) || object.PointId != point.ID ||
+		object.GetPoint().
+			GetModRevision() !=
+			item.PointRevision || !bytes.Equal(object.GetPoint().GetSha256(), item.PointSHA256) ||
+		!backupPointArtifactMatches(point.Evidence, object.Evidence) ||
+		!backupPointObjectMatches(point.Object, object.Object) ||
+		!proto.Equal(connector, item.ConnectorAuthority) ||
+		connector.GetConnector().GetModRevision() != item.ConnectorRevision ||
+		connector.GetCanonicalEndpointUrl() != item.ConnectorEndpoint || object.Object.Bucket != item.ConnectorBucket ||
+		connector.GetPrefix() != item.ConnectorPrefix || connector.GetRegion() != item.ConnectorRegion ||
+		connector.GetPathStyle() != item.ConnectorPathStyle ||
+		object.MetadataCount != metadataCount || !bytes.Equal(object.MetadataSha256, metadataDigest[:]) {
+		return errs.New(errs.KindValidationFailed, "backup prune point plan evidence is invalid")
 	}
 	return nil
 }

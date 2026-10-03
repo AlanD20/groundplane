@@ -3,6 +3,10 @@
 package servicefactauthority
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -94,6 +98,15 @@ func ReadApplied(value *etcdstore.KeyValue, kind Kind, environmentID, serviceID 
 		len(workload.ExpectedLabels) == 0 {
 		return Applied{}, invalid()
 	}
+	at, err := ids.Timestamp(ids.KindConfig, artifact.ArtifactId)
+	if err != nil {
+		return Applied{}, err
+	}
+	// Member projections can share a candidate ID but contain different bytes.
+	// Every reader uses the same exact-value handle; labels remain unchanged.
+	digest := sha256.Sum256(value.Value)
+	artifact.ArtifactId = ids.DeriveAt(ids.KindConfig, at,
+		hex.EncodeToString(digest[:]), "backup-runtime:"+serviceID)
 	return Applied{Artifact: artifact, Workload: workload, LocalImageID: workload.ImageReference}, nil
 }
 

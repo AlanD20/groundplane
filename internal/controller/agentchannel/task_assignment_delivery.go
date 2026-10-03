@@ -12,6 +12,7 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -66,6 +67,9 @@ func (s *Server) sendAssignmentPayloads(
 ) error {
 	for _, step := range assignment.GetPlan().GetSteps() {
 		if step.GetBackupStep() != nil {
+			if backupPrunePayloadRetired(step, assignment.GetBackupResume()) {
+				continue
+			}
 			if err := s.sendBackupSecretSlots(
 				stream.Context(),
 				stream,
@@ -124,6 +128,26 @@ func (s *Server) sendAssignmentPayloads(
 		}
 	}
 	return nil
+}
+
+func backupPrunePayloadRetired(step *agentpb.ExecutionStep, resume *agentpb.BackupTaskResume) bool {
+	sealed := step.GetBackupStep()
+	prune := sealed.GetPrune()
+	if prune == nil || len(prune.Objects) != 1 {
+		return false
+	}
+	object := prune.Objects[0]
+	for _, retained := range resume.GetSteps() {
+		if retained.GetStepId() != sealed.GetStepId() || retained.GetExecutionId() != sealed.GetExecutionId() {
+			continue
+		}
+		progress := retained.GetPrune()
+		deleted := progress.GetObjectDeleted()
+		return progress.GetNextObjectOrdinal() > object.GetOrdinal() &&
+			deleted.GetOrdinal() == object.GetOrdinal() && deleted.GetPointId() == object.GetPointId() &&
+			proto.Equal(deleted.GetObject(), object.GetObject())
+	}
+	return false
 }
 
 func (s *Server) taskAssignmentMessage(
