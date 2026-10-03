@@ -4,6 +4,7 @@ import (
 	"filippo.io/age"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
+	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/oklog/ulid/v2"
 	"path"
@@ -28,23 +29,10 @@ func validateBackupPostgresSnapshot(snapshot BackupPostgresSourceSnapshot) error
 		recordcodec.ValidateID(ids.KindService, snapshot.BackingServiceID) != nil ||
 		recordcodec.ValidateID(ids.KindService, snapshot.ConsumerServiceID) != nil ||
 		snapshot.BackingServiceRevision <= 0 || snapshot.AttachFactsRevision <= 0 ||
-		!validBackupPostgresIdentity(snapshot.Database) || !validBackupPostgresIdentity(snapshot.Role) {
+		!postgresidentity.ValidGenerated(snapshot.Database) || !postgresidentity.ValidGenerated(snapshot.Role) {
 		return invalidBackupRuntimeRecord("postgres source snapshot is invalid")
 	}
 	return nil
-}
-
-func validBackupPostgresIdentity(value string) bool {
-	if len(value) == 0 || len(value) > 63 || value[0] < 'a' || value[0] > 'z' {
-		return false
-	}
-	for _, character := range []byte(value[1:]) {
-		if (character < 'a' || character > 'z') &&
-			(character < '0' || character > '9') && character != '_' {
-			return false
-		}
-	}
-	return true
 }
 
 func validateBackupVolumeSnapshot(snapshot BackupVolumeSourceSnapshot) error {

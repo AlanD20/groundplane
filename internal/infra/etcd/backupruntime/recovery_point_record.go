@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
 
@@ -111,8 +112,8 @@ func ValidateBackupRecoveryPointSnapshot(record BackupRecoveryPointSnapshot) err
 		return err
 	}
 	if record.SourceKind == BackupRuntimeSourceAttach {
-		if !validBackupPostgresIdentity(record.Postgres.Database) ||
-			!validBackupPostgresIdentity(record.Postgres.Role) ||
+		if !postgresidentity.ValidGenerated(record.Postgres.Database) ||
+			!postgresidentity.ValidGenerated(record.Postgres.Role) ||
 			recordcodec.ValidateID(ids.KindEnvironment, record.Postgres.BackingEnvironmentID) != nil ||
 			recordcodec.ValidateID(ids.KindService, record.Postgres.BackingServiceID) != nil ||
 			recordcodec.ValidateID(ids.KindService, record.Postgres.ConsumerServiceID) != nil {

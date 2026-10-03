@@ -2,6 +2,7 @@ package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -105,8 +106,8 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 		return invalidBackupRuntimeRecord("backup orphan upload evidence or identity is invalid")
 	}
 	if record.Target.SourceKind == BackupRuntimeSourceAttach {
-		if !validBackupPostgresIdentity(record.Postgres.Database) ||
-			!validBackupPostgresIdentity(record.Postgres.Role) ||
+		if !postgresidentity.ValidGenerated(record.Postgres.Database) ||
+			!postgresidentity.ValidGenerated(record.Postgres.Role) ||
 			recordcodec.ValidateID(ids.KindEnvironment, record.Postgres.BackingEnvironmentID) != nil ||
 			recordcodec.ValidateID(ids.KindService, record.Postgres.BackingServiceID) != nil ||
 			recordcodec.ValidateID(ids.KindService, record.Postgres.ConsumerServiceID) != nil {
