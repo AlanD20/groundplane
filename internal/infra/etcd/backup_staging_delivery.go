@@ -199,7 +199,8 @@ func (repository *TaskRepository) PublishBackupStagingDelivery(
 	}
 	if found {
 		conditions[0].ModRevision = current.Revision
-		if current.Record.AgentGeneration != record.AgentGeneration && !current.Record.AllowsGenerationReplacement(record) {
+		if current.Record.AgentGeneration != record.AgentGeneration &&
+			!current.Record.AllowsGenerationReplacement(record) {
 			return backupStagingConflict()
 		}
 		if current.Record.Ack == nil && !proto.Equal(current.Record.Plan, record.Plan) {

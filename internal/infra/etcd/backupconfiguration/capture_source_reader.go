@@ -125,35 +125,21 @@ func (reader *CaptureSourceReader) ReadEntries(
 	if err != nil || environment.ID != environmentID {
 		return nil, captureSourceCorrupt()
 	}
-	var result []CaptureSourceEntry
-	start := ""
-	prefix := entries.EntryOwnerCollectionPrefix(environmentID)
-	for {
-		page, err := reader.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, StartExclusive: start, Limit: 96})
+	projection, found, err := environmentqueries.NewProjectionReader(reader).
+		GetEnvironmentComposeProjection(ctx, environmentID)
+	if err != nil || !found {
+		return nil, err
+	}
+	if len(projection.Record.Entries) > backupconfig.MaxEntries {
+		return nil, errs.New(errs.KindValidationFailed, "Config snapshot Entry count exceeds its limit")
+	}
+	result := make([]CaptureSourceEntry, 0, len(projection.Record.Entries))
+	for _, record := range projection.Record.Entries {
+		entry, err := reader.readEntry(ctx, environmentID, environment.ProjectID, record, projection.Revision)
 		if err != nil {
 			return nil, err
 		}
-		if page.More && len(page.Values) == 0 {
-			return nil, captureSourceCorrupt()
-		}
-		for _, index := range page.Values {
-			entryID := string(index.Value)
-			if index.Key != prefix+entryID || ids.Validate(ids.KindEnvEntry, entryID) != nil {
-				return nil, captureSourceCorrupt()
-			}
-			entry, err := reader.readEntry(ctx, environmentID, environment.ProjectID, entryID)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, entry)
-			if len(result) > backupconfig.MaxEntries {
-				return nil, errs.New(errs.KindValidationFailed, "Config snapshot Entry count exceeds its limit")
-			}
-			start = index.Key
-		}
-		if !page.More {
-			break
-		}
+		result = append(result, entry)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Record.Entry.ID < result[j].Record.Entry.ID })
 	return result, nil
@@ -161,24 +147,22 @@ func (reader *CaptureSourceReader) ReadEntries(
 
 func (reader *CaptureSourceReader) readEntry(
 	ctx context.Context,
-	environmentID, projectID, entryID string,
+	environmentID, projectID string,
+	record entries.Record,
+	revision int64,
 ) (CaptureSourceEntry, error) {
-	read, err := reader.Get(ctx, entries.RecordKey(entryID))
+	encoded, err := entries.EncodeRecord(record)
 	if err != nil {
 		return CaptureSourceEntry{}, err
 	}
-	if read.Entry == nil {
-		return CaptureSourceEntry{}, captureSourceCorrupt()
-	}
-	defer clear(read.Entry.Value)
-	record, err := entries.DecodeRecord(read.Entry.Value)
-	if err != nil || record.EnvironmentID != environmentID || record.Entry.ID != entryID {
+	defer clear(encoded)
+	if record.EnvironmentID != environmentID || revision <= 0 {
 		return CaptureSourceEntry{}, captureSourceCorrupt()
 	}
 	entry := CaptureSourceEntry{
 		Record:        record,
-		EntryRevision: read.Entry.ModRevision,
-		EntrySHA256:   sha256.Sum256(read.Entry.Value),
+		EntryRevision: revision,
+		EntrySHA256:   sha256.Sum256(encoded),
 	}
 	value, err := reader.ReadGeneration(ctx, entry)
 	if err != nil {

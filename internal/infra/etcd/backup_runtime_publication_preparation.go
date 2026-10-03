@@ -289,7 +289,6 @@ func backupRunExternalConditions(
 			allowed[backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshotID, run.RetryOfTaskID)] = struct{}{}
 			allowed[backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(run.TaskID, snapshotID)] = struct{}{}
 			allowed[backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID)] = struct{}{}
-			allowed[hierarchyrecord.EnvironmentKey(run.EnvironmentID)] = struct{}{}
 		}
 	}
 	result := make([]etcdstore.Condition, 0, len(allowed))
