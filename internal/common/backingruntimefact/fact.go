@@ -156,10 +156,8 @@ func MatchesObservation(value Observation, artifact *agentpb.ComposeArtifact, wo
 	for _, pair := range value.Labels {
 		labels[pair.Key] = pair.Value
 	}
-	if labels["com.docker.compose.project"] != artifact.ProjectName ||
-		labels["com.docker.compose.service"] != workload.ComposeName {
-		return false
-	}
+	// The Compose observer verifies Docker's project/service labels before
+	// emitting typed identity; its report contains only sealed ownership labels.
 	for _, pair := range workload.ExpectedLabels {
 		if labels[pair.Key] != pair.Value {
 			return false
