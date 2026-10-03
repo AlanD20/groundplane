@@ -54,7 +54,7 @@ func validateBackupVolumeSnapshot(snapshot BackupVolumeSourceSnapshot) error {
 		snapshot.EnvironmentRevision <= 0 || snapshot.HeadRevision <= 0 ||
 		!recordcodec.ValidSHA256(snapshot.HeadSHA256) || snapshot.ProjectionRoot <= 0 ||
 		!recordcodec.ValidSHA256(snapshot.DependencyDigest) || snapshot.RenderGeneration == 0 ||
-		snapshot.ComposeVolumeKey == "" || snapshot.DockerVolumeName != "gp_vol_"+snapshot.VolumeID ||
+		snapshot.ComposeVolumeKey == "" || snapshot.DockerVolumeName != "gp_vol_"+strings.ToLower(snapshot.VolumeID) ||
 		snapshot.AuthorizedVolumeDir == "" {
 		return invalidBackupRuntimeRecord("volume source snapshot is invalid")
 	}

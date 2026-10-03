@@ -6,6 +6,7 @@ import (
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
+	"strings"
 	testing "testing"
 	time "time"
 )
@@ -752,7 +753,7 @@ func TestBackupVolumeServiceSnapshotRequiresStableIDOrder(t *testing.T) {
 		VolumeID: testBackupVolumeID, DesiredRevisionID: testBackupTaskID,
 		HeadRevision: 6, HeadSHA256: testBackupDigest,
 		ProjectionRoot: 7, DependencyDigest: testBackupDigest, RenderGeneration: 1,
-		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + testBackupVolumeID,
+		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + strings.ToLower(testBackupVolumeID),
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		Services: []BackupVolumeServiceSnapshot{
 			{

@@ -8,6 +8,7 @@ import (
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	postgres16protocol "github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"strings"
 	testing "testing"
 	time "time"
 )
@@ -238,7 +239,7 @@ func testBackupVolumeSourceSnapshot(revision int64) testbackupruntime.BackupVolu
 		VolumeID: testBackupVolumeID, DesiredRevisionID: testBackupTaskID,
 		HeadRevision: revision, HeadSHA256: testBackupDigest,
 		ProjectionRoot: revision + 1, DependencyDigest: testBackupDigest, RenderGeneration: 1,
-		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + testBackupVolumeID,
+		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + strings.ToLower(testBackupVolumeID),
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		Services: []testbackupruntime.BackupVolumeServiceSnapshot{{
 			ServiceID: testBackupServiceID, ServiceRevision: revision + 2,

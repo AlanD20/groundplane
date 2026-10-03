@@ -10,6 +10,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"strings"
 )
 
 func ValidateBackupPostgresPublicationEvidence(
@@ -66,7 +67,7 @@ func ValidateBackupVolumePublicationEvidence(
 		revisionID != snapshot.DesiredRevisionID || seal.EnvironmentID != snapshot.EnvironmentID ||
 		seal.RevisionID != snapshot.DesiredRevisionID || seal.RenderGeneration != snapshot.RenderGeneration ||
 		hex.EncodeToString(seal.DependencyDigest[:]) != snapshot.DependencyDigest ||
-		snapshot.VolumeID != source.TargetID || snapshot.DockerVolumeName != "gp_vol_"+source.TargetID {
+		snapshot.VolumeID != source.TargetID || snapshot.DockerVolumeName != "gp_vol_"+strings.ToLower(source.TargetID) {
 		return errs.New(errs.KindStateConflict, "volume projection evidence changed")
 	}
 	for index, expected := range snapshot.Services {

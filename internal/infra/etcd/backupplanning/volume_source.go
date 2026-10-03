@@ -14,6 +14,7 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
+	"strings"
 )
 
 func (repository *Planner) prepareManualVolumeSource(
@@ -74,7 +75,7 @@ func (repository *Planner) prepareManualVolumeSource(
 		DependencyDigest:    evidence.DependencyDigest,
 		RenderGeneration:    evidence.Projection.Record.RenderGeneration,
 		ComposeVolumeKey:    evidence.Volume.Key,
-		DockerVolumeName:    "gp_vol_" + evidence.Volume.ID,
+		DockerVolumeName:    "gp_vol_" + strings.ToLower(evidence.Volume.ID),
 		AuthorizedVolumeDir: evidence.Environment.Record.VolumeDir,
 		Services:            services,
 	}

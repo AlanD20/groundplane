@@ -5,6 +5,7 @@ import (
 	sha256 "crypto/sha256"
 	hex "encoding/hex"
 	errors "errors"
+	"strings"
 	testing "testing"
 	time "time"
 
@@ -533,7 +534,7 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 		EnvironmentID: environment.ID, EnvironmentRevision: environmentValue.ModRevision,
 		VolumeID: source.TargetID, DesiredRevisionID: revisionID, ProjectionRoot: rootRevision,
 		DependencyDigest: hex.EncodeToString(digest[:]), RenderGeneration: 1,
-		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + source.TargetID,
+		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + strings.ToLower(source.TargetID),
 		AuthorizedVolumeDir: environment.VolumeDir,
 	}
 	projectionEvidence := []*testkeyvalue.KeyValue{
