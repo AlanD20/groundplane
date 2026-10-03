@@ -57,8 +57,9 @@ uses durable child receipts, so Task status or a missing Docker name alone is
 not proof of cleanup. Bounded scans summarize the complete plan before the
 parent-last final transaction removes the resource and releases its slug.
 
-Consumer workloads stop before Attach deprovisioning. Backup cleanup retires its
-exact objects and source exclusions before credentials are revoked. Credential
+Backup cleanup retires its exact objects and source exclusions before destructive
+host cleanup removes Volumes. Consumer workloads stop before Attach deprovisioning,
+and credentials remain until Backup cleanup completes. Credential
 dependents and incoming grant sources finalize before their referenced Attach.
 Each credential owner uses one sealed Agent deprovision plan, then a Controller
 finalizer removes the exact captured record, facts and indexes. Network-only,

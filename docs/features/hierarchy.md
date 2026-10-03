@@ -33,10 +33,13 @@ See [network decisions](../decisions/network-and-shared-access.md).
 
 ## Removing a hierarchy
 
-**Current limit:** deletion containing an Attach can remain stuck on its internal
-cleanup Task. Hierarchy Attach execution and record finalization are incomplete;
-[H87](../acceptance.md#bounded-backup-fault-recovery) records the reproduced failure.
-The contract below remains required, not fully implemented by that path.
+Removal includes owned Attach deprovisioning and record cleanup. Backup objects
+must be proven absent before host cleanup can destroy Volumes or Attach credentials
+can be revoked. PostgreSQL Detach retains database data under the backing
+administrator; it does not drop the database. Deprovisioning needs a usable
+Backing Service. [H87](../acceptance.md#bounded-backup-fault-recovery) qualifies one
+PostgreSQL-owner Environment variant through remote uncertainty and restart;
+other adapter and shared/granted credential variants remain unqualified.
 
 Removal coordinates descendant cleanup and removes the parent last. It is not a
 shortcut around active child operations. A descendant already being deleted,

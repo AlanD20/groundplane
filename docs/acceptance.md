@@ -701,8 +701,8 @@ arm64 or complete Gate B. No release tag was created.
 
 ## Bounded Backup fault recovery
 
-**H87 — selected failure and interruption variants PASS; uncertain Environment
-deletion BLOCKED, 2026-10-03.** Disposable Ubuntu amd64 used separate, isolated Backup
+**H87 — selected failure and interruption variants, including uncertain Environment
+deletion, PASS, 2026-10-03.** Disposable Ubuntu amd64 used separate, isolated Backup
 Environments and an S3-compatible fault gateway restricted to their owned object
 prefix. Expected results came from captured Entry values, host files, SQL rows,
 independent authenticated object HEAD requests and retained original Task ids.
@@ -747,21 +747,52 @@ independent authenticated object HEAD requests and retained original Task ids.
 
 Full local `make ci` passed for `f318b31aa` and the complete `2c3dc9fb7` batch.
 No new tests were added. Earlier reconnect timeout and sandbox ownership failures
-are retained; installer safety checks were not relaxed. The final Controller
+are retained; installer safety checks were not relaxed. That earlier Controller's
 bytes were `sha256:c4c6d44dfef5a9033062875a9c43e86d1d4a1a8746b897f04afb96b7355f62b9`;
 the Agent image was
 `sha256:b62248912ceda1ec68d14a42d9f6355cc14fbcaf3eb0a7a9f5a603e7d6a9636f`.
 The Controller repair is not normal-upgrade proof.
 
-The final Environment deletion stalled on its generated `attach.grant-revoke`
-child before any remote deletion. The hierarchy publisher emits both Attach
-grant-revoke and detach procedures, but its execution resolver implements only
-Environment cleanup; Attach record finalization is also missing. The parent and
-child Tasks remain running. Independent authenticated HEAD requests still returned
-200 for all four exact objects, and the Environment, Connector and four Recovery
-Points remained readable. The fault gateway returned to pass-through mode.
-The uncertainty fault was not reached, so this does not qualify uncertain deletion
-or recovery from it. No Task, fence, history or retained object was rewritten.
+The initial Environment deletion stalled on its generated `attach.grant-revoke`
+child before remote deletion. At that observation, authenticated HEAD requests
+returned 200 for all four exact objects, and the Environment, Connector and Points
+remained readable. Its invalid immutable child plan remains incident evidence;
+no Task, fence or history was rewritten to make it executable.
+
+`34fb59c06` replaces the incomplete Attach cascade with one sealed deprovision
+child and exact Controller finalization. The next full Config/Volume/PostgreSQL
+fixture reached remote deletion but exposed premature local Volume destruction
+and rejection of the child's Detach plan by the generic Remove operation check.
+`a4dfa9f54` orders Backup cleanup before destructive host cleanup and binds the
+typed Attach child to its actual execution operation. After Controller-only
+repair, that fixture's already accepted Retry and child completed without a plan
+rewrite; the original failed Task stayed failed.
+
+A fresh equivalent fixture captured three verified Points. The gateway deleted
+one actual object, lost the DELETE response and rejected the subsequent HEAD.
+Removal failed while retaining the Connector, exact Volume sentinel bytes and
+PostgreSQL sentinel row. Ordinary Retry continued the same cleanup operation.
+Killing the Controller while the gateway held another DELETE did not require a
+reset or another Retry: the accepted Retry completed after restart. Independent
+authenticated HEAD requests proved all three exact objects absent. The owned
+Volume path, Environment, Connector, Service, Attach facts and workload containers
+were absent. PostgreSQL catalog reads proved the credential role absent, with
+the database retained under administrator ownership and no public CONNECT or
+TEMPORARY privileges; its sentinel row was unchanged, as required by Detach.
+Another database's rows and Recovery Points were unchanged. The original failed
+Task remained failed.
+
+Full local `make ci` passed on the complete follow-up batch; no new tests or
+architecture allowances were added. The deployed Controller was
+`0.0.1-qa-backup-order`, bytes
+`sha256:eca53d993676bc461682de4b5f4aea42f6a5adbcf4a817b1acf5af9fdc24d4c8`,
+release `sha256:9d9d47d204d230698d5036b825f105e6f7b1dfca2eb39a664b0e387be95187c3`.
+The Agent image above was unchanged. Repair preserved application/etcd containers
+and immutable Task identity; it is not normal-upgrade proof. The temporary fault
+gateway was stopped and its listener independently proved closed. Private
+receipts and failed observations remain retained. This qualifies only the selected
+PostgreSQL-owner deletion variant, not live Custom hooks or shared/granted
+credential variants.
 
 This is not complete Gate B, arm64, all provider/archive/key failures or a release
 qualification. No new tests or release tag were added; earlier failures remain
