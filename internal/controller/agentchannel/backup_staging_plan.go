@@ -125,7 +125,8 @@ func (s *Server) resolveBackupStagingDisposition(
 	}
 	if taskjournal.IsTerminalTaskStatus(task.Status) {
 		if task.Result == nil || task.Result.ReconciliationRequired || task.TerminalAssignment == nil ||
-			task.TerminalAssignment.AgentID != agentID || task.TerminalAssignment.AgentGeneration != agentGeneration {
+			task.TerminalAssignment.AgentID != agentID ||
+			task.TerminalAssignment.AgentGeneration != source.Index.Record.AgentGeneration {
 			return nil, unresolvedBackupStage()
 		}
 		result.Disposition = &agentpb.BackupStagingDisposition_DiscardRecovered{

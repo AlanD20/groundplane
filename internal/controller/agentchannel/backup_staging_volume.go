@@ -63,7 +63,7 @@ func (s *Server) resolveBackupVolumeRestoreDisposition(ctx context.Context,
 	if terminal {
 		if source.Task.Record.TerminalAssignment == nil ||
 			source.Task.Record.TerminalAssignment.AgentID != agentID ||
-			source.Task.Record.TerminalAssignment.AgentGeneration != generation ||
+			source.Task.Record.TerminalAssignment.AgentGeneration != source.Index.Record.AgentGeneration ||
 			source.Task.Record.Result == nil {
 			return nil, unresolvedBackupStage()
 		}
