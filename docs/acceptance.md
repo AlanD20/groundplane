@@ -676,6 +676,29 @@ and not a current instruction to pause QA. No historical record established
 whether every affected PostgreSQL, Valkey, Volume, application file and
 Groundplane state byte remained intact.
 
+## Backup-owned Environment deletion
+
+**H86 — retained Config/Volume cleanup through Task Retry PASS; BAK-17 PARTIAL,
+2026-10-03.** On disposable Ubuntu amd64, `3947a0547` captured and verified one
+Config and one Volume point in a new isolated Environment. Its deletion failed
+before remote cleanup because the executor received a domain summary without
+the durable action fence. `845260ee9` corrected that handoff to read the stored
+operation. Both candidates activated through ordinary Controller-only update
+Tasks; Agent, etcd and existing workloads were not replaced or reset.
+
+Ordinary Task Retry resumed the same sealed deletion plan. Independent signed
+object-store HEAD requests proved both exact objects absent. The owned Volume
+path was absent; Environment and Connector reads returned 404. The capture Task
+remained completed and the original deletion Task remained failed. Independently
+seeded PostgreSQL rows and unrelated Recovery Points were unchanged.
+
+Full local `make ci` passed on `845260ee9`; no new tests were added. The deployed
+Controller digest was
+`sha256:0972a48ae2a9f2759401992d34a8b28a73703beca7f0d6c629b37bbad0d45bea`.
+The earlier H85 plan remains immutable and was not retrofitted. This run does not
+qualify uncertain remote deletion, interruption, orphan variants, scheduling,
+arm64 or complete Gate B. No release tag was created.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

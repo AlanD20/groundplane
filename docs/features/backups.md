@@ -1,8 +1,9 @@
 # Backups
 
 **Not fully qualified.** Config, Volume and PostgreSQL capture/Restore and selected
-retention journeys have passed on disposable QA. Environment deletion with
-retained Backup authority is still blocked by missing cleanup integration.
+retention journeys have passed on disposable QA. Environment deletion now includes
+owned Backup cleanup; a retained Config/Volume deletion completed through ordinary
+Task Retry after its executor handoff was repaired.
 The behavior below is the accepted contract; the bounded
 [qualification record](../acceptance.md#source-restore-retention-and-deletion-boundary)
 does not establish complete recovery readiness.
@@ -58,6 +59,11 @@ does not delete points. There is no ordinary operator point-delete action.
 Remote cleanup must prove absence of the exact selected object before releasing
 its records and Connector references. Uncertain cleanup retains the credentials
 and ownership needed to retry. Bucket listing is not ownership proof.
+
+Environment removal cleans up its owned points and proven orphan objects before
+retiring Backup scheduling, policy, key and Connector authority. It preserves
+terminal Task history. An unproved orphan, active prune or nonterminal Backup or
+Restore prevents removal; unavailable remote cleanup keeps the parent fenced.
 
 ## Restore and downtime
 

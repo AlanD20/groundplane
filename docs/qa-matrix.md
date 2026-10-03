@@ -416,7 +416,7 @@ transactional snapshot. Detailed fixture/format limits come from the linked
 | BAK-14 | First enable age encryption, rotate key, create later point and export key. | Lazy era creation; rotation changes future points only; export is explicit and creates no Task/store record or secret-bearing history. | PARTIAL H84 rotation/export; remaining variants NOT RUN |
 | BAK-15 | Restore old era with valid/missing/wrong supplied identity; attempt generic Retry. | Recipient-bound transient identity required, not persisted or leaked; wrong era fails before overwrite; no unsafe generic retry without its key authority. | PARTIAL H84 valid/missing/wrong identity; persistence/Retry NOT RUN |
 | BAK-16 | Restart/reconnect/lose checkpoints or terminal ACK during backup/restore/cleanup. | Original six-hour deadline and exact operation survive; no repeated committed effect; cleanup failure overrides apparent success. | BLOCKED D2 |
-| BAK-17 | Delete Environment with retained remote points and uncertain remote deletion. | Parent, credentials and orphan authority retained until every exact object is proven absent; unrelated provider objects untouched. | FAIL H85 cleanup omitted before Connector finalization; parent/credentials retained |
+| BAK-17 | Delete Environment with retained remote points and uncertain remote deletion. | Parent, credentials and orphan authority retained until every exact object is proven absent; unrelated provider objects untouched. | PARTIAL H86 retained Config/Volume cleanup via ordinary Retry; uncertain deletion/interruption NOT RUN; H85 failure preserved |
 
 ## Isolated Runners
 
