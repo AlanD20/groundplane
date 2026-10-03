@@ -21,6 +21,7 @@ type backupRestoreInput struct {
 }
 
 func (s *Server) registerBackupRestore() {
+	s.setRoutePolicy("POST /api/v1/environments/{id}/restore", routePolicy{body: jsonBody})
 	accepted := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backup.restore", Method: http.MethodPost, Path: "/environments/{id}/restore",
