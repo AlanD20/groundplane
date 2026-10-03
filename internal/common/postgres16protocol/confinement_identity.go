@@ -17,7 +17,9 @@ func (identity ConfinementFileIdentity) Validate() error {
 }
 
 func (identity ConfinementProcessIdentity) Validate() error {
-	if identity.PID == 0 || identity.ParentPID == 0 || identity.ProcessGroupID == 0 || identity.StartTicks == 0 ||
+	// Docker Exec's supervisor has no visible parent in the container PID
+	// namespace. Gate validation separately binds its parent to that supervisor.
+	if identity.PID == 0 || identity.ProcessGroupID == 0 || identity.StartTicks == 0 ||
 		identity.BootID == (ConfinementBootID{}) || identity.ThreadCount == 0 {
 		return invalidConfinement("postgres helper process identity is incomplete")
 	}
