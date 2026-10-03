@@ -14,7 +14,6 @@ import (
 	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
-	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -43,9 +42,6 @@ func (fixture *ExecutedArtifactFixture) CreateManualScript(
 	service, err := services.GetService(ctx, serviceID)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if fixture.store.valueAt(testservices.ServiceRuntimeKey(serviceID), fixture.store.revision) != nil {
-		t.Fatal("manual source journey must exercise a Service without an optional runtime sidecar")
 	}
 	scripts, err := etcd.NewScriptRepository(fixture.store)
 	if err != nil {

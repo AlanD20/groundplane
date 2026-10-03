@@ -445,6 +445,8 @@ func classifyServiceLifecycleStartConflict(
 			if input.Release.RetainedPrior != nil {
 				expected++
 			}
+		} else {
+			expected++
 		}
 		if len(values) != expected {
 			return errs.New(errs.KindInternal, "Service lifecycle compare evidence is incomplete")
@@ -492,6 +494,9 @@ func classifyServiceLifecycleStartConflict(
 			if values[index] != nil {
 				return errs.New(errs.KindResourceInUse, "Service hierarchy deletion is in progress")
 			}
+		}
+		if !applied && values[deletionEnd] != nil {
+			return recordcodec.StateConflict("service runtime authority", service.Record.Desired.ID)
 		}
 		if applied {
 			if values[deletionEnd] != nil {
