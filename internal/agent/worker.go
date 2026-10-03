@@ -265,6 +265,15 @@ func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservati
 	p.backupVolumes.release(reservation.assignment.BackupAuthority)
 	p.materializations.Retire(result.TaskID)
 
+	// Session teardown quiesces Backup workers for the next staging inventory;
+	// it is not operator Abort authority. Keep their durable progress resumable.
+	if result.Backup != nil && runCtx.Err() != nil {
+		clearExecutionPlanSecrets(reservation.assignment.Plan)
+		taskassignment.ClearScriptArtifacts(reservation.assignment.ScriptArtifacts)
+		reservation.cancel()
+		return
+	}
+
 	owned := result
 	if result.Compose != nil {
 		owned.Compose = proto.Clone(result.Compose).(*agentpb.ComposeTaskResult)
