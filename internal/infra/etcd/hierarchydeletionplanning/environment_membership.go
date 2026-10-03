@@ -98,25 +98,24 @@ func (repository *Planner) freezeEnvironmentMembership(
 			controller:    true,
 		},
 	}
+	backupNodes, err := repository.freezeEnvironmentBackupMembership(ctx, operation, environmentID, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Host cleanup destroys owned Volumes; keep them until exact remote absence is proved.
 	cleanup := hierarchyDeletionAgentNode(
 		"environment:"+environmentID+":cleanup", "environment", environmentID,
-		hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup, environmentRevision, nil, operation.OperationID,
+		hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup, environmentRevision,
+		terminalHierarchyDeletionNodes(backupNodes), operation.OperationID,
 	)
 	cleanup.fixedInputDigest = environmentDigest
-	nodes := []HierarchyDeletionMembershipNode{cleanup}
+	nodes := append(backupNodes, cleanup)
 	services, err := repository.freezeEnvironmentServiceRuntimeMembership(ctx, operation, projection)
 	if err != nil {
 		return nil, err
 	}
 	for _, descriptor := range descriptors {
 		if descriptor.actionKind == hierarchydeletion.HierarchyDeletionConnectorFinalize {
-			backupNodes, backupErr := repository.freezeEnvironmentBackupMembership(
-				ctx, operation, environmentID, terminalHierarchyDeletionNodes(nodes),
-			)
-			if backupErr != nil {
-				return nil, backupErr
-			}
-			nodes = append(nodes, backupNodes...)
 			attachNodes, attachErr := repository.freezeEnvironmentAttachMembership(
 				ctx, operation, environmentID, terminalHierarchyDeletionNodes(nodes),
 			)
