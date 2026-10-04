@@ -86,7 +86,7 @@ func (runtime Runtime) Run(ctx context.Context, arguments []string) (
 		return postgres16protocol.ExitRecoveryRequired, supervisorError()
 	}
 	if err := storeProcessRecord(operation.stateDir, operation.Request.Nonce,
-		intentSHA256, gate.process.Pid, operation.Gate); err != nil {
+		intentSHA256, gate.process.Pid); err != nil {
 		return runtime.abortGate(gate, err)
 	}
 	if err := gate.status.SetReadDeadline(deadline); err != nil {

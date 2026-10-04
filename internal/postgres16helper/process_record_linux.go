@@ -28,14 +28,18 @@ func processRecordName(nonce postgres16protocol.Nonce) string {
 
 func storeProcessRecord(
 	directory *os.File, nonce postgres16protocol.Nonce, intentSHA256 postgres16protocol.Digest,
-	pid int, executable postgres16protocol.ConfinementFileIdentity,
+	pid int,
 ) error {
-	identity, err := inspectProcess(pid, executable)
-	if err != nil || identity.PID != uint32(pid) {
+	// The caller owns this unreaped child, so its PID cannot be reused. An early
+	// exit may already have cleared cmdline and environ; recording its lifetime
+	// must not require a live READY gate. The READY handshake still verifies the
+	// complete executable and security identity before releasing any client.
+	identity, err := processLifetime(pid)
+	if err != nil {
 		return supervisorError()
 	}
 	record := processRecord{
-		PID: identity.PID, StartTicks: identity.StartTicks,
+		PID: uint32(pid), StartTicks: identity.StartTicks,
 		BootID: identity.BootID, IntentSHA256: intentSHA256,
 	}
 	fd, err := unix.Openat2(int(directory.Fd()), processRecordName(nonce), &unix.OpenHow{
