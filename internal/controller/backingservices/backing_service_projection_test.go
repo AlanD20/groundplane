@@ -49,7 +49,7 @@ func TestBackingServiceCreationProjectionIncludesGeneratedTopology(t *testing.T)
 		EnvironmentID: environmentID, BackingNetworkID: networkID,
 		Desired: core.Service{
 			ID: serviceID, Name: "postgres", Image: "postgres:16-alpine",
-			Zones: []string{networkID}, Strategy: core.StrategyRecreate, Adapter: "postgres:16",
+			Zones: []string{"data"}, Strategy: core.StrategyRecreate, Adapter: "postgres:16",
 			Authentication: core.BackingAuthenticationPassword,
 			Mounts:         []core.Mount{{Volume: volumeID, Mount: "/var/lib/postgresql/data"}},
 		},
