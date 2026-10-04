@@ -72,6 +72,10 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	defer hookPublication.clear()
 	defer func() { returnErr = hookPublication.finish(ctx, repository.store, returnErr) }()
 	creation.Task = hookPublication.task
+	creation.Task, err = prepareRuntimeConfigurationTask(ctx, repository.store, creation.Task, creation.Stage.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	if err := validateBackingServiceCreation(ctx, creation); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -393,6 +397,10 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	}
 	mutations = append(mutations, identityPublication.mutations...)
 	classifier := classifyBackingServiceCreation(creation, publication, len(conditions))
+	conditions, classifier, err = bindRuntimeConfigurationPublication(creation.Task, conditions, classifier)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	conditions, mutations, classifier, err = hookPublication.bind(conditions, mutations, classifier)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

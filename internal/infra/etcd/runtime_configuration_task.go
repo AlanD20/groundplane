@@ -127,7 +127,8 @@ func prepareRuntimeConfigurationTask(
 	if headRevision == 0 || len(task.Materializations) != 0 {
 		configurationID := ids.New(ids.KindConfig)
 		if task.Configuration != nil {
-			if _, _, err := taskConfigurationCondition(task); err != nil {
+			_, present, err := taskConfigurationCondition(task)
+			if err != nil {
 				return TaskRecord{}, err
 			}
 			if task.Configuration.PriorRevision != headRevision ||
@@ -135,7 +136,9 @@ func prepareRuntimeConfigurationTask(
 				prior != nil && *task.Configuration.Prior != *prior {
 				return TaskRecord{}, errs.New(errs.KindStateConflict, "prepared configuration predecessor changed")
 			}
-			configurationID = task.Configuration.Current.ID
+			if present {
+				configurationID = task.Configuration.Current.ID
+			}
 		}
 		var candidate runtimeconfiguration.Snapshot
 		if headRevision == 0 {
@@ -161,15 +164,17 @@ func prepareRuntimeConfigurationTask(
 			return TaskRecord{}, err
 		}
 	}
-	if task.Configuration != nil && reference != task.Configuration.Current {
+	if task.Configuration != nil && task.Configuration.Current != (runtimeconfiguration.Reference{}) && reference != task.Configuration.Current {
 		return TaskRecord{}, errs.New(errs.KindStateConflict, "prepared configuration source set changed")
 	}
 	prepared := cloneTaskRecord(task)
-	prepared.Configuration = &taskconfiguration.TaskConfiguration{
-		Current:       reference,
-		Prior:         prior,
-		PriorRevision: headRevision,
+	prepared.Configuration = taskconfiguration.CloneTaskConfiguration(task.Configuration)
+	if prepared.Configuration == nil {
+		prepared.Configuration = &taskconfiguration.TaskConfiguration{}
 	}
+	prepared.Configuration.Current = reference
+	prepared.Configuration.Prior = prior
+	prepared.Configuration.PriorRevision = headRevision
 	return prepared, nil
 }
 
