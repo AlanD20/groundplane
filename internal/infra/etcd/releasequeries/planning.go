@@ -112,7 +112,7 @@ func (ledger *Reader) loadPlanningScope(
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
-	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
+	if err != nil || project.ID != environment.ProjectID {
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	compose, found, err := blueprints.ReadProjectionAtRevision(ctx, ledger.store, environmentID, initial.ReadRevision)
@@ -130,6 +130,12 @@ func (ledger *Reader) loadPlanningScope(
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID), releases.ReleaseFenceSetKey(environmentID),
 		deletions.TombstoneKey("environment", environmentID), deletions.TombstoneKey("project", project.ID),
 		deletions.TombstoneKey("tenant", project.TenantID),
+	}
+	if project.Kind == hierarchyrecord.ProjectKindBacking {
+		keys[2] = hierarchyrecord.ProjectKey(project.ID)
+		keys[8] = deletions.TombstoneKey("project", project.ID)
+	} else if project.Kind != hierarchyrecord.ProjectKindTenant {
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	loaded, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: initial.ReadRevision})
 	if err != nil {
@@ -152,11 +158,18 @@ func (ledger *Reader) loadPlanningScope(
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	project, err = hierarchyrecord.DecodeProject(loaded.Values[1].Value)
-	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
+	if err != nil || project.ID != environment.ProjectID {
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
-	tenant, err := hierarchyrecord.DecodeTenant(loaded.Values[2].Value)
-	if err != nil || tenant.ID != project.TenantID {
+	var tenant hierarchyrecord.TenantRecord
+	tenantRevision := int64(0)
+	if project.Kind == hierarchyrecord.ProjectKindTenant {
+		tenant, err = hierarchyrecord.DecodeTenant(loaded.Values[2].Value)
+		if err != nil || tenant.ID != project.TenantID {
+			return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
+		}
+		tenantRevision = loaded.Values[2].ModRevision
+	} else if project.Kind != hierarchyrecord.ProjectKindBacking || project.TenantID != "" {
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(loaded.Values[3].Value)
@@ -176,7 +189,7 @@ func (ledger *Reader) loadPlanningScope(
 		},
 		Tenant: etcdstore.Versioned[hierarchyrecord.TenantRecord]{
 			Record:       tenant,
-			Revision:     loaded.Values[2].ModRevision,
+			Revision:     tenantRevision,
 			ReadRevision: loaded.ReadRevision,
 		},
 		Compose:                  compose,

@@ -10361,27 +10361,28 @@ func (x *ComposeArtifact) GetVolumes() []*ComposeVolume {
 }
 
 type ComposeService struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId         string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	ComposeName       string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
-	ExpectedLabels    []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
-	ExpectedReplicas  uint32                 `protobuf:"varint,4,opt,name=expected_replicas,json=expectedReplicas,proto3" json:"expected_replicas,omitempty"`
-	HasHealthcheck    bool                   `protobuf:"varint,5,opt,name=has_healthcheck,json=hasHealthcheck,proto3" json:"has_healthcheck,omitempty"`
-	Role              ComposeServiceRole     `protobuf:"varint,6,opt,name=role,proto3,enum=groundplane.agent.v1.ComposeServiceRole" json:"role,omitempty"`
-	Slot              string                 `protobuf:"bytes,7,opt,name=slot,proto3" json:"slot,omitempty"`
-	ProxyConfigJson   []byte                 `protobuf:"bytes,8,opt,name=proxy_config_json,json=proxyConfigJson,proto3" json:"proxy_config_json,omitempty"`
-	ProxyConfigSha256 []byte                 `protobuf:"bytes,9,opt,name=proxy_config_sha256,json=proxyConfigSha256,proto3" json:"proxy_config_sha256,omitempty"`
-	OwnerComponentId  string                 `protobuf:"bytes,10,opt,name=owner_component_id,json=ownerComponentId,proto3" json:"owner_component_id,omitempty"`
-	ImageReference    string                 `protobuf:"bytes,11,opt,name=image_reference,json=imageReference,proto3" json:"image_reference,omitempty"`
-	ImageRepository   string                 `protobuf:"bytes,12,opt,name=image_repository,json=imageRepository,proto3" json:"image_repository,omitempty"`
-	ImageIndexDigest  []byte                 `protobuf:"bytes,13,opt,name=image_index_digest,json=imageIndexDigest,proto3" json:"image_index_digest,omitempty"`
-	ImageChildDigest  []byte                 `protobuf:"bytes,14,opt,name=image_child_digest,json=imageChildDigest,proto3" json:"image_child_digest,omitempty"`
-	ImageOs           string                 `protobuf:"bytes,15,opt,name=image_os,json=imageOs,proto3" json:"image_os,omitempty"`
-	ImageArchitecture string                 `protobuf:"bytes,16,opt,name=image_architecture,json=imageArchitecture,proto3" json:"image_architecture,omitempty"`
-	ImageVariant      string                 `protobuf:"bytes,17,opt,name=image_variant,json=imageVariant,proto3" json:"image_variant,omitempty"`
-	ImageConfigDigest []byte                 `protobuf:"bytes,18,opt,name=image_config_digest,json=imageConfigDigest,proto3" json:"image_config_digest,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	ServiceId          string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ComposeName        string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
+	ExpectedLabels     []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
+	ExpectedReplicas   uint32                 `protobuf:"varint,4,opt,name=expected_replicas,json=expectedReplicas,proto3" json:"expected_replicas,omitempty"`
+	HasHealthcheck     bool                   `protobuf:"varint,5,opt,name=has_healthcheck,json=hasHealthcheck,proto3" json:"has_healthcheck,omitempty"`
+	Role               ComposeServiceRole     `protobuf:"varint,6,opt,name=role,proto3,enum=groundplane.agent.v1.ComposeServiceRole" json:"role,omitempty"`
+	Slot               string                 `protobuf:"bytes,7,opt,name=slot,proto3" json:"slot,omitempty"`
+	ProxyConfigJson    []byte                 `protobuf:"bytes,8,opt,name=proxy_config_json,json=proxyConfigJson,proto3" json:"proxy_config_json,omitempty"`
+	ProxyConfigSha256  []byte                 `protobuf:"bytes,9,opt,name=proxy_config_sha256,json=proxyConfigSha256,proto3" json:"proxy_config_sha256,omitempty"`
+	OwnerComponentId   string                 `protobuf:"bytes,10,opt,name=owner_component_id,json=ownerComponentId,proto3" json:"owner_component_id,omitempty"`
+	ImageReference     string                 `protobuf:"bytes,11,opt,name=image_reference,json=imageReference,proto3" json:"image_reference,omitempty"`
+	ImageRepository    string                 `protobuf:"bytes,12,opt,name=image_repository,json=imageRepository,proto3" json:"image_repository,omitempty"`
+	ImageIndexDigest   []byte                 `protobuf:"bytes,13,opt,name=image_index_digest,json=imageIndexDigest,proto3" json:"image_index_digest,omitempty"`
+	ImageChildDigest   []byte                 `protobuf:"bytes,14,opt,name=image_child_digest,json=imageChildDigest,proto3" json:"image_child_digest,omitempty"`
+	ImageOs            string                 `protobuf:"bytes,15,opt,name=image_os,json=imageOs,proto3" json:"image_os,omitempty"`
+	ImageArchitecture  string                 `protobuf:"bytes,16,opt,name=image_architecture,json=imageArchitecture,proto3" json:"image_architecture,omitempty"`
+	ImageVariant       string                 `protobuf:"bytes,17,opt,name=image_variant,json=imageVariant,proto3" json:"image_variant,omitempty"`
+	ImageConfigDigest  []byte                 `protobuf:"bytes,18,opt,name=image_config_digest,json=imageConfigDigest,proto3" json:"image_config_digest,omitempty"`
+	PostgresToolsImage string                 `protobuf:"bytes,19,opt,name=postgres_tools_image,json=postgresToolsImage,proto3" json:"postgres_tools_image,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ComposeService) Reset() {
@@ -10538,6 +10539,13 @@ func (x *ComposeService) GetImageConfigDigest() []byte {
 		return x.ImageConfigDigest
 	}
 	return nil
+}
+
+func (x *ComposeService) GetPostgresToolsImage() string {
+	if x != nil {
+		return x.PostgresToolsImage
+	}
+	return ""
 }
 
 type ComposeNetwork struct {
@@ -23124,15 +23132,16 @@ func (x *BackupPostgresRestoreAuthority) GetManagedReleaseIndex() []byte {
 }
 
 type BackupPostgresContainerObserved struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId            string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	ContainerId          string                 `protobuf:"bytes,2,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"` // 64 lowercase hexadecimal characters
-	RepositoryDigest     []byte                 `protobuf:"bytes,3,opt,name=repository_digest,json=repositoryDigest,proto3" json:"repository_digest,omitempty"`
-	ObservedLabelCount   uint32                 `protobuf:"varint,4,opt,name=observed_label_count,json=observedLabelCount,proto3" json:"observed_label_count,omitempty"`
-	ObservedLabelsSha256 []byte                 `protobuf:"bytes,5,opt,name=observed_labels_sha256,json=observedLabelsSha256,proto3" json:"observed_labels_sha256,omitempty"`
-	ObservationSha256    []byte                 `protobuf:"bytes,6,opt,name=observation_sha256,json=observationSha256,proto3" json:"observation_sha256,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	ServiceId             string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ContainerId           string                 `protobuf:"bytes,2,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"` // 64 lowercase hexadecimal characters
+	RepositoryDigest      []byte                 `protobuf:"bytes,3,opt,name=repository_digest,json=repositoryDigest,proto3" json:"repository_digest,omitempty"`
+	ObservedLabelCount    uint32                 `protobuf:"varint,4,opt,name=observed_label_count,json=observedLabelCount,proto3" json:"observed_label_count,omitempty"`
+	ObservedLabelsSha256  []byte                 `protobuf:"bytes,5,opt,name=observed_labels_sha256,json=observedLabelsSha256,proto3" json:"observed_labels_sha256,omitempty"`
+	ObservationSha256     []byte                 `protobuf:"bytes,6,opt,name=observation_sha256,json=observationSha256,proto3" json:"observation_sha256,omitempty"`
+	DatabaseImageIdSha256 []byte                 `protobuf:"bytes,7,opt,name=database_image_id_sha256,json=databaseImageIdSha256,proto3" json:"database_image_id_sha256,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *BackupPostgresContainerObserved) Reset() {
@@ -23203,6 +23212,13 @@ func (x *BackupPostgresContainerObserved) GetObservedLabelsSha256() []byte {
 func (x *BackupPostgresContainerObserved) GetObservationSha256() []byte {
 	if x != nil {
 		return x.ObservationSha256
+	}
+	return nil
+}
+
+func (x *BackupPostgresContainerObserved) GetDatabaseImageIdSha256() []byte {
+	if x != nil {
+		return x.DatabaseImageIdSha256
 	}
 	return nil
 }
@@ -29534,7 +29550,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\bservices\x18\b \x03(\v2$.groundplane.agent.v1.ComposeServiceR\bservices\x12@\n" +
 	"\bnetworks\x18\t \x03(\v2$.groundplane.agent.v1.ComposeNetworkR\bnetworks\x12=\n" +
 	"\avolumes\x18\n" +
-	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\x9d\x06\n" +
+	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\xcf\x06\n" +
 	"\x0eComposeService\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
@@ -29555,7 +29571,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\bimage_os\x18\x0f \x01(\tR\aimageOs\x12-\n" +
 	"\x12image_architecture\x18\x10 \x01(\tR\x11imageArchitecture\x12#\n" +
 	"\rimage_variant\x18\x11 \x01(\tR\fimageVariant\x12.\n" +
-	"\x13image_config_digest\x18\x12 \x01(\fR\x11imageConfigDigest\"\xbd\x01\n" +
+	"\x13image_config_digest\x18\x12 \x01(\fR\x11imageConfigDigest\x120\n" +
+	"\x14postgres_tools_image\x18\x13 \x01(\tR\x12postgresToolsImage\"\xbd\x01\n" +
 	"\x0eComposeNetwork\x12\x1d\n" +
 	"\n" +
 	"network_id\x18\x01 \x01(\tR\tnetworkId\x12!\n" +
@@ -30612,7 +30629,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x13database_service_id\x18\x02 \x01(\tR\x11databaseServiceId\x12#\n" +
 	"\rdatabase_name\x18\x05 \x01(\tR\fdatabaseName\x12\x1b\n" +
 	"\trole_name\x18\x06 \x01(\tR\broleName\x122\n" +
-	"\x15managed_release_index\x18\a \x01(\fR\x13managedReleaseIndexJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\tconsumersR\"managed_postgres_repository_digest\"\xa7\x02\n" +
+	"\x15managed_release_index\x18\a \x01(\fR\x13managedReleaseIndexJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\tconsumersR\"managed_postgres_repository_digest\"\xe0\x02\n" +
 	"\x1fBackupPostgresContainerObserved\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
@@ -30620,7 +30637,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x11repository_digest\x18\x03 \x01(\fR\x10repositoryDigest\x120\n" +
 	"\x14observed_label_count\x18\x04 \x01(\rR\x12observedLabelCount\x124\n" +
 	"\x16observed_labels_sha256\x18\x05 \x01(\fR\x14observedLabelsSha256\x12-\n" +
-	"\x12observation_sha256\x18\x06 \x01(\fR\x11observationSha256\"\xa8\x03\n" +
+	"\x12observation_sha256\x18\x06 \x01(\fR\x11observationSha256\x127\n" +
+	"\x18database_image_id_sha256\x18\a \x01(\fR\x15databaseImageIdSha256\"\xa8\x03\n" +
 	"\x17BackupPostgresDumpStart\x12\x19\n" +
 	"\bpoint_id\x18\x01 \x01(\tR\apointId\x12'\n" +
 	"\x0fexecution_nonce\x18\x02 \x01(\fR\x0eexecutionNonce\x12!\n" +

@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/internal/core"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -16,11 +17,12 @@ import (
 // derived identity authority, not operator input or an applied runtime fact.
 // A successor Apply can use it while this revision is still rendering.
 type OwnedIdentity struct {
-	ID                string `json:"id"`
-	Name              string `json:"name"`
-	Slug              string `json:"slug,omitempty"`
-	ValueGenerationID string `json:"value_generation_id,omitempty"`
-	BirthRevisionID   string `json:"birth_revision_id"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Slug               string `json:"slug,omitempty"`
+	ValueGenerationID  string `json:"value_generation_id,omitempty"`
+	BirthRevisionID    string `json:"birth_revision_id"`
+	PostgresToolsImage string `json:"postgres_tools_image,omitempty"`
 }
 
 type EnvironmentOwnedIdentities struct {
@@ -40,6 +42,10 @@ type EnvironmentOwnedIdentities struct {
 // OwnedIdentitiesFromProjection captures the IDs already assigned during
 // admission. It does not claim the projection has been applied to the host.
 func OwnedIdentitiesFromProjection(projection EnvironmentComposeProjection) (EnvironmentOwnedIdentities, error) {
+	tools, err := PostgresToolsImages(projection)
+	if err != nil {
+		return EnvironmentOwnedIdentities{}, err
+	}
 	value := EnvironmentOwnedIdentities{
 		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
 		RenderGeneration: projection.RenderGeneration,
@@ -59,6 +65,7 @@ func OwnedIdentitiesFromProjection(projection EnvironmentComposeProjection) (Env
 		}
 		value.Services[index] = OwnedIdentity{
 			ID: service.Desired.ID, Name: service.Desired.Name, BirthRevisionID: projection.RevisionID,
+			PostgresToolsImage: tools[service.Desired.ID],
 		}
 	}
 	for index, network := range projection.DesiredZones {
@@ -220,6 +227,14 @@ func validOwnedIdentities(values []OwnedIdentity, kind ids.Kind) bool {
 	seenIDs := make(map[string]struct{}, len(values))
 	seenSlugs := make(map[string]struct{}, len(values))
 	for index, value := range values {
+		if value.PostgresToolsImage != "" {
+			if kind != ids.KindService {
+				return false
+			}
+			if _, err := postgres16protocol.ToolsDirectory(value.PostgresToolsImage); err != nil {
+				return false
+			}
+		}
 		if value.Name == "" || ids.Validate(kind, value.ID) != nil ||
 			ids.Validate(ids.KindTask, value.BirthRevisionID) != nil ||
 			index > 0 && values[index-1].Name == value.Name {

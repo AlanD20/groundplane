@@ -45,7 +45,11 @@ func markBackupPostgresArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.Back
 					continue
 				}
 				if serviceID == databaseID {
-					if _, err := backingruntimefact.SelectWorkload(artifact, serviceID); err != nil {
+					if candidate.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED {
+						if _, err := backingruntimefact.SelectWorkload(artifact, serviceID); err != nil {
+							return invalidBackupPostgresArtifact()
+						}
+					} else if candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
 						return invalidBackupPostgresArtifact()
 					}
 				} else if candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON &&
@@ -89,13 +93,8 @@ func backupPostgresArtifactImage(service *agentpb.ComposeService, fact *agentpb.
 		return true
 	}
 	imageID := "sha256:" + hex.EncodeToString(fact.LocalImageIdSha256)
-	for _, image := range release.Images {
-		if release.MatchesRuntimeImageID(image, imageID) &&
-			(service.ImageReference == release.Image || service.ImageReference == image.RepositoryDigest) {
-			return true
-		}
-	}
-	return false
+	return service.PostgresToolsImage == release.Image &&
+		(postgres16protocol.ValidDatabaseImage(service.ImageReference) || service.ImageReference == imageID)
 }
 
 func invalidBackupPostgresArtifact() error {

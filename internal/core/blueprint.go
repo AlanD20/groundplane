@@ -21,6 +21,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/dnsname"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 )
 
 // Document is implemented by every top-level Blueprint document.
@@ -144,6 +145,12 @@ func (e Environment) Validate() error {
 func (s Service) Validate() error {
 	if s.ID == "" || s.Name == "" || s.Image == "" {
 		return fmt.Errorf("id, name, and image are required")
+	}
+	if s.Adapter == "postgres:16" && (!postgres16protocol.ValidDatabaseImage(s.Image) ||
+		(s.Replicas != 0 && s.Replicas != 1) || (s.Strategy != "" && s.Strategy != StrategyRecreate)) {
+		return fmt.Errorf(
+			"PostgreSQL Backing Service requires an upstream PostgreSQL 16 Alpine image and singleton recreate",
+		)
 	}
 	switch s.Strategy {
 	case "", StrategyBlueGreen, StrategyRecreate:

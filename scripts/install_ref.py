@@ -110,7 +110,7 @@ def install(source: Path, output: Path, version: str, identity: str,
     if config and (not Path(config).is_file() or Path(config).is_symlink()):
         raise ValueError("--config must be a regular startup YAML file")
     deploy.require_capacity(source)
-    tags = tuple(f"groundplane-{kind}:ref-{identity}" for kind in ("agent", "runner", "postgres16"))
+    tags = tuple(f"groundplane-{kind}:ref-{identity}" for kind in ("agent", "runner", "postgres16-tools"))
     started_install = False
     try:
         # Source builds publish their managed database image before compiling its

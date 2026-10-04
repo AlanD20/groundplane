@@ -328,6 +328,16 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
+			postgresConditions, postgresMutations, err := repository.postgresRuntimeAcknowledgement(
+				ctx,
+				runtimeValue,
+				readRevision,
+			)
+			if err != nil {
+				return false, err
+			}
+			conditions = append(conditions, postgresConditions...)
+			mutations = append(mutations, postgresMutations...)
 			conditions = append(
 				conditions,
 				etcdstore.Condition{Key: keys[5], ModRevision: etcdstore.RevisionOf(values[5])},

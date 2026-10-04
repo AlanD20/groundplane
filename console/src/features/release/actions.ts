@@ -15,6 +15,7 @@ export type ReleaseActions = {
     service: string,
     image: string,
     strategy: Service["strategy"],
+    onFailure: Service["onFailure"],
   ) => Promise<string>;
   commitRollback: (
     envId: string,
@@ -27,7 +28,7 @@ export function createReleaseActions(
   assertEnvironmentMutable: (environmentId: string, operation: string) => void,
 ): ReleaseActions {
   return {
-    commitDeploy: async (envId, service, image, strategy) => {
+    commitDeploy: async (envId, service, image, strategy, onFailure) => {
       assertEnvironmentMutable(envId, "deployment");
       const target = findEnvironment(state, envId)?.services.find(
         (candidate) => candidate.name === service,
@@ -37,7 +38,7 @@ export function createReleaseActions(
         {
           image,
           strategy,
-          on_failure: "switch_back",
+          on_failure: onFailure,
         };
       const accepted = await controllerRequest<
         operations["service.deploy"]["responses"][202]["content"]["application/json"]

@@ -51,6 +51,14 @@ func authoredComposeIdentitySnapshot(
 	if err != nil {
 		return composeidentity.Snapshot{}, err
 	}
+	operational, err := composerender.ComposeIdentitySnapshotFromProjection(projection)
+	if err != nil {
+		return composeidentity.Snapshot{}, err
+	}
+	toolImages := make(map[string]string)
+	for _, resource := range operational.Services {
+		toolImages[resource.ID] = resource.PostgresToolsImage
+	}
 	authoredNames := make(map[string]struct{}, len(project.Services)+len(project.DisabledServices))
 	for name := range project.Services {
 		authoredNames[name] = struct{}{}
@@ -97,8 +105,9 @@ func authoredComposeIdentitySnapshot(
 		seenServiceIDs[service.Desired.ID] = service.Desired.Name
 		seenServiceNames[service.Desired.Name] = service.Desired.ID
 		snapshot.Services[index] = composeidentity.Resource{
-			ID:   service.Desired.ID,
-			Name: service.Desired.Name,
+			ID:                 service.Desired.ID,
+			Name:               service.Desired.Name,
+			PostgresToolsImage: toolImages[service.Desired.ID],
 		}
 	}
 	if len(authoredNames) != 0 {

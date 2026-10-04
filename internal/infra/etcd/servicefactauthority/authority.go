@@ -8,7 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -47,7 +47,7 @@ func Key(kind Kind, environmentID, serviceID string) string {
 	case ReleaseRuntime:
 		return serviceruntimerecord.Key(serviceID)
 	case BackingRuntime:
-		return environmentprojection.EnvironmentComposeProjectionStorageKey(environmentID)
+		return backingpostgresruntime.Key(environmentID, serviceID)
 	default:
 		return ""
 	}
@@ -58,16 +58,16 @@ func ReadApplied(value *etcdstore.KeyValue, kind Kind, environmentID, serviceID 
 		return Applied{}, invalid()
 	}
 	if kind == BackingRuntime {
-		projection, err := environmentprojection.DecodeEnvironmentComposeProjectionStorage(value.Value)
-		if err != nil || projection.EnvironmentID != environmentID {
+		record, err := backingpostgresruntime.Decode(value.Value)
+		if err != nil || record.EnvironmentID != environmentID || record.ServiceID != serviceID {
 			return Applied{}, invalid()
 		}
-		artifact, workload, err := environmentprojection.SelectBackingRuntime(projection, serviceID)
+		artifact, workload, err := backingpostgresruntime.Select(record)
 		if err != nil {
 			return Applied{}, err
 		}
-		return Applied{Artifact: artifact, Workload: workload, LocalImageID: projection.BackingRuntime.LocalImageID,
-			ManagedReleaseSHA256: projection.BackingRuntime.ManagedReleaseSHA256}, nil
+		return Applied{Artifact: artifact, Workload: workload, LocalImageID: record.LocalImageID,
+			ManagedReleaseSHA256: record.CatalogSHA256}, nil
 	}
 	if kind != ReleaseRuntime {
 		return Applied{}, invalid()

@@ -93,7 +93,7 @@ jobs:
           fi
           if [[ "$SCOPE" != agent ]]; then
             bash scripts/repo-env.sh python3 scripts/release_postgres16.py \
-              --base-image "$POSTGRES16_BASE" --image "$IMAGE_ROOT-postgres16:v$VERSION-$ARCH"
+              --base-image "$POSTGRES16_BASE" --image "$IMAGE_ROOT-postgres16-tools:v$VERSION-$ARCH"
             make runner-image-smoke VERSION="$VERSION" RUNNER_IMAGE="$IMAGE_ROOT-runner:v$VERSION-$ARCH"
             docker push "$IMAGE_ROOT-runner:v$VERSION-$ARCH"
             docker image inspect "$IMAGE_ROOT-runner:v$VERSION-$ARCH" \

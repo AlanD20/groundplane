@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish one native managed PostgreSQL image and its measured release identity."""
+"""Publish native backup tools; the database stays on its pinned upstream image."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +12,7 @@ import subprocess
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = "/usr/local/share/groundplane/postgres16-release.json"
+MANIFEST = "/opt/groundplane/postgres16/release.json"
 ARCHES = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 MANIFEST_FIELDS = (
@@ -27,7 +27,8 @@ def load_catalog(path: Path, *, published: bool = False) -> tuple[bytes, dict]:
     if not 0 < len(raw) <= 16384:
         raise ValueError("managed PostgreSQL release catalog exceeds its bound")
     catalog = json.loads(raw)
-    if (tuple(catalog) != ("schema", "image", "images") or catalog["schema"] != 1
+    if (tuple(catalog) != ("schema", "image", "database_image", "images") or catalog["schema"] != 1
+            or not re.fullmatch(r"postgres:16-alpine@sha256:[0-9a-f]{64}", catalog["database_image"])
             or not re.fullmatch(r"[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}", catalog["image"])
             or json.dumps(catalog, separators=(",", ":")).encode() != raw.strip()
             or not 1 <= len(catalog["images"]) <= 2):
@@ -75,7 +76,7 @@ def native_configuration_digest(manifest: dict, reference: str, local_id: str) -
 def read_manifest(image_id: str, arch: str) -> dict:
     # The helper is never started to retrieve metadata. Remove only this
     # temporary stopped container and the anonymous volumes Docker created.
-    container = output("docker", "create", "--network", "none", image_id)
+    container = output("docker", "create", "--network", "none", "--entrypoint", "/not-started", image_id)
     if not re.fullmatch(r"[0-9a-f]{64}", container):
         raise ValueError("Docker did not return the temporary container identity")
     try:
@@ -123,7 +124,7 @@ def main() -> None:
     metadata_path = destination / f"postgres16-{arch}.json"
     if any(path.exists() or path.is_symlink() for path in (reference_path, metadata_path)):
         parser.error("native release output already exists")
-    subprocess.run(["bash", "scripts/build-postgres16-image.sh", "--base-image", args.base_image,
+    subprocess.run(["bash", "scripts/build-postgres16-tools.sh", "--base-image", args.base_image,
                     "--image", args.image], cwd=ROOT, check=True)
     inspected = json.loads(output("docker", "image", "inspect", args.image))[0]
     image_id = inspected["Id"]
@@ -141,7 +142,8 @@ def main() -> None:
     reference = references[0]
     remote = json.loads(output("docker", "manifest", "inspect", reference))
     configuration_digest = native_configuration_digest(remote, reference, image_id)
-    metadata = {"repository_digest": reference, "image_id": configuration_digest, "manifest": manifest}
+    metadata = {"database_image": args.base_image, "repository_digest": reference,
+                "image_id": configuration_digest, "manifest": manifest}
     with metadata_path.open("x") as file:
         file.write(json.dumps(metadata, separators=(",", ":")) + "\n")
     with reference_path.open("x") as file:

@@ -81,7 +81,7 @@ func (repository *Planner) prepareManualPostgresSource(
 		service.Record.Desired.Adapter != "postgres:16" ||
 		releaseRecord.EnvironmentID != environment.ID ||
 		releaseRecord.ServiceID != service.Record.Desired.ID ||
-		service.Record.Desired.Image != releaseRecord.Release.Image ||
+		service.Record.Runtime.PostgresToolsImage != releaseRecord.Release.Image ||
 		service.Revision != backingRead.Values[2].ModRevision {
 		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,

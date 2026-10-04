@@ -49,6 +49,9 @@ func (service *Service) publish(
 	proxyServices := make([]core.Service, len(candidates))
 	for i, candidate := range candidates {
 		proxyServices[i] = candidate.planning.Service.Record.Desired
+		if candidate.planning.Service.Record.Runtime.PostgresToolsImage != "" {
+			proxyServices[i].Expose = nil
+		}
 	}
 	addresses, err := taskplanning.PrepareServiceProxyAddresses(ctx, service.ledger.Planner, projection, proxyServices)
 	if err != nil {
@@ -154,7 +157,11 @@ func (service *Service) publish(
 			}
 			priorRender = &prior.Record
 		}
-		if err := configureReleaseProxy(&render, candidate.planning.Service.Record.Desired.Expose,
+		expose := candidate.planning.Service.Record.Desired.Expose
+		if candidate.planning.Service.Record.Runtime.PostgresToolsImage != "" {
+			expose = nil
+		}
+		if err := configureReleaseProxy(&render, expose,
 			priorRender, candidate.planning.Projection.Revision); err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
@@ -182,6 +189,9 @@ func (service *Service) publish(
 				Kind: domain.WorkspaceTenant, TenantID: scope.Tenant.Record.ID,
 				ProjectID: scope.Project.Record.ID, EnvironmentID: scope.Environment.Record.ID,
 			}, OriginatingTaskID: taskID,
+		}
+		if scope.Tenant.Record.ID == "" {
+			intent.Workspace.Kind = domain.WorkspacePlatform
 		}
 		if groupID != "" {
 			intent.GroupOperationID = operationID
@@ -241,6 +251,9 @@ func (service *Service) publish(
 		PublicationID: publicationID, Operation: head, Members: renderMembers,
 	})
 	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if err := service.ledger.ValidatePostgresPatchPlan(ctx, plan, scope.ReadRevision); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task, err = service.ledger.PrepareTaskConfigurationAtRevision(ctx, preparedTask, scope.ReadRevision)

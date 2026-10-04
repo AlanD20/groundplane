@@ -108,12 +108,13 @@ func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
 			ids.KindConfig,
 			input.ArtifactID,
 		) != nil || ids.Validate(ids.KindService, input.ServiceID) != nil ||
-		ids.Validate(ids.KindTenant, input.TenantID) != nil || ids.Validate(ids.KindProject, input.ProjectID) != nil ||
+		(input.TenantID != "" && ids.Validate(ids.KindTenant, input.TenantID) != nil) ||
+		(input.TenantID == "") != (input.TenantSlug == "") || ids.Validate(ids.KindProject, input.ProjectID) != nil ||
 		ids.Validate(
 			ids.KindEnvironment,
 			input.EnvironmentID,
 		) != nil || input.ServiceName == "" || domain.ValidateWorkloadSeal(input.CandidateWorkload) != nil ||
-		input.TenantSlug == "" || input.ProjectSlug == "" || input.EnvironmentName == "" || input.AuthorizedVolumeDir == "" {
+		input.ProjectSlug == "" || input.EnvironmentName == "" || input.AuthorizedVolumeDir == "" {
 		return errs.New(errs.KindValidationFailed, "release render input identity is invalid")
 	}
 	candidateTarget, candidateErr := domain.TargetFor(input.Strategy, input.Slot)

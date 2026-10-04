@@ -3,6 +3,7 @@ package releaseoperation
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -499,6 +500,17 @@ func (service *Service) deployCandidate(
 	}
 	if replicas < 1 || uint64(replicas) > uint64(^uint32(0)) {
 		return releaseCandidateInput{}, errs.New(errs.KindValidationFailed, "release replica count is invalid")
+	}
+	if planning.Service.Record.BackingNetworkID != "" {
+		if planning.Service.Record.Desired.Adapter != "postgres:16" || !postgres16protocol.ValidDatabaseImage(image) ||
+			strategy != domain.StrategyRecreate || replicas != 1 || planning.Service.Record.Runtime.PostgresToolsImage == "" {
+			return releaseCandidateInput{}, errs.New(errs.KindValidationFailed,
+				"Backing image Deploy requires an upstream PostgreSQL 16 Alpine image and singleton recreate")
+		}
+		if !hasServing && onFailure != domain.OnFailureLeaveActive {
+			return releaseCandidateInput{}, errs.New(errs.KindValidationFailed,
+				"first Backing image Deploy requires leave_active; no previous Deployment exists for switch-back")
+		}
 	}
 	return releaseCandidateInput{
 		planning: planning, selection: workloadseal.Selection{Requested: &workloadseal.Requested{Reference: image, Replicas: uint32(replicas)}}, tag: tag,

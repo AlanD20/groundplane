@@ -164,6 +164,7 @@ func TestBackingServiceProjectionRequiresStableNetworkBinding(t *testing.T) {
 	t.Parallel()
 	desired := serviceRecordTestDesired()
 	desired.Adapter = "postgres:16"
+	desired.Image = "postgres:16-alpine"
 	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
 	projection := serviceRecordTestProjection(t, environmentID, desired)
 	projection.DesiredServices[0].BackingNetworkID = ""

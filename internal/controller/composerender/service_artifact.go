@@ -51,10 +51,8 @@ func MutateEnvironmentServiceArtifact(
 			ids.KindConfig,
 			mutation.ArtifactID,
 		) != nil || ids.Validate(ids.KindPlan, mutation.PlanID) != nil ||
-		ids.Validate(
-			ids.KindTenant,
-			mutation.TenantID,
-		) != nil || ids.Validate(ids.KindProject, mutation.ProjectID) != nil ||
+		(mutation.TenantID != "" && ids.Validate(ids.KindTenant, mutation.TenantID) != nil) ||
+		ids.Validate(ids.KindProject, mutation.ProjectID) != nil ||
 		mutation.RenderGeneration == 0 ||
 		(mutation.Action != ServiceArtifactCreate && mutation.Action != ServiceArtifactEdit &&
 			mutation.Action != ServiceArtifactRemove) ||
@@ -120,6 +118,7 @@ func MutateEnvironmentServiceArtifact(
 			return nil, err
 		}
 		owned.Services[metadataIndex].ExpectedReplicas = uint32(mutation.Desired.Replicas)
+		owned.Services[metadataIndex].ImageReference = mutation.Desired.Image
 		owned.Services[metadataIndex].HasHealthcheck = serviceNodeHasHealthcheck(services.Content[found+1])
 	} else {
 		if found < 0 || metadataIndex < 0 {

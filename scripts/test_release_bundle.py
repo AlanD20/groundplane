@@ -121,20 +121,18 @@ class BundleTests(unittest.TestCase):
         manifest = {
             "agent_image": self.agent,
             "runner_image": self.runner,
-            "postgres_image": self.postgres["image"],
+            "postgres_image": self.postgres["database_image"],
+            "postgres_tools_image": self.postgres["image"],
             "arch": "amd64",
         }
-        native = self.postgres["images"][0]
         with mock.patch.object(install_bundle.subprocess, "run") as run, \
-                mock.patch.object(install_bundle.subprocess, "check_output", return_value=json.dumps([{
-                    "Id": native["image_id"], "Os": "linux", "Architecture": "amd64",
-                }])) as inspect, \
+                mock.patch.object(install_bundle.postgres16_tools, "install") as tools, \
                 mock.patch.object(install_bundle.os, "execvp") as execute, \
                 mock.patch.object(install_bundle.install_agent, "installed_image", return_value=self.agent), \
                 mock.patch.object(install_bundle.shutil, "disk_usage") as capacity:
             capacity.return_value.free = 3 * 1024**3
             install_bundle.install(self.root, args, manifest, layout)
-        inspect.assert_called_once()
+        tools.assert_called_once_with(self.postgres, "amd64")
         return run, execute
 
     def test_native_update_only_pulls_agent_and_uses_guarded_activation(self):
@@ -142,7 +140,8 @@ class BundleTests(unittest.TestCase):
             run, execute = self.invoke("native", stage)
             run.assert_any_call(["docker", "pull", self.agent], check=True, timeout=600)
             run.assert_any_call(["docker", "pull", self.postgres["image"]], check=True, timeout=600)
-            self.assertEqual(run.call_count, 3)
+            run.assert_any_call(["docker", "pull", self.postgres["database_image"]], check=True, timeout=600)
+            self.assertEqual(run.call_count, 4)
             argv = run.call_args.args[0]
             self.assertEqual(argv[1], str(self.root / "install-runtime.sh"))
             self.assertEqual(argv[-2:], ["1" if stage else "0", "0"])
@@ -154,7 +153,8 @@ class BundleTests(unittest.TestCase):
             mock.call(["sh", str(self.root / "setup-host.sh")], check=True),
             mock.call(["docker", "pull", self.agent], check=True, timeout=600),
             mock.call(["docker", "pull", self.runner], check=True, timeout=600),
-            mock.call(["docker", "pull", self.postgres["image"]], check=True, timeout=600)])
+            mock.call(["docker", "pull", self.postgres["database_image"]], check=True, timeout=600)])
+        run.assert_any_call(["docker", "pull", self.postgres["image"]], check=True, timeout=600)
 
     def test_stage_on_fresh_host_and_config_on_native_refuse(self):
         with self.assertRaisesRegex(ValueError, "existing native"):
@@ -169,7 +169,8 @@ class BundleTests(unittest.TestCase):
         manifest = {
             "agent_image": self.agent,
             "runner_image": self.runner,
-            "postgres_image": self.postgres["image"],
+            "postgres_image": self.postgres["database_image"],
+            "postgres_tools_image": self.postgres["image"],
             "arch": "amd64",
         }
         with mock.patch.object(install_bundle.subprocess, "run") as run, \

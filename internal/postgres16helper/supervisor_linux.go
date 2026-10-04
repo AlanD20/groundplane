@@ -2,6 +2,7 @@ package postgres16helper
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"syscall"
@@ -168,6 +169,11 @@ func (runtime Runtime) clientDigest(operation postgres16protocol.Operation) post
 }
 
 func openStateDirectory() (*os.File, error) {
+	// The upstream database image contains no GP directories. Only the trusted
+	// root helper creates its private state, before opening it without symlinks.
+	if err := os.Mkdir(postgres16protocol.StateDirectoryPath, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		return nil, supervisorError()
+	}
 	rootFD, err := unix.Open("/", unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, supervisorError()

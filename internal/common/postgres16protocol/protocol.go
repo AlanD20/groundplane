@@ -19,14 +19,14 @@ const (
 	PlatformArchitecture = "arm64"
 	PlatformVariant      = "v8"
 
-	HelperDirectoryPath = "/usr/local/libexec"
-	HelperPath          = "/usr/local/libexec/groundplane-postgres16-helper"
-	ClientGatePath      = "/usr/local/libexec/groundplane-postgres16-client-gate"
+	HelperDirectoryPath = "/opt/groundplane/postgres16"
+	HelperPath          = HelperDirectoryPath + "/helper"
+	ClientGatePath      = HelperDirectoryPath + "/client-gate"
 	StateDirectoryPath  = "/run/groundplane-postgres16"
 
-	PGDumpPath    = "/usr/local/bin/pg_dump"
-	PGRestorePath = "/usr/local/bin/pg_restore"
-	PSQLPath      = "/usr/local/bin/psql"
+	PGDumpPath    = HelperDirectoryPath + "/bin/pg_dump"
+	PGRestorePath = HelperDirectoryPath + "/bin/pg_restore"
+	PSQLPath      = HelperDirectoryPath + "/bin/psql"
 
 	HelperDirectoryUID  uint32 = 0
 	HelperDirectoryGID  uint32 = 0

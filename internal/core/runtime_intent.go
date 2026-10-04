@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
+)
 
 // ServiceRuntimeIntent is Controller-owned operational state. It is stored
 // separately from Service so Blueprint input cannot author or overwrite it.
@@ -27,8 +30,9 @@ func (i ServiceRuntimeIntent) Validate() error {
 // desired Service. It deliberately has no YAML tags and is not a Blueprint
 // document.
 type ServiceRuntime struct {
-	ServiceID     string               `json:"service_id"`
-	RuntimeIntent ServiceRuntimeIntent `json:"runtime_intent"`
+	ServiceID          string               `json:"service_id"`
+	RuntimeIntent      ServiceRuntimeIntent `json:"runtime_intent"`
+	PostgresToolsImage string               `json:"postgres_tools_image,omitempty"`
 }
 
 // Validate enforces a complete per-service runtime record.
@@ -38,6 +42,9 @@ func (r ServiceRuntime) Validate() error {
 	}
 	if err := r.RuntimeIntent.Validate(); err != nil {
 		return fmt.Errorf("service runtime: %w", err)
+	}
+	if r.PostgresToolsImage != "" && !imageref.IsDigestPinned(r.PostgresToolsImage) {
+		return fmt.Errorf("service runtime: PostgreSQL backup tools must be digest-pinned")
 	}
 	return nil
 }

@@ -78,9 +78,11 @@ Initial single-host release.
   A combined `vX.Y.Z` release also publishes both matching component releases
   from the same artifacts. Agent-only updates leave the Controller unchanged.
 - Agent and Runner container images are distributed through GHCR. Release
-  bundles also select GP's managed PostgreSQL 16 image with its capture/restore
-  helper. Installation preloads it without replacing existing databases;
-  source installations build it into the local registry. Bundles pin image
+  bundles also select upstream PostgreSQL 16 Alpine and independent capture/restore
+  tools. Installation preloads these without replacing existing databases;
+  source installations build only GP's tools into the local registry. Backing
+  image updates retain data Volumes and allow PostgreSQL 16 patch images without
+  rebuilding a GP database image. Bundles pin image
   digests and include file checksums.
 - Tagged GitHub releases publish both platform bundles, checksums and installer.
 - GitHub Pages deploys independently on every push to `main`, serving a dark

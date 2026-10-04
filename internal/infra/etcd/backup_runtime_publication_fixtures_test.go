@@ -347,7 +347,7 @@ func seedBackupRuntimePublicationEvidence(
 				EnvironmentID:    backingEnvironment.ID,
 				BackingNetworkID: backingNetworkID,
 				Desired: core.Service{
-					ID: backingServiceID, Name: "postgres", Image: release.Image, Adapter: "postgres:16",
+					ID: backingServiceID, Name: "postgres", Image: release.DatabaseImage, Adapter: "postgres:16",
 				},
 			}},
 		},
@@ -518,6 +518,7 @@ func seedBackupRuntimePublicationEvidence(
 				BackingNetworkID: backingNetworkID,
 				Runtime: core.ServiceRuntime{
 					ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
+					PostgresToolsImage: release.Image,
 				},
 			})
 		},

@@ -86,8 +86,11 @@ Controller startup configuration, the host age key, etcd or platform state.
 Its bounds are 4,096 Entries, 256 KiB per selected value and 1 GiB of selected
 values in total. Blueprint export, in contrast, redacts secret values.
 
-PostgreSQL capture uses GP's release-selected PostgreSQL 16 image and helper
-to dump the credential owner's selected database. It is not a dump of the
+PostgreSQL capture runs release-selected backup tools through a read-only mount
+inside an unmodified upstream PostgreSQL 16 Alpine container. The tool selection
+is independent of database patches; both identities are verified against the
+acknowledged current runtime. It dumps the credential owner's selected database,
+not the
 whole Backing instance or a filesystem copy of its live database directory.
 
 Volume capture supports regular files and directories on one filesystem, with

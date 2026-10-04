@@ -173,7 +173,7 @@ export function DeployDialog({
       steps={steps}
       startDisabled={!image.trim()}
       onDispatch={() =>
-        store.commitDeploy(env.id, svc.name, image.trim(), strategy)
+        store.commitDeploy(env.id, svc.name, image.trim(), strategy, "switch_back")
       }
       onSettled={async () => {
         await Promise.all([

@@ -2,6 +2,7 @@ package executionplan
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 
@@ -58,14 +59,14 @@ func postgresObservationMatchesService(value *agentpb.BackupPostgresContainerObs
 	}
 	for _, fact := range services {
 		if fact.ServiceId != value.ServiceId || fact.RequiredLabelCount != value.ObservedLabelCount ||
-			!bytes.Equal(fact.RequiredLabelsSha256, value.ObservedLabelsSha256) {
+			!bytes.Equal(fact.RequiredLabelsSha256, value.ObservedLabelsSha256) ||
+			!bytes.Equal(fact.LocalImageIdSha256, value.DatabaseImageIdSha256) {
 			continue
 		}
 		for _, image := range release.Images {
 			manifest, manifestErr := hex.DecodeString(strings.TrimPrefix(image.ManifestDigest(), "sha256:"))
-			imageID := "sha256:" + hex.EncodeToString(fact.LocalImageIdSha256)
 			if manifestErr == nil && bytes.Equal(manifest, value.RepositoryDigest) &&
-				release.MatchesRuntimeImageID(image, imageID) {
+				len(fact.LocalImageIdSha256) == sha256.Size {
 				return true
 			}
 		}

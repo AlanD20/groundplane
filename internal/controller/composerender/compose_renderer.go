@@ -116,6 +116,9 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := projectPostgresBackupTools(&rendered, services, input.Identities.Services); err != nil {
+		return nil, err
+	}
 
 	networks := make([]*agentpb.ComposeNetwork, 0, len(ownedNetworkNames))
 	for _, name := range ownedNetworkNames {

@@ -21,6 +21,21 @@ func CaptureLogSource(
 		return captured.target, nil
 	}
 	if service.Record.BackingNetworkID != "" {
+		if service.Record.Desired.Adapter == "postgres:16" {
+			_, found, err := releases.GetPostgresRuntimeAt(
+				ctx,
+				service.Record.EnvironmentID,
+				service.Record.Desired.ID,
+				service.ReadRevision,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if !found {
+				return nil, nil
+			}
+			return nil, errs.New(errs.KindStorageUnavailable, "PostgreSQL runtime could not be selected for logs")
+		}
 		_, found, err := releases.GetAppliedProjectionAt(ctx, service.Record.EnvironmentID, service.ReadRevision)
 		if err != nil {
 			return nil, err

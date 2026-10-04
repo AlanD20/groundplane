@@ -3,10 +3,12 @@ package postgres16execution
 import (
 	"context"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
@@ -31,9 +33,8 @@ var protectedPaths = []string{
 
 func (executor *Executor) attest(ctx context.Context, expected Container) error {
 	if !validDockerID(expected.ID) || expected.Name == "" || expected.NetworkMode == "" ||
-		len(
-			expected.Labels,
-		) == 0 || !validExpectedMounts(expected.Mounts) || !executor.matchesRuntimeImageID(expected.ImageID) {
+		len(expected.Labels) == 0 || !validExpectedMounts(expected.Mounts) ||
+		expected.ImageID != executor.databaseImageID {
 		return errs.New(errs.KindValidationFailed, "managed PostgreSQL container authority is invalid")
 	}
 	image, err := executor.engine.ImageInspect(ctx, expected.ImageID)
@@ -44,9 +45,7 @@ func (executor *Executor) attest(ctx context.Context, expected Container) error 
 		image.Architecture != executor.manifest.Architecture ||
 		(executor.manifest.Architecture == "amd64" && image.Variant != "" ||
 			executor.manifest.Architecture == "arm64" && image.Variant != "" && image.Variant != "v8") ||
-		image.Descriptor != nil && (!executor.matchesImageDescriptor(image.Descriptor.Digest.String()) ||
-			image.Descriptor.Size <= 0) ||
-		(!imageHasReference(image, executor.imageReference) && !imageHasReference(image, executor.indexReference)) {
+		image.Descriptor != nil && image.Descriptor.Size <= 0 {
 		return errs.New(errs.KindStateConflict, "managed PostgreSQL release image changed")
 	}
 	inspected, err := executor.engine.ContainerInspect(ctx, expected.ID, client.ContainerInspectOptions{})
@@ -56,7 +55,7 @@ func (executor *Executor) attest(ctx context.Context, expected Container) error 
 	observed := inspected.Container
 	if observed.ID != expected.ID || observed.Name != expected.Name || observed.Image != expected.ImageID ||
 		observed.Platform != executor.manifest.OS || observed.Config == nil ||
-		(observed.Config.Image != executor.imageReference && observed.Config.Image != executor.indexReference &&
+		(observed.Config.Image != executor.databaseImageReference &&
 			observed.Config.Image != expected.ImageID) ||
 		observed.Config.Tty || !labelsMatch(observed.Config.Labels, expected.Labels) ||
 		observed.State == nil || !observed.State.Running || observed.State.Paused ||
@@ -68,7 +67,7 @@ func (executor *Executor) attest(ctx context.Context, expected Container) error 
 	}
 	if observed.ImageManifestDescriptor != nil {
 		descriptor := observed.ImageManifestDescriptor
-		if descriptor.Digest.String() != executor.manifestDigest || descriptor.Size <= 0 ||
+		if descriptor.Size <= 0 ||
 			descriptor.Platform != nil &&
 				(descriptor.Platform.OS != executor.manifest.OS ||
 					descriptor.Platform.Architecture != executor.manifest.Architecture) {
@@ -76,29 +75,6 @@ func (executor *Executor) attest(ctx context.Context, expected Container) error 
 		}
 	}
 	return nil
-}
-
-func (executor *Executor) matchesImageDescriptor(digest string) bool {
-	_, indexDigest, _ := strings.Cut(executor.indexReference, "@")
-	return digest == executor.manifestDigest || digest == indexDigest
-}
-
-func (executor *Executor) matchesRuntimeImageID(digest string) bool {
-	return digest == executor.imageID || executor.matchesImageDescriptor(digest)
-}
-
-func imageHasReference(image client.ImageInspectResult, reference string) bool {
-	separator := strings.LastIndex(reference, "@sha256:")
-	if separator < 0 {
-		return false
-	}
-	digest := reference[separator+1:]
-	for _, observed := range image.RepoDigests {
-		if observed == reference {
-			return true
-		}
-	}
-	return image.Descriptor != nil && image.Descriptor.Digest.String() == digest
 }
 
 func validRootProfile(host *container.HostConfig, expected Container) bool {
@@ -133,7 +109,7 @@ func labelsMatch(observed, expected map[string]string) bool {
 func validExpectedMounts(mounts []Mount) bool {
 	seen := make(map[string]struct{}, len(mounts))
 	for _, item := range mounts {
-		if !validMountPath(item.Destination) || mountShadowsProtected(item.Destination) {
+		if !validMountPath(item.Destination) || mountShadowsProtected(item.Destination) && !validToolingMount(item) {
 			return false
 		}
 		if _, exists := seen[item.Destination]; exists {
@@ -159,9 +135,14 @@ func sameMounts(observed []container.MountPoint, expected []Mount) bool {
 		}
 		seen[item.Destination] = struct{}{}
 		claim, ok := byDestination[item.Destination]
-		if !ok || !validMountPath(item.Destination) || mountShadowsProtected(item.Destination) ||
-			claim.Type != item.Type || claim.Name != item.Name || claim.Source != item.Source ||
-			claim.Driver != item.Driver || claim.Mode != item.Mode || claim.RW != item.RW ||
+		if !ok || !validMountPath(item.Destination) ||
+			mountShadowsProtected(item.Destination) && !validToolingMount(claim) ||
+			claim.Type != item.Type ||
+			claim.Name != item.Name ||
+			claim.Source != item.Source ||
+			claim.Driver != item.Driver ||
+			claim.Mode != item.Mode ||
+			claim.RW != item.RW ||
 			claim.Propagation != item.Propagation {
 			return false
 		}
@@ -171,6 +152,11 @@ func sameMounts(observed []container.MountPoint, expected []Mount) bool {
 
 func validMountPath(value string) bool {
 	return strings.HasPrefix(value, "/") && value == path.Clean(value)
+}
+
+func validToolingMount(value Mount) bool {
+	return value.Type == mount.TypeBind && !value.RW && value.Destination == postgres16protocol.HelperDirectoryPath &&
+		filepath.Dir(value.Source) == postgres16protocol.HostToolsRoot && validDockerID(filepath.Base(value.Source))
 }
 
 func mountShadowsProtected(destination string) bool {

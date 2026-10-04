@@ -120,8 +120,13 @@ func (repository *Planner) manualBackupSourceAuthority(
 			return nil, err
 		}
 		fact := backupScopeService(scope, postgres.BackingServiceID)
-		imageID := "sha256:" + hex.EncodeToString(fact.GetLocalImageIdSha256())
-		if !release.ContainsRuntimeImageID(imageID) {
+		var boundTools bool
+		for _, workload := range artifact.Services {
+			if workload.ServiceId == fact.GetServiceId() && workload.PostgresToolsImage == release.Image {
+				boundTools = true
+			}
+		}
+		if !boundTools {
 			return nil, errs.New(errs.KindStateConflict, "PostgreSQL workload is not the managed backup release")
 		}
 		maximum := backupformat.MaxStoredBytes

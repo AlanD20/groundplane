@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresruntime"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
@@ -38,6 +39,7 @@ type sourceRead struct {
 }
 
 type fakeReleases struct {
+	postgres       *testkeyvalue.Versioned[backingpostgresruntime.Record]
 	applied        *testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
 	fixtures       map[string]sourceFixture
 	resolveCalls   []sourceRead
@@ -50,6 +52,20 @@ type fakeReleases struct {
 	mutateRender   func(string, int, *testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput])
 	mutateRuntime  func(string, int, *testkeyvalue.Versioned[serviceruntimerecord.Record])
 	runtimeCounts  map[string]int
+}
+
+func (releases *fakeReleases) GetPostgresRuntimeAt(
+	_ context.Context, environmentID, serviceID string, revision int64,
+) (testkeyvalue.Versioned[backingpostgresruntime.Record], bool, error) {
+	if releases.postgres == nil || releases.postgres.Record.EnvironmentID != environmentID ||
+		releases.postgres.Record.ServiceID != serviceID {
+		return testkeyvalue.Versioned[backingpostgresruntime.Record]{}, false, nil
+	}
+	result := *releases.postgres
+	if releases.followRevision {
+		result.ReadRevision = revision
+	}
+	return result, true, nil
 }
 
 func (releases *fakeReleases) GetAppliedProjectionAt(

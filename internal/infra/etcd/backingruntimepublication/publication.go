@@ -116,7 +116,7 @@ func Prepare(ctx context.Context, storage CatalogReader, input Input,
 	defer etcdstore.ClearValues(read.Values)
 	release, err := backingpostgresrelease.Decode(read.Values[0].Value)
 	if err != nil || release.EnvironmentID != projection.EnvironmentID || release.ServiceID != serviceID ||
-		release.Release.Image != workload.ImageReference || !release.Release.ContainsRuntimeImageID(observed.LocalImageID) {
+		release.Release.Image != workload.PostgresToolsImage {
 		return nil, invalidBackingAcknowledgement()
 	}
 	artifactSHA, releaseSHA := sha256.Sum256(projection.ComposeArtifact), sha256.Sum256(read.Values[0].Value)

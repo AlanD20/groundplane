@@ -59,7 +59,7 @@ func TestEnvironmentComposeProjectionRoundTripsLosslessDesiredTopology(t *testin
 			value.DesiredZones[0].Desired.Internal = !value.DesiredZones[0].Desired.Internal
 		}},
 		{name: "Service desired field", mutate: func(value *testenvironmentprojection.EnvironmentComposeProjection) {
-			value.DesiredServices[0].Desired.Image = "postgres:16.9"
+			value.DesiredServices[0].Desired.Image = "postgres:16.9-alpine"
 		}},
 		{name: "Service backing network", mutate: func(value *testenvironmentprojection.EnvironmentComposeProjection) {
 			value.DesiredServices[0].BackingNetworkID = value.DesiredZones[1].Desired.ID
@@ -115,6 +115,7 @@ func desiredTopologyProjectionFixture(t *testing.T) testenvironmentprojection.En
 		backingNetworkID := ""
 		if index == 0 {
 			service.Adapter = "postgres:16"
+			service.Image = "postgres:16-alpine"
 			backingNetworkID = projection.DesiredZones[0].Desired.ID
 		}
 		projection.DesiredServices = append(projection.DesiredServices, testservices.EnvironmentServiceProjection{

@@ -2,6 +2,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SummaryItem, SummaryStrip } from "@/components/common/resource-panel";
 import { ServiceFormBody } from "@/components/common/service-form-body";
+import { PostgresImageUpdate } from "./postgres-image-update";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
@@ -113,6 +114,7 @@ export default function BackingServiceDetailPage() {
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               Edit service
             </Button>
+            {svc.adapter === "postgres:16" && <PostgresImageUpdate env={env} service={svc} />}
             {running ? (
               <Button
                 variant="outline"

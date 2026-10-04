@@ -115,6 +115,7 @@ func carryOwnedIdentities(
 		}
 		identity := projectionrecord.OwnedIdentity{
 			ID: resource.ID, Name: resource.Name, BirthRevisionID: birth,
+			PostgresToolsImage: resource.PostgresToolsImage,
 		}
 		if slugs != nil {
 			volumeSlug, found := slugs[resource.Name]

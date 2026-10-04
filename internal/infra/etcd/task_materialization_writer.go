@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingruntimepublication"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -376,10 +377,27 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		return taskMaterializationProjectionChange{}, err
 	}
 	conditions = append(conditions, backingConditions...)
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: projectionKey, Value: projectionValue}}
+	if projection.BackingRuntime != nil && projection.BackingRuntime.TaskID == record.ID {
+		backing, err := backingpostgresruntime.FromProvisioning(projection)
+		if err != nil {
+			return taskMaterializationProjectionChange{}, err
+		}
+		value, err := backingpostgresruntime.Encode(backing)
+		if err != nil {
+			return taskMaterializationProjectionChange{}, err
+		}
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: backingpostgresruntime.Key(backing.EnvironmentID, backing.ServiceID)},
+		)
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut,
+			Key: backingpostgresruntime.Key(backing.EnvironmentID, backing.ServiceID), Value: value})
+	}
 	return taskMaterializationProjectionChange{
 		applies:    true,
 		conditions: conditions,
-		mutations:  []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: projectionKey, Value: projectionValue}},
+		mutations:  mutations,
 	}, nil
 }
 

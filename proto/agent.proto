@@ -1026,6 +1026,7 @@ message ComposeService {
   string image_architecture = 16;
   string image_variant = 17;
   bytes image_config_digest = 18;
+  string postgres_tools_image = 19;
 }
 
 enum ComposeServiceRole {
@@ -2433,6 +2434,7 @@ message BackupPostgresContainerObserved {
   uint32 observed_label_count = 4;
   bytes observed_labels_sha256 = 5;
   bytes observation_sha256 = 6;
+  bytes database_image_id_sha256 = 7;
 }
 
 message BackupPostgresDumpStart {

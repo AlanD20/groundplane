@@ -351,8 +351,10 @@ func CloneCheckpoint(value Checkpoint) Checkpoint {
 }
 
 func validateWorkspace(value Workspace, environmentID string) error {
-	if value.Kind != WorkspaceTenant || ids.Validate(ids.KindTenant, value.TenantID) != nil ||
-		ids.Validate(ids.KindProject, value.ProjectID) != nil || value.EnvironmentID != environmentID {
+	if ids.Validate(ids.KindProject, value.ProjectID) != nil || value.EnvironmentID != environmentID ||
+		(value.Kind == WorkspaceTenant && ids.Validate(ids.KindTenant, value.TenantID) != nil) ||
+		(value.Kind == WorkspacePlatform && value.TenantID != "") ||
+		(value.Kind != WorkspaceTenant && value.Kind != WorkspacePlatform) {
 		return invalid("release workspace is invalid")
 	}
 	return nil

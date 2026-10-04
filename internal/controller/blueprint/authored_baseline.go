@@ -149,7 +149,8 @@ func authoredOwnedIdentitySnapshot(
 		Volumes:  make([]composeidentity.Resource, len(identities.Volumes)),
 	}
 	for index, identity := range identities.Services {
-		previous.Services[index] = composeidentity.Resource{ID: identity.ID, Name: identity.Name}
+		previous.Services[index] = composeidentity.Resource{ID: identity.ID, Name: identity.Name,
+			PostgresToolsImage: identity.PostgresToolsImage}
 	}
 	for index, identity := range identities.Networks {
 		previous.Networks[index] = composeidentity.Resource{ID: identity.ID, Name: identity.Name}

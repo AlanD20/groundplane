@@ -297,7 +297,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		if releaseErr != nil {
 			return idempotencyrecord.IdempotencyResponse{}, releaseErr
 		}
-		if spec.Image != release.Image {
+		if spec.Image != release.DatabaseImage {
 			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindStateConflict, "managed PostgreSQL creation image differs from release authority")
 		}
@@ -324,6 +324,9 @@ func (service *CreationService) createBackingServiceFromStage(
 	serviceRecord, err := servicerecord.NewServiceRecord(environment.ID, desiredService, zone.Desired.ID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if postgresRelease != nil {
+		serviceRecord.Runtime.PostgresToolsImage = postgresRelease.Release.Image
 	}
 	entryDesired := make([]core.EnvEntry, len(entries))
 	for index := range entries {
@@ -353,6 +356,9 @@ func (service *CreationService) createBackingServiceFromStage(
 	identities := composeidentity.Snapshot{
 		Services: []composeidentity.Resource{{ID: serviceID, Name: spec.ServiceName}},
 		Networks: []composeidentity.Resource{{ID: zone.Desired.ID, Name: zone.Desired.Name}},
+	}
+	if postgresRelease != nil {
+		identities.Services[0].PostgresToolsImage = postgresRelease.Release.Image
 	}
 	if volume != nil {
 		identities.Volumes = []composeidentity.Resource{{ID: volumeID, Name: volume.Key}}

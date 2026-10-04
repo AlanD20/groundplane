@@ -12,10 +12,11 @@ import (
 
 // Resource binds one mutable Compose key to its durable id.
 type Resource struct {
-	ID             string
-	Name           string
-	ComponentID    string
-	ComponentImage *ComponentImage
+	ID                 string
+	Name               string
+	ComponentID        string
+	ComponentImage     *ComponentImage
+	PostgresToolsImage string
 }
 
 // ComponentImage preserves one compiled selection across persisted rerenders.
@@ -195,7 +196,14 @@ func reconcileComposeResourceIdentities(
 			}
 			usedIDs[id] = struct{}{}
 		}
-		current = append(current, Resource{ID: id, Name: name})
+		identity := Resource{ID: id, Name: name}
+		for _, prior := range previous {
+			if prior.ID == id {
+				identity.PostgresToolsImage = prior.PostgresToolsImage
+				break
+			}
+		}
+		current = append(current, identity)
 	}
 
 	removed := make([]string, 0, len(previous))

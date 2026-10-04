@@ -1,4 +1,4 @@
-"""Build and pin the native managed PostgreSQL artifact for a source installation."""
+"""Build independent backup tools and select the unmodified upstream database."""
 from __future__ import annotations
 
 import base64
@@ -11,9 +11,10 @@ import ssl
 import subprocess
 
 import private_registry
+import postgres16_tools
 from release_postgres16 import DIGEST, read_manifest, native_configuration_digest
 
-REPOSITORY = "localhost:5000/groundplane-postgres16"
+REPOSITORY = "localhost:5000/groundplane-postgres16-tools"
 
 
 def output(*args: str) -> str:
@@ -32,7 +33,7 @@ def native_manifest(reference: str, image_id: str) -> str:
     connection = http.client.HTTPSConnection(
         "127.0.0.1", 5000, context=ssl.create_default_context(cafile=str(settings / "tls.crt")), timeout=30)
     try:
-        connection.request("GET", f"/v2/groundplane-postgres16/manifests/{digest}", headers={
+        connection.request("GET", f"/v2/groundplane-postgres16-tools/manifests/{digest}", headers={
             "Authorization": "Basic " + auth,
             "Accept": "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
         })
@@ -53,11 +54,11 @@ def build_release(source: Path, common: list[str], buildx: list[str], identity: 
                              "--format", "{{json .Manifest}}"))["digest"]
     if not DIGEST.fullmatch(base):
         raise ValueError("managed PostgreSQL base image did not resolve to a digest")
-    tag = f"groundplane-postgres16:ref-{identity}"
+    tag = f"groundplane-postgres16-tools:ref-{identity}"
     if not re.fullmatch(r"[0-9a-f]{32}", identity):
         raise ValueError("managed PostgreSQL source build identity is invalid")
     runtime_tag = f"{REPOSITORY}:ref-{identity}"
-    subprocess.run([*common, "--file", "Dockerfile.postgres16", "--build-arg",
+    subprocess.run([*common, "--file", "Dockerfile.postgres16-tools", "--build-arg",
                     f"POSTGRES16_BASE=postgres:16-alpine@{base}", "--tag", tag,
                     "--output", "type=docker,rewrite-timestamp=true", "."],
                    cwd=source, check=True, timeout=1800)
@@ -75,7 +76,9 @@ def build_release(source: Path, common: list[str], buildx: list[str], identity: 
         raise ValueError("managed PostgreSQL publication did not return one native repository digest")
     reference = references[0]
     configuration_digest = native_manifest(reference, image_id)
-    catalog = {"schema": 1, "image": reference, "images": [
+    catalog = {"schema": 1, "image": reference, "database_image": f"postgres:16-alpine@{base}", "images": [
         {"repository_digest": reference, "image_id": configuration_digest, "manifest": manifest},
     ]}
+    postgres16_tools.install(catalog, arch)
+    subprocess.run(["docker", "pull", catalog["database_image"]], check=True, timeout=1200)
     return base64.b64encode(json.dumps(catalog, separators=(",", ":")).encode()).decode()

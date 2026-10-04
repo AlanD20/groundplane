@@ -164,20 +164,22 @@ remaining dispatch or its validation checks.
 
 ## Managed PostgreSQL uses a closed helper and private gate
 
-Published releases carry one authenticated, dual-platform PostgreSQL 16 image
-index. A consumer building `--ref` builds only its native architecture and
-publishes that image to the host's managed registry. Both use the same catalog,
-embedded in the Controller, binding the deployment reference to measured native
-image and helper identities. Native source builds do not fabricate an unbuilt
-platform or depend on an earlier published release.
+Published releases carry an authenticated dual-platform scratch image containing
+only PostgreSQL backup clients, their libraries, the helper and private gate.
+The database image is unmodified upstream PostgreSQL 16 Alpine. Native `--ref`
+builds publish only the host architecture's tooling; they do not fabricate an
+unbuilt platform or depend on a previous published release.
 
-The helper, private client gate, rootfs and runtime security evidence are part
-of that build; operators and desired state cannot override them. Installer
-updates preload the next image without replacing an existing database container.
-Backing creation stores that selected catalog with its immutable native authority.
-Capture and Restore use this retained catalog, so a Controller update cannot
-substitute new helper measurements for an existing database image.
-Container and mount attestation prevents any workload mount
+The installer extracts tooling into a digest-owned directory, verifies its
+inventory against the authenticated image and mounts it read-only. Clients use
+their bundled loader and libraries, not those of the patched database image.
+Backing creation retains the catalog. GP software updates cannot substitute new
+tools for an existing Backing. Database patch Deploys preserve the same Volume
+and tooling mount; verified provisioning and Deploy outcomes publish one current
+PostgreSQL runtime authority consumed by Backup. See
+[the record owner](../../internal/infra/etcd/backingpostgresruntime/record.go).
+Container and mount attestation admits only that exact read-only tooling bind
+alongside the data Volume and prevents any other workload mount
 from shadowing the helper, gate, state directory, clients, socket, or runtime
 identity. Container and host root are trusted boundary actors; database uid 70
 is not trusted with supervisor state.

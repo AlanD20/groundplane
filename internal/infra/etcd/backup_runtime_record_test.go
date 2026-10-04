@@ -270,7 +270,7 @@ func testBackupObject(key string) testbackupruntime.BackupObjectIdentity {
 
 func testBackupManagedRelease() string {
 	return fmt.Sprintf(
-		`{"schema":1,"image":"registry.example.test/postgres@sha256:%[1]s","images":[{"repository_digest":"registry.example.test/postgres@sha256:%[1]s","image_id":"sha256:%[1]s","manifest":{"schema":1,"os":"linux","architecture":"amd64","postgresql_major":16,"helper_sha256":"%[1]s","gate_sha256":"%[1]s","pg_dump_sha256":"%[1]s","pg_restore_sha256":"%[1]s","psql_sha256":"%[1]s","launch_profile_sha256":"%[2]s","gate_seccomp_sha256":"%[1]s"}}]}`,
+		`{"schema":1,"image":"registry.example.test/postgres-tools@sha256:%[1]s","database_image":"postgres:16-alpine@sha256:%[1]s","images":[{"repository_digest":"registry.example.test/postgres-tools@sha256:%[1]s","image_id":"sha256:%[1]s","manifest":{"schema":1,"os":"linux","architecture":"amd64","postgresql_major":16,"helper_sha256":"%[1]s","gate_sha256":"%[1]s","pg_dump_sha256":"%[1]s","pg_restore_sha256":"%[1]s","psql_sha256":"%[1]s","launch_profile_sha256":"%[2]s","gate_seccomp_sha256":"%[1]s"}}]}`,
 		testBackupDigest,
 		postgres16protocol.ManagedLaunchProfileSHA256().String(),
 	)

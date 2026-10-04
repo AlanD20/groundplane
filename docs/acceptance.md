@@ -798,6 +798,24 @@ This is not complete Gate B, arm64, all provider/archive/key failures or a relea
 qualification. No new tests or release tag were added; earlier failures remain
 preserved.
 
+**H88 — upstream PostgreSQL backup tooling and patch authority, selected local
+variants PASS on 2026-10-04. BACK-16 PARTIAL.**
+
+On Linux amd64, the separate scratch toolbox built against pinned upstream
+`postgres:16-alpine`. Its executable inventory verified, and its mounted helper
+ran three client probes against an unchanged upstream database container.
+A custom-format dump captured a known row; after changing that row, restore
+returned its original value and the post-restore verification succeeded.
+The isolated container and data Volume were removed afterward. No QA host or
+existing application/database was changed.
+
+The runtime transition regression accepts a new database image while preserving
+the data Volume, tools and catalogue authority. It rejects changed data/tool
+mounts both before publication and at acknowledgement. These are local behavior
+checks, not proof of an operator-driven GP patch. The complete GP update journey,
+failed-patch recovery, arm64 tooling, and remote Backup/Restore with this new
+toolbox remain NOT RUN. Bounded raw evidence is ignored locally.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

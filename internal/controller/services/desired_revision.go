@@ -37,9 +37,15 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceMutationEvidence,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	var tenant etcdstore.Versioned[hierarchyrecord.TenantRecord]
+	var err error
+	if project.Record.Kind == hierarchyrecord.ProjectKindTenant {
+		tenant, err = service.repository.GetTenant(ctx, project.Record.TenantID)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+	} else if project.Record.Kind != hierarchyrecord.ProjectKindBacking {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Service owner is invalid")
 	}
 	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
 	if err != nil {

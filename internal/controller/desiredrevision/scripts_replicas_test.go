@@ -69,6 +69,7 @@ func TestReconcileBlueprintScriptsRejectsIneligibleLogicalServices(t *testing.T)
 		"negative replicas": func(service *testservices.ServiceRecord) { service.Desired.Replicas = -1 },
 		"managed backing": func(service *testservices.ServiceRecord) {
 			service.Desired.Adapter = "postgres:16"
+			service.Desired.Image = "postgres:16-alpine"
 			service.BackingNetworkID = ids.NewAt(ids.KindNetwork, at, 14)
 		},
 	}

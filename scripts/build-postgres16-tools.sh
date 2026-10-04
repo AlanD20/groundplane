@@ -8,7 +8,7 @@ repo_env_init
 cd "$GROUNDPLANE_REPO_ROOT"
 
 usage() {
-  printf 'usage: bash scripts/build-postgres16-image.sh --base-image postgres:16-alpine@sha256:DIGEST --image REPOSITORY:TAG\n' >&2
+  printf 'usage: bash scripts/build-postgres16-tools.sh --base-image postgres:16-alpine@sha256:DIGEST --image REPOSITORY:TAG\n' >&2
 }
 
 base_image=
@@ -30,8 +30,8 @@ case "$(uname -sm)" in
   *) printf 'managed PostgreSQL must be built natively on Linux amd64 or arm64\n' >&2; exit 2 ;;
 esac
 
-docker build --platform "linux/$arch" --file Dockerfile.postgres16 \
+docker build --platform "linux/$arch" --file Dockerfile.postgres16-tools \
   --build-arg "BUILDARCH=$arch" --build-arg "TARGETARCH=$arch" \
   --build-arg "POSTGRES16_BASE=$base_image" --tag "$image" .
 printf 'Built native linux/%s image %s. Not published or qualified.\n' "$arch" "$image"
-printf 'Release metadata is embedded at /usr/local/share/groundplane/postgres16-release.json.\n'
+printf 'Backup tools and metadata are embedded at /opt/groundplane/postgres16.\n'

@@ -166,7 +166,7 @@ func (ledger *ReleaseLedger) Publish(
 		},
 		{Key: deletions.TombstoneKey("environment", evidence.EnvironmentID)},
 		{Key: deletions.TombstoneKey("project", evidence.ProjectID)},
-		{Key: deletions.TombstoneKey("tenant", evidence.TenantID)},
+		{Key: releases.AncestorTombstone(evidence.TenantID, evidence.ProjectID)},
 		{Key: desiredKey, ModRevision: evidence.DesiredRevision},
 		{Key: releases.ReleaseFenceSetKey(evidence.EnvironmentID), ModRevision: evidence.FenceRevision},
 		{Key: markerKey},
@@ -317,7 +317,8 @@ func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error 
 		len(manifest.Members) > releases.MaximumReleasePublicationMembers ||
 		ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil ||
 		ids.Validate(ids.KindProject, value.ProjectID) != nil ||
-		ids.Validate(ids.KindTenant, value.TenantID) != nil ||
+		(value.TenantID != "" && ids.Validate(ids.KindTenant, value.TenantID) != nil) ||
+		value.Task.Owner.TenantID != value.TenantID || value.Task.Owner.ProjectID != value.ProjectID ||
 		value.DesiredRevision <= 0 ||
 		value.EnvironmentEpochRevision <= 0 ||
 		len(value.EnvironmentEpochValue) == 0 ||

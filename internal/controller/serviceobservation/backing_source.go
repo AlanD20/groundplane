@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -20,22 +20,13 @@ func captureBacking(
 	service etcdstore.Versioned[servicerecord.ServiceRecord],
 ) (source, bool) {
 	environmentID, serviceID := service.Record.EnvironmentID, service.Record.Desired.ID
+	if service.Record.Desired.Adapter == "postgres:16" {
+		return capturePostgres(ctx, releases, service)
+	}
 	applied, found, err := releases.GetAppliedProjectionAt(ctx, environmentID, service.ReadRevision)
 	if err != nil || !found || applied.ReadRevision != service.ReadRevision || applied.Revision <= 0 ||
 		applied.Revision > service.ReadRevision || applied.Record.EnvironmentID != environmentID {
 		return source{}, false
-	}
-	if service.Record.Desired.Adapter == "postgres:16" {
-		_, workload, err := environmentprojection.SelectBackingRuntime(applied.Record, serviceID)
-		if err != nil {
-			return source{}, false
-		}
-		receipt := applied.Record.BackingRuntime
-		return source{
-			target: &agentpb.ServiceObservationTarget{EnvironmentId: environmentID, ServiceId: serviceID,
-				PlanId: receipt.PlanID, RenderGeneration: receipt.RenderGeneration, ComposeName: workload.ComposeName, RuntimeRole: "backing"},
-			expected: workload.ExpectedReplicas, runtimeRevision: servicerecord.ServiceRuntimeRevision(service), projectionRevision: applied.Revision,
-		}, true
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if proto.Unmarshal(applied.Record.ComposeArtifact, artifact) != nil ||
@@ -82,4 +73,34 @@ func captureBacking(
 		expected: workload.ExpectedReplicas, runtimeRevision: servicerecord.ServiceRuntimeRevision(service),
 		projectionRevision: applied.Revision,
 	}, true
+}
+
+func capturePostgres(ctx context.Context, releases Releases,
+	service etcdstore.Versioned[servicerecord.ServiceRecord],
+) (source, bool) {
+	applied, found, err := releases.GetPostgresRuntimeAt(
+		ctx,
+		service.Record.EnvironmentID,
+		service.Record.Desired.ID,
+		service.ReadRevision,
+	)
+	if err != nil || !found || applied.ReadRevision != service.ReadRevision || applied.Revision <= 0 ||
+		applied.Revision > service.ReadRevision {
+		return source{}, false
+	}
+	_, workload, err := backingpostgresruntime.Select(applied.Record)
+	if err != nil {
+		return source{}, false
+	}
+	target := &agentpb.ServiceObservationTarget{EnvironmentId: applied.Record.EnvironmentID,
+		ServiceId: applied.Record.ServiceID, ComposeName: workload.ComposeName}
+	if receipt := applied.Record.Provisioning; receipt != nil {
+		target.PlanId, target.RenderGeneration, target.RuntimeRole = receipt.PlanID, receipt.RenderGeneration, "backing"
+	} else {
+		receipt := applied.Record.Deployment
+		target.PlanId, target.RenderGeneration, target.RuntimeRole = receipt.PlanID, receipt.RenderGeneration, "singleton"
+		target.ReleaseId = applied.Record.DeploymentReleaseID
+	}
+	return source{target: target, expected: workload.ExpectedReplicas,
+		runtimeRevision: servicerecord.ServiceRuntimeRevision(service), projectionRevision: applied.Revision}, true
 }

@@ -29,7 +29,8 @@ func backupCheckpointServiceID(value string) bool {
 func validBackupPostgresObservation(value *agentpb.BackupPostgresContainerObserved) bool {
 	return value != nil && backupCheckpointServiceID(value.ServiceId) && backupCheckpointHexID(value.ContainerId) &&
 		backupCheckpointDigest(value.RepositoryDigest) && value.ObservedLabelCount > 0 &&
-		backupCheckpointDigest(value.ObservedLabelsSha256) && backupCheckpointDigest(value.ObservationSha256)
+		backupCheckpointDigest(value.ObservedLabelsSha256) && backupCheckpointDigest(value.ObservationSha256) &&
+		backupCheckpointDigest(value.DatabaseImageIdSha256)
 }
 
 func validBackupPostgresDump(value *agentpb.BackupPostgresDumpStart) bool {

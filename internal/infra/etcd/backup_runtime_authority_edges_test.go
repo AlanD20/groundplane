@@ -14,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backupservicefact"
 	executionplan "github.com/AlanD20/groundplane/internal/common/executionplan"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	testbackupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -89,7 +90,11 @@ func backupRuntimeRunPlanDraft(
 		case testbackupruntime.BackupRuntimeSourceAttach:
 			snapshot := source.Snapshot.Postgres
 			projectName := "gp-" + strings.ToLower(snapshot.BackingEnvironmentID)
-			image := "registry.example.test/postgres@sha256:" + testBackupDigest
+			release, err := postgres16protocol.DecodeManagedReleaseIndex([]byte(snapshot.ManagedReleaseIndex))
+			if err != nil {
+				t.Fatal(err)
+			}
+			image := release.DatabaseImage
 			labels := []*agentpb.LabelPair{
 				{Key: "com.groundplane.environment-id", Value: snapshot.BackingEnvironmentID},
 				{Key: "com.groundplane.kind", Value: "service"},
@@ -113,8 +118,9 @@ func backupRuntimeRunPlanDraft(
 					ProjectName: projectName,
 					Services: []*agentpb.ComposeService{{
 						ServiceId: snapshot.BackingServiceID, ComposeName: "postgres",
-						ExpectedReplicas: 1,
-						ExpectedLabels:   labels, ImageReference: image,
+						ExpectedReplicas:   1,
+						PostgresToolsImage: release.Image,
+						ExpectedLabels:     labels, ImageReference: image,
 					}},
 				})
 			}

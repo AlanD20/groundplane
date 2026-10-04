@@ -92,16 +92,17 @@ type Result struct {
 }
 
 type Executor struct {
-	engine         Engine
-	authority      postgres16protocol.ConfinementReleaseAuthority
-	manifest       postgres16protocol.ManagedReleaseManifest
-	imageReference string
-	indexReference string
-	imageID        string
-	manifestDigest string
-	startRecorder  StartRecorder
-	mu             sync.Mutex
-	spent          map[postgres16protocol.Nonce]struct{}
+	engine                 Engine
+	authority              postgres16protocol.ConfinementReleaseAuthority
+	manifest               postgres16protocol.ManagedReleaseManifest
+	imageReference         string
+	indexReference         string
+	manifestDigest         string
+	databaseImageReference string
+	databaseImageID        string
+	startRecorder          StartRecorder
+	mu                     sync.Mutex
+	spent                  map[postgres16protocol.Nonce]struct{}
 }
 
 func New(
@@ -137,7 +138,7 @@ func NewWithEngine(
 	}
 	return &Executor{
 		engine: engine, authority: authority, manifest: release.Manifest,
-		imageReference: release.RepositoryDigest, imageID: release.ImageID,
+		imageReference: release.RepositoryDigest,
 		indexReference: index.Image, manifestDigest: release.ManifestDigest(), startRecorder: recorder,
 		spent: make(map[postgres16protocol.Nonce]struct{}),
 	}, nil

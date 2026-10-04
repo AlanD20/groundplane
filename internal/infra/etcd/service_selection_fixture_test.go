@@ -66,6 +66,7 @@ func selectedServiceFixture(
 	desired := core.Service{ID: serviceID, Name: "app", Image: "example/app:1"}
 	if backingNetworkID != "" {
 		desired.Adapter = "postgres:16"
+		desired.Image = "postgres:16-alpine"
 	}
 	service, err := services.ReadJoined(t.Context(), emptyServiceRuntimeFixture{}, services.DesiredSelection{
 		Services: []services.EnvironmentServiceProjection{

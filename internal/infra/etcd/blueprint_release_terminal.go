@@ -218,13 +218,21 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
-			intentMutation, err := servicerecord.RunningRuntimeMutation(task.Owner.EnvironmentID, member.ServiceID)
+			intentMutation, err := servicerecord.RunningRuntimeMutation(ctx, repository.store,
+				task.Owner.EnvironmentID, member.ServiceID, readRevision)
 			if err != nil {
 				return false, err
 			}
-			// This full replacement consumes no prior runtime receipt. The owning
-			// Blueprint terminal envelope fences the held Environment writer and
-			// epoch; another runtime writer cannot publish under that ownership.
+			postgresConditions, postgresMutations, err := repository.postgresRuntimeAcknowledgement(
+				ctx,
+				runtimeValue,
+				readRevision,
+			)
+			if err != nil {
+				return false, err
+			}
+			conditions = append(conditions, postgresConditions...)
+			mutations = append(mutations, postgresMutations...)
 			mutations = append(mutations, intentMutation, etcdstore.Mutation{
 				Type: etcdstore.MutationPut, Key: serviceruntimerecord.Key(member.ServiceID), Value: runtimeValue,
 			})

@@ -8,7 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const ManagedReleaseManifestPath = "/usr/local/share/groundplane/postgres16-release.json"
+const ManagedReleaseManifestPath = HelperDirectoryPath + "/release.json"
 
 // ManagedReleaseManifest is an image-build artifact, never desired state.
 // Its bytes and the image containing them must both match the selected release.

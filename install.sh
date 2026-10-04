@@ -274,7 +274,7 @@ allowed = {"controller", "groundplane", "controller-release.json", "controller_r
            "controller_bootstrap.py", "controller_update.py", "groundplane-controller.service",
            "groundplane.conf", "controller.yaml.example", "install_bundle.py",
            "install-runtime.sh", "setup-host.sh", "bundle.json", "install_agent.py", "release_selection.py",
-           "postgres16-release.json"}
+           "postgres16-release.json", "postgres16_tools.py"}
 if sys.argv[4] == "agent":
     allowed = {"install_agent.py", "controller_update.py", "controller_release.py", "bundle.json"}
 with tarfile.open(root / "bundle.tar.gz", "r:gz") as archive:

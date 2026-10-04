@@ -35,17 +35,21 @@ func (image ManagedReleaseImage) ManifestDigest() string {
 	return digest
 }
 
-// ManagedReleaseIndex is the release-owned image choice. A Controller uses its
-// index for deployment; an Agent executes only the native child selected here.
+// ManagedReleaseIndex separates the initial upstream database selection from
+// the independently authenticated native backup-tool artifacts.
 type ManagedReleaseIndex struct {
-	Schema uint32                `json:"schema"`
-	Image  string                `json:"image"`
-	Images []ManagedReleaseImage `json:"images"`
+	Schema        uint32                `json:"schema"`
+	Image         string                `json:"image"`
+	DatabaseImage string                `json:"database_image"`
+	Images        []ManagedReleaseImage `json:"images"`
 }
 
 func (index ManagedReleaseIndex) Validate() error {
 	if index.Schema != 1 || !imageref.IsDigestPinned(index.Image) || len(index.Images) < 1 || len(index.Images) > 2 {
 		return invalidConfinement("managed PostgreSQL release index is invalid")
+	}
+	if !ValidDatabaseImage(index.DatabaseImage) || !strings.Contains(index.DatabaseImage, "@sha256:") {
+		return invalidConfinement("upstream PostgreSQL database image is invalid")
 	}
 	repository, digest, _ := strings.Cut(index.Image, "@")
 	previousArchitecture := ""
@@ -76,22 +80,6 @@ func (index ManagedReleaseIndex) Select(architecture string) (ManagedReleaseImag
 		}
 	}
 	return ManagedReleaseImage{}, invalidConfinement("managed PostgreSQL build does not support this architecture")
-}
-
-// MatchesRuntimeImageID recognizes only the identities bound by this release.
-// The executor separately attests the selected native platform and container.
-func (index ManagedReleaseIndex) MatchesRuntimeImageID(image ManagedReleaseImage, imageID string) bool {
-	_, indexDigest, _ := strings.Cut(index.Image, "@")
-	return imageID == image.ImageID || imageID == image.ManifestDigest() || imageID == indexDigest
-}
-
-func (index ManagedReleaseIndex) ContainsRuntimeImageID(imageID string) bool {
-	for _, image := range index.Images {
-		if index.MatchesRuntimeImageID(image, imageID) {
-			return true
-		}
-	}
-	return false
 }
 
 func DecodeManagedReleaseIndex(data []byte) (ManagedReleaseIndex, error) {

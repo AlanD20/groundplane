@@ -29,6 +29,7 @@ def payload(version: str, agent: str | None, runner: str, arch: str, postgres_ca
                deploy.RELEASE_STAGER, deploy.BOOTSTRAP_HELPER, deploy.UPDATE_CLIENT,
                deploy.CONTROLLER_UNIT, deploy.TMPFILES, deploy.CONFIG_EXAMPLE,
                ROOT / "scripts" / "install_bundle.py", ROOT / "scripts" / "install_agent.py",
+               ROOT / "scripts" / "postgres16_tools.py",
                ROOT / "scripts" / "release_selection.py"]
     files = {source.name: source.read_bytes() for source in sources}
     metadata = build_metadata(files["controller-release.json"])
@@ -41,7 +42,8 @@ def payload(version: str, agent: str | None, runner: str, arch: str, postgres_ca
     files["postgres16-release.json"] = postgres_catalog
     postgres = json.loads(postgres_catalog)
     manifest = {"schema": 1, "version": version, "os": "linux", "arch": arch,
-                "agent_image": agent, "runner_image": runner, "postgres_image": postgres["image"],
+                "agent_image": agent, "runner_image": runner, "postgres_image": postgres["database_image"],
+                "postgres_tools_image": postgres["image"],
                 "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
     files["bundle.json"] = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
     return files

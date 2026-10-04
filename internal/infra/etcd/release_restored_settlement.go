@@ -191,6 +191,18 @@ func (repository *TaskRepository) settleRestoredReleaseMember(
 			etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(read.Values[index])},
 		)
 	}
+	if runtime.Type == etcdstore.MutationPut {
+		postgresConditions, postgresMutations, err := repository.postgresRuntimeAcknowledgement(
+			ctx,
+			runtime.Value,
+			revision,
+		)
+		if err != nil {
+			return false, err
+		}
+		conditions = append(conditions, postgresConditions...)
+		mutations = append(mutations, postgresMutations...)
+	}
 	return repository.commitRestoredRelease(ctx, conditions, mutations)
 }
 

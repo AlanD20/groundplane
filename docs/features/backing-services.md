@@ -53,8 +53,9 @@ slug; the display name remains independent.
 The Controller publishes exactly one backing Project, one `main` Environment,
 one dedicated backing-owned Zone, one adapter Service, one adapter-defined data
 Volume for built-in database adapters, and one Agent Task. Managed PostgreSQL
-uses GP's release-pinned PostgreSQL 16 image, including its Backup/Restore helper;
-an update preloads a new image without replacing existing Backings. The Zone
+uses a release-pinned, unmodified upstream PostgreSQL 16 Alpine image. Its
+Backup/Restore clients are a separate authenticated tool bundle, mounted
+read-only. A GP software update does not patch a running database. The Zone
 subnet must be canonical IPv4, inside the new Environment pool, and globally
 unreserved. A conflict commits none of the
 aggregate; protected replay returns the original ids and response.
@@ -63,6 +64,35 @@ Start, Stop, and Destroy change only the adapter Service's runtime intent under
 the current MVP and API contract. Destroy removes runtime, not the Project,
 Environment, Zone, Volume, Entries, Attach history, credentials, or data. There
 is no Backing Service DELETE endpoint.
+
+### PostgreSQL patch updates
+
+Fetch the desired upstream `postgres:16.x-alpine` image on the Agent first.
+Choose **Update image** on the Backing page, then **Save and deploy**. GP saves
+the image choice in desired state and uses the ordinary protected Deploy path
+to replace the single database container, retaining its data Volume, network
+alias and selected backup tools. Existing connections are interrupted during
+the restart; completion requires the selected runtime to pass its checks.
+
+Fetch the selected upstream patch on **Host → Images** before Deploy; Deploy
+does not download missing images. The equivalent CLI operations are Service Edit
+followed by Service Deploy:
+
+```sh
+groundplane service edit SERVICE_ID --id --image postgres:16-alpine --on-failure leave_active
+groundplane service deploy SERVICE_ID --id --image postgres:16-alpine --strategy recreate --on-failure leave_active
+```
+
+For automation, use `PATCH /services/{id}` and `POST /services/{id}/deploy`.
+Use a concrete patch tag or digest to select reproducible bytes. The first image
+Deploy has no prior Deployment Release and requires `leave_active`; GP does not
+claim to have rolled it back. If Deploy fails, the saved image choice remains;
+inspect the Task and retry or explicitly select another supported image.
+PostgreSQL major-version migration and switching distribution families are not
+supported. Updating GP does not replace existing backup tools automatically.
+This pre-release change advances GP's storage epoch. Installations with the old
+wrapped database format reject an in-place update before activation; no legacy
+runtime conversion or compatibility path is provided.
 
 Permanent Backing deletion is outside the current MVP, by owner decision on
 2026-09-12. Start recreates runtime using the retained configuration and data.

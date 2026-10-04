@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresruntime"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
@@ -30,6 +31,12 @@ type Services interface {
 
 // Releases exposes only the immutable serving-source and runtime-receipt reads.
 type Releases interface {
+	GetPostgresRuntimeAt(
+		context.Context,
+		string,
+		string,
+		int64,
+	) (etcdstore.Versioned[backingpostgresruntime.Record], bool, error)
 	GetAppliedProjectionAt(
 		context.Context,
 		string,

@@ -128,6 +128,9 @@ func (service *Service) prepareSelected(
 	proxyServices := make([]core.Service, len(candidates))
 	for i, candidate := range candidates {
 		proxyServices[i] = candidate.Record.Desired
+		if candidate.Record.Runtime.PostgresToolsImage != "" {
+			proxyServices[i].Expose = nil
+		}
 	}
 	addresses, err := taskplanning.PrepareServiceProxyAddresses(
 		ctx,
@@ -257,10 +260,22 @@ func (service *Service) prepareSelected(
 			Workspace: domain.Workspace{Kind: domain.WorkspaceTenant, TenantID: input.Tenant.Record.ID,
 				ProjectID: input.Project.Record.ID, EnvironmentID: input.Environment.Record.ID},
 		}
+		if input.Tenant.Record.ID == "" {
+			intent.Workspace.Kind = domain.WorkspacePlatform
+		}
 		if err := service.preparePredecessor(ctx, input, candidate, &render, &intent); err != nil {
 			return Prepared{}, err
 		}
-		if err := configureBlueprintProxy(&render, candidate.Record.Desired.Expose); err != nil {
+		if candidate.Record.Runtime.PostgresToolsImage != "" && intent.PriorServingReleaseID == "" &&
+			intent.OnFailure != domain.OnFailureLeaveActive {
+			return Prepared{}, errs.New(errs.KindValidationFailed,
+				"first PostgreSQL image Deploy requires leave_active; no prior Release exists")
+		}
+		expose := candidate.Record.Desired.Expose
+		if candidate.Record.Runtime.PostgresToolsImage != "" {
+			expose = nil
+		}
+		if err := configureBlueprintProxy(&render, expose); err != nil {
 			return Prepared{}, err
 		}
 		if err := service.plans.PrepareReleaseProxyImage(&render, nil); err != nil {
@@ -306,6 +321,9 @@ func (service *Service) prepareSelected(
 		PreStepIDs: hooks.preStepIDs, PostStepIDs: hooks.postStepIDs,
 	})
 	if err != nil {
+		return Prepared{}, err
+	}
+	if err := service.ledger.ValidatePostgresPatchPlan(ctx, plan, input.Environment.ReadRevision); err != nil {
 		return Prepared{}, err
 	}
 	candidateDescriptor, err := executionplan.DescribeCandidateRelease(plan)

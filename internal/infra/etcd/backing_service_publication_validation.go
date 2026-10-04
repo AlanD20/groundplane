@@ -118,7 +118,8 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 			backingpostgresrelease.Validate(*creation.PostgresRelease) != nil ||
 			creation.PostgresRelease.EnvironmentID != creation.Environment.ID ||
 			creation.PostgresRelease.ServiceID != creation.Service.Desired.ID ||
-			creation.PostgresRelease.Release.Image != creation.Service.Desired.Image {
+			creation.PostgresRelease.Release.DatabaseImage != creation.Service.Desired.Image ||
+			creation.PostgresRelease.Release.Image != creation.Service.Runtime.PostgresToolsImage {
 			return errs.New(
 				errs.KindValidationFailed,
 				"managed PostgreSQL creation release does not match Backing Service",

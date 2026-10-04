@@ -44,6 +44,12 @@ func renderServiceProxyTopology(
 				exposures = append(exposures, fmt.Sprint(published.Target))
 			}
 		}
+		for _, resource := range input.Identities.Services {
+			if resource.ID == serviceID && resource.PostgresToolsImage != "" {
+				exposures = nil
+				break
+			}
+		}
 		identity, hasRelease := input.Releases[serviceID]
 		if !hasRelease {
 			labels, expected, err := composeOwnershipLabels(authored.Labels, "service", serviceID, input)

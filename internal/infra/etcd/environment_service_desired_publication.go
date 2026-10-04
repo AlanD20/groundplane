@@ -42,14 +42,18 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err := hierarchyrecord.ValidateEnvironment(input.Environment.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if input.Project.Record.Kind != hierarchyrecord.ProjectKindTenant || input.Project.Revision <= 0 ||
-		input.Environment.Revision <= 0 || input.Project.ReadRevision < input.Project.Revision ||
+	if (input.Project.Record.Kind != hierarchyrecord.ProjectKindTenant && input.Project.Record.Kind != hierarchyrecord.ProjectKindBacking) ||
+		input.Project.Revision <= 0 ||
+		input.Environment.Revision <= 0 ||
+		input.Project.ReadRevision < input.Project.Revision ||
 		input.Environment.ReadRevision < input.Environment.Revision ||
 		input.Environment.Record.ProjectID != input.Project.Record.ID ||
 		input.Environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
-		input.ExpectedHeadRevision < 0 || input.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
+		input.ExpectedHeadRevision < 0 ||
+		input.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		input.Revision.EnvironmentID != input.Environment.Record.ID ||
-		input.Revision.RevisionID != input.Claim.RevisionID || input.Claim.TaskID != input.Claim.RevisionID ||
+		input.Revision.RevisionID != input.Claim.RevisionID ||
+		input.Claim.TaskID != input.Claim.RevisionID ||
 		input.Projection.EnvironmentID != input.Revision.EnvironmentID ||
 		input.Projection.RevisionID != input.Revision.RevisionID {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -288,7 +292,8 @@ func validateDirectEnvironmentServiceChange(input EnvironmentServiceDesiredPubli
 			break
 		}
 	}
-	if !matched || change.Record.EnvironmentID != input.Environment.Record.ID || change.Record.BackingNetworkID != "" {
+	if !matched || change.Record.EnvironmentID != input.Environment.Record.ID ||
+		(change.Record.BackingNetworkID != "" && (input.Project.Record.Kind != hierarchyrecord.ProjectKindBacking || change.Current == nil)) {
 		return errs.New(errs.KindValidationFailed, "direct Service change does not match its desired projection")
 	}
 	if change.Current == nil {

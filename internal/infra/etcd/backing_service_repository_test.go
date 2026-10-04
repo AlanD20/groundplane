@@ -212,7 +212,7 @@ func seedBackingService(
 	serviceID := hierarchyTestID(ids.KindService, offset+3)
 	backingNetworkID := hierarchyTestID(ids.KindNetwork, offset+4)
 	old := seedDesiredServiceFixture(t, ctx, store, environmentID, core.Service{
-		ID: serviceID, Name: "postgres-old", Image: "postgres:15-alpine",
+		ID: serviceID, Name: "postgres-old", Image: "postgres:16.1-alpine",
 		Strategy: core.StrategyRecreate, Adapter: "postgres:16", FactsPrefix: "pg16_",
 	}, backingNetworkID, offset+10, true, true)
 	current := seedDesiredServiceFixture(t, ctx, store, environmentID, core.Service{

@@ -690,6 +690,11 @@ def preload_postgres_release(deployment: Deployment, catalog: dict) -> None:
                   catalog["image"].rsplit("@", 1)[1]}
     if result.stdout.strip() not in {f"{identity} linux {architecture}" for identity in pinned_ids}:
         raise ValueError("target PostgreSQL image differs from the Controller's managed catalog")
+    tools_code = (REPOSITORY_ROOT / "scripts" / "postgres16_tools.py").read_text()
+    tools_code += "\nimport base64, sys\ninstall(json.loads(base64.b64decode(sys.argv[1])), sys.argv[2])\n"
+    catalog_argument = base64.b64encode(json.dumps(catalog, separators=(",", ":")).encode()).decode()
+    run([*deployment.ssh_base, shlex.join(["python3", "-c", tools_code, catalog_argument, architecture])])
+    run([*deployment.ssh_base, shlex.join(["docker", "pull", catalog["database_image"]])])
 
 
 def cleanup_temporary_images(images: tuple[str, ...]) -> None:

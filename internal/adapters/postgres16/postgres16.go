@@ -32,7 +32,7 @@ func (a *adapter) DefaultImage() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return release.Image, nil
+	return release.DatabaseImage, nil
 }
 func (a *adapter) FactsPrefix() string               { return "pg16_" }
 func (a *adapter) URLScheme() string                 { return "pgsql://" }

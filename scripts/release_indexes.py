@@ -35,7 +35,7 @@ def main() -> None:
     if scope == "both":
         kinds = ("agent", *kinds)
     for kind in kinds:
-        repository = f"{root}-{kind}"
+        repository = f"{root}-{kind}-tools" if kind == "postgres16" else f"{root}-{kind}"
         children = {arch: Path(f".tmp/release-images/{kind}-{arch}").read_text().strip()
                     for arch in ("amd64", "arm64")}
         if any(not re.fullmatch(re.escape(repository) + r"@sha256:[0-9a-f]{64}", ref)
@@ -53,7 +53,7 @@ def main() -> None:
             natives = {}
             for arch in ("amd64", "arm64"):
                 native = json.loads(Path(f".tmp/release-images/postgres16-{arch}.json").read_bytes())
-                if (set(native) != {"repository_digest", "image_id", "manifest"}
+                if (set(native) != {"database_image", "repository_digest", "image_id", "manifest"}
                         or native["repository_digest"] != children[arch]
                         or native["manifest"]["architecture"] != arch
                         or native["manifest"]["os"] != "linux"
@@ -63,7 +63,11 @@ def main() -> None:
                 if remote.get("config", {}).get("digest") != native["image_id"]:
                     raise ValueError("managed PostgreSQL native manifest configuration changed")
                 natives[arch] = native
-            catalog = {"schema": 1, "image": ref, "images": [natives["amd64"], natives["arm64"]]}
+            database = natives["amd64"].pop("database_image")
+            if natives["arm64"].pop("database_image") != database:
+                raise ValueError("native backup tools use different upstream PostgreSQL selections")
+            catalog = {"schema": 1, "image": ref, "database_image": database,
+                       "images": [natives["amd64"], natives["arm64"]]}
             with Path(".tmp/release-images/postgres16-release.json").open("x") as catalog_file:
                 catalog_file.write(json.dumps(catalog, separators=(",", ":")) + "\n")
         with open(os.environ["GITHUB_OUTPUT"], "a") as result:

@@ -15,6 +15,16 @@ func ComposeIdentitySnapshotFromProjection(
 	projection projectionrecord.EnvironmentComposeProjection,
 ) (composeidentity.Snapshot, error) {
 	componentOwners := make(map[string]string)
+	toolImages := make(map[string]string)
+	artifactMetadata := &agentpb.ComposeArtifact{}
+	if proto.Unmarshal(projection.ComposeArtifact, artifactMetadata) != nil {
+		return composeidentity.Snapshot{}, errs.New(errs.KindInternal, "Service render metadata is corrupt")
+	}
+	for _, workload := range artifactMetadata.Services {
+		if workload.PostgresToolsImage != "" {
+			toolImages[workload.ServiceId] = workload.PostgresToolsImage
+		}
+	}
 	for _, component := range projection.Components {
 		for _, serviceID := range component.Runtime.GeneratedServices {
 			if owner, exists := componentOwners[serviceID]; exists && owner != component.Desired.ID {
@@ -51,7 +61,8 @@ func ComposeIdentitySnapshotFromProjection(
 		}
 		usedServiceIDs[service.ID] = struct{}{}
 		usedServiceNames[service.Name] = struct{}{}
-		services = append(services, composeidentity.Resource{ID: service.ID, Name: service.Name})
+		services = append(services, composeidentity.Resource{ID: service.ID, Name: service.Name,
+			PostgresToolsImage: toolImages[service.ID]})
 	}
 	if len(componentOwners) != 0 {
 		artifact := &agentpb.ComposeArtifact{}

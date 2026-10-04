@@ -192,7 +192,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	}
 	return composerender.RenderCompose(composerender.ComposeRenderInput{
 		Project: project, ArtifactID: artifactID,
-		ProjectOwnerKind: composerender.ComposeProjectOwnerTenant,
+		ProjectOwnerKind: pinnedProjectOwner(identity.TenantID),
 		TenantID:         identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		AuthorizedVolumeDir:      identity.AuthorizedVolumeDir,
@@ -231,6 +231,13 @@ func (resolver *TaskPlanResolver) parsePinnedEnvironmentBlueprint(
 		EnvironmentID: identity.EnvironmentID,
 		Tenant:        identity.TenantSlug, Project: identity.ProjectSlug, Environment: identity.EnvironmentName,
 	}, bundle)
+}
+
+func pinnedProjectOwner(tenantID string) composerender.ComposeProjectOwnerKind {
+	if tenantID == "" {
+		return composerender.ComposeProjectOwnerBacking
+	}
+	return composerender.ComposeProjectOwnerTenant
 }
 
 func projectedEnvironmentEntries(records []entryrecord.Record) []core.EnvEntry {

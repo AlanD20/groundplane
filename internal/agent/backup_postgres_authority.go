@@ -82,8 +82,7 @@ func postgresSourceAuthority(step *agentpb.BackupStepAuthority, services []*agen
 	}
 	if fact == nil || fact.PriorRuntimeIntent.GetKind() !=
 		agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING ||
-		len(fact.LocalImageIdSha256) != sha256.Size ||
-		!index.MatchesRuntimeImageID(image, "sha256:"+hex.EncodeToString(fact.LocalImageIdSha256)) {
+		len(fact.LocalImageIdSha256) != sha256.Size {
 		return postgresStepAuthority{}, invalidAgentStaging()
 	}
 	var selected *agentpb.ComposeService
@@ -100,7 +99,7 @@ func postgresSourceAuthority(step *agentpb.BackupStepAuthority, services []*agen
 	}
 	if selected == nil || selectedArtifact == nil ||
 		selectedArtifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-		(selected.ImageReference != index.Image && selected.ImageReference != image.RepositoryDigest) ||
+		selected.PostgresToolsImage != index.Image ||
 		uint32(len(selected.ExpectedLabels)) != fact.RequiredLabelCount {
 		return postgresStepAuthority{}, invalidAgentStaging()
 	}
@@ -139,6 +138,7 @@ func postgresSourceAuthority(step *agentpb.BackupStepAuthority, services []*agen
 	volumeLabels["com.docker.compose.volume"] = volume.ComposeName
 	return postgresStepAuthority{
 		index: index, selection: postgres16execution.Selection{Labels: labels,
+			ImageReference: selected.ImageReference, ImageID: "sha256:" + hex.EncodeToString(fact.LocalImageIdSha256),
 			VolumeName: volume.DockerName, VolumeLabels: volumeLabels},
 		serviceID: serviceID, artifactID: selectedArtifact.ArtifactId, labelsSHA256: labelsSHA,
 		labelCount:    fact.RequiredLabelCount,
@@ -157,9 +157,10 @@ func postgresDataVolume(artifact *agentpb.ComposeArtifact,
 	var document struct {
 		Services map[string]struct {
 			Volumes []struct {
-				Type   string `yaml:"type"`
-				Source string `yaml:"source"`
-				Target string `yaml:"target"`
+				Type     string `yaml:"type"`
+				Source   string `yaml:"source"`
+				Target   string `yaml:"target"`
+				ReadOnly bool   `yaml:"read_only"`
 			} `yaml:"volumes"`
 		} `yaml:"services"`
 	}
@@ -167,13 +168,35 @@ func postgresDataVolume(artifact *agentpb.ComposeArtifact,
 		return nil, invalidAgentStaging()
 	}
 	config, exists := document.Services[service.ComposeName]
-	if !exists || len(config.Volumes) != 1 || config.Volumes[0].Type != "volume" ||
-		config.Volumes[0].Target != "/var/lib/postgresql/data" || config.Volumes[0].Source == "" {
+	if !exists || len(config.Volumes) != 2 {
+		return nil, invalidAgentStaging()
+	}
+	var dataSource string
+	toolsSource, err := postgres16protocol.ToolsDirectory(service.PostgresToolsImage)
+	if err != nil {
+		return nil, invalidAgentStaging()
+	}
+	for _, item := range config.Volumes {
+		switch item.Target {
+		case "/var/lib/postgresql/data":
+			if item.Type != "volume" || item.Source == "" || dataSource != "" {
+				return nil, invalidAgentStaging()
+			}
+			dataSource = item.Source
+		case postgres16protocol.HelperDirectoryPath:
+			if item.Type != "bind" || item.Source != toolsSource || !item.ReadOnly {
+				return nil, invalidAgentStaging()
+			}
+		default:
+			return nil, invalidAgentStaging()
+		}
+	}
+	if dataSource == "" {
 		return nil, invalidAgentStaging()
 	}
 	var volume *agentpb.ComposeVolume
 	for _, candidate := range artifact.Volumes {
-		if candidate.ComposeName == config.Volumes[0].Source {
+		if candidate.ComposeName == dataSource {
 			if volume != nil {
 				return nil, invalidAgentStaging()
 			}
@@ -225,6 +248,11 @@ func postgresContainerCheckpoint(authority postgresStepAuthority,
 		ObservedLabelCount:   authority.labelCount,
 		ObservedLabelsSha256: append([]byte(nil), authority.labelsSHA256...),
 	}
+	imageDigest, err := hex.DecodeString(strings.TrimPrefix(authority.imageID, "sha256:"))
+	if err != nil || len(imageDigest) != sha256.Size {
+		return nil, invalidAgentStaging()
+	}
+	value.DatabaseImageIdSha256 = imageDigest
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(value)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)

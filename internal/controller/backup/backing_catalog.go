@@ -21,7 +21,7 @@ func validateBackupBackingCatalog(
 		record, err := backingpostgresrelease.Decode(value.Value)
 		if err == nil && record.EnvironmentID == input.EnvironmentID && record.ServiceID == input.ServiceID &&
 			hex.EncodeToString(digest[:]) == applied.ManagedReleaseSHA256 &&
-			record.Release.Image == applied.Workload.ImageReference && record.Release.ContainsRuntimeImageID(applied.LocalImageID) {
+			record.Release.Image == applied.Workload.PostgresToolsImage {
 			return nil
 		}
 	}
