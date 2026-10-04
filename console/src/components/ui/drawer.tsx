@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { X } from "lucide-react";
+import { submitFormOnShortcut } from "./form-submit-shortcut";
 
 // Right-side drawer (sheet) for forms that need more room than a centered
 // dialog — e.g. the service create/edit form. Same base-ui modal primitives
@@ -15,6 +16,7 @@ function DrawerContent({
   className,
   children,
   showClose = true,
+  onKeyDown,
   ...props
 }: DialogPrimitive.Popup.Props & { showClose?: boolean }) {
   return (
@@ -27,6 +29,10 @@ function DrawerContent({
           "transition-all duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full",
           className,
         )}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          submitFormOnShortcut(event);
+        }}
         {...props}
       >
         {children}

@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { X } from "lucide-react";
+import { submitFormOnShortcut } from "./form-submit-shortcut";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -23,6 +24,7 @@ function DialogContent({
     event,
   ) => {
     onKeyDown?.(event);
+    if (submitOnEnter) submitFormOnShortcut(event);
     if (
       event.defaultPrevented ||
       !submitOnEnter ||

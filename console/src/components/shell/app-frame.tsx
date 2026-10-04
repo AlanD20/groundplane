@@ -75,7 +75,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   async function createTenant() {
     const s = slug.trim();
-    if (!s) return;
+    if (creating || !s) return;
     setCreating(true);
     setCreateError(null);
     try {
@@ -182,59 +182,71 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
       <Drawer open={newTenantOpen} onOpenChange={setNewTenantOpen}>
         <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>New tenant</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="t-name">Display name</Label>
-              <Input
-                id="t-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Acme Inc."
-                autoFocus
-              />
+          <form
+            className="flex flex-col gap-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (name.trim() && slug.trim()) void createTenant();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>New tenant</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="t-name">Display name</Label>
+                <Input
+                  id="t-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Acme Inc."
+                  autoFocus
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="t-slug">Slug</Label>
+                <Input
+                  id="t-slug"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  placeholder="acme"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Follows Display name until edited. Projects, runners, and
+                  secrets live under this isolation boundary.
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="t-desc">Description</Label>
+                <Input
+                  id="t-desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="What this tenant hosts"
+                />
+              </div>
+              {createError && (
+                <p role="alert" className="text-xs text-destructive">
+                  {createError}
+                </p>
+              )}
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="t-slug">Slug</Label>
-              <Input
-                id="t-slug"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="acme"
-              />
-              <p className="text-xs text-muted-foreground">
-                Follows Display name until edited. Projects, runners, and
-                secrets live under this isolation boundary.
-              </p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="t-desc">Description</Label>
-              <Input
-                id="t-desc"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What this tenant hosts"
-              />
-            </div>
-            {createError && (
-              <p role="alert" className="text-xs text-destructive">
-                {createError}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNewTenantOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => void createTenant()}
-              disabled={creating || !name.trim() || !slug.trim()}
-            >
-              {creating ? "Creating…" : "Create tenant"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setNewTenantOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={creating || !name.trim() || !slug.trim()}
+              >
+                {creating ? "Creating…" : "Create tenant"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DrawerContent>
       </Drawer>
     </TooltipProvider>
