@@ -798,6 +798,8 @@ This is not complete Gate B, arm64, all provider/archive/key failures or a relea
 qualification. No new tests or release tag were added; earlier failures remain
 preserved.
 
+## Upstream PostgreSQL patch and backup tooling
+
 **H88 — upstream PostgreSQL backup tooling and patch authority, selected local
 variants PASS on 2026-10-04. BACK-16 PARTIAL.**
 
@@ -815,6 +817,55 @@ mounts both before publication and at acknowledgement. These are local behavior
 checks, not proof of an operator-driven GP patch. The complete GP update journey,
 failed-patch recovery, arm64 tooling, and remote Backup/Restore with this new
 toolbox remain NOT RUN. Bounded raw evidence is ignored locally.
+
+**H89 — upstream PostgreSQL patch followed by GP Backup/Restore, selected live
+amd64 journey PASS on 2026-10-05. BACK-16 and BAK-18 PARTIAL.**
+
+A fresh disposable Ubuntu 24.04 amd64 host ran committed source `92b2b24bf`
+through the maintainer installer, version `0.0.1-qa-upstream-92b2b24bf`.
+Controller bytes were
+`sha256:e0f8eaca64fcc2ac4392d30f26a40ba0a431384c7b70de7eeb18818229b6ba47`;
+the Agent image was
+`sha256:16a8210b6b6ca7a4c45e4116302ce18dd54f379209f37f143ded4c4438e9ad94`.
+The independently authenticated native toolbox was
+`sha256:c15a427d9b9e18b1591a2bf88cce3f353c3e67c308e9c1b2ab7a84848259c91b`.
+Only that host architecture was built; this is not a published dual-platform
+release or a public `install.sh --ref` result.
+
+GP provisioned an unchanged upstream PostgreSQL 16.12 instance and a new
+credential-owning Attach. Two distinct known rows were inserted and read back.
+GP Fetch selected the exact downloaded PostgreSQL 16.13 Alpine digest, followed
+by Service Edit and protected recreate Deploy. The database container and image
+changed; every data/tool mount's type, source, destination and writable flag
+remained identical. PostgreSQL reported 16.13 and both rows were unchanged.
+The database patch Task was `task_01M44FP0DDE2DA0N16A3ST7NTW`.
+
+An isolated S3-compatible store received an age-encrypted GP Backup. Task
+`task_01M44FPZ7YE4WFX87VFH7D5AJW` completed and exactly one verified PostgreSQL
+Attach Recovery Point appeared; source rows were unchanged. After replacing
+those rows with a different value, Restore Task
+`task_01M44FQ1M01F3400FGZTCKEBZJ` completed and independent SQL reads returned
+the original two rows. The patched database image and exact mounts remained;
+the consumer containers retained their identities and returned to running.
+Final Host/CLI and container reads showed healthy Controller, Agent, etcd and
+PostgreSQL. These assertions check actual data, not only Task completion.
+
+The first run had passed the patch but failed Backup capture before a verified
+Point; its Agent subsequently rejected startup staging delivery. That failure's
+Task, helper journal and logs remain retained, and Restore was not run there.
+A separate early-exit reproduction found that the helper could not record its
+owned, unreaped gate using live-process inspection. `92b2b24bf` records its
+lifetime before readiness while retaining full identity checks before client
+release. The original capture's precise launch cause was not established;
+the later successful run does not erase or prove recovery from that incident.
+The old disposable installation was reset with approval, not repaired in place.
+
+Current isolated resources remain on the disposable QA host; private receipts
+are retained locally. No push, tag, new tests or compatibility path was added.
+Existing focused helper checks, vet and architecture pass. Full CI still has
+the previously recorded verifier-helper timeouts. Failed-patch recovery,
+connection interruption, injected Backup/Restore failures, arm64, public
+installation and blanket Gate B/release qualification are not established here.
 
 ## Interpretation limit
 
