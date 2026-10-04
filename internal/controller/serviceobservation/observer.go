@@ -34,6 +34,7 @@ type Snapshot struct {
 	ServingReleaseID      string
 	ExpectedReplicas      uint32
 	Replicas              *agentpb.ServiceReplicaCounts
+	Containers            []*agentpb.ServiceContainerObservation
 }
 
 type Observer struct {
@@ -119,6 +120,7 @@ func (observer *Observer) Observe(
 			Snapshot: &Snapshot{
 				ObservedAt: started.UTC(), ExpiresAt: started.Add(wire.Freshness).UTC(),
 				ServingReleaseID: sources[index].target.ReleaseId, ExpectedReplicas: sources[index].expected, Replicas: counts,
+				Containers: result.Observations[ordinal].Containers,
 			},
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -27,10 +28,8 @@ type LogScope struct {
 }
 
 type LogTarget struct {
-	EnvironmentID string
-	ServiceID     string
-	ServiceName   string
-	ReleaseID     string
+	Runtime     *agentpb.ServiceObservationTarget
+	ServiceName string
 }
 
 type LogSubscription struct {
@@ -61,7 +60,11 @@ func (subscription *LogSubscription) Scope() LogScope {
 }
 
 func (subscription *LogSubscription) Targets() []LogTarget {
-	return append([]LogTarget(nil), subscription.targets...)
+	result := append([]LogTarget(nil), subscription.targets...)
+	for index := range result {
+		result[index].Runtime = proto.Clone(result[index].Runtime).(*agentpb.ServiceObservationTarget)
+	}
+	return result
 }
 
 func (subscription *LogSubscription) Cancel(ctx context.Context) {
@@ -113,18 +116,19 @@ func (registry *Registry) OpenLogs(
 	}
 	seenServices := make(map[string]struct{}, len(targets))
 	for _, target := range targets {
-		if target.EnvironmentID != scope.EnvironmentID || ids.Validate(ids.KindService, target.ServiceID) != nil ||
-			ids.Validate(ids.KindDeployment, target.ReleaseID) != nil || target.ServiceName == "" ||
+		if serviceobservation.ValidateTarget(target.Runtime) != nil ||
+			target.Runtime.EnvironmentId != scope.EnvironmentID ||
+			target.ServiceName == "" ||
 			!utf8.ValidString(target.ServiceName) {
 			return nil, errs.New(errs.KindValidationFailed, "log subscription target is invalid")
 		}
-		if scope.ServiceID != "" && target.ServiceID != scope.ServiceID {
+		if scope.ServiceID != "" && target.Runtime.ServiceId != scope.ServiceID {
 			return nil, errs.New(errs.KindValidationFailed, "log subscription target is outside its scope")
 		}
-		if _, exists := seenServices[target.ServiceID]; exists {
+		if _, exists := seenServices[target.Runtime.ServiceId]; exists {
 			return nil, errs.New(errs.KindValidationFailed, "log subscription has a duplicate Service target")
 		}
-		seenServices[target.ServiceID] = struct{}{}
+		seenServices[target.Runtime.ServiceId] = struct{}{}
 	}
 	requestID, err := newLogRequestID()
 	if err != nil {
@@ -148,6 +152,9 @@ func (registry *Registry) OpenLogs(
 		return nil, errs.New(errs.KindStorageUnavailable, "Agent is unavailable for logs")
 	}
 	ownedTargets := append([]LogTarget(nil), targets...)
+	for index := range ownedTargets {
+		ownedTargets[index].Runtime = proto.Clone(ownedTargets[index].Runtime).(*agentpb.ServiceObservationTarget)
+	}
 	subscription := &LogSubscription{
 		ID: requestID, scope: scope, targets: ownedTargets, Tail: tail, Follow: follow,
 		registry: registry, state: state, ready: make(chan error, 1),
@@ -161,10 +168,8 @@ func (registry *Registry) OpenLogs(
 	protobufTargets := make([]*agentpb.LogTarget, 0, len(ownedTargets))
 	for _, target := range ownedTargets {
 		protobufTargets = append(protobufTargets, &agentpb.LogTarget{
-			EnvironmentId: target.EnvironmentID,
-			ServiceId:     target.ServiceID,
-			ServiceName:   target.ServiceName,
-			ReleaseId:     target.ReleaseID,
+			Runtime:     proto.Clone(target.Runtime).(*agentpb.ServiceObservationTarget),
+			ServiceName: target.ServiceName,
 		})
 	}
 	command := logCommand{
@@ -335,7 +340,7 @@ func (session *Session) RecordLogEvent(event *agentpb.LogEvent) (bool, error) {
 		event.GetTimestamp().CheckValid() != nil || len(event.GetLine()) > maximumPublicLogLine ||
 		ids.Validate(ids.KindEnvironment, event.GetEnvironmentId()) != nil ||
 		ids.Validate(ids.KindService, event.GetServiceId()) != nil ||
-		ids.Validate(ids.KindDeployment, event.GetReleaseId()) != nil || event.GetServiceName() == "" ||
+		(event.GetReleaseId() != "" && ids.Validate(ids.KindDeployment, event.GetReleaseId()) != nil) || event.GetServiceName() == "" ||
 		event.GetContainerId() == "" || event.GetContainerName() == "" ||
 		!utf8.ValidString(event.GetServiceName()) || !utf8.ValidString(event.GetContainerId()) ||
 		!utf8.ValidString(event.GetContainerName()) || !utf8.ValidString(event.GetLine()) ||
@@ -466,8 +471,10 @@ func (subscription *LogSubscription) completeCancellationLocked() {
 
 func (subscription *LogSubscription) accepts(event *agentpb.LogEvent) bool {
 	for _, target := range subscription.targets {
-		if event.GetEnvironmentId() == target.EnvironmentID && event.GetServiceId() == target.ServiceID &&
-			event.GetServiceName() == target.ServiceName && event.GetReleaseId() == target.ReleaseID {
+		if event.GetEnvironmentId() == target.Runtime.EnvironmentId &&
+			event.GetServiceId() == target.Runtime.ServiceId &&
+			event.GetServiceName() == target.ServiceName &&
+			event.GetReleaseId() == target.Runtime.ReleaseId {
 			return true
 		}
 	}

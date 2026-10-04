@@ -138,8 +138,10 @@ is its acknowledged Environment artifact at the same fixed storage revision.
 Its explicit backing target has no Release or slot and matches the provisioning
 plan and generation. Desired configuration is never a substitute for that receipt.
 
-Each Service result is either one complete bounded count partition or
-unavailable. Empty complete evidence means absent; malformed, duplicate,
+Each Service result contains a complete bounded count partition and its selected
+container rows, or is unavailable. Rows expose identity, image, state and
+healthcheck status, never environment variables or healthcheck output.
+Empty complete evidence means absent; malformed, duplicate,
 overflowing, changing, timed-out, disconnected, or ownership-mismatched
 evidence is unavailable rather than a partial healthy sample. The Controller
 rechecks source revisions before returning the snapshot, and the Console

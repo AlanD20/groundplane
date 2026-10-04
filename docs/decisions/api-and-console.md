@@ -140,14 +140,17 @@ Task events and never enter etcd, files, ordinary daemon logs, or a resumable
 journal. `Last-Event-ID` is rejected and reconnecting starts a fresh bounded
 tail.
 
-Before headers, the Controller resolves the current serving Release set at one
-fixed revision. Service Logs use that Service's serving Release; Environment
-Logs use the serving Release of each Service in stable order. The set is frozen
+Before headers, the Controller resolves current workload authority at one
+fixed revision, using the same source selection as Service observations.
+Ordinary Services use their serving Release; Backing Services use their
+acknowledged provisioning artifact without inventing a Release. Environment
+Logs select these owned workloads in stable Service order. The set is frozen
 for the connection, excludes stable proxies and inactive release slots, and
 does not traverse Attaches into backing Environments.
 
 The Controller sends a typed subscription over the existing authenticated
-Agent channel. The Agent alone reads Docker, verifies managed ownership labels,
+Agent channel. The Agent alone reads Docker, verifies exact plan, render
+generation, Compose replica and managed ownership labels,
 and returns bounded normalized frames; the Controller alone selects serving
 authority and encodes SSE. A private ready signal separates setup failures that
 can still return an RFC 7807 response from failures after headers, which close

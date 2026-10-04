@@ -71,10 +71,17 @@ func publicObservation(observation Observation, now time.Time) api.ServiceObserv
 	if snapshot.ServingReleaseID != "" {
 		releaseID = &snapshot.ServingReleaseID
 	}
+	containers := make([]api.ServiceContainerObservation, 0, len(snapshot.Containers))
+	for _, item := range snapshot.Containers {
+		containers = append(containers, api.ServiceContainerObservation{
+			ID: item.Id, Name: item.Name, Image: item.Image, State: item.State, Health: item.Health, Replica: item.Replica,
+		})
+	}
 	return api.ServiceObservation{
 		State:      api.ServiceObservationState(observation.State),
 		ObservedAt: &snapshot.ObservedAt, ExpiresAt: &snapshot.ExpiresAt,
 		ServingReleaseID: releaseID, ExpectedReplicas: &snapshot.ExpectedReplicas,
+		Containers: containers,
 		Replicas: &api.ServiceReplicaCounts{
 			Running: counts.Running, Healthy: counts.Healthy, Starting: counts.Starting,
 			Unhealthy: counts.Unhealthy, Transitional: counts.Transitional, Stopped: counts.Stopped, Failed: counts.Failed,

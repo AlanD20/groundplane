@@ -27,6 +27,19 @@ Blueprint contract](../blueprint.md).
 
 ## Operating a backing service
 
+### Containers and logs
+
+Overview shows the current workload containers, image, runtime state and
+healthcheck status. These are live Agent observations, not the saved runtime
+intent; an expired or unavailable report is not proof that the container stopped.
+
+The Logs tab uses the same tail/follow viewer as ordinary Services. It reads
+only this Backing Service's container stdout/stderr, not its consumers' output.
+For automation, use `groundplane service show SERVICE_ID --id --output json`
+and `groundplane service logs SERVICE_ID --id`. Reopen a stream after Start or
+runtime replacement to select the current containers. Workloads must not print
+credentials; GP does not redact arbitrary container output.
+
 ### Creation and lifecycle
 
 Backing creation is one protected atomic operation. The operator supplies the

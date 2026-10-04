@@ -125,12 +125,22 @@ const (
 // ServiceObservation contains either unavailable alone or a complete serving
 // workload snapshot. Runtime intent and desired replica count remain separate.
 type ServiceObservation struct {
-	State            ServiceObservationState `json:"state" enum:"unavailable,absent,failed,stopped,starting,healthy,running,degraded"`
-	ObservedAt       *time.Time              `json:"observed_at,omitempty"`
-	ExpiresAt        *time.Time              `json:"expires_at,omitempty"`
-	ServingReleaseID *string                 `json:"serving_release_id,omitempty"`
-	ExpectedReplicas *uint32                 `json:"expected_replicas,omitempty" minimum:"1"`
-	Replicas         *ServiceReplicaCounts   `json:"replicas,omitempty"`
+	State            ServiceObservationState       `json:"state" enum:"unavailable,absent,failed,stopped,starting,healthy,running,degraded"`
+	ObservedAt       *time.Time                    `json:"observed_at,omitempty"`
+	ExpiresAt        *time.Time                    `json:"expires_at,omitempty"`
+	ServingReleaseID *string                       `json:"serving_release_id,omitempty"`
+	ExpectedReplicas *uint32                       `json:"expected_replicas,omitempty" minimum:"1"`
+	Replicas         *ServiceReplicaCounts         `json:"replicas,omitempty"`
+	Containers       []ServiceContainerObservation `json:"containers,omitempty"`
+}
+
+type ServiceContainerObservation struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Image   string `json:"image"`
+	State   string `json:"state" enum:"created,running,paused,restarting,removing,exited,dead"`
+	Health  string `json:"health" enum:"none,healthy,starting,unhealthy"`
+	Replica uint32 `json:"replica" minimum:"1"`
 }
 
 // ServiceReplicaCounts partitions only the selected serving workload.

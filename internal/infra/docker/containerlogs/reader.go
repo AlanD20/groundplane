@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -80,17 +80,19 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 	targets := make(map[string]*agentpb.LogTarget, len(request.GetTargets()))
 	seenServices := make(map[string]struct{}, len(request.GetTargets()))
 	for _, target := range request.GetTargets() {
-		if target == nil || ids.Validate(ids.KindEnvironment, target.GetEnvironmentId()) != nil ||
-			ids.Validate(ids.KindService, target.GetServiceId()) != nil ||
-			ids.Validate(ids.KindDeployment, target.GetReleaseId()) != nil || target.GetServiceName() == "" ||
+		if target == nil || serviceobservation.ValidateTarget(target.GetRuntime()) != nil ||
+			target.GetServiceName() == "" ||
 			!utf8.ValidString(target.GetServiceName()) {
 			return nil, fmt.Errorf("invalid log target")
 		}
-		if _, exists := seenServices[target.GetServiceId()]; exists {
+		if _, exists := seenServices[target.Runtime.ServiceId]; exists {
 			return nil, fmt.Errorf("duplicate log target")
 		}
-		seenServices[target.GetServiceId()] = struct{}{}
-		targets[target.GetServiceId()+"\x00"+target.GetReleaseId()] = target
+		if target.Runtime.EnvironmentId != request.Targets[0].Runtime.EnvironmentId {
+			return nil, fmt.Errorf("log targets must share one Environment")
+		}
+		seenServices[target.Runtime.ServiceId] = struct{}{}
+		targets[target.Runtime.ServiceId] = target
 	}
 
 	containers, err := reader.docker.ContainerList(ctx, client.ContainerListOptions{All: true})
@@ -98,19 +100,23 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 		return nil, errs.Wrap(errs.KindStorageUnavailable, fmt.Errorf("list managed log containers: %w", err))
 	}
 	selected := make([]container.Summary, 0)
+	seenContainers := make(map[string]bool)
+	seenReplicas := make(map[string]bool)
 	for _, candidate := range containers.Items {
 		labels := candidate.Labels
 		if labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "service" {
 			continue
 		}
-		target := targets[labels["com.groundplane.service-id"]+"\x00"+labels["com.groundplane.release-id"]]
-		if target == nil || labels["com.groundplane.environment-id"] != target.GetEnvironmentId() {
+		target := targets[labels["com.groundplane.service-id"]]
+		if target == nil || !serviceobservation.SelectsWorkload(labels, target.Runtime) {
 			continue
 		}
-		role := labels["com.groundplane.runtime-role"]
-		if role != "slot" && role != "singleton" {
-			continue
+		replica, valid := serviceobservation.WorkloadReplica(labels, target.Runtime)
+		key := target.Runtime.ServiceId + "\x00" + strconv.FormatUint(replica, 10)
+		if !valid || candidate.ID == "" || seenContainers[candidate.ID] || seenReplicas[key] {
+			return nil, fmt.Errorf("log container ownership does not match its runtime")
 		}
+		seenContainers[candidate.ID], seenReplicas[key] = true, true
 		selected = append(selected, candidate)
 	}
 	if len(selected) > maxContainers {
@@ -135,25 +141,23 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 				fmt.Errorf("inspect log container %s: %w", candidate.ID, inspectErr),
 			)
 		}
-		if inspect.Container.Config == nil {
+		if inspect.Container.ID != candidate.ID || inspect.Container.Config == nil {
 			set.Close()
 			return nil, fmt.Errorf("inspect log container %s returned no configuration", candidate.ID)
 		}
 		labels := inspect.Container.Config.Labels
-		role := labels["com.groundplane.runtime-role"]
 		if inspect.Container.Config.Tty {
 			set.Close()
 			return nil, fmt.Errorf("managed log container %s unexpectedly enables TTY", candidate.ID)
 		}
-		target := targets[labels["com.groundplane.service-id"]+"\x00"+labels["com.groundplane.release-id"]]
-		if target == nil || labels["com.groundplane.managed"] != "true" ||
-			labels["com.groundplane.kind"] != "service" ||
-			labels["com.groundplane.environment-id"] != target.GetEnvironmentId() ||
-			(role != "slot" && role != "singleton") {
+		target := targets[candidate.Labels["com.groundplane.service-id"]]
+		replica, valid := serviceobservation.WorkloadReplica(labels, target.Runtime)
+		selectedReplica, selectedValid := serviceobservation.WorkloadReplica(candidate.Labels, target.Runtime)
+		if !valid || !selectedValid || replica != selectedReplica {
 			set.Close()
 			return nil, fmt.Errorf("log container %s ownership changed", candidate.ID)
 		}
-		slot, slotErr := logSlot(labels)
+		slot, slotErr := logSlot(target.Runtime)
 		if slotErr != nil {
 			set.Close()
 			return nil, slotErr
@@ -291,10 +295,10 @@ func (writer *lineWriter) emit() error {
 	}
 	event := &agentpb.LogEvent{
 		RequestId:     writer.source.requestID,
-		EnvironmentId: writer.source.target.GetEnvironmentId(),
-		ServiceId:     writer.source.target.GetServiceId(),
+		EnvironmentId: writer.source.target.Runtime.EnvironmentId,
+		ServiceId:     writer.source.target.Runtime.ServiceId,
 		ServiceName:   writer.source.target.GetServiceName(),
-		ReleaseId:     writer.source.target.GetReleaseId(),
+		ReleaseId:     writer.source.target.Runtime.ReleaseId,
 		ContainerId:   writer.source.containerID,
 		ContainerName: writer.source.containerName,
 		Slot:          writer.source.slot,
@@ -326,11 +330,11 @@ func containerName(summary container.Summary) string {
 	return strings.TrimPrefix(summary.Names[0], "/")
 }
 
-func logSlot(labels map[string]string) (agentpb.LogSlot, error) {
-	if labels["com.groundplane.runtime-role"] == "singleton" {
+func logSlot(target *agentpb.ServiceObservationTarget) (agentpb.LogSlot, error) {
+	if target.RuntimeRole == "singleton" || target.RuntimeRole == "backing" {
 		return agentpb.LogSlot_LOG_SLOT_SINGLETON, nil
 	}
-	switch labels["com.groundplane.slot"] {
+	switch target.Slot {
 	case "blue":
 		return agentpb.LogSlot_LOG_SLOT_BLUE, nil
 	case "green":

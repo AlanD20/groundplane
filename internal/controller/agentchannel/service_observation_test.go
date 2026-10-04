@@ -25,7 +25,12 @@ func servingResult(request *agentpb.ObserveServices) *agentpb.AgentMessage {
 		ServiceObservationResult: &agentpb.ServiceObservationResult{RequestId: request.RequestId,
 			Observations: []*agentpb.ServiceObservationRow{{
 				ServiceId: request.Targets[0].ServiceId, ReleaseId: request.Targets[0].ReleaseId,
-				Outcome: &agentpb.ServiceObservationRow_Replicas{Replicas: &agentpb.ServiceReplicaCounts{Healthy: 1}},
+				Outcome: &agentpb.ServiceObservationRow_Replicas{
+					Replicas: &agentpb.ServiceReplicaCounts{Healthy: 1},
+				},
+				Containers: []*agentpb.ServiceContainerObservation{
+					{Id: "container-1", Name: "api-1", State: "running", Health: "healthy", Replica: 1},
+				},
 			}},
 		},
 	}}
@@ -330,6 +335,9 @@ func assertServingReply(t *testing.T, reply observationReply, requestID string) 
 	want := &agentpb.ServiceObservationResult{RequestId: requestID, Observations: []*agentpb.ServiceObservationRow{{
 		ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Outcome: &agentpb.ServiceObservationRow_Replicas{Replicas: &agentpb.ServiceReplicaCounts{Healthy: 1}},
+		Containers: []*agentpb.ServiceContainerObservation{
+			{Id: "container-1", Name: "api-1", State: "running", Health: "healthy", Replica: 1},
+		},
 	}}}
 	if reply.err != nil || !proto.Equal(reply.result, want) {
 		t.Fatalf("observation reply = %v, want exact serving identity and counts", reply)

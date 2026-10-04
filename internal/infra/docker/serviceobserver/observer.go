@@ -6,7 +6,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"io"
+	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
@@ -90,16 +92,17 @@ func (observer *Observer) observeTarget(
 		Outcome: &agentpb.ServiceObservationRow_Unavailable{Unavailable: true},
 	}
 	counts := &agentpb.ServiceReplicaCounts{}
+	containers := make([]*agentpb.ServiceContainerObservation, 0)
 	seenIDs := make(map[string]bool)
 	seenReplicas := make(map[uint64]bool)
 	for _, candidate := range candidates {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if !selected(candidate.Labels, target) {
+		if !serviceobservation.SelectsWorkload(candidate.Labels, target) {
 			continue
 		}
-		replica, valid := replicaIdentity(candidate.Labels, target)
+		replica, valid := serviceobservation.WorkloadReplica(candidate.Labels, target)
 		if !valid || candidate.ID == "" || seenIDs[candidate.ID] || seenReplicas[replica] {
 			return row, nil
 		}
@@ -111,10 +114,22 @@ func (observer *Observer) observeTarget(
 		if err != nil || inspected.Container.ID != candidate.ID || inspected.Container.Config == nil {
 			return row, nil
 		}
-		actualReplica, valid := replicaIdentity(inspected.Container.Config.Labels, target)
+		actualReplica, valid := serviceobservation.WorkloadReplica(inspected.Container.Config.Labels, target)
 		if !valid || actualReplica != replica || !countState(counts, inspected.Container.State) {
 			return row, nil
 		}
+		name := strings.TrimPrefix(inspected.Container.Name, "/")
+		if name == "" {
+			name = candidate.ID
+		}
+		health := "none"
+		if inspected.Container.State.Health != nil {
+			health = string(inspected.Container.State.Health.Status)
+		}
+		containers = append(containers, &agentpb.ServiceContainerObservation{
+			Id: candidate.ID, Name: name, Image: inspected.Container.Config.Image,
+			State: string(inspected.Container.State.Status), Health: health, Replica: uint32(replica),
+		})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -127,6 +142,10 @@ func (observer *Observer) observeTarget(
 		row.ProxyState = proxyState
 	}
 	row.Outcome = &agentpb.ServiceObservationRow_Replicas{Replicas: counts}
+	row.Containers = containers
+	sort.Slice(row.Containers, func(left, right int) bool {
+		return row.Containers[left].Replica < row.Containers[right].Replica
+	})
 	return row, nil
 }
 
@@ -210,34 +229,6 @@ func (observer *Observer) proxyConfigMatches(ctx context.Context, containerID st
 	}
 	digest := sha256.Sum256(canonical)
 	return bytes.Equal(digest[:], expected), true
-}
-
-// Retained releases, proxies, one-off containers and Components are not serving
-// candidates. A selected candidate with corrupt ownership is unavailable, not
-// silently omitted from an otherwise healthy count.
-func selected(labels map[string]string, target *agentpb.ServiceObservationTarget) bool {
-	role := target.RuntimeRole
-	if role == "backing" {
-		role = ""
-	}
-	return labels["com.groundplane.managed"] == "true" && labels["com.groundplane.kind"] == "service" &&
-		labels["com.groundplane.component-id"] == "" &&
-		labels["com.groundplane.environment-id"] == target.EnvironmentId &&
-		labels["com.groundplane.service-id"] == target.ServiceId &&
-		labels["com.groundplane.release-id"] == target.ReleaseId &&
-		labels["com.groundplane.runtime-role"] == role &&
-		labels["com.groundplane.slot"] == target.Slot && labels["com.docker.compose.oneoff"] != "True"
-}
-
-func replicaIdentity(labels map[string]string, target *agentpb.ServiceObservationTarget) (uint64, bool) {
-	if !selected(labels, target) || labels["com.groundplane.plan-id"] != target.PlanId ||
-		labels["com.groundplane.render-generation"] != strconv.FormatUint(target.RenderGeneration, 10) ||
-		labels["com.docker.compose.service"] != target.ComposeName || labels["com.docker.compose.oneoff"] != "False" {
-		return 0, false
-	}
-	value := labels["com.docker.compose.container-number"]
-	ordinal, err := strconv.ParseUint(value, 10, 32)
-	return ordinal, err == nil && ordinal != 0 && strconv.FormatUint(ordinal, 10) == value
 }
 
 func proxyCandidate(labels map[string]string, target *agentpb.ServiceObservationTarget) bool {

@@ -48,7 +48,7 @@ func (c *Client) StreamLogs(
 
 func validateLogEvent(event apiTypes.LogEvent) error {
 	if event.Sequence == 0 || ids.Validate(ids.KindService, event.ServiceID) != nil ||
-		ids.Validate(ids.KindDeployment, event.ReleaseID) != nil || event.ServiceName == "" ||
+		(event.ReleaseID != "" && ids.Validate(ids.KindDeployment, event.ReleaseID) != nil) || event.ServiceName == "" ||
 		event.ContainerID == "" || event.ContainerName == "" || event.Timestamp.IsZero() ||
 		!utf8.ValidString(event.ServiceName) || !utf8.ValidString(event.ContainerID) ||
 		!utf8.ValidString(event.ContainerName) || !utf8.ValidString(event.Line) ||

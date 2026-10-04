@@ -335,10 +335,12 @@ func nextAuditLogCommand(t *testing.T, session *Session) logCommand {
 
 func testLogTarget() LogTarget {
 	return LogTarget{
-		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		ServiceID:     "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		ServiceName:   "api",
-		ReleaseID:     "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		ServiceName: "api",
+		Runtime: &agentpb.ServiceObservationTarget{
+			EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			RenderGeneration: 1, ComposeName: "api", RuntimeRole: "singleton",
+		},
 	}
 }
 

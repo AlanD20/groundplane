@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { ServiceOverview } from "@/features/service/service-overview";
+import { LogStream } from "@/features/logs/log-viewer";
 import { ServiceStateBadges } from "@/features/service/service-runtime-actions";
 import { useVisibleServiceObservations } from "@/features/service/use-service-observation-refresh";
 import { useRequiredParams } from "@/lib/router";
@@ -19,7 +20,8 @@ import { BackupsTab } from "./backing-backups";
 import { ConnectionsTab } from "./backing-connections";
 import { DesiredStateTab } from "./backing-desired-state";
 
-type PlatformTab = "overview" | "service" | "connections" | "state" | "backups";
+type PlatformTab =
+  "overview" | "logs" | "service" | "connections" | "state" | "backups";
 
 export default function BackingServiceDetailPage() {
   const params = useRequiredParams("id");
@@ -175,6 +177,7 @@ export default function BackingServiceDetailPage() {
       <Tabs value={tab} onValueChange={(v) => setTab(v as PlatformTab)}>
         <TabsList aria-label="Backing Service sections">
           <TabsTab value="overview">Overview</TabsTab>
+          <TabsTab value="logs">Logs</TabsTab>
           <TabsTab value="service">Configuration</TabsTab>
           <TabsTab value="connections">Connections</TabsTab>
           <TabsTab value="state">Desired state</TabsTab>
@@ -187,6 +190,11 @@ export default function BackingServiceDetailPage() {
             env={env}
             now={observationRefresh.now}
           />
+        </TabsPanel>
+        <TabsPanel value="logs" className="mt-6">
+          {tab === "logs" && (
+            <LogStream target={{ kind: "service", id: svc.id }} />
+          )}
         </TabsPanel>
         <TabsPanel value="service" className="mt-6 flex flex-col gap-6">
           <ServiceTab env={env} svc={svc} />

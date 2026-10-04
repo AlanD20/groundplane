@@ -42,6 +42,9 @@ func successfulServiceRead(
 	result.Observations[0].Outcome = &agentpb.ServiceObservationRow_Replicas{
 		Replicas: &agentpb.ServiceReplicaCounts{Healthy: 1},
 	}
+	result.Observations[0].Containers = []*agentpb.ServiceContainerObservation{
+		{Id: "container-1", Name: "api-1", State: "running", Health: "healthy", Replica: 1},
+	}
 	return result, nil
 }
 

@@ -619,6 +619,63 @@ func (e ScriptExecution1Mode) Valid() bool {
 	}
 }
 
+// Defines values for ServiceContainerObservationHealth.
+const (
+	ServiceContainerObservationHealthHealthy   ServiceContainerObservationHealth = "healthy"
+	ServiceContainerObservationHealthNone      ServiceContainerObservationHealth = "none"
+	ServiceContainerObservationHealthStarting  ServiceContainerObservationHealth = "starting"
+	ServiceContainerObservationHealthUnhealthy ServiceContainerObservationHealth = "unhealthy"
+)
+
+// Valid indicates whether the value is a known member of the ServiceContainerObservationHealth enum.
+func (e ServiceContainerObservationHealth) Valid() bool {
+	switch e {
+	case ServiceContainerObservationHealthHealthy:
+		return true
+	case ServiceContainerObservationHealthNone:
+		return true
+	case ServiceContainerObservationHealthStarting:
+		return true
+	case ServiceContainerObservationHealthUnhealthy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServiceContainerObservationState.
+const (
+	ServiceContainerObservationStateCreated    ServiceContainerObservationState = "created"
+	ServiceContainerObservationStateDead       ServiceContainerObservationState = "dead"
+	ServiceContainerObservationStateExited     ServiceContainerObservationState = "exited"
+	ServiceContainerObservationStatePaused     ServiceContainerObservationState = "paused"
+	ServiceContainerObservationStateRemoving   ServiceContainerObservationState = "removing"
+	ServiceContainerObservationStateRestarting ServiceContainerObservationState = "restarting"
+	ServiceContainerObservationStateRunning    ServiceContainerObservationState = "running"
+)
+
+// Valid indicates whether the value is a known member of the ServiceContainerObservationState enum.
+func (e ServiceContainerObservationState) Valid() bool {
+	switch e {
+	case ServiceContainerObservationStateCreated:
+		return true
+	case ServiceContainerObservationStateDead:
+		return true
+	case ServiceContainerObservationStateExited:
+		return true
+	case ServiceContainerObservationStatePaused:
+		return true
+	case ServiceContainerObservationStateRemoving:
+		return true
+	case ServiceContainerObservationStateRestarting:
+		return true
+	case ServiceContainerObservationStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ServiceObservationState.
 const (
 	ServiceObservationStateAbsent      ServiceObservationState = "absent"
@@ -2763,6 +2820,22 @@ type Service struct {
 	Zones                      *[]string                     `json:"zones,omitempty"`
 }
 
+// ServiceContainerObservation defines model for ServiceContainerObservation.
+type ServiceContainerObservation struct {
+	Health  ServiceContainerObservationHealth `json:"health"`
+	Id      string                            `json:"id"`
+	Image   string                            `json:"image"`
+	Name    string                            `json:"name"`
+	Replica int32                             `json:"replica"`
+	State   ServiceContainerObservationState  `json:"state"`
+}
+
+// ServiceContainerObservationHealth defines model for ServiceContainerObservation.Health.
+type ServiceContainerObservationHealth string
+
+// ServiceContainerObservationState defines model for ServiceContainerObservation.State.
+type ServiceContainerObservationState string
+
 // ServiceCreate defines model for ServiceCreate.
 type ServiceCreate struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -2869,12 +2942,13 @@ type ServiceMount struct {
 
 // ServiceObservation defines model for ServiceObservation.
 type ServiceObservation struct {
-	ExpectedReplicas *int32                  `json:"expected_replicas,omitempty"`
-	ExpiresAt        *time.Time              `json:"expires_at,omitempty"`
-	ObservedAt       *time.Time              `json:"observed_at,omitempty"`
-	Replicas         *ServiceReplicaCounts   `json:"replicas,omitempty"`
-	ServingReleaseId *string                 `json:"serving_release_id,omitempty"`
-	State            ServiceObservationState `json:"state"`
+	Containers       *[]ServiceContainerObservation `json:"containers,omitempty"`
+	ExpectedReplicas *int32                         `json:"expected_replicas,omitempty"`
+	ExpiresAt        *time.Time                     `json:"expires_at,omitempty"`
+	ObservedAt       *time.Time                     `json:"observed_at,omitempty"`
+	Replicas         *ServiceReplicaCounts          `json:"replicas,omitempty"`
+	ServingReleaseId *string                        `json:"serving_release_id,omitempty"`
+	State            ServiceObservationState        `json:"state"`
 }
 
 // ServiceObservationState defines model for ServiceObservation.State.

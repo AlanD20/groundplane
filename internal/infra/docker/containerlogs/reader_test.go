@@ -50,17 +50,17 @@ func TestOpenRejectsInvalidAndDuplicateTargetsBeforeDocker(t *testing.T) {
 		}},
 		{name: "invalid environment id", request: func() *agentpb.LogSubscribe {
 			request := validSubscribe()
-			request.Targets[0].EnvironmentId = "environment"
+			request.Targets[0].Runtime.EnvironmentId = "environment"
 			return request
 		}},
 		{name: "invalid service id", request: func() *agentpb.LogSubscribe {
 			request := validSubscribe()
-			request.Targets[0].ServiceId = "service"
+			request.Targets[0].Runtime.ServiceId = "service"
 			return request
 		}},
 		{name: "invalid release id", request: func() *agentpb.LogSubscribe {
 			request := validSubscribe()
-			request.Targets[0].ReleaseId = "release"
+			request.Targets[0].Runtime.ReleaseId = "release"
 			return request
 		}},
 		{name: "empty service name", request: func() *agentpb.LogSubscribe {
@@ -76,7 +76,7 @@ func TestOpenRejectsInvalidAndDuplicateTargetsBeforeDocker(t *testing.T) {
 		{name: "duplicate service target", request: func() *agentpb.LogSubscribe {
 			request := validSubscribe()
 			duplicate := proto.CloneOf(request.Targets[0])
-			duplicate.ReleaseId = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+			duplicate.Runtime.ReleaseId = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 			request.Targets = append(request.Targets, duplicate)
 			return request
 		}},
@@ -106,9 +106,17 @@ func TestOpenSelectsOwnedServingSourcesInDeterministicOrder(t *testing.T) {
 	t.Parallel()
 
 	matching := []container.Summary{
-		{ID: "container-b", Names: []string{"/api-1"}, Labels: ownedLabels("slot", "blue")},
-		{ID: "container-a", Names: []string{"/api-1"}, Labels: ownedLabels("singleton", "")},
-		{ID: "container-z", Names: []string{"/api-2"}, Labels: ownedLabels("slot", "green")},
+		{
+			ID:     "container-b",
+			Names:  []string{"/api-1"},
+			Labels: changedLabel(ownedLabels("slot", "blue"), "com.docker.compose.container-number", "2"),
+		},
+		{ID: "container-a", Names: []string{"/api-1"}, Labels: ownedLabels("slot", "blue")},
+		{
+			ID:     "container-z",
+			Names:  []string{"/api-2"},
+			Labels: changedLabel(ownedLabels("slot", "blue"), "com.docker.compose.container-number", "3"),
+		},
 	}
 	excluded := []container.Summary{
 		{
@@ -144,6 +152,8 @@ func TestOpenSelectsOwnedServingSourcesInDeterministicOrder(t *testing.T) {
 			Names:  []string{"/ignored-5"},
 			Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.kind", "component"),
 		},
+		{ID: "inactive-slot", Labels: ownedLabels("slot", "green")},
+		{ID: "oneoff", Labels: changedLabel(ownedLabels("slot", "blue"), "com.docker.compose.oneoff", "True")},
 	}
 	docker := &fakeDocker{
 		containers: append(matching, excluded...),
@@ -190,9 +200,13 @@ func TestOpenRejectsMoreThanMaximumSources(t *testing.T) {
 	docker := &fakeDocker{containers: make([]container.Summary, maxContainers+1)}
 	for index := range docker.containers {
 		docker.containers[index] = container.Summary{
-			ID:     "container-" + strconv.Itoa(index),
-			Names:  []string{"/api-" + strconv.Itoa(index)},
-			Labels: ownedLabels("singleton", ""),
+			ID:    "container-" + strconv.Itoa(index),
+			Names: []string{"/api-" + strconv.Itoa(index)},
+			Labels: changedLabel(
+				ownedLabels("slot", "blue"),
+				"com.docker.compose.container-number",
+				strconv.Itoa(index+1),
+			),
 		}
 	}
 	if _, err := NewReader(docker).Open(context.Background(), validSubscribe()); err == nil {
@@ -395,23 +409,30 @@ func validSubscribe() *agentpb.LogSubscribe {
 	return &agentpb.LogSubscribe{
 		RequestId: "request-1", Tail: 37, Follow: true,
 		Targets: []*agentpb.LogTarget{{
-			EnvironmentId: testEnvironmentID,
-			ServiceId:     testServiceID,
-			ServiceName:   "api",
-			ReleaseId:     testReleaseID,
+			ServiceName: "api",
+			Runtime: &agentpb.ServiceObservationTarget{
+				EnvironmentId: testEnvironmentID, ServiceId: testServiceID, ReleaseId: testReleaseID,
+				PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1, ComposeName: "api-blue",
+				RuntimeRole: "slot", Slot: "blue",
+			},
 		}},
 	}
 }
 
 func ownedLabels(role string, slot string) map[string]string {
 	return map[string]string{
-		"com.groundplane.managed":        "true",
-		"com.groundplane.kind":           "service",
-		"com.groundplane.environment-id": testEnvironmentID,
-		"com.groundplane.service-id":     testServiceID,
-		"com.groundplane.release-id":     testReleaseID,
-		"com.groundplane.runtime-role":   role,
-		"com.groundplane.slot":           slot,
+		"com.groundplane.managed":             "true",
+		"com.groundplane.kind":                "service",
+		"com.groundplane.environment-id":      testEnvironmentID,
+		"com.groundplane.service-id":          testServiceID,
+		"com.groundplane.release-id":          testReleaseID,
+		"com.groundplane.runtime-role":        role,
+		"com.groundplane.slot":                slot,
+		"com.groundplane.plan-id":             "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		"com.groundplane.render-generation":   "1",
+		"com.docker.compose.service":          "api-blue",
+		"com.docker.compose.container-number": "1",
+		"com.docker.compose.oneoff":           "False",
 	}
 }
 

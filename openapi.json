@@ -5502,6 +5502,55 @@
         ],
         "type": "object"
       },
+      "ServiceContainerObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "health": {
+            "enum": [
+              "none",
+              "healthy",
+              "starting",
+              "unhealthy"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "replica": {
+            "format": "int32",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "created",
+              "running",
+              "paused",
+              "restarting",
+              "removing",
+              "exited",
+              "dead"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "image",
+          "state",
+          "health",
+          "replica"
+        ],
+        "type": "object"
+      },
       "ServiceCreate": {
         "additionalProperties": false,
         "properties": {
@@ -5875,6 +5924,15 @@
       "ServiceObservation": {
         "additionalProperties": false,
         "properties": {
+          "containers": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceContainerObservation"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "expected_replicas": {
             "format": "int32",
             "minimum": 1,

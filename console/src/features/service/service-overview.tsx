@@ -8,6 +8,7 @@ import {
 } from "@/components/common/resource-panel";
 import type { Environment, Service } from "@/lib/types";
 import { currentServiceObservation, replicaTotal } from "./service-observation";
+import { ServiceContainers } from "./service-containers";
 
 export function ServiceOverview({
   service,
@@ -80,23 +81,28 @@ export function ServiceOverview({
           )}
         </div>
       )}
-      <ResourcePanel title="Deployment">
+      <ServiceContainers observation={observation} />
+      <ResourcePanel
+        title={service.adapter ? "Runtime configuration" : "Deployment"}
+      >
         <DetailRow
           label="Configured image"
           value={<ImageReference value={service.image} />}
         />
-        <DetailRow
-          label="Serving Release"
-          value={
-            release ? (
-              <ImageReference
-                value={release.tag || release.digest || release.id}
-              />
-            ) : (
-              "Not reported"
-            )
-          }
-        />
+        {!service.adapter && (
+          <DetailRow
+            label="Serving Release"
+            value={
+              release ? (
+                <ImageReference
+                  value={release.tag || release.digest || release.id}
+                />
+              ) : (
+                "Not reported"
+              )
+            }
+          />
+        )}
         <DetailRow label="Strategy" value={service.strategy} />
         <DetailRow
           label="Healthcheck"
@@ -161,11 +167,13 @@ export function ServiceOverview({
               label="Report expires"
               value={new Date(observation.expiresAt).toLocaleString()}
             />
-            <DetailRow
-              label="Serving Release ID"
-              value={observation.servingReleaseId}
-              mono
-            />
+            {observation.servingReleaseId && (
+              <DetailRow
+                label="Serving Release ID"
+                value={observation.servingReleaseId}
+                mono
+              />
+            )}
           </>
         )}
         <p className="text-muted-foreground">

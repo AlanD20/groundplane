@@ -267,7 +267,7 @@ func publicLogEvent(sequence uint64, event *agentpb.LogEvent) (api.LogEvent, boo
 	if event == nil || event.GetTimestamp() == nil || event.GetTimestamp().CheckValid() != nil ||
 		ids.Validate(ids.KindEnvironment, event.GetEnvironmentId()) != nil ||
 		ids.Validate(ids.KindService, event.GetServiceId()) != nil ||
-		ids.Validate(ids.KindDeployment, event.GetReleaseId()) != nil || event.GetServiceName() == "" ||
+		(event.GetReleaseId() != "" && ids.Validate(ids.KindDeployment, event.GetReleaseId()) != nil) || event.GetServiceName() == "" ||
 		event.GetContainerId() == "" || event.GetContainerName() == "" ||
 		!utf8.ValidString(event.GetServiceName()) || !utf8.ValidString(event.GetContainerId()) ||
 		!utf8.ValidString(event.GetContainerName()) || !utf8.ValidString(event.GetLine()) ||

@@ -2,6 +2,7 @@ package serviceobservation
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -83,6 +84,25 @@ func availableResult(
 		rows[index] = &agentpb.ServiceObservationRow{
 			ServiceId: target.ServiceId, ReleaseId: target.ReleaseId,
 			Outcome: &agentpb.ServiceObservationRow_Replicas{Replicas: counts[target.ServiceId]},
+		}
+		for _, bin := range []struct {
+			count         uint32
+			state, health string
+		}{
+			{counts[target.ServiceId].Running, "running", "none"},
+			{counts[target.ServiceId].Healthy, "running", "healthy"},
+			{counts[target.ServiceId].Starting, "running", "starting"},
+			{counts[target.ServiceId].Unhealthy, "running", "unhealthy"},
+			{counts[target.ServiceId].Transitional, "restarting", "none"},
+			{counts[target.ServiceId].Stopped + counts[target.ServiceId].Failed, "exited", "none"},
+		} {
+			for range bin.count {
+				replica := uint32(len(rows[index].Containers) + 1)
+				name := "container-" + strconv.Itoa(int(replica))
+				rows[index].Containers = append(rows[index].Containers, &agentpb.ServiceContainerObservation{
+					Id: name, Name: name, State: bin.state, Health: bin.health, Replica: replica,
+				})
+			}
 		}
 		if target.ProxyComposeName != "" {
 			rows[index].ProxyState = agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING

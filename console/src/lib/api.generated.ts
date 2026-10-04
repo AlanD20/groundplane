@@ -3258,6 +3258,17 @@ export interface components {
             strategy?: string;
             zones?: string[] | null;
         };
+        ServiceContainerObservation: {
+            /** @enum {string} */
+            health: "none" | "healthy" | "starting" | "unhealthy";
+            id: string;
+            image: string;
+            name: string;
+            /** Format: int32 */
+            replica: number;
+            /** @enum {string} */
+            state: "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead";
+        };
         ServiceCreate: {
             /**
              * Format: uri
@@ -3364,6 +3375,7 @@ export interface components {
             volume?: string;
         };
         ServiceObservation: {
+            containers?: components["schemas"]["ServiceContainerObservation"][] | null;
             /** Format: int32 */
             expected_replicas?: number;
             /** Format: date-time */

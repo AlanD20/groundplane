@@ -165,6 +165,17 @@ message ServiceObservationRow {
     bool unavailable = 4; // must be true; no partial counts or diagnostic text
   }
   ServiceProxyObservationState proxy_state = 5;
+  repeated ServiceContainerObservation containers = 6;
+}
+
+// Selected workload metadata only; no environment, commands or healthcheck output.
+message ServiceContainerObservation {
+  string id = 1;
+  string name = 2;
+  string image = 3;
+  string state = 4;
+  string health = 5;
+  uint32 replica = 6;
 }
 
 enum ServiceProxyObservationState {
@@ -436,10 +447,8 @@ message ControllerMessage {
 }
 
 message LogTarget {
-  string environment_id = 1;
-  string service_id = 2;
-  string service_name = 3;
-  string release_id = 4;
+  ServiceObservationTarget runtime = 1;
+  string service_name = 2;
 }
 
 message LogSubscribe {

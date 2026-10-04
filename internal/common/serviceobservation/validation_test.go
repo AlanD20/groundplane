@@ -25,6 +25,10 @@ func observationResult(request *agentpb.ObserveServices) *agentpb.ServiceObserva
 		Observations: []*agentpb.ServiceObservationRow{{
 			ServiceId: request.Targets[0].ServiceId, ReleaseId: request.Targets[0].ReleaseId,
 			Outcome: &agentpb.ServiceObservationRow_Replicas{Replicas: &agentpb.ServiceReplicaCounts{Healthy: 2}},
+			Containers: []*agentpb.ServiceContainerObservation{
+				{Id: "container-1", Name: "api-1", State: "running", Health: "healthy", Replica: 1},
+				{Id: "container-2", Name: "api-2", State: "running", Health: "healthy", Replica: 2},
+			},
 		}},
 	}
 }
@@ -112,6 +116,7 @@ func TestObservationResultCannotSubstituteOrOverflow(t *testing.T) {
 	}
 	unavailable := observationResult(request)
 	unavailable.Observations[0].Outcome = &agentpb.ServiceObservationRow_Unavailable{Unavailable: true}
+	unavailable.Observations[0].Containers = nil
 	if err := ValidateResult(request, unavailable); err != nil {
 		t.Fatalf("closed unavailable outcome: %v", err)
 	}

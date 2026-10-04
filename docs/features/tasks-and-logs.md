@@ -74,7 +74,8 @@ was undone.
 ## Logs
 
 Service and Environment log actions read current workload stdout/stderr through
-the Controller. Use the tail/follow controls and stop the stream when finished.
+the Controller, including provisioned Backing Service containers. Use the
+tail/follow controls and stop the stream when finished.
 These logs are not persisted as Task events and cannot be resumed from a durable
 cursor. An empty stream may mean the selected workload has emitted no output.
 
