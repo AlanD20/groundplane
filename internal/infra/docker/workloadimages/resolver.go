@@ -8,7 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/containerd/errdefs"
-	"github.com/distribution/reference"
 	"github.com/moby/moby/client"
 	"google.golang.org/protobuf/proto"
 )
@@ -49,14 +48,6 @@ func (resolver *Resolver) Resolve(
 		value := selector.GetRequestedReference()
 		if local := selector.GetLocalImageId(); local != "" {
 			value = local
-		} else {
-			named, parseErr := reference.ParseNormalizedNamed(value)
-			if parseErr != nil {
-				return nil, errs.Wrap(errs.KindValidationFailed, parseErr)
-			}
-			if pinned, ok := named.(reference.Digested); ok {
-				value = reference.TrimNamed(named).Name() + "@" + pinned.Digest().String()
-			}
 		}
 		observed, err := resolver.engine.ImageInspect(ctx, value)
 		if contextErr := ctx.Err(); contextErr != nil {

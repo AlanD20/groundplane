@@ -438,11 +438,9 @@ func releaseImageWithTag(value string, requested string, current string) (string
 		digest = digested.Digest().Encoded()
 	}
 	tag := requested
-	preserveDigest := false
+	preserveDigest := digest != "" && requested == ""
 	if tag == "" && current != "" {
 		tag = current
-		_, tagged := named.(reference.NamedTagged)
-		preserveDigest = digest != "" && !tagged
 	}
 	if tag == "" {
 		tagged, ok := named.(reference.NamedTagged)
