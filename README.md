@@ -18,8 +18,10 @@ that a release has been published.
 The MVP assumes trusted operators. Its human API has no authentication: keep it
 on loopback or explicitly selected trusted private interfaces.
 Read [product scope](docs/mvp.md) and [current limitations](docs/capabilities.md)
-before selecting it for production. Backup/Restore and full runtime qualification
-remain incomplete.
+before selecting it for production. Config, Volume and PostgreSQL Backup/Restore
+are implemented, with selected recovery journeys verified; full production
+qualification remains incomplete. See [Backups](docs/features/backups.md) for
+supported sources, overwrite behavior and recovery limits.
 
 ## Use Groundplane
 

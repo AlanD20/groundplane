@@ -11,6 +11,12 @@ captured inputs, progress and an eventual completed, failed, timed-out or aborte
 outcome. Rename or deletion does not move its history to a different owner.
 Step completion is not Task completion.
 
+The API and structured CLI response also expose `reconciliation_required`.
+When true, terminal status does not prove that effects were restored or cleanup
+settled: the affected resources may remain fenced. Keep the original Task and
+follow its feature-specific recovery instructions. Retry is available only
+where the Controller can prove it safe.
+
 Every Console action that publishes a Task provides an **Open task** link as
 soon as its ID is known. Top-right toasts follow accepted Tasks, and the bell
 opens the notification center for operations started in the current session.

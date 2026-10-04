@@ -39,6 +39,13 @@ Initial single-host release.
   permits them.
 - Perform guarded Controller and Agent updates with recorded update Tasks and
   recovery checks.
+- Capture and verify Environment configuration, managed Volumes and
+  credential-owning PostgreSQL Attach databases to S3-compatible storage.
+  Restore a verified Recovery Point to its original surviving target, with
+  age encryption/key rotation, scheduled runs and per-source retention.
+- Retain Backup cleanup and Attach deprovisioning through hierarchy-deletion
+  failures; remote Backup absence is proved before Volume destruction or
+  credential revocation.
 
 ### Runner CI/CD
 
@@ -71,23 +78,31 @@ Initial single-host release.
   A combined `vX.Y.Z` release also publishes both matching component releases
   from the same artifacts. Agent-only updates leave the Controller unchanged.
 - Agent and Runner container images are distributed through GHCR. Release
-  bundles pin image digests and include file checksums.
+  bundles also select GP's managed PostgreSQL 16 image with its capture/restore
+  helper. Installation preloads it without replacing existing databases;
+  source installations build it into the local registry. Bundles pin image
+  digests and include file checksums.
 - Tagged GitHub releases publish both platform bundles, checksums and installer.
 - GitHub Pages deploys independently on every push to `main`, serving a dark
   violet installation page, the source installer and its SHA256 checksum.
 
 ### Limits and deferred work
 
-- Backup/Restore is not a complete, qualified feature in this release.
-  Privileged Backup staging acceptance is separate from default CI and deferred.
+- Config, Volume and PostgreSQL Backup/Restore have selected live capture,
+  restore, key-era, retention and interruption proof on Ubuntu amd64. Full Gate B,
+  other provider/archive/checkpoint and arm64 variants remain unqualified.
+  Valkey and Custom Attach sources are unsupported. Privileged Backup staging
+  acceptance remains separate from default CI.
 - A Project-owned Runner's real build/push/Fetch/Deploy, delivery-failure
   preservation, same-boot listener restart and local cleanup passed on Ubuntu
   amd64. Full isolation, token-failure, concurrency, reboot and other platform
   variants remain unqualified. Runners are for trusted workflows, not hostile
   jobs; GitHub-side deregistration remains manual.
-- General Blueprint omission/removal, resource-level latest-wins and same-Apply
-  Custom hook facts remain deferred. Use separate supported removal actions;
-  complete a Custom Attach before applying configuration that consumes its facts.
+- Blueprint Entry omission is implemented; omission of existing Services,
+  Zones, Attaches, Routes and persistent Volumes is rejected. Resource-level
+  latest-wins and same-Apply Custom hook facts remain unavailable. Use separate
+  supported removal actions; complete a Custom Attach before applying
+  configuration that consumes its facts.
 - Packaging checks do not establish fresh-install qualification on every supported
   OS/architecture or guarantee uninterrupted upgrades for every workload.
 - This is a single-host release, not a multi-host or high-availability platform.

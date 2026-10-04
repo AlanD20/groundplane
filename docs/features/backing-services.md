@@ -39,8 +39,11 @@ slug; the display name remains independent.
 
 The Controller publishes exactly one backing Project, one `main` Environment,
 one dedicated backing-owned Zone, one adapter Service, one adapter-defined data
-Volume for built-in database adapters, and one Agent Task. The Zone subnet must be canonical IPv4, inside the
-new Environment pool, and globally unreserved. A conflict commits none of the
+Volume for built-in database adapters, and one Agent Task. Managed PostgreSQL
+uses GP's release-pinned PostgreSQL 16 image, including its Backup/Restore helper;
+an update preloads a new image without replacing existing Backings. The Zone
+subnet must be canonical IPv4, inside the new Environment pool, and globally
+unreserved. A conflict commits none of the
 aggregate; protected replay returns the original ids and response.
 
 Start, Stop, and Destroy change only the adapter Service's runtime intent under
@@ -63,7 +66,8 @@ environment-variable representation. Results are declared string facts with
 sensitivity metadata, not text scraped from diagnostic logs.
 
 Custom hooks are optional: `attach`, `detach`, `before-stop`, and `after-start`.
-Restart uses before-stop followed by after-start. These belong to GP-requested
+Use Stop followed by Start when restarting a Backing Service; there is no
+standalone Restart action. These hooks belong to GP-requested
 operations, not autonomous container restarts or host boot. An omitted hook is
 a no-op. A hook failure blocks its operation. The operator owns command
 correctness and idempotency; GP owns targeting, time bounds, recording, and
@@ -180,6 +184,11 @@ credential-bearing URL facts remain masked until explicit reveal. Plaintext
 facts must not enter Attach primaries, Tasks, Activity, list responses, or
 desired-state projections.
 
+Use `groundplane attach fact api-db pg16_HOST` to read one ready fact, or
+`--grant <attach>` to select a granted fact set. Replace the Attach and key
+with your own. This explicitly reveals the selected value, including confidential
+facts; keep its output out of logs and public artifacts.
+
 ### Adapter behavior and Valkey authentication
 
 The accepted managed create keys are `postgres:16` and `valkey:9`. Adapter
@@ -221,7 +230,9 @@ generic Custom or Valkey access controls.
 Valkey Backup/Restore has no accepted safe per-Attach artifact and restore
 contract. A live data-directory archive is not a substitute; unsupported requests
 fail with `strategy.not_implemented`. Custom has no managed Backup support.
-Backup/Restore work is currently deferred.
+PostgreSQL credential-owning Attaches can be selected by a consumer Environment's
+Backup Policy. See [Backups](backups.md) for implemented capture/Restore and its
+remaining qualification limits.
 
 [Backing-service provisioning](../decisions/backing-service-provisioning.md)
 explains why credential ownership, network edges and hook results are separate.

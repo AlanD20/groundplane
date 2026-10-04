@@ -106,7 +106,9 @@ promise complete in-process zeroization of copies held by SDK or TLS internals.
 
 The S3 adapter uses the declared endpoint and credentials, not ambient host
 credentials or proxy settings. Connector CRUD does not qualify a provider or
-prove that Backup/Restore works. Those workflows remain incomplete and deferred.
+prove that Backup/Restore works. Config, Volume and PostgreSQL capture/Restore
+are implemented; [Backups](backups.md) describes their operation and remaining
+qualification limits.
 
 [Storage and idempotency decisions](../decisions/storage-and-idempotency.md)
 explain Secret ownership and resolution. [Backup recovery](../decisions/backup-recovery.md)

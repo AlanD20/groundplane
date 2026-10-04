@@ -70,6 +70,12 @@ by recoverable Tasks.
 
 ## Safety and design
 
+Config Backup captures the complete Entry set and selected values. Config Restore
+replaces that set and updates managed files without restarting running Services;
+their already-loaded environment changes on the next Deploy. Volume Restore is
+different: it overwrites the selected Volume and temporarily stops its consumers.
+See [Backups](backups.md#restore-and-downtime) before either operation.
+
 File operations use bounded, root-relative paths and exact ownership. A lost
 acknowledgement does not authorize another destructive operation. Metadata-only
 changes do not acknowledge unrelated file or runtime state.

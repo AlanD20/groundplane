@@ -30,7 +30,7 @@ The [changelog](../CHANGELOG.md) records release changes, not production readine
 | How do I store credentials and select object storage? | [Secrets and Connectors](features/secrets-and-connectors.md) |
 | How do setup and migration hooks run? | [Scripts](features/setup-scripts.md) |
 | How do I follow work, retry, abort or read logs? | [Tasks and logs](features/tasks-and-logs.md) |
-| What are the backup and restore limits? | [Backups](features/backups.md) |
+| How do I run backups, select Recovery Points and restore data? | [Backups](features/backups.md) |
 | How are GitHub Runners isolated? | [Runners](features/runners.md) |
 | What must an update preserve? | [Update safety](features/upgrade-safety.md) |
 

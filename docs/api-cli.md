@@ -96,7 +96,8 @@ groundplane service list --env env_01J00000000000000000000000 --id --output json
 ```
 
 Some commands already take ids, including Task actions, Route detail actions
-and Component detail actions. Follow each command's help rather than assuming
+and Component detail actions. Backup Restore takes a stable source id (`spt_…`),
+not an Attach name or Volume slug. Follow each command's help rather than assuming
 every positional argument is a slug. Secret commands use Project scope, or
 explicit `--platform`; there is no Environment Secret scope.
 
@@ -169,8 +170,10 @@ groundplane secret show DATABASE_PASSWORD
 
 Secret creation reads a file or stdin; plaintext is not accepted as an argv
 value. Ordinary Secret and Attach fact reads omit or mask confidential values.
-Explicit reveal uses the Console and resource-specific API; there is no CLI
-reveal command. A masked value is not a replacement credential. See
+Reusable Secret reveal uses the Console or Secret API and has no CLI command.
+Attach facts also have an explicit CLI read, `groundplane attach fact <attach> <key>`;
+it writes the selected value, so treat its output as confidential. A masked value
+is not a replacement credential. See
 [Secrets and Connectors](features/secrets-and-connectors.md).
 
 ### Automate CLI output
@@ -179,6 +182,8 @@ Use `--output json` or `--output yaml` to retain structured responses, including
 `items` and `next_cursor` on paginated lists. Table output is for interactive
 reading. Blueprint Show writes YAML directly and rejects an explicit `--output`;
 Task Events writes one JSON event per line; workload logs write log lines.
+Backup key export writes the private identity directly; use its `--file` option
+instead of global `--output`. See [backup key handling](features/backups.md#encryption-keys).
 
 Exit 0 means the CLI request succeeded, including acceptance of asynchronous
 work. A downstream pipe closing early also exits 0; it does not prove complete
@@ -258,11 +263,11 @@ execution attempt after failure.
 
 The CLI generates keys automatically. Most commands have no operator-supplied
 replay key, so rerunning them is a new request. Blueprint Apply exposes the
-recovery flags in its guide; Image Fetch and Remove expose `--idempotency-key`.
-Backup Restore's `--idempotency-key` is part of the unfinished recovery surface;
-its API/client integration is incomplete. Do not use it as an available recovery
-procedure. Use the API when automation needs explicit replay control for an
-implemented operation.
+recovery flags in its guide; Image Fetch, Image Remove and Backup Restore expose
+`--idempotency-key`. Supply and retain that key before Restore when you need to
+resolve uncertain acceptance. See [Restore](features/backups.md#restore-and-downtime)
+for source selection, overwrite, downtime and Retry restrictions. Use the API
+when automation needs explicit replay control for other implemented operations.
 
 ## Blueprint requests
 

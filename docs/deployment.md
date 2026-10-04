@@ -50,8 +50,11 @@ archive download, not package-manager or runtime-registry access.
 
 Bootstrap provisions Docker/Compose and the loopback registry prerequisites,
 installs Controller/CLI and the native recovery guard, creates the age identity,
-configures the pinned Agent/Runner images and enrolls the Agent. No Go or Node
-toolchain is installed on the host. Python, curl and CA certificates are installed
+configures the pinned Agent/Runner images, preloads GP's managed PostgreSQL 16
+image and enrolls the Agent. The PostgreSQL image includes GP's bounded capture
+and restore helper; a newly created managed PostgreSQL Backing uses the exact
+release-selected image. No Go or Node toolchain is installed on the host.
+Python, curl and CA certificates are installed
 when needed. A partial or mixed Docker installation is refused, not replaced.
 
 The unauthenticated Controller listens on loopback by default. To expose it on a
@@ -153,6 +156,13 @@ or global Docker login is required for that registry.
 Updating both runs the guarded Controller update first, preserving the Agent,
 then its independent update. A failed second operation does not undo a completed
 Controller update. Inspect each Task's result.
+
+Controller installation or staging also preloads the selected managed PostgreSQL
+image. It does not replace an existing Backing's running database or change its
+retained image selection. Agent-only updates do not select a new database image.
+Source installation builds that PostgreSQL image locally and publishes it to the
+host's managed registry before building the Controller; allow space and memory
+for that build as well as the Controller, Console, Agent and fresh-install Runner.
 
 ## Updates, staging and repeat runs
 

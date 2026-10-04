@@ -10,12 +10,20 @@ is reported separately from both.
 - **Deploy** applies the selected Service's configuration and image using the
   chosen strategy. Explicit selection also permits a configured-only Service
   whose Compose profile was not enabled; it does not start other profile members.
-- **Start**, **Stop** and **Restart** operate on the whole logical workload set.
+- **Start** and **Stop** operate on the whole logical workload set.
   Stopped intent must survive unrelated configuration changes.
 - **Destroy** removes runtime, not the Service's configuration or persistent data.
 - **Remove** checks dependencies and performs its own cleanup Task. It leaves the
   Service visible until cleanup succeeds and does not delete Volumes or Release
   history. Resolve Route, Attach, group and other reported references first.
+
+Start, Stop and Destroy use the configuration GP last acknowledged for that
+workload, including a workload first started through Blueprint Apply. Pending
+Service edits are not deployed by these actions; use Deploy to apply them.
+A Service without an acknowledged runtime can record running intent through
+Start without creating containers. Deploy or Blueprint Apply creates its first
+runtime. There is no standalone Restart action; the `restart` configuration
+field controls Docker's automatic restart policy.
 
 ## Selecting an image
 

@@ -676,8 +676,10 @@ embedded in Component configuration.
 
 ### `x-gp-backup`
 
-**Backup/Restore is not operationally complete or qualified.** This
-section defines policy input, not a qualified data-recovery procedure.
+Config, Volume and PostgreSQL capture/Restore are implemented. **Full recovery
+qualification remains incomplete.** This section defines policy input;
+[Backups](features/backups.md) explains how to run it, select Recovery Points
+and handle restore failures.
 
 Backup policy is Environment desired state, not Compose topology:
 
