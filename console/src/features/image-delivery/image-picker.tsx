@@ -3,14 +3,17 @@ import { RefreshCw } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Button } from '@/components/ui/button'
-import { imageReferences } from './api'
+import { imageReferences, type HostImage } from './api'
 import { useImageInventory } from './use-image-inventory'
 
 // Authored input remains editable even when Docker cannot be observed. Saving
 // a Service is not Deploy admission; only the backend can prove availability.
-export function ImagePicker({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+export function ImagePicker({ id, value, onChange, referencesForImage = imageReferences }: {
+  id: string; value: string; onChange: (value: string) => void;
+  referencesForImage?: (image: HostImage) => string[];
+}) {
   const { inventory, loading, error, refresh } = useImageInventory()
-  const references = [...new Set(inventory?.images.flatMap(imageReferences) ?? [])].sort()
+  const references = [...new Set(inventory?.images.flatMap(referencesForImage) ?? [])].sort()
   return <div className="flex min-w-0 flex-col gap-2">
     <Input id={id} value={value} onChange={event => onChange(event.target.value)} placeholder="nginx:latest or a pinned registry reference" />
     <div className="flex min-w-0 gap-2">

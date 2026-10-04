@@ -4,6 +4,8 @@ import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ImagePicker } from "@/features/image-delivery/image-picker";
+import { listImages } from "@/features/image-delivery/api";
+import { postgresImageReferences, postgresUpdateReference } from "./postgres-images";
 import { useStore } from "@/lib/store";
 import type { Environment, Service } from "@/lib/types";
 
@@ -23,12 +25,13 @@ export function PostgresImageUpdate({ env, service }: { env: Environment; servic
       startLabel="Save and deploy" startDisabled={!image.trim()} steps={[]}
       review={<div className="space-y-3">
         <Label htmlFor="postgres-update-image">Upstream image</Label>
-        <ImagePicker id="postgres-update-image" value={image} onChange={setImage} />
+        <ImagePicker id="postgres-update-image" value={image} onChange={setImage} referencesForImage={postgresImageReferences} />
         <p className="text-sm text-muted-foreground">Fetch the image on Host → Images first. If Deploy fails, the image choice remains saved and the candidate stays in place. Inspect the Task before retrying or selecting another PostgreSQL 16 image.</p>
       </div>}
       onDispatch={async () => {
-        await store.updateService(env.id, service.id, { ...service, image: image.trim(), strategy: "recreate", onFailure: "leave_active" });
-        return store.commitDeploy(env.id, service.name, image.trim(), "recreate", "leave_active");
+        const selected = postgresUpdateReference(image.trim(), (await listImages()).images);
+        await store.updateService(env.id, service.id, { ...service, image: selected, strategy: "recreate", onFailure: "leave_active" });
+        return store.commitDeploy(env.id, service.name, selected, "recreate", "leave_active");
       }}
       onSettled={async () => { await Promise.all([store.refreshEnvironmentServices(env.id), store.refreshEnvironmentReleases(env.id)]); }}
     />}

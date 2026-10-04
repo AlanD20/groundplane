@@ -75,16 +75,21 @@ alias and selected backup tools. Existing connections are interrupted during
 the restart; completion requires the selected runtime to pass its checks.
 
 Fetch the selected upstream patch on **Host → Images** before Deploy; Deploy
-does not download missing images. The equivalent CLI operations are Service Edit
-followed by Service Deploy:
+does not download missing images. The Console pairs the completed Fetch's patch
+tag with its downloaded digest. CLI/API callers supply that same combined
+reference, for example `postgres:16.13-alpine@sha256:…`, as `POSTGRES16_IMAGE`
+below. Copy the digest from the completed Fetch in Images, not from a later
+registry lookup. The equivalent CLI operations are Service Edit followed by
+Service Deploy:
 
 ```sh
-groundplane service edit SERVICE_ID --id --image postgres:16-alpine --on-failure leave_active
-groundplane service deploy SERVICE_ID --id --image postgres:16-alpine --strategy recreate --on-failure leave_active
+groundplane service edit SERVICE_ID --id --image "$POSTGRES16_IMAGE" --on-failure leave_active
+groundplane service deploy SERVICE_ID --id --image "$POSTGRES16_IMAGE" --strategy recreate --on-failure leave_active
 ```
 
 For automation, use `PATCH /services/{id}` and `POST /services/{id}/deploy`.
-Use a concrete patch tag or digest to select reproducible bytes. The first image
+The family tag selects PostgreSQL 16 Alpine; the digest selects exact bytes.
+The first image
 Deploy has no prior Deployment Release and requires `leave_active`; GP does not
 claim to have rolled it back. If Deploy fails, the saved image choice remains;
 inspect the Task and retry or explicitly select another supported image.
