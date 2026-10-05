@@ -65,7 +65,8 @@ export default function PlatformSecretsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Secrets"
-
+        eyebrow="Settings"
+        description="Reusable encrypted inputs. Values are loaded only after an explicit reveal."
         icon={<KeyRound />}
         actions={
           <Button onClick={() => setOpen(true)}>
@@ -77,11 +78,11 @@ export default function PlatformSecretsPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <ResourcePanel
-        title="Platform reusable Secrets"
+        title="Secret references"
         actions={
           <HelpHint>
-            Controller-managed metadata; plaintext is never retained in the
-            store
+            Platform-owned metadata. Plaintext is returned only by the explicit
+            reveal action and is never listed with these references.
           </HelpHint>
         }
       >
@@ -139,6 +140,8 @@ export default function PlatformSecretsPage() {
                   <Label htmlFor="s-value">Value</Label>
                   <Input
                     id="s-value"
+                    type="password"
+                    autoComplete="new-password"
                     value={value}
                     onChange={(event) => setValue(event.target.value)}
                     placeholder="••••"

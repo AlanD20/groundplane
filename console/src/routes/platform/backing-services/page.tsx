@@ -9,7 +9,11 @@ import { Select } from "@/components/ui/select";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import { SummaryStrip, SummaryItem } from "@/components/common/resource-panel";
+import {
+  ResourcePanel,
+  SummaryStrip,
+  SummaryItem,
+} from "@/components/common/resource-panel";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -122,7 +126,7 @@ export default function PlatformBackingServicesPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Backing services"
-        description="Shared databases and services for your projects."
+        description="Shared infrastructure with separate connections and credentials for each consumer."
         icon={<Database />}
         actions={
           <Button onClick={openCreate}>
@@ -174,17 +178,26 @@ export default function PlatformBackingServicesPage() {
               )}
             </SummaryItem>
             <SummaryItem label="Adapters">
-              {
-                new Set(
-                  visibleEnvironments.flatMap((e) =>
-                    e.services.map((s) => s.adapter),
+              {[
+                ...new Set(
+                  visibleEnvironments.flatMap((environment) =>
+                    environment.services.map(
+                      (service) =>
+                        store.adapters.find(
+                          (adapter) => adapter.key === service.adapter,
+                        )?.label ??
+                        service.adapter ??
+                        "Custom",
+                    ),
                   ),
-                ).size
-              }
+                ),
+              ].join(" · ") || "None"}
             </SummaryItem>
             <SummaryItem label="Ownership">Platform</SummaryItem>
           </SummaryStrip>
-          <BackingServicesTable now={observationRefresh.now} />
+          <ResourcePanel title="Shared instances">
+            <BackingServicesTable now={observationRefresh.now} />
+          </ResourcePanel>
         </div>
       )}
 

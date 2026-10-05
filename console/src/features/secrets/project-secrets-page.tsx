@@ -92,7 +92,8 @@ export default function ProjectSecretsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Secrets"
-
+        eyebrow={`Project · ${project.name}`}
+        description="Project-owned encrypted inputs and the platform references available as fallbacks."
         icon={<KeyRound />}
         meta={
           <MetaPill icon={<KeyRound />}>
@@ -109,7 +110,7 @@ export default function ProjectSecretsPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <ResourcePanel
-        title="Project Secrets"
+        title="Secret references"
         actions={
           <HelpHint>defined here or inherited from the platform scope</HelpHint>
         }
@@ -184,6 +185,8 @@ export default function ProjectSecretsPage() {
                   <Label htmlFor="ps-value">Value</Label>
                   <Input
                     id="ps-value"
+                    type="password"
+                    autoComplete="new-password"
                     value={value}
                     onChange={(event) => setValue(event.target.value)}
                     placeholder="••••"

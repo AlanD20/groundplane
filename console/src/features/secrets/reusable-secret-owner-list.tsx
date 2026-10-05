@@ -1,5 +1,5 @@
 import { EmptyState } from "@/components/common/empty-state";
-import { AdvancedDetails, HelpHint } from "@/components/common/resource-panel";
+import { HelpHint } from "@/components/common/resource-panel";
 import { ResourceTable } from "@/components/common/resource-table";
 import { RevealValue } from "@/components/common/reveal-value";
 import {
@@ -46,7 +46,7 @@ export function ReusableSecretOwnerList({
   const [confirmation, setConfirmation] = useState<ReusableSecret | null>(null);
   const [query, setQuery] = useState("");
   const matches = secrets.filter((secret) =>
-    `${secret.key} ${secret.kind}`
+    `${secret.key} ${secret.kind} ${secret.ref} ${scopeLabel}`
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   );
@@ -88,12 +88,18 @@ export function ReusableSecretOwnerList({
               <TableHeader>
                 <TableRow>
                   <TableSortHead sort={table} field="key">
-                    Secret
+                    Key
                   </TableSortHead>
-                  <TableSortHead sort={table} field="kind">
-                    Type
-                  </TableSortHead>
-                  <TableSortHead sort={table} field="updated">
+                  <TableHead className="hidden md:table-cell">Owner</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="hidden lg:table-cell">
+                    Reference
+                  </TableHead>
+                  <TableSortHead
+                    sort={table}
+                    field="updated"
+                    className="hidden sm:table-cell"
+                  >
                     Updated
                   </TableSortHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -103,14 +109,29 @@ export function ReusableSecretOwnerList({
                 {table.rows.map((secret) => (
                   <TableRow key={secret.id}>
                     <TableCell className="font-mono font-medium">
-                      {secret.key}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
+                      <span className="block">{secret.key}</span>
+                      <Badge
+                        variant="outline"
+                        className="mt-1 font-sans font-normal"
+                      >
                         {secret.kind === "file" ? "File" : "Variable"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+                      {scopeLabel}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="success">Stored</Badge>
+                    </TableCell>
+                    <TableCell className="hidden max-w-72 lg:table-cell">
+                      <code
+                        className="block truncate text-xs text-muted-foreground"
+                        title={secret.ref}
+                      >
+                        {secret.ref}
+                      </code>
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {formatTimestamp(secret.updatedAt, "Not reported")}
                     </TableCell>
                     <TableCell>
@@ -143,21 +164,6 @@ export function ReusableSecretOwnerList({
             )}
           </ResourceTable>
           <TablePagination table={table} label="Secrets" />
-          <AdvancedDetails title="Secret references">
-            <div className="space-y-2">
-              {table.rows.map((secret) => (
-                <div
-                  key={secret.id}
-                  className="grid min-w-0 gap-1 sm:grid-cols-2"
-                >
-                  <span>{secret.key}</span>
-                  <code className="break-all text-muted-foreground">
-                    {secret.ref}
-                  </code>
-                </div>
-              ))}
-            </div>
-          </AdvancedDetails>
         </div>
       )}
       {confirmation && onRemove && (

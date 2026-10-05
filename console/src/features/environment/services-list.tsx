@@ -1,6 +1,4 @@
-import { EmptyState } from "@/components/common/empty-state";
 import { ImageReference } from "@/components/common/image-reference";
-import { HelpHint } from "@/components/common/resource-panel";
 import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import {
   CollectionToolbar,
@@ -24,7 +22,7 @@ import { ServiceStateBadges } from "@/features/service/service-runtime-actions";
 import { useStore } from "@/lib/store";
 import type { Environment, Service } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Boxes, Plug, RefreshCw } from "lucide-react";
+import { Plug } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { ZoneSelection } from "./zone-map";
@@ -273,69 +271,5 @@ export function ServiceCard({
         </div>
       </article>
     </>
-  );
-}
-
-export function ServicesPanel({
-  env,
-  now,
-  refreshing,
-  onRefresh,
-  createAction,
-}: {
-  env: Environment;
-  now: number;
-  refreshing: boolean;
-  onRefresh: () => void;
-  createAction: React.ReactNode;
-}) {
-  const count = env.services.length;
-  return (
-    <section
-      aria-labelledby="environment-services-heading"
-      className="flex flex-col gap-4"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2
-            id="environment-services-heading"
-            className="flex items-center gap-2 text-sm font-semibold"
-          >
-            <Boxes className="size-4 text-muted-foreground" /> Services
-          </h2>
-          <HelpHint label="About Service configuration">
-            Saving configuration does not deploy it. The runtime report shows
-            what the Agent currently observes.
-          </HelpHint>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={refreshing}
-            onClick={onRefresh}
-          >
-            <RefreshCw
-              className={cn("size-3.5", refreshing && "animate-spin")}
-            />
-            {refreshing ? "Refreshing runtime" : "Refresh runtime"}
-          </Button>
-          <Badge variant="outline" className="font-mono">
-            {count} {count === 1 ? "service" : "services"}
-          </Badge>
-          {createAction}
-        </div>
-      </div>
-      {count === 0 ? (
-        <EmptyState
-          icon={<Boxes />}
-          title="No services yet"
-          description="Add a service to start building this environment's workload."
-          action={createAction}
-        />
-      ) : (
-        <ServicesList env={env} now={now} />
-      )}
-    </section>
   );
 }

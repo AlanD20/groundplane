@@ -3,28 +3,14 @@
 import { HelpHint, ResourcePanel } from "@/components/common/resource-panel";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { DNSProtectedRemoval } from "@/features/platform-component/dns-protected-removal";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
 import type { Environment, Service } from "@/lib/types";
 import { Ban, CirclePlay, CircleStop, Trash2 } from "lucide-react";
-import {
-  currentServiceObservation,
-  replicaTotal,
-  type ServiceObservationState,
-} from "./service-observation";
+import { currentServiceObservation, replicaTotal } from "./service-observation";
 
 export type ServiceOperation = "start" | "stop" | "destroy" | "remove";
-
-function observationBadgeVariant(
-  state: ServiceObservationState,
-): "success" | "warning" | "danger" | "muted" | "primary" {
-  if (state === "healthy") return "success";
-  if (state === "failed") return "danger";
-  if (state === "degraded" || state === "starting") return "warning";
-  if (state === "running") return "primary";
-  return "muted";
-}
 
 export function ServiceStateBadges({
   service,
@@ -38,15 +24,16 @@ export function ServiceStateBadges({
   const observation = currentServiceObservation(service.observation, now);
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <Badge
-        variant={observationBadgeVariant(observation.state)}
+      <StatusBadge
+        status={observation.state}
         className={compact ? "text-[10px]" : ""}
-      >
-        {observation.state === "running"
-          ? "Running · no healthcheck"
-          : observation.state.charAt(0).toUpperCase() +
-            observation.state.slice(1)}
-      </Badge>
+        label={
+          observation.state === "running"
+            ? "Running · no healthcheck"
+            : observation.state.charAt(0).toUpperCase() +
+              observation.state.slice(1)
+        }
+      />
       {observation.state !== "unavailable" && (
         <span className="text-[11px] text-muted-foreground">
           {replicaTotal(observation.replicas)}/{observation.expectedReplicas}{" "}

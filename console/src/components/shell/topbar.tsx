@@ -180,7 +180,7 @@ function attachOptions(
           ...c,
           options: (environment?.services ?? []).map((service) => ({
             label: service.name,
-            href: `${pathname}?view=services&panel=overview&service=${service.id}`,
+            href: `${pathname}?view=overview&service=${service.id}`,
           })),
         };
       }

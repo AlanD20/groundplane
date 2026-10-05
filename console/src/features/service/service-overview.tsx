@@ -6,166 +6,255 @@ import {
   SummaryItem,
   SummaryStrip,
 } from "@/components/common/resource-panel";
+import { Button } from "@/components/ui/button";
+import { formatTimestamp } from "@/lib/format-timestamp";
+import { useStore } from "@/lib/store";
 import type { Environment, Service } from "@/lib/types";
+import {
+  Boxes,
+  ChevronRight,
+  Database,
+  ExternalLink,
+  HardDrive,
+  Network,
+  Route,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { currentServiceObservation, replicaTotal } from "./service-observation";
 import { ServiceContainers } from "./service-containers";
+
+type ConnectedResource = {
+  key: string;
+  icon: ReactNode;
+  name: string;
+  kind: string;
+  href?: string;
+};
 
 export function ServiceOverview({
   service,
   env,
   now = Date.now(),
+  onOpenLogs,
+  onOpenConfiguration,
 }: {
   service: Service;
   env: Environment;
   now?: number;
+  onOpenLogs?: () => void;
+  onOpenConfiguration?: () => void;
 }) {
+  const store = useStore();
   const observation = currentServiceObservation(service.observation, now);
-  const release =
+  const releases = service.releaseLedger ?? [];
+  const servingRelease =
     observation.state === "unavailable"
       ? undefined
-      : service.releaseLedger?.find(
-          (release) => release.id === observation.servingReleaseId,
-        );
-  const counts =
+      : releases.find((release) => release.id === observation.servingReleaseId);
+  const latestRelease = releases.reduce<(typeof releases)[number] | undefined>(
+    (latest, release) =>
+      !latest || Date.parse(release.when) > Date.parse(latest.when)
+        ? release
+        : latest,
+    undefined,
+  );
+  const presentedRelease =
+    servingRelease ??
+    releases.find((release) => release.status === "active") ??
+    latestRelease;
+  const totalContainers =
     observation.state === "unavailable"
-      ? []
-      : ([
-          ["Healthy", observation.replicas.healthy],
-          ["Running without healthcheck", observation.replicas.running],
-          ["Starting", observation.replicas.starting],
-          ["Unhealthy", observation.replicas.unhealthy],
-          ["Changing", observation.replicas.transitional],
-          ["Stopped", observation.replicas.stopped],
-          ["Failed", observation.replicas.failed],
-        ] as const);
+      ? undefined
+      : replicaTotal(observation.replicas);
+  const zoneNames = service.zones.map(
+    (ref) =>
+      env.zones.find((zone) => zone.id === ref || zone.name === ref)?.name ??
+      ref,
+  );
+  const connected: ConnectedResource[] = [
+    ...zoneNames.map((name) => ({
+      key: `zone-${name}`,
+      icon: <Network />,
+      name,
+      kind: "Network Zone",
+    })),
+    ...env.attaches
+      .filter(
+        (attach) =>
+          attach.serviceId === service.id || attach.service === service.name,
+      )
+      .map((attach) => ({
+        key: `attach-${attach.id}`,
+        icon: <Database />,
+        name: attach.name,
+        kind:
+          store.getBackingProject(attach.projectId)?.name ??
+          "Backing connection",
+        href: `/platform/backing-services/${attach.projectId}`,
+      })),
+    ...service.mounts.map((mount, index) => ({
+      key: `mount-${index}-${mount.mount}`,
+      icon: <HardDrive />,
+      name:
+        mount.type === "volume"
+          ? (env.volumes.find(
+              (volume) =>
+                volume.id === mount.volume || volume.slug === mount.volume,
+            )?.slug ?? mount.volume)
+          : mount.file,
+      kind: `${mount.type === "volume" ? "Persistent Volume" : "File"} · ${mount.mount}`,
+    })),
+    ...env.routes
+      .filter((route) => route.targetServiceId === service.id)
+      .map((route) => ({
+        key: `route-${route.id}`,
+        icon: <Route />,
+        name: `${route.host}${route.path}`,
+        kind: "HTTP Route",
+      })),
+  ];
+  const healthcheckSummary = !service.healthcheck
+    ? "Not configured"
+    : observation.state === "healthy"
+      ? "Passing"
+      : observation.state === "unavailable"
+        ? "Not reported"
+        : observation.state === "stopped" || observation.state === "absent"
+          ? "Not running"
+          : observation.state;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <section className="flex min-w-0 flex-col gap-4 rounded-xl border border-border bg-card p-5 sm:flex-row sm:items-center">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent text-primary">
+          <Boxes className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            {service.runtimeIntent === "stopped" ||
+            service.runtimeIntent === "absent"
+              ? "Last deployed image"
+              : "Current deployment"}
+          </p>
+          <h2 className="mt-1 min-w-0 font-semibold [&_span]:text-base">
+            <ImageReference
+              value={
+                presentedRelease?.tag ||
+                presentedRelease?.digest ||
+                service.image
+              }
+            />
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {presentedRelease
+              ? `${presentedRelease.status === "active" ? "Active Release" : "Latest Release"} · ${formatTimestamp(presentedRelease.when, "time unavailable")}`
+              : "No serving Release has been reported."}
+          </p>
+        </div>
+        {presentedRelease && (
+          <span className="shrink-0 rounded-full bg-accent px-2.5 py-1 text-[10px] font-medium text-primary">
+            {presentedRelease.strategy}
+          </span>
+        )}
+      </section>
+
       <SummaryStrip>
         <SummaryItem label="Containers">
           {observation.state === "unavailable"
             ? "Not reported"
-            : `${replicaTotal(observation.replicas)} / ${observation.expectedReplicas}`}
+            : `${totalContainers} / ${observation.expectedReplicas}`}
+        </SummaryItem>
+        <SummaryItem label="Healthcheck">{healthcheckSummary}</SummaryItem>
+        <SummaryItem
+          label={zoneNames.length === 1 ? "Network Zone" : "Network Zones"}
+        >
+          {zoneNames.join(", ") || "None"}
         </SummaryItem>
         <SummaryItem label="Runtime intent">
           {service.runtimeIntent}
         </SummaryItem>
-        <SummaryItem label="Memory limit">
-          {service.resources.mem || "Not set"}
-        </SummaryItem>
-        <SummaryItem label="CPU limit">
-          {service.resources.cpus || "Not set"}
-        </SummaryItem>
       </SummaryStrip>
-      {observation.state === "unavailable" ? (
-        <p
-          role="status"
-          className="rounded-lg border border-border p-3 text-xs text-muted-foreground"
+
+      <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <ServiceContainers observation={observation} onOpenLogs={onOpenLogs} />
+        <ResourcePanel
+          title="Connected resources"
+          actions={
+            onOpenConfiguration ? (
+              <Button variant="link" size="sm" onClick={onOpenConfiguration}>
+                Manage <ExternalLink className="size-3.5" />
+              </Button>
+            ) : undefined
+          }
         >
-          {service.releaseLedger?.length === 0
-            ? "Not deployed yet. Choose an available image, then Deploy."
-            : "No current container report. Runtime state cannot be confirmed."}
-        </p>
-      ) : (
-        <div className="flex flex-wrap gap-3 text-xs">
-          {counts
-            .filter(([, count]) => count > 0)
-            .map(([label, count]) => (
-              <span key={label}>
-                {count} {label.toLowerCase()}
-              </span>
-            ))}
-          {replicaTotal(observation.replicas) === 0 && (
-            <span className="text-muted-foreground">
-              No containers observed
-            </span>
+          {connected.length ? (
+            <div className="divide-y divide-border rounded-xl border border-border">
+              {connected.map((resource) => {
+                const row = (
+                  <>
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-primary [&_svg]:size-4">
+                      {resource.icon}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {resource.name}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                        {resource.kind}
+                      </span>
+                    </span>
+                    {resource.href && (
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                    )}
+                  </>
+                );
+                return resource.href ? (
+                  <Link
+                    key={resource.key}
+                    to={resource.href}
+                    className="flex min-w-0 items-center gap-3 p-3 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                  >
+                    {row}
+                  </Link>
+                ) : (
+                  <div
+                    key={resource.key}
+                    className="flex min-w-0 items-center gap-3 p-3"
+                  >
+                    {row}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p role="status" className="text-sm text-muted-foreground">
+              No Zones, backing connections, mounts or Routes are configured.
+            </p>
           )}
-        </div>
-      )}
-      <ServiceContainers observation={observation} />
-      <ResourcePanel
-        title={service.adapter ? "Runtime configuration" : "Deployment"}
-      >
+        </ResourcePanel>
+      </div>
+
+      <AdvancedDetails>
+        <DetailRow label="Service ID" value={service.id} mono />
         <DetailRow
           label="Configured image"
           value={<ImageReference value={service.image} />}
         />
-        {!service.adapter && (
-          <DetailRow
-            label="Serving Release"
-            value={
-              release ? (
-                <ImageReference
-                  value={release.tag || release.digest || release.id}
-                />
-              ) : (
-                "Not reported"
-              )
-            }
-          />
-        )}
         <DetailRow label="Strategy" value={service.strategy} />
         <DetailRow
-          label="Healthcheck"
-          value={
-            service.healthcheck
-              ? `${service.healthcheck.kind}: ${service.healthcheck.target}`
-              : "Not configured"
-          }
+          label="Memory / CPU limit"
+          value={`${service.resources.mem || "Not set"} · ${service.resources.cpus || "Not set"}`}
         />
-      </ResourcePanel>
-      <ResourcePanel title="Connectivity & storage">
-        <DetailRow
-          label="Zones"
-          value={
-            service.zones
-              .map(
-                (ref) =>
-                  env.zones.find((zone) => zone.id === ref || zone.name === ref)
-                    ?.name ?? ref,
-              )
-              .join(", ") || "None configured"
-          }
-        />
-        <DetailRow
-          label="Exposed ports"
-          value={service.expose.join(", ") || "None"}
-        />
-        <DetailRow
-          label="Aliases"
-          value={service.aliases.join(", ") || "None"}
-        />
-        <DetailRow
-          label="Mounts"
-          value={
-            service.mounts
-              .map(
-                (mount) =>
-                  `${mount.type === "volume" ? (env.volumes.find((volume) => volume.id === mount.volume || volume.slug === mount.volume)?.slug ?? mount.volume) : mount.file} → ${mount.mount}`,
-              )
-              .join(", ") || "None"
-          }
-        />
-        <DetailRow
-          label="Routes"
-          value={
-            env.routes
-              .filter((route) => route.targetServiceId === service.id)
-              .map((route) => `${route.host}${route.path}`)
-              .join(", ") || "None"
-          }
-        />
-      </ResourcePanel>
-      <AdvancedDetails>
-        <DetailRow label="Service ID" value={service.id} mono />
         {observation.state !== "unavailable" && (
           <>
             <DetailRow
               label="Reported"
-              value={new Date(observation.observedAt).toLocaleString()}
+              value={formatTimestamp(observation.observedAt, "Not reported")}
             />
             <DetailRow
               label="Report expires"
-              value={new Date(observation.expiresAt).toLocaleString()}
+              value={formatTimestamp(observation.expiresAt, "Not reported")}
             />
             {observation.servingReleaseId && (
               <DetailRow

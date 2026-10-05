@@ -15,8 +15,8 @@ export function ServiceFormDialog({ env }: { env: Environment }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus className="size-3.5" /> Add Service
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        <Plus className="size-3.5" /> Service
       </Button>
       <Drawer open={open} onOpenChange={setOpen}>
         {open && (

@@ -1,5 +1,13 @@
 import { HelpHint, ResourcePanel } from "@/components/common/resource-panel";
 import { TaskJournalItem } from "@/components/common/task-journal-item";
+import { ResourceTable } from "@/components/common/resource-table";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
@@ -191,16 +199,33 @@ export function TaskList({
           No recorded Tasks match these filters.
         </p>
       )}
-      <div className="divide-y divide-border">
-        {visible.map((task) => (
-          <TaskJournalItem
-            key={task.id}
-            entry={task}
-            scope={scope}
-            surface={surface}
-          />
-        ))}
-      </div>
+      <ResourceTable>
+        <Table aria-label={title}>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Task</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Resource</TableHead>
+              <TableHead>Scope</TableHead>
+              <TableHead>When · newest first</TableHead>
+              <TableHead>
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visible.map((task) => (
+              <TaskJournalItem
+                key={task.id}
+                entry={task}
+                scope={scope}
+                surface={surface}
+                tableRow
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </ResourceTable>
       <TaskPagination scope={scope} surface={surface} />
     </ResourcePanel>
   );

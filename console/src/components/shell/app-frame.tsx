@@ -178,7 +178,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               <ThemeToggle />
             </div>
           </div>
-          <main className="mx-auto w-full max-w-[1800px] flex-1 px-4 pb-12 pt-7 sm:px-6 lg:px-7 console-content">
+          <main className="mx-auto w-full max-w-[1580px] flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-7 console-content">
             <div className="console-page" key={pathname}>
               {children}
             </div>

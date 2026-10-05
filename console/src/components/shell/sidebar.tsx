@@ -263,7 +263,7 @@ export function Sidebar({
                           {e.services.map((s) => (
                             <Link
                               key={s.id}
-                              to={`${envBase}?view=services&panel=overview&service=${encodeURIComponent(s.id)}`}
+                              to={`${envBase}?view=overview&service=${encodeURIComponent(s.id)}`}
                               aria-current={
                                 search.get("service") === s.id
                                   ? "page"
@@ -281,7 +281,9 @@ export function Sidebar({
                           ))}
                           <div className="my-3 border-t border-border" />
                           {environmentSections
-                            .filter((s) => s.key !== "services")
+                            .filter(
+                              (s) => !["overview", "services"].includes(s.key),
+                            )
                             .map((section) => (
                               <Button
                                 key={section.key}

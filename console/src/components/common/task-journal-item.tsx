@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { TableCell } from "@/components/ui/table";
+import { ResourceRow } from "@/components/common/resource-table";
 
 import { ActivityIcon } from "@/components/common/activity-icon";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -23,10 +25,12 @@ export function TaskJournalItem({
   entry,
   scope,
   surface,
+  tableRow = false,
 }: {
   entry: ActivityEntry;
   scope: TaskJournalScope;
   surface: TaskJournalSurface;
+  tableRow?: boolean;
 }) {
   const store = useStore();
   const [open, setOpen] = useState(false);
@@ -58,32 +62,83 @@ export function TaskJournalItem({
 
   return (
     <>
-      <div className="flex w-full items-stretch rounded-md transition-colors hover:bg-primary/5 focus-within:bg-primary/5">
-        <Button
-          variant="ghost"
-          size="content"
-          type="button"
-          onClick={() => setOpen(true)}
-          className="min-w-0 flex-1 items-start justify-start gap-3 rounded-l-lg rounded-r-none p-3.5 text-left hover:bg-surface/40"
-          aria-label={`Inspect ${entry.title}, ${entry.status}, Task ${entry.id}`}
-          aria-haspopup="dialog"
-        >
-          {body}
-        </Button>
-        {destination && (
+      {tableRow ? (
+        <ResourceRow onOpen={() => setOpen(true)}>
+          <TableCell>
+            <Button
+              variant="ghost"
+              size="content"
+              className="justify-start gap-2 p-0 text-left"
+              onClick={() => setOpen(true)}
+              aria-label={`Inspect ${entry.title}, ${entry.status}, Task ${entry.id}`}
+              aria-haspopup="dialog"
+            >
+              <ActivityIcon type={entry.type} status={entry.status} />
+              <span className="min-w-0">
+                <strong className="block text-[11px] font-medium">
+                  {view.title}
+                </strong>
+                {entry.note && (
+                  <span className="mt-1 line-clamp-1 block max-w-80 break-all text-[10px] font-normal text-muted-foreground">
+                    {entry.note}
+                  </span>
+                )}
+              </span>
+            </Button>
+          </TableCell>
+          <TableCell>
+            <StatusBadge status={entry.status} />
+          </TableCell>
+          <TableCell className="max-w-64 break-words">
+            {destination ? (
+              <Link
+                to={destination.href}
+                className="text-primary hover:underline"
+              >
+                {view.resource}
+              </Link>
+            ) : (
+              view.resource
+            )}
+          </TableCell>
+          <TableCell className="text-muted-foreground">{view.scope}</TableCell>
+          <TableCell className="whitespace-nowrap text-muted-foreground">
+            {formatTimestamp(entry.createdAt ?? entry.ts, "Time unavailable")}
+          </TableCell>
+          <TableCell>
+            <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+              Inspect
+            </Button>
+          </TableCell>
+        </ResourceRow>
+      ) : (
+        <div className="flex w-full items-stretch rounded-md transition-colors hover:bg-primary/5 focus-within:bg-primary/5">
           <Button
-            variant="outline"
-            size="sm"
-            render={<Link to={destination.href} />}
-            nativeButton={false}
-            className="m-2 ml-0 self-center"
-            aria-label={`${destination.label} for Task ${entry.id}`}
-            title={destination.label}
+            variant="ghost"
+            size="content"
+            type="button"
+            onClick={() => setOpen(true)}
+            className="min-w-0 flex-1 items-start justify-start gap-3 rounded-l-lg rounded-r-none p-3.5 text-left hover:bg-surface/40"
+            aria-label={`Inspect ${entry.title}, ${entry.status}, Task ${entry.id}`}
+            aria-haspopup="dialog"
           >
-            <ArrowUpRight className="size-3.5" />
+            {body}
           </Button>
-        )}
-      </div>
+          {destination && (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link to={destination.href} />}
+              nativeButton={false}
+              className="m-2 ml-0 self-center"
+              aria-label={`${destination.label} for Task ${entry.id}`}
+              title={destination.label}
+            >
+              <ArrowUpRight className="size-3.5" />
+            </Button>
+          )}
+        </div>
+      )}
       {open && (
         <TaskDetailDrawer
           entry={entry}

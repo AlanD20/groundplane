@@ -8,20 +8,16 @@ import { FactsCard } from "@/features/attach/environment-facts";
 import { BackupsCard } from "@/features/backup/environment-backups";
 import { BlueprintState } from "@/features/blueprint/environment-blueprint-state";
 import { EnvVarsCard } from "@/features/entry/environment-entries";
-import { LogViewer } from "@/features/logs/log-viewer";
+import { LogViewer, LogStream } from "@/features/logs/log-viewer";
 import { ReleaseGroupsPanel } from "@/features/release-group/release-group-surface";
 import { DeployControls } from "@/features/release/environment-deploy-controls";
 import { ReleasesCard } from "@/features/release/environment-releases-card";
 import { ScriptsCard } from "@/features/script/scripts-card";
 import { ServiceFormDialog } from "@/features/service/environment-service-dialog";
-import {
-  environmentRuntimeHint,
-  environmentRuntimeState,
-} from "@/features/service/service-observation";
+import { environmentRuntimeState } from "@/features/service/service-observation";
 import { useVisibleServiceObservations } from "@/features/service/use-service-observation-refresh";
 import { TasksCard } from "@/features/task/environment-tasks-card";
 import { EnvironmentVolumeManager } from "@/features/volume/environment-volume-manager";
-import { formatTimestamp } from "@/lib/format-timestamp";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { ArrowLeft, Boxes, Layers, Network, Plug } from "lucide-react";
@@ -31,12 +27,13 @@ import { SettingsCard } from "./environment-settings";
 import { Topology } from "./network-topology";
 import { RouterCard } from "./router-card";
 import { RoutesCard } from "./routes-card";
-import { ServicesPanel } from "./services-list";
+import { ServicesList } from "./services-list";
 import {
   environmentNavigation,
   environmentSections,
 } from "./workspace-navigation";
-import { ConnectedEnvironment } from "./connected-environment";
+import { ConnectedServiceBoard } from "./connected-service-board";
+import { EnvironmentOverview } from "./environment-overview";
 import { ServiceWorkspace } from "./service-workspace";
 
 export default function EnvironmentPage() {
@@ -105,22 +102,10 @@ export default function EnvironmentPage() {
     />
   );
   const panels: Record<string, React.ReactNode> = {
-    overview: (
-      <ConnectedEnvironment
-        env={env}
-        now={observation.now}
-        createAction={<ServiceFormDialog env={env} />}
-      />
-    ),
-    services: (
-      <ServicesPanel
-        env={env}
-        now={observation.now}
-        refreshing={observation.refreshing}
-        onRefresh={observation.refreshNow}
-        createAction={<ServiceFormDialog env={env} />}
-      />
-    ),
+    overview: <EnvironmentOverview env={env} now={observation.now} />,
+    services: <ConnectedServiceBoard env={env} now={observation.now} />,
+    logs: <LogStream target={{ kind: "environment", id: env.id }} />,
+    "service-list": <ServicesList env={env} now={observation.now} />,
     zones: <Topology env={env} />,
     routes: <RoutesCard env={env} />,
     attaches: <AttachesCard env={env} />,
@@ -158,6 +143,7 @@ export default function EnvironmentPage() {
               setSearch((current) => {
                 const next = new URLSearchParams(current);
                 next.delete("service");
+                next.delete("serviceTab");
                 return next;
               })
             }
@@ -177,9 +163,10 @@ export default function EnvironmentPage() {
             />
           </span>
         }
-        description={`${project.name} application · ${environmentRuntimeHint(env.services, observation.now)}`}
+        eyebrow={`${params.tenant} / ${project.name} / Environment`}
         actions={
           <>
+            <ServiceFormDialog env={env} />
             <LogViewer
               target={{ kind: "environment", id: env.id }}
               label="Logs"
@@ -201,13 +188,12 @@ export default function EnvironmentPage() {
               <Plug className="size-3.5" />
               {env.routes.length} Routes
             </span>
-            <span>
-              Last deploy {formatTimestamp(env.lastDeployAt, "never")}
-            </span>
-            <StatusBadge
-              status={env.status}
-              label={`Provisioning ${env.provisioningState}`}
-            />
+            {env.provisioningState !== "ready" && (
+              <StatusBadge
+                status={env.status}
+                label={`Provisioning ${env.provisioningState}`}
+              />
+            )}
           </>
         }
       />
@@ -232,7 +218,11 @@ export default function EnvironmentPage() {
           value={section.key}
           onValueChange={(value) => setSearch({ view: String(value) })}
         >
-          <TabsList aria-label="Environment sections" className="mb-5">
+          <TabsList
+            aria-label="Environment sections"
+            variant="underline"
+            className="mb-6"
+          >
             {environmentSections.map((item) => (
               <TabsTab key={item.key} value={item.key}>
                 <item.icon />

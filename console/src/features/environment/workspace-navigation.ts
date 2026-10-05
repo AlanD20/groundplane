@@ -3,18 +3,26 @@ import {
   Boxes,
   FileCode2,
   Network,
+  Layers,
   Settings,
   type LucideIcon,
 } from "lucide-react";
 
 export const environmentSections = [
   {
+    key: "overview",
+    label: "Overview",
+    icon: Layers,
+    panels: [{ key: "overview", label: "Environment overview" }],
+  },
+  {
     key: "services",
     label: "Services",
     icon: Boxes,
     panels: [
-      { key: "overview", label: "Connected overview" },
-      { key: "services", label: "Service list" },
+      { key: "services", label: "Services" },
+      { key: "logs", label: "Environment logs" },
+      { key: "service-list", label: "Service list" },
     ],
   },
   {

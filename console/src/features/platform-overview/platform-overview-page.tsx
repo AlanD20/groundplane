@@ -2,7 +2,7 @@
 
 import { ImageReference } from "@/components/common/image-reference";
 import { PageHeader } from "@/components/common/page-header";
-import { StatCard } from "@/components/common/stat-card";
+import { SummaryItem, SummaryStrip } from "@/components/common/resource-panel";
 import { StatusBadge, StatusDot } from "@/components/common/status-badge";
 import { TaskJournalItem } from "@/components/common/task-journal-item";
 import { Button } from "@/components/ui/button";
@@ -113,7 +113,7 @@ export default function PlatformOverviewPage() {
           <span className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
             <StatusDot status={platformHealth} />
             <span className="font-medium capitalize">{platformHealth}</span>
-            <span className="text-muted-foreground">provisioning</span>
+            <span className="text-muted-foreground">overall</span>
           </span>
         }
       />
@@ -125,47 +125,38 @@ export default function PlatformOverviewPage() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          icon={<Boxes />}
-          label="Tenants"
-          value={tenants.length}
-          hint={`${tenantProjects.length} projects`}
-        />
-        <StatCard
-          icon={<Layers />}
-          label="Environments"
-          value={allEnvs.length}
-          hint="across tenant projects"
-        />
-        <StatCard
-          icon={<Cpu />}
-          label="Services"
-          value={totalServices}
-          hint={
-            totalServices === 0
-              ? "No Service observations loaded"
+      <SummaryStrip>
+        <SummaryItem label="Tenants">
+          {tenants.length}
+          <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+            {tenantProjects.length} projects
+          </span>
+        </SummaryItem>
+        <SummaryItem label="Environments">
+          {allEnvs.length}
+          <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+            across tenant projects
+          </span>
+        </SummaryItem>
+        <SummaryItem label="Services">
+          {totalServices}
+          <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+            {totalServices === 0
+              ? "No observations loaded"
               : unavailableServices
-                ? `${unavailableServices} runtime state${unavailableServices === 1 ? "" : "s"} unavailable`
+                ? `${unavailableServices} unavailable`
                 : incompleteServices
-                  ? `${incompleteServices} incomplete runtime${incompleteServices === 1 ? "" : "s"}`
-                  : "all healthy or running unchecked"
-          }
-          tone={
-            totalServices === 0
-              ? undefined
-              : incompleteServices || unavailableServices
-                ? "warning"
-                : "success"
-          }
-        />
-        <StatCard
-          icon={<Database />}
-          label="Backing services"
-          value={backingProjects.length}
-          hint="attachable datastores"
-        />
-      </div>
+                  ? `${incompleteServices} need attention`
+                  : "Healthy or running"}
+          </span>
+        </SummaryItem>
+        <SummaryItem label="Backing services">
+          {backingProjects.length}
+          <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+            shared instances
+          </span>
+        </SummaryItem>
+      </SummaryStrip>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">

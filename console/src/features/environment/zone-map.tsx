@@ -1,8 +1,23 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { Environment, Zone } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ServicesList } from "./services-list";
+import { ResourcePanel } from "@/components/common/resource-panel";
+import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
+import {
+  TablePagination,
+  TableSortHead,
+  useTableView,
+} from "@/components/common/table-controls";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Boxes, Network } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 export type ZoneSelection = {
@@ -21,161 +36,199 @@ export function ZoneMap({
   renderZone: (zone: Zone, selection: ZoneSelection) => ReactNode;
   renderUnzoned: (selection: ZoneSelection) => ReactNode;
 }) {
-  const [view, setView] = useState<"map" | "list">("map");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedZone, setSelectedZone] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<string | null>(null);
   const [, setSearch] = useSearchParams();
-  const board = useRef<HTMLDivElement>(null);
-  const selected = env.services.find((service) => service.id === selectedId);
   const selection: ZoneSelection = {
-    selectedId: selected?.id ?? null,
-    onSelect: (id) => setSelectedId((current) => (current === id ? null : id)),
+    selectedId: selectedService,
+    onSelect: (id) =>
+      setSelectedService((current) => (current === id ? null : id)),
   };
-
-  function jump(id: string) {
-    const container = board.current;
-    const target = Array.from(container?.children ?? []).find(
-      (child) => child.getAttribute("data-zone-id") === id,
+  const members = (zone: Zone) =>
+    env.services.filter(
+      (s) => s.zones.includes(zone.name) || s.zones.includes(zone.id),
     );
-    if (container && target instanceof HTMLElement) {
-      target.scrollIntoView({
-        block: "nearest",
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
-      });
-      target.focus({ preventScroll: true });
-    }
-  }
-
+  const select = (id: string) => {
+    setSelectedZone((current) => (current === id ? null : id));
+    setSelectedService(null);
+  };
+  const table = useTableView(
+    env.zones,
+    {
+      name: (z) => z.name,
+      subnet: (z) => z.subnet,
+      access: (z) => (z.internal ? "Internal" : "Outbound"),
+      services: (z) => members(z).length,
+    },
+    "name",
+    "asc",
+    env.id,
+  );
+  const zone = env.zones.find((z) => z.id === selectedZone);
+  const unzoned = env.services.filter((s) => !s.zones.length);
   return (
-    <section
-      className="flex min-w-0 flex-col gap-4"
-      aria-label="Network topology"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Network zones</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {env.services.length} services, {env.zones.length} zones. Repeated
-            cards represent the same Service.
-          </p>
+    <section className="space-y-5" aria-label="Network topology">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
+        <Network className="size-5 text-primary" />
+        <div className="min-w-0">
+          <strong className="block text-sm">{env.networkPool}</strong>
+          <span className="text-[11px] text-muted-foreground">
+            Environment network pool
+          </span>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {actions}
-          <div className="flex rounded-lg border border-border bg-card p-1">
-            <Button
-              variant={view === "map" ? "secondary" : "ghost"}
-              size="sm"
-              aria-pressed={view === "map"}
-              onClick={() => setView("map")}
-            >
-              Map
-            </Button>
-            <Button
-              variant={view === "list" ? "secondary" : "ghost"}
-              size="sm"
-              aria-pressed={view === "list"}
-              onClick={() => setView("list")}
-            >
-              List
-            </Button>
-          </div>
-        </div>
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          {env.networkCapacity.allocatedAddresses} reserved ·{" "}
+          {env.networkCapacity.availableAddresses} available
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSearch({ view: "settings" })}
+        >
+          Edit pool
+        </Button>
       </div>
-      {view === "map" ? (
-        <>
-          <nav className="flex flex-wrap gap-1" aria-label="Jump to zone">
-            {env.zones.map((zone) => (
-              <Button
-                key={zone.id}
-                size="xs"
-                variant="ghost"
-                onClick={() => jump(zone.id)}
-              >
-                {zone.name}
-              </Button>
-            ))}
-            <Button size="xs" variant="ghost" onClick={() => jump("unzoned")}>
-              No zone
-            </Button>
-          </nav>
-          <div
-            ref={board}
-            tabIndex={0}
-            aria-label="Network zones"
-            className="grid items-start gap-4 xl:grid-cols-2 2xl:grid-cols-3"
-          >
-            {env.zones.map((zone) => (
-              <div
-                key={zone.id}
-                data-zone-id={zone.id}
-                tabIndex={-1}
-                className="min-w-0 rounded-xl"
-              >
-                {renderZone(zone, selection)}
-              </div>
-            ))}
-            <div
-              data-zone-id="unzoned"
-              tabIndex={-1}
-              className="min-w-0 rounded-xl"
+      <ResourcePanel
+        title={
+          <span className="flex items-center gap-2">
+            <Network className="size-4 text-primary" />
+            Zone topology
+          </span>
+        }
+        actions={actions}
+      >
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {env.zones.map((z) => (
+            <Button
+              key={z.id}
+              variant="outline"
+              size="content"
+              aria-pressed={selectedZone === z.id}
+              onClick={() => select(z.id)}
+              className={`flex-col items-start gap-2 rounded-lg p-4 text-left ${selectedZone === z.id ? "border-primary bg-accent" : selectedZone ? "opacity-60" : ""}`}
             >
-              {renderUnzoned(selection)}
-            </div>
-          </div>
-          <div
-            className="flex min-h-16 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 text-xs"
-            aria-live="polite"
-          >
-            {selected ? (
-              <>
-                <strong>{selected.name}</strong>
-                {selected.zones.map((zone) => (
-                  <Badge key={zone} variant="outline">
-                    {zone}
-                  </Badge>
-                ))}
-                {selected.zones.length === 0 && (
-                  <Badge variant="outline">No zone</Badge>
-                )}
-                <div className="ml-auto flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setSearch((current) => {
-                        const next = new URLSearchParams(current);
-                        next.set("service", selected.id);
-                        return next;
-                      })
-                    }
-                  >
-                    Service details
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setSelectedId(null)}
-                  >
-                    Clear
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <span className="text-muted-foreground">
-                Select a Service to highlight every zone it joins. Click again
-                to clear.
+              <span className="grid size-10 place-items-center rounded-lg bg-accent text-primary">
+                <Network className="size-5" />
               </span>
-            )}
+              <strong className="text-xs">{z.name}</strong>
+              <span className="font-mono text-[10px] font-normal text-muted-foreground">
+                {z.subnet}
+              </span>
+              <Badge variant="outline" className="text-[9px]">
+                {z.internal ? "Internal" : "Outbound allowed"}
+              </Badge>
+              <span className="mt-1 flex flex-wrap gap-1.5">
+                {members(z).length ? (
+                  members(z).map((s) => (
+                    <span
+                      key={s.id}
+                      className="flex items-center gap-1 text-[9px] font-normal text-muted-foreground"
+                    >
+                      <Boxes className="size-2.5" />
+                      {s.name}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[9px] font-normal text-muted-foreground">
+                    No Services assigned
+                  </span>
+                )}
+              </span>
+            </Button>
+          ))}
+          {!!unzoned.length && (
+            <Button
+              variant="outline"
+              size="content"
+              onClick={() => select("unzoned")}
+              aria-pressed={selectedZone === "unzoned"}
+              className="flex-col items-start gap-2 border-dashed p-4"
+            >
+              <Boxes className="size-5 text-muted-foreground" />
+              <strong className="text-xs">No Zone</strong>
+              <span className="text-[10px] font-normal text-muted-foreground">
+                {unzoned.length} unconnected Services
+              </span>
+            </Button>
+          )}
+        </div>
+        {selectedZone && (
+          <div className="space-y-3 border-y border-border py-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs">{zone?.name ?? "No Zone"}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => select(selectedZone)}
+              >
+                Clear selection
+              </Button>
+            </div>
+            {zone ? renderZone(zone, selection) : renderUnzoned(selection)}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Attach chips link to backing services. Network membership is not a
-            traffic measurement.
-          </p>
-        </>
-      ) : (
-        <ServicesList env={env} />
-      )}
+        )}
+        <ResourceTable>
+          <Table aria-label="Zones">
+            <TableHeader>
+              <TableRow>
+                <TableSortHead sort={table} field="name">
+                  Zone
+                </TableSortHead>
+                <TableSortHead sort={table} field="subnet">
+                  Subnet
+                </TableSortHead>
+                <TableSortHead sort={table} field="access">
+                  Access
+                </TableSortHead>
+                <TableSortHead sort={table} field="services">
+                  Services
+                </TableSortHead>
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {table.rows.map((z) => (
+                <ResourceRow key={z.id} onOpen={() => select(z.id)}>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="content"
+                      onClick={() => select(z.id)}
+                      className="gap-2 p-0 text-[11px]"
+                    >
+                      <Network className="size-3" />
+                      {z.name}
+                    </Button>
+                  </TableCell>
+                  <TableCell className="font-mono text-muted-foreground">
+                    {z.subnet}
+                  </TableCell>
+                  <TableCell>
+                    {z.internal ? "Internal" : "Outbound allowed"}
+                  </TableCell>
+                  <TableCell className="max-w-64 text-muted-foreground">
+                    {members(z)
+                      .map((s) => s.name)
+                      .join(", ") || "None"}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => select(z.id)}
+                    >
+                      Inspect
+                    </Button>
+                  </TableCell>
+                </ResourceRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ResourceTable>
+        <TablePagination table={table} label="Zones" />
+      </ResourcePanel>
     </section>
   );
 }

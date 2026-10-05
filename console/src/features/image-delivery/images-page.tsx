@@ -10,7 +10,7 @@ import {
 } from "@/components/common/table-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import {
   Table,
@@ -96,6 +96,7 @@ export default function ImagesPage() {
       </Link>
       <PageHeader
         title="Images"
+        description="Host Agent inventory, with every local tag grouped under its immutable image."
         icon={<Boxes />}
         actions={
           <>
@@ -120,15 +121,25 @@ export default function ImagesPage() {
           <SummaryItem label="In use by containers">
             {inventory.images.filter((i) => i.containers > 0).length}
           </SummaryItem>
-          <SummaryItem label="Protected">
-            {inventory.images.filter((i) => i.removal_blocked).length}
+          <SummaryItem label="No containers">
+            {inventory.images.filter((i) => i.containers === 0).length}
           </SummaryItem>
-          <SummaryItem label="Removable">
-            {inventory.images.filter((i) => !i.removal_blocked).length}
+          <SummaryItem label="Stored size">
+            {imageSize(
+              inventory.images.reduce(
+                (total, image) => total + image.size_bytes,
+                0,
+              ),
+            )}
           </SummaryItem>
         </SummaryStrip>
       )}
       <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Image inventory</h2>
+          </CardTitle>
+        </CardHeader>
         <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
           <CollectionToolbar
             query={search}

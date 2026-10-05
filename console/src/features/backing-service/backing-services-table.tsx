@@ -1,3 +1,4 @@
+import { ImageReference } from "@/components/common/image-reference";
 import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import { StatusBadge } from "@/components/common/status-badge";
 import {
@@ -58,8 +59,10 @@ export function BackingServicesTable({ now }: { now: number }) {
               <TableSortHead sort={table} field="adapter">
                 Adapter & endpoint
               </TableSortHead>
+              <TableHead className="hidden lg:table-cell">Image</TableHead>
+              <TableHead className="hidden md:table-cell">Network</TableHead>
               <TableSortHead sort={table} field="consumers">
-                Usage
+                Attaches
               </TableSortHead>
             </TableRow>
           </TableHeader>
@@ -144,6 +147,17 @@ export function BackingServicesTable({ now }: { now: number }) {
                         }
                       </p>
                     )}
+                  </TableCell>
+                  <TableCell className="hidden max-w-64 lg:table-cell">
+                    <ImageReference value={service?.image ?? ""} />
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <p className="font-mono text-xs">
+                      {env?.zones.map((zone) => zone.name).join(", ") || "—"}
+                    </p>
+                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                      {env?.zones.map((zone) => zone.subnet).join(", ") || "—"}
+                    </p>
                   </TableCell>
                   <TableCell>
                     <p>{project.consumers?.length ?? 0} consumers</p>
