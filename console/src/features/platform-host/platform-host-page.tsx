@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/common/page-header";
+import { DetailRow } from "@/components/common/detail-row";
 import { ResourceMeter } from "@/components/common/resource-meter";
 import {
   ResourcePanel,
@@ -63,10 +64,14 @@ export default function PlatformHostPage() {
       ) : (
         <>
           <SummaryStrip>
-            <SummaryItem label="System">{host.os}</SummaryItem>
-            <SummaryItem label="Architecture">{host.arch}</SummaryItem>
+            <SummaryItem label="CPU load">{host.cpu.load}%</SummaryItem>
+            <SummaryItem label="Memory">
+              {host.memory.used} / {host.memory.total}
+            </SummaryItem>
             <SummaryItem label="Uptime">{host.uptime}</SummaryItem>
-            <SummaryItem label="Docker / Compose">{host.docker}</SummaryItem>
+            <SummaryItem label="Disk">
+              {host.disk.used} / {host.disk.total}
+            </SummaryItem>
           </SummaryStrip>
           <ResourcePanel title="Resource usage">
             <div className="grid gap-6 sm:grid-cols-2">
@@ -93,6 +98,17 @@ export default function PlatformHostPage() {
                 label="Swap"
                 pct={host.swap.usedPct}
                 detail={`${host.swap.used} / ${host.swap.total}`}
+              />
+            </div>
+          </ResourcePanel>
+          <ResourcePanel title="Host inventory">
+            <div className="grid gap-x-8 sm:grid-cols-2">
+              <DetailRow label="System" value={host.os} />
+              <DetailRow label="Architecture" value={host.arch} />
+              <DetailRow label="Docker / Compose" value={host.docker} />
+              <DetailRow
+                label="CPU"
+                value={`${host.cpu.cores} cores · ${host.cpu.model}`}
               />
             </div>
           </ResourcePanel>

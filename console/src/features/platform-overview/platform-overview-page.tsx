@@ -284,9 +284,9 @@ export default function PlatformOverviewPage() {
                 <Link
                   key={g.id}
                   to={`/platform/backing-services/${g.id}`}
-                  className="group flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 transition-colors hover:border-ring/50 hover:bg-muted"
+                  className="group flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 transition-colors hover:border-ring/50 hover:bg-muted"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     {g.environments?.[0] && (
                       <StatusDot
                         status={environmentRuntimeState(
@@ -295,14 +295,18 @@ export default function PlatformOverviewPage() {
                         )}
                       />
                     )}
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{g.name}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {g.environments?.[0]?.services[0]?.image ?? g.id}
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <span className="truncate text-sm font-medium">
+                        {g.name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        <ImageReference
+                          value={g.environments?.[0]?.services[0]?.image ?? ""}
+                        />
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex shrink-0 items-center gap-4">
                     <div className="hidden text-right sm:block">
                       <div className="text-sm font-medium">
                         {g.consumers?.length ?? 0}

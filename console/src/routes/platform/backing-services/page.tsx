@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { SummaryStrip, SummaryItem } from "@/components/common/resource-panel";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -141,7 +142,7 @@ export default function PlatformBackingServicesPage() {
         <EmptyState
           icon={<Database />}
           title="Loading backing services"
-          description="Reading the platform-owned backing Project, main Environment, and adapter Service facades."
+          description="Loading shared instances and their runtime reports."
         />
       ) : store.backingProjectError ? (
         <EmptyState
@@ -153,7 +154,7 @@ export default function PlatformBackingServicesPage() {
         <EmptyState
           icon={<Database />}
           title="No backing services"
-          description="Create a backing service explicitly — it is never lazily created. Then environments can attach to it."
+          description="Create a shared instance, then attach consumer Services to it."
           action={
             <Button onClick={openCreate}>
               <Plus className="size-4" /> New backing service
@@ -161,7 +162,30 @@ export default function PlatformBackingServicesPage() {
           }
         />
       ) : (
-        <BackingServicesTable now={observationRefresh.now} />
+        <div className="space-y-6">
+          <SummaryStrip>
+            <SummaryItem label="Shared instances">
+              {store.backingProjects.length}
+            </SummaryItem>
+            <SummaryItem label="Consumer connections">
+              {store.backingProjects.reduce(
+                (n, p) => n + (p.consumers?.length || 0),
+                0,
+              )}
+            </SummaryItem>
+            <SummaryItem label="Adapters">
+              {
+                new Set(
+                  visibleEnvironments.flatMap((e) =>
+                    e.services.map((s) => s.adapter),
+                  ),
+                ).size
+              }
+            </SummaryItem>
+            <SummaryItem label="Ownership">Platform</SummaryItem>
+          </SummaryStrip>
+          <BackingServicesTable now={observationRefresh.now} />
+        </div>
       )}
 
       <Drawer open={createOpen} onOpenChange={setCreateOpen}>

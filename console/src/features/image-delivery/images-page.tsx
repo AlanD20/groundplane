@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/common/page-header";
+import { SummaryStrip, SummaryItem } from "@/components/common/resource-panel";
 import { HelpHint } from "@/components/common/resource-panel";
 import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import {
@@ -111,6 +112,22 @@ export default function ImagesPage() {
           </>
         }
       />
+      {inventory && (
+        <SummaryStrip>
+          <SummaryItem label="Local images">
+            {inventory.images.length}
+          </SummaryItem>
+          <SummaryItem label="In use by containers">
+            {inventory.images.filter((i) => i.containers > 0).length}
+          </SummaryItem>
+          <SummaryItem label="Protected">
+            {inventory.images.filter((i) => i.removal_blocked).length}
+          </SummaryItem>
+          <SummaryItem label="Removable">
+            {inventory.images.filter((i) => !i.removal_blocked).length}
+          </SummaryItem>
+        </SummaryStrip>
+      )}
       <Card>
         <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
           <CollectionToolbar

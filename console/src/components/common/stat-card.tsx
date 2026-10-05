@@ -28,7 +28,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-4",
+        "flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-5",
         className,
       )}
     >
@@ -43,7 +43,7 @@ export function StatCard({
       <div
         title={valueTitle ?? (typeof value === "string" ? value : undefined)}
         className={cn(
-          "truncate text-2xl font-medium tabular-nums leading-none",
+          "break-words text-xl font-medium tracking-tight tabular-nums leading-tight",
           toneText,
         )}
       >

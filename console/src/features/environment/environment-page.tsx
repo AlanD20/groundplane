@@ -32,7 +32,12 @@ import { Topology } from "./network-topology";
 import { RouterCard } from "./router-card";
 import { RoutesCard } from "./routes-card";
 import { ServicesPanel } from "./services-list";
-import { environmentNavigation } from "./workspace-navigation";
+import {
+  environmentNavigation,
+  environmentSections,
+} from "./workspace-navigation";
+import { ConnectedEnvironment } from "./connected-environment";
+import { ServiceWorkspace } from "./service-workspace";
 
 export default function EnvironmentPage() {
   const params = useRequiredParams("tenant", "project", "env");
@@ -85,7 +90,28 @@ export default function EnvironmentPage() {
   const deleting =
     env.deletionTaskId !== null || store.isEnvironmentDeletionPending(env.id);
   const deletionFailure = store.getEnvironmentDeletionFailure(env.id);
+  const deletionNotice = (
+    <EnvironmentDeletionFence
+      inProgress={deleting}
+      failure={deletionFailure}
+      onRetry={() =>
+        deletionFailure?.kind === "task"
+          ? store.retryTask(deletionFailure.taskId)
+          : store.refreshEnvironmentDeletion(env.id)
+      }
+      retryLabel={
+        deletionFailure?.kind === "task" ? "Retry deletion" : "Retry refresh"
+      }
+    />
+  );
   const panels: Record<string, React.ReactNode> = {
+    overview: (
+      <ConnectedEnvironment
+        env={env}
+        now={observation.now}
+        createAction={<ServiceFormDialog env={env} />}
+      />
+    ),
     services: (
       <ServicesPanel
         env={env}
@@ -110,6 +136,35 @@ export default function EnvironmentPage() {
     backups: <BackupsCard env={env} />,
     settings: <SettingsCard env={env} />,
   };
+  const selected = env.services.find((s) => s.id === search.get("service"));
+  if (selected)
+    return (
+      <div className="flex min-w-0 flex-col gap-5">
+        {deletionNotice}
+        <fieldset
+          key={deleting ? "deletion-fenced" : "editable"}
+          disabled={deleting}
+          className="min-w-0"
+          aria-label={
+            deleting ? "Environment deletion in progress" : selected.name
+          }
+        >
+          <ServiceWorkspace
+            key={selected.id}
+            env={env}
+            service={selected}
+            now={observation.now}
+            onBack={() =>
+              setSearch((current) => {
+                const next = new URLSearchParams(current);
+                next.delete("service");
+                return next;
+              })
+            }
+          />
+        </fieldset>
+      </div>
+    );
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
@@ -156,18 +211,7 @@ export default function EnvironmentPage() {
           </>
         }
       />
-      <EnvironmentDeletionFence
-        inProgress={deleting}
-        failure={deletionFailure}
-        onRetry={() =>
-          deletionFailure?.kind === "task"
-            ? store.retryTask(deletionFailure.taskId)
-            : store.refreshEnvironmentDeletion(env.id)
-        }
-        retryLabel={
-          deletionFailure?.kind === "task" ? "Retry deletion" : "Retry refresh"
-        }
-      />
+      {deletionNotice}
       {observation.refreshError && (
         <p
           role="alert"
@@ -184,34 +228,53 @@ export default function EnvironmentPage() {
           deleting ? "Environment deletion in progress" : section.label
         }
       >
-        {section.panels.length > 1 ? (
-          <Tabs
-            value={panel.key}
-            onValueChange={(value) =>
-              setSearch((current) => {
-                const next = new URLSearchParams(current);
-                next.set("panel", String(value));
-                next.delete("service");
-                return next;
-              })
-            }
-          >
-            <TabsList aria-label={section.label}>
-              {section.panels.map((item) => (
-                <TabsTab key={item.key} value={item.key}>
-                  {item.label}
-                </TabsTab>
-              ))}
-            </TabsList>
-            {section.panels.map((item) => (
-              <TabsPanel key={item.key} value={item.key} className="pt-6">
-                {panels[item.key]}
-              </TabsPanel>
+        <Tabs
+          value={section.key}
+          onValueChange={(value) => setSearch({ view: String(value) })}
+        >
+          <TabsList aria-label="Environment sections" className="mb-5">
+            {environmentSections.map((item) => (
+              <TabsTab key={item.key} value={item.key}>
+                <item.icon />
+                {item.label}
+              </TabsTab>
             ))}
-          </Tabs>
-        ) : (
-          panels[panel.key]
-        )}
+          </TabsList>
+          <TabsPanel value={section.key}>
+            {section.panels.length > 1 ? (
+              <Tabs
+                value={panel.key}
+                onValueChange={(value) =>
+                  setSearch((current) => {
+                    const next = new URLSearchParams(current);
+                    next.set("panel", String(value));
+                    next.delete("service");
+                    return next;
+                  })
+                }
+              >
+                <TabsList aria-label={section.label} className="border-0 pb-0">
+                  {section.panels.map((item) => (
+                    <TabsTab key={item.key} value={item.key}>
+                      {item.label}
+                    </TabsTab>
+                  ))}
+                </TabsList>
+                {section.panels.map((item) => (
+                  <TabsPanel
+                    key={item.key}
+                    value={item.key}
+                    className="min-w-0 space-y-6 pt-6"
+                  >
+                    {panels[item.key]}
+                  </TabsPanel>
+                ))}
+              </Tabs>
+            ) : (
+              panels[panel.key]
+            )}
+          </TabsPanel>
+        </Tabs>
       </fieldset>
     </div>
   );

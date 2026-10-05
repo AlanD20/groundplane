@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -12,13 +13,15 @@ export function HelpHint({
 }) {
   return (
     <Tooltip content={children}>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon-xs"
         aria-label={label}
         className="inline-flex shrink-0 items-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <CircleHelp aria-hidden className="size-3.5" />
-      </button>
+      </Button>
     </Tooltip>
   );
 }
@@ -48,11 +51,7 @@ export function ResourcePanel({
 }
 
 export function SummaryStrip({ children }: { children: ReactNode }) {
-  return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-border bg-card p-4 sm:grid-cols-4">
-      {children}
-    </dl>
-  );
+  return <dl className="grid grid-cols-2 gap-3 xl:grid-cols-4">{children}</dl>;
 }
 
 export function SummaryItem({
@@ -63,9 +62,9 @@ export function SummaryItem({
   children: ReactNode;
 }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 rounded-xl border border-border bg-card p-5">
       <dt className="mb-1 text-[11px] text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words text-sm font-medium tabular-nums">
+      <dd className="min-w-0 break-words text-lg font-medium tracking-tight tabular-nums">
         {children}
       </dd>
     </div>

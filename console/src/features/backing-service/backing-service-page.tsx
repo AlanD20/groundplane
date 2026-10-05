@@ -111,10 +111,6 @@ export default function BackingServiceDetailPage() {
         meta={<ServiceStateBadges service={svc} now={observationRefresh.now} />}
         actions={
           <>
-            <Button variant="outline" onClick={() => setEditOpen(true)}>
-              Edit service
-            </Button>
-            {svc.adapter === "postgres:16" && <PostgresImageUpdate env={env} service={svc} />}
             {running ? (
               <Button
                 variant="outline"
@@ -199,6 +195,14 @@ export default function BackingServiceDetailPage() {
           )}
         </TabsPanel>
         <TabsPanel value="service" className="mt-6 flex flex-col gap-6">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              Edit configuration
+            </Button>
+            {svc.adapter === "postgres:16" && (
+              <PostgresImageUpdate env={env} service={svc} />
+            )}
+          </div>
           <ServiceTab env={env} svc={svc} />
         </TabsPanel>
         <TabsPanel value="connections" className="mt-6 flex flex-col gap-6">

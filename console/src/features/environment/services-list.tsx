@@ -27,7 +27,6 @@ import { cn } from "@/lib/utils";
 import { Boxes, Plug, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ServiceDetailsDrawer } from "./service-details-drawer";
 import type { ZoneSelection } from "./zone-map";
 
 export function ServicesList({
@@ -38,10 +37,7 @@ export function ServicesList({
   now?: number;
 }) {
   const store = useStore();
-  const [search, setSearch] = useSearchParams();
-  const selected = env.services.find(
-    (service) => service.id === search.get("service"),
-  );
+  const [, setSearch] = useSearchParams();
   const inspect = (id: string | null) =>
     setSearch((current) => {
       const next = new URLSearchParams(current);
@@ -132,7 +128,6 @@ export function ServicesList({
                       variant="ghost"
                       size="content"
                       aria-label={`Inspect ${service.name}`}
-                      aria-haspopup="dialog"
                       className="flex-col items-start gap-1 text-left"
                       onClick={() => inspect(service.id)}
                     >
@@ -192,18 +187,6 @@ export function ServicesList({
         )}
       </ResourceTable>
       <TablePagination table={table} label="Services" />
-      {selected && (
-        <ServiceDetailsDrawer
-          key={selected.id}
-          env={env}
-          service={selected}
-          now={now}
-          open
-          onOpenChange={(open) => {
-            if (!open) inspect(null);
-          }}
-        />
-      )}
     </>
   );
 }
@@ -221,7 +204,7 @@ export function ServiceCard({
   const attached = env.attaches.filter(
     (attach) => attach.service === service.name,
   );
-  const [open, setOpen] = useState(false);
+  const [, setSearch] = useSearchParams();
   const selected = selection.selectedId === service.id;
   return (
     <>
@@ -274,17 +257,21 @@ export function ServiceCard({
         )}
         <div className="flex justify-end gap-1 border-t border-border p-2">
           <LogViewer target={{ kind: "service", id: service.id }} />
-          <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={() =>
+              setSearch((current) => {
+                const next = new URLSearchParams(current);
+                next.set("service", service.id);
+                return next;
+              })
+            }
+          >
             Details
           </Button>
         </div>
       </article>
-      <ServiceDetailsDrawer
-        env={env}
-        service={service}
-        open={open}
-        onOpenChange={setOpen}
-      />
     </>
   );
 }

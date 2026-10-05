@@ -9,9 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useStore } from "@/lib/store";
-import { cn } from "@/lib/utils";
 import { Boxes, Check, ChevronsUpDown, Globe, Plus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 // The primary selection (Vercel team / Neon org style): the dropdown holds
 // Platform (the workspace) and every Tenant; the sidebar and every page
@@ -24,42 +23,36 @@ export function WorkspaceSwitcher({
   onNewTenant: () => void;
 }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { tenants } = useStore();
   const current =
     workspace.kind === "platform"
       ? {
-          name: "Platform",
-          sub: "workspace",
-          icon: <Globe className="size-4" />,
+          name: pathname.startsWith("/platform/backing-services")
+            ? "Shared services"
+            : pathname.startsWith("/platform/host") ||
+                pathname.startsWith("/platform/components")
+              ? "Host"
+              : pathname.startsWith("/platform/settings") ||
+                  pathname === "/platform/secrets"
+                ? "Settings"
+                : pathname === "/platform/activity"
+                  ? "Activity"
+                  : "Projects",
         }
       : (() => {
           const t = tenants.find((x) => x.slug === workspace.slug);
           return {
             name: t?.name ?? workspace.slug,
-            sub: "Tenant",
-            icon: <Boxes className="size-4" />,
           };
         })();
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-2.5 py-2.5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring">
-        <span
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-md",
-            workspace.kind === "platform"
-              ? "bg-primary/15 text-primary"
-              : "bg-secondary text-secondary-foreground",
-          )}
-        >
-          {current.icon}
-        </span>
+      <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-lg px-2 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring">
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-xs font-semibold leading-tight">
+          <span className="truncate text-sm font-semibold leading-tight">
             {current.name}
-          </span>
-          <span className="truncate text-xs text-muted-foreground">
-            {current.sub}
           </span>
         </span>
         <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />

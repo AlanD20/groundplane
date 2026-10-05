@@ -11,7 +11,7 @@ import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown, ChevronRight, Server } from "lucide-react";
 import { Fragment } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 type Crumb = { label: string; href?: string };
 type CrumbOption = { label: string; href: string };
@@ -22,6 +22,7 @@ function buildCrumbs(
     tenantName: (s: string) => string;
     projectName: (tenantSlug: string, projectSlug: string) => string;
     backingProjectName: (s: string) => string;
+    componentName: (s: string) => string;
     agentName: (s: string) => string;
   },
 ): Crumb[] {
@@ -46,6 +47,8 @@ function buildCrumbs(
       });
     if (parts[1] === "host") {
       if (parts[2] === "controller") crumbs.push({ label: "Controller" });
+      if (parts[2] === "etcd") crumbs.push({ label: "etcd" });
+      if (parts[2] === "images") crumbs.push({ label: "Images" });
       if (parts[2] === "agents" && parts[3])
         crumbs.push({ label: `Agent / ${lookups.agentName(parts[3])}` });
       return crumbs;
@@ -53,8 +56,8 @@ function buildCrumbs(
     if (parts[2]) {
       crumbs.push({
         label:
-          parts[1] === "agents"
-            ? lookups.agentName(parts[2])
+          parts[1] === "components"
+            ? lookups.componentName(parts[2])
             : lookups.backingProjectName(parts[2]),
       });
     }
@@ -75,6 +78,7 @@ function buildCrumbs(
         href: `/t/${slug}/${parts[2]}`,
       });
       if (parts[3] === "secrets") crumbs.push({ label: "Secrets" });
+      else if (parts[3] === "settings") crumbs.push({ label: "Settings" });
       else if (parts[3]) crumbs.push({ label: parts[3] });
     }
     return crumbs;
@@ -126,6 +130,8 @@ function attachOptions(
           ...c,
           options: [
             { label: "Controller", href: "/platform/host/controller" },
+            { label: "etcd", href: "/platform/host/etcd" },
+            { label: "Images", href: "/platform/host/images" },
             ...store.platform.agents.map((agent) => ({
               label: `Agent / ${agent.host}`,
               href: `/platform/host/agents/${agent.id}`,
@@ -164,6 +170,20 @@ function attachOptions(
         ];
         return { ...c, options: [...envOptions, ...sectionOptions] };
       }
+      if (i === 3 && parts[3]) {
+        const environment = store.getEnvironment(
+          slug,
+          parts[2],
+          decodeURIComponent(parts[3]),
+        );
+        return {
+          ...c,
+          options: (environment?.services ?? []).map((service) => ({
+            label: service.name,
+            href: `${pathname}?view=services&panel=overview&service=${service.id}`,
+          })),
+        };
+      }
     }
     return { ...c, options: [] };
   });
@@ -171,21 +191,33 @@ function attachOptions(
 
 export function Topbar({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
+  const [search] = useSearchParams();
   const store = useStore();
   const { host } = store;
-  const crumbs = attachOptions(
-    pathname,
-    buildCrumbs(pathname, {
-      tenantName: (s) => store.tenants.find((t) => t.slug === s)?.name ?? s,
-      projectName: (tenantSlug, projectSlug) =>
-        store.getProject(tenantSlug, projectSlug)?.name ?? projectSlug,
-      backingProjectName: (s) =>
-        store.backingProjects.find((g) => g.id === s)?.name ?? s,
-      agentName: (s) =>
-        store.platform.agents.find((agent) => agent.id === s)?.host ?? s,
-    }),
-    store,
-  );
+  const baseCrumbs = buildCrumbs(pathname, {
+    tenantName: (s) => store.tenants.find((t) => t.slug === s)?.name ?? s,
+    projectName: (tenantSlug, projectSlug) =>
+      store.getProject(tenantSlug, projectSlug)?.name ?? projectSlug,
+    backingProjectName: (s) =>
+      store.backingProjects.find((g) => g.id === s)?.name ?? s,
+    componentName: (s) =>
+      store.platform.components.find((component) => component.kind === s)
+        ?.name ?? s,
+    agentName: (s) =>
+      store.platform.agents.find((agent) => agent.id === s)?.host ?? s,
+  });
+  const parts = pathname.split("/").filter(Boolean);
+  const selectedService =
+    parts[0] === "t" && parts[3]
+      ? store
+          .getEnvironment(parts[1], parts[2], decodeURIComponent(parts[3]))
+          ?.services.find((service) => service.id === search.get("service"))
+      : undefined;
+  if (selectedService) {
+    baseCrumbs[baseCrumbs.length - 1].href = pathname;
+    baseCrumbs.push({ label: selectedService.name });
+  }
+  const crumbs = attachOptions(pathname, baseCrumbs, store);
 
   return (
     <header className="relative z-20 flex min-h-14 items-center justify-between gap-3 py-3">

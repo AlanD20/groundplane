@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 export function ResourceTable({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    <div className="overflow-x-auto rounded-xl border border-border bg-card">
       {children}
     </div>
   );

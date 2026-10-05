@@ -17,11 +17,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useStore } from "@/lib/store";
 import { useLinkedSlug } from "@/lib/use-linked-slug";
 import { Menu } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { NavigationRail } from "./navigation-rail";
 
 function useWorkspace(pathname: string): {
   kind: "platform" | "tenant";
@@ -51,7 +52,7 @@ function useProjectSlug(
 }
 
 export function AppFrame({ children }: { children: React.ReactNode }) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const workspace = useWorkspace(pathname);
   const navigate = useNavigate();
   const { addTenant, tenantProjects } = useStore();
@@ -61,6 +62,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   );
 
   const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => setMobileOpen(false), [pathname, search]);
   const [newTenantOpen, setNewTenantOpen] = useState(false);
   const {
     name,
@@ -101,47 +103,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     <TooltipProvider>
       <div className="flex min-h-screen w-full">
         {/* Desktop sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[216px] flex-col border-r border-border bg-sidebar lg:flex">
-          <div className="px-6 pb-6 pt-7">
-            <Brand />
-          </div>
-          <div className="px-3 pb-4">
-            <WorkspaceSwitcher
-              workspace={workspace}
-              onNewTenant={() => setNewTenantOpen(true)}
-            />
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <Sidebar
-              workspace={workspace}
-              projectSlug={projectSlug}
-              pathname={pathname}
-            />
-          </div>
-          <div className="border-t border-border px-5 py-4 text-xs text-muted-foreground">
-            Self-hosted workspace
-          </div>
-        </aside>
-
-        <Drawer open={mobileOpen} onOpenChange={setMobileOpen}>
-          <DrawerContent
-            className="left-0 right-auto max-w-72 border-l-0 border-r p-0 data-[ending-style]:-translate-x-full data-[starting-style]:-translate-x-full"
-            onClick={(event) => {
-              if (event.target instanceof Element && event.target.closest("a"))
-                setMobileOpen(false);
-            }}
-          >
-            <DialogTitle className="sr-only">Navigation</DialogTitle>
-            <div className="border-b border-border p-4">
-              <Brand />
-            </div>
-            <div className="px-3">
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[294px] border-r border-border bg-sidebar lg:flex">
+          <NavigationRail pathname={pathname} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex h-16 shrink-0 items-center px-4">
               <WorkspaceSwitcher
                 workspace={workspace}
-                onNewTenant={() => {
-                  setMobileOpen(false);
-                  setNewTenantOpen(true);
-                }}
+                onNewTenant={() => setNewTenantOpen(true)}
               />
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -151,12 +119,48 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 pathname={pathname}
               />
             </div>
+          </div>
+        </aside>
+
+        <Drawer open={mobileOpen} onOpenChange={setMobileOpen}>
+          <DrawerContent
+            className="left-0 right-auto max-w-80 border-l-0 border-r p-0 data-[ending-style]:-translate-x-full data-[starting-style]:-translate-x-full"
+            onClick={(event) => {
+              if (event.target instanceof Element && event.target.closest("a"))
+                setMobileOpen(false);
+            }}
+          >
+            <DialogTitle className="sr-only">Navigation</DialogTitle>
+            <div className="border-b border-border p-4">
+              <Brand />
+            </div>
+            <div className="flex min-h-0 flex-1">
+              <NavigationRail pathname={pathname} />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <div className="px-3">
+                  <WorkspaceSwitcher
+                    workspace={workspace}
+                    onNewTenant={() => {
+                      setMobileOpen(false);
+                      setNewTenantOpen(true);
+                    }}
+                  />
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <Sidebar
+                    workspace={workspace}
+                    projectSlug={projectSlug}
+                    pathname={pathname}
+                  />
+                </div>
+              </div>
+            </div>
           </DrawerContent>
         </Drawer>
 
         {/* Main column */}
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-[216px]">
-          <div className="mx-4 flex min-h-[68px] items-center gap-2 border-b border-border sm:mx-6 lg:mx-9">
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-[294px]">
+          <div className="flex min-h-16 items-center gap-2 border-b border-border px-4 sm:px-6 lg:px-7">
             <Button
               variant="outline"
               size="icon"
@@ -170,9 +174,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               <Topbar pathname={pathname} />
             </div>
             <TaskNotifications />
-            <ThemeToggle />
+            <div className="lg:hidden">
+              <ThemeToggle />
+            </div>
           </div>
-          <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 pb-12 pt-7 sm:px-6 lg:px-9 console-content">
+          <main className="mx-auto w-full max-w-[1800px] flex-1 px-4 pb-12 pt-7 sm:px-6 lg:px-7 console-content">
             <div className="console-page" key={pathname}>
               {children}
             </div>

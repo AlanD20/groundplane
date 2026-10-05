@@ -1,5 +1,5 @@
 import { ImageReference } from "@/components/common/image-reference";
-import { Inspector } from "@/components/common/inspector";
+import { PageHeader } from "@/components/common/page-header";
 import { ServiceFormBody } from "@/components/common/service-form-body";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,21 +23,25 @@ import { useVisibleServiceObservations } from "@/features/service/use-service-ob
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, Service } from "@/lib/types";
-import { ArrowUpCircle, History, Settings2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpCircle,
+  Boxes,
+  History,
+  Settings2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
-export function ServiceDetailsDrawer({
+export function ServiceWorkspace({
   env,
   service: summary,
   now: listNow = Date.now(),
-  open,
-  onOpenChange,
+  onBack,
 }: {
   env: Environment;
   service: Service;
   now?: number;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onBack: () => void;
 }) {
   const params = useRequiredParams("tenant");
   const store = useStore();
@@ -62,17 +66,11 @@ export function ServiceDetailsDrawer({
   const [tab, setTab] = useState("runtime");
   const clock = useVisibleServiceObservations({
     environmentIds: [],
-    observations: open ? [service.observation] : [],
+    observations: [service.observation],
     refreshEnvironment: store.refreshEnvironmentServices,
   });
   const now = Math.max(listNow, clock.now);
   useEffect(() => {
-    if (!open) {
-      setEditing(false);
-      setOperation(null);
-      setReleaseAction(null);
-      return;
-    }
     let current = true;
     setDetail(undefined);
     setLoading(true);
@@ -96,40 +94,41 @@ export function ServiceDetailsDrawer({
     return () => {
       current = false;
     };
-  }, [open, summary.id, servingReleaseId, reload, store.getService]);
+  }, [summary.id, servingReleaseId, reload, store.getService]);
 
   return (
     <>
-      <Inspector
-        open={open && !editing && !operation && !releaseAction}
-        onOpenChange={onOpenChange}
-        title={service.name}
-        context={`Service / ${env.name}${service.role ? ` / ${service.role}` : ""}`}
-        status={<ServiceStateBadges service={service} now={now} />}
-        footer={
-          <>
-            <RemoveDesiredServiceButton
-              onClick={() => setOperation("remove")}
-            />
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setTab("logs")}>
-            Logs
-          </Button>
-          <Button variant="outline" onClick={() => setEditing(true)}>
-            <Settings2 className="size-3.5" />
-            Configure
-          </Button>
-          <Button onClick={() => setReleaseAction("deploy")}>
-            <ArrowUpCircle className="size-3.5" />
-            Deploy
+      <section className="flex min-w-0 flex-col gap-5">
+        <div>
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            <ArrowLeft />
+            Back to {env.name}
           </Button>
         </div>
+        <PageHeader
+          title={service.name}
+          icon={<Boxes />}
+          description={service.role || `Service in ${env.name}`}
+          meta={<ServiceStateBadges service={service} now={now} />}
+          actions={
+            <>
+              <Button variant="outline" onClick={() => setTab("logs")}>
+                Logs
+              </Button>
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                <Settings2 />
+                Configure
+              </Button>
+              <Button onClick={() => setReleaseAction("deploy")}>
+                <ArrowUpCircle />
+                Deploy
+              </Button>
+              <RemoveDesiredServiceButton
+                onClick={() => setOperation("remove")}
+              />
+            </>
+          }
+        />
         {detailError && (
           <p
             role="alert"
@@ -208,9 +207,9 @@ export function ServiceDetailsDrawer({
             )}
           </TabsPanel>
         </Tabs>
-      </Inspector>
-      <Drawer open={open && editing} onOpenChange={onOpenChange}>
-        {open && editing && (
+      </section>
+      <Drawer open={editing} onOpenChange={setEditing}>
+        {editing && (
           <ServiceFormBody
             key={service.id}
             env={env}
@@ -223,7 +222,7 @@ export function ServiceDetailsDrawer({
           />
         )}
       </Drawer>
-      {open && releaseAction === "deploy" && (
+      {releaseAction === "deploy" && (
         <DeployDialog
           env={env}
           serviceId={service.id}
@@ -233,7 +232,7 @@ export function ServiceDetailsDrawer({
           }}
         />
       )}
-      {open && releaseAction === "rollback" && (
+      {releaseAction === "rollback" && (
         <RollbackDialog
           env={env}
           serviceId={service.id}
@@ -253,7 +252,7 @@ export function ServiceDetailsDrawer({
         }}
         onRemoved={() => {
           setOperation(null);
-          onOpenChange(false);
+          onBack();
         }}
       />
     </>

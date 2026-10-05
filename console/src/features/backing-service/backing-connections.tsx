@@ -1,3 +1,27 @@
+import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
+import {
+  CollectionToolbar,
+  TablePagination,
+  TableSortHead,
+  useTableView,
+} from "@/components/common/table-controls";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AdvancedDetails,
   ResourcePanel,
@@ -38,6 +62,24 @@ export function ConnectionsTab({
     adapter?.requires.role &&
     (svc.adapter !== "valkey:9" || svc.authentication === "username_password");
 
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<ConsumerLink | null>(null);
+  const rows = (g.consumers || []).filter((c) =>
+    `${c.project} ${c.environment} ${c.service} ${c.database} ${c.role}`
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  const table = useTableView(
+    rows,
+    {
+      service: (c) => c.service,
+      environment: (c) => `${c.project}/${c.environment}`,
+      database: (c) => c.database,
+    },
+    "service",
+    "asc",
+    query,
+  );
   return (
     <>
       {adapter && (
@@ -166,125 +208,203 @@ export function ConnectionsTab({
         </AdvancedDetails>
       )}
 
-      <ResourcePanel title="Consumers">
-        <div className="space-y-3">
-          {(g.consumers ?? []).length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              No environments attached yet — attachment opens once this backing
-              service is running.
-            </p>
-          )}
-          {(g.consumers ?? []).map((c) => (
-            <div
-              key={`${c.environment}-${c.service}-${c.attachId}`}
-              className="rounded-xl border border-border bg-card p-4"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-sm">
-                  {c.project} / {c.environment}{" "}
-                  <span className="text-muted-foreground">· {c.service}</span>
-                </span>
-                {!adapter?.custom && (
-                  <div className="flex items-center gap-1">
-                    <ConsumerConnectionActions
-                      consumer={c}
-                      authentication={svc.authentication}
+      <ResourcePanel title="Consumer connections">
+        <CollectionToolbar
+          query={query}
+          onQueryChange={setQuery}
+          label="Consumers"
+        />
+        <ResourceTable>
+          <Table aria-label="Backing Service consumers">
+            <TableHeader>
+              <TableRow>
+                <TableSortHead sort={table} field="service">
+                  Service
+                </TableSortHead>
+                <TableSortHead sort={table} field="environment">
+                  Environment
+                </TableSortHead>
+                <TableSortHead sort={table} field="database">
+                  Database
+                </TableSortHead>
+                <TableHead>Connection</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {table.rows.map((c) => (
+                <ResourceRow key={c.attachId} onOpen={() => setSelected(c)}>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="content"
+                      className="justify-start text-xs"
+                      onClick={() => setSelected(c)}
+                    >
+                      {c.service}
+                    </Button>
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      to={`/t/${c.tenant}/${c.project}/${encodeURIComponent(c.environment)}?view=network&panel=attaches`}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      {c.project}/{c.environment}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{c.database || "—"}</TableCell>
+                  <TableCell>
+                    {!adapter?.custom ? (
+                      <ConsumerConnectionActions
+                        consumer={c}
+                        authentication={svc.authentication}
+                      />
+                    ) : svc.hooks?.attach ? (
+                      "Custom provisioning"
+                    ) : (
+                      "Network access"
+                    )}
+                  </TableCell>
+                </ResourceRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ResourceTable>
+        {!rows.length && (
+          <p className="py-5 text-xs text-muted-foreground">
+            {g.consumers?.length
+              ? "No matching consumers."
+              : "No consumer Attaches yet."}
+          </p>
+        )}
+        <TablePagination table={table} label="Consumers" />
+      </ResourcePanel>
+      <Dialog
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selected?.service} connection</DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <>
+              <div
+                key={`${selected.environment}-${selected.service}-${selected.attachId}`}
+                className="rounded-xl border border-border bg-card p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-sm">
+                    {selected.project} / {selected.environment}{" "}
+                    <span className="text-muted-foreground">
+                      · {selected.service}
+                    </span>
+                  </span>
+                  {!adapter?.custom && (
+                    <div className="flex items-center gap-1">
+                      <ConsumerConnectionActions
+                        consumer={selected}
+                        authentication={svc.authentication}
+                      />
+                    </div>
+                  )}
+                </div>
+                {adapter?.custom ? (
+                  <div className="mt-2 flex flex-col gap-1.5 text-sm">
+                    <Row
+                      label="Access"
+                      value={
+                        svc.hooks?.attach
+                          ? "network access and custom provisioning"
+                          : "network-only, no provisioning"
+                      }
+                      mono
+                    />
+                    <Row
+                      label="Declared facts"
+                      value={
+                        svc.hooks?.facts?.map((fact) => fact.key).join(", ") ||
+                        "none"
+                      }
+                      mono
+                    />
+                    <Row
+                      label="Reach at"
+                      value={`${svc.serviceName ?? svc.name} on the network`}
+                      mono
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-1.5 text-sm">
+                    <Row label="Service" value={selected.service} mono />
+                    {adapter?.requires.database && (
+                      <Row label="Database" value={selected.database} mono />
+                    )}
+                    {exposesRole && (
+                      <Row label="Role" value={selected.role} mono />
+                    )}
+                    <Row
+                      label="Host"
+                      value={`${svc.serviceName}:${adapter?.urlScheme === "redis" ? 6379 : 5432}`}
+                      mono
+                    />
+                    <Row
+                      label="Connection"
+                      value={
+                        selected.connectionFactKey
+                          ? "available through explicit reveal"
+                          : "unavailable"
+                      }
+                      mono
+                      masked={svc.authentication !== "none"}
                     />
                   </div>
                 )}
-              </div>
-              {adapter?.custom ? (
-                <div className="mt-2 flex flex-col gap-1.5 text-sm">
-                  <Row
-                    label="Access"
-                    value={
-                      svc.hooks?.attach
-                        ? "network access and custom provisioning"
-                        : "network-only, no provisioning"
-                    }
-                    mono
-                  />
-                  <Row
-                    label="Declared facts"
-                    value={
-                      svc.hooks?.facts?.map((fact) => fact.key).join(", ") ||
-                      "none"
-                    }
-                    mono
-                  />
-                  <Row
-                    label="Reach at"
-                    value={`${svc.serviceName ?? svc.name} on the network`}
-                    mono
-                  />
-                </div>
-              ) : (
-                <div className="mt-2 flex flex-col gap-1.5 text-sm">
-                  <Row label="Service" value={c.service} mono />
-                  {adapter?.requires.database && (
-                    <Row label="Database" value={c.database} mono />
-                  )}
-                  {exposesRole && <Row label="Role" value={c.role} mono />}
-                  <Row
-                    label="Host"
-                    value={`${svc.serviceName}:${adapter?.urlScheme === "redis" ? 6379 : 5432}`}
-                    mono
-                  />
-                  <Row
-                    label="Connection"
-                    value={
-                      c.connectionFactKey
-                        ? "available through explicit reveal"
-                        : "unavailable"
-                    }
-                    mono
-                    masked={svc.authentication !== "none"}
-                  />
-                </div>
-              )}
-              {!adapter?.custom && (
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-xs text-primary">
-                    procedure the Agent runs · {provision.length} steps
-                  </summary>
-                  <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
-                    {authenticationUnavailable ? (
-                      <p className="text-xs text-muted-foreground">
-                        Mode-specific provisioning is unavailable until the
-                        Controller returns the authentication mode.
-                      </p>
-                    ) : (
-                      provision.length === 0 && (
+                {!adapter?.custom && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-primary">
+                      procedure the Agent runs · {provision.length} steps
+                    </summary>
+                    <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
+                      {authenticationUnavailable ? (
                         <p className="text-xs text-muted-foreground">
-                          No credential procedure; the Attach joins the network
-                          and publishes credential-free facts.
+                          Mode-specific provisioning is unavailable until the
+                          Controller returns the authentication mode.
                         </p>
-                      )
-                    )}
-                    {provision.map((op) => (
-                      <div
-                        key={op.op}
-                        className="flex items-baseline gap-2.5 text-xs"
-                      >
-                        <span className="size-1.5 shrink-0 translate-y-[-2px] rounded-full bg-success" />
-                        <span className="w-32 shrink-0 font-mono text-primary">
-                          {op.op}
-                        </span>
-                        <span className="break-all font-mono text-muted-foreground">
-                          {op.detail
-                            .replaceAll("<db>", c.database)
-                            .replaceAll("<role>", c.role)
-                            .replaceAll("<generated>", "••••••")}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </div>
-          ))}
-        </div>
-      </ResourcePanel>
+                      ) : (
+                        provision.length === 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            No credential procedure; the Attach joins the
+                            network and publishes credential-free facts.
+                          </p>
+                        )
+                      )}
+                      {provision.map((op) => (
+                        <div
+                          key={op.op}
+                          className="flex items-baseline gap-2.5 text-xs"
+                        >
+                          <span className="size-1.5 shrink-0 translate-y-[-2px] rounded-full bg-success" />
+                          <span className="w-32 shrink-0 font-mono text-primary">
+                            {op.op}
+                          </span>
+                          <span className="break-all font-mono text-muted-foreground">
+                            {op.detail
+                              .replaceAll("<db>", selected.database)
+                              .replaceAll("<role>", selected.role)
+                              .replaceAll("<generated>", "••••••")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

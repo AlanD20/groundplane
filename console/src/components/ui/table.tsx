@@ -31,7 +31,7 @@ export function TableHead({ className, ...props }: ComponentProps<"th">) {
     <th
       scope="col"
       className={cn(
-        "border-b border-border bg-surface/40 px-4 py-3 text-[11px] font-medium text-muted-foreground",
+        "relative border-b border-border bg-surface/40 px-4 py-3 text-[11px] font-medium text-muted-foreground",
         className,
       )}
       {...props}

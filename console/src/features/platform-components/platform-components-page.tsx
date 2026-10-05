@@ -14,6 +14,7 @@ import {
 import { useStore } from "@/lib/store";
 import { Network, RefreshCw, Server } from "lucide-react";
 import { Link } from "react-router-dom";
+import { EnvironmentComponentsTable } from "./environment-components-table";
 
 export default function PlatformInfraPage() {
   const {
@@ -29,6 +30,7 @@ export default function PlatformInfraPage() {
         icon={<Server />}
         actions={
           <Button
+            nativeButton={false}
             variant="outline"
             render={
               <Link to="/platform/activity?owner=platform&resource_kind=component" />
@@ -103,6 +105,9 @@ export default function PlatformInfraPage() {
             </Table>
           </ResourceTable>
         )}
+      </ResourcePanel>
+      <ResourcePanel title="Environment Components">
+        <EnvironmentComponentsTable />
       </ResourcePanel>
     </div>
   );

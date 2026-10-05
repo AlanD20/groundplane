@@ -6,14 +6,16 @@ import {
   AdvancedDetails,
   SummaryItem,
   SummaryStrip,
+  ResourcePanel,
 } from "@/components/common/resource-panel";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
 import { environmentPlatformIngress } from "@/features/environment/platform-ingress";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { ArrowLeft, Network, RefreshCw } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CoreDnsSettings } from "./coredns-settings";
 import { DNSRecordSettings } from "./dns-record-settings";
@@ -25,6 +27,7 @@ const kindIcon: Record<string, React.ReactNode> = {
 
 export default function PlatformComponentPage() {
   const params = useRequiredParams("component");
+  const [tab, setTab] = useState("overview");
   const {
     platform,
     tenantProjects,
@@ -176,111 +179,133 @@ export default function PlatformComponentPage() {
           {editableDNSConfig.forwarders.length}
         </SummaryItem>
       </SummaryStrip>
-      <div>
-        <CoreDnsSettings
-          activeTaskId={
-            managedConfigComponentId === component.id
-              ? managedConfigTaskId
-              : null
-          }
-          upstream={editableDNSConfig.upstream}
-          upstreamAuto={editableDNSConfig.upstreamAuto}
-          tailnetDelegation={editableDNSConfig.tailnetDelegation}
-          corefileTemplate={editableDNSConfig.corefileTemplate}
-          forwarders={editableDNSConfig.forwarders}
-          enabled={platform.dns.enabled}
-          configured={dnsConfig !== undefined}
-          managedFiles={managedConfigFiles}
-          managedConfigLoading={managedConfigLoading}
-          managedConfigError={managedConfigError}
-          onRefreshManagedConfig={() => refreshComponentConfig(component.id)}
-          onEnabled={async (enabled) => {
-            await setComponentEnabled(component.id, enabled);
-            await refreshComponentConfig(component.id);
-            await refreshPlatformComponents();
-          }}
-          onTailnet={(tailnetDelegation) =>
-            replaceCoreDNSConfig(
-              updateComponentConfig,
-              refreshPlatformComponents,
-              refreshComponentConfig,
-              component.id,
-              editableDNSConfig,
-              { tailnetDelegation },
-            )
-          }
-          onAddForwarder={(domain, upstream) =>
-            replaceCoreDNSConfig(
-              updateComponentConfig,
-              refreshPlatformComponents,
-              refreshComponentConfig,
-              component.id,
-              editableDNSConfig,
-              {
-                forwarders: [
-                  ...editableDNSConfig.forwarders,
-                  { domain, upstream },
-                ],
-              },
-            )
-          }
-          onRemoveForwarder={(index) =>
-            replaceCoreDNSConfig(
-              updateComponentConfig,
-              refreshPlatformComponents,
-              refreshComponentConfig,
-              component.id,
-              editableDNSConfig,
-              {
-                forwarders: editableDNSConfig.forwarders.filter(
-                  (_, candidateIndex) => candidateIndex !== index,
-                ),
-              },
-            )
-          }
-          onSave={(upstream, upstreamAuto, corefileTemplate) =>
-            replaceCoreDNSConfig(
-              updateComponentConfig,
-              refreshPlatformComponents,
-              refreshComponentConfig,
-              component.id,
-              editableDNSConfig,
-              { upstream, upstreamAuto, corefileTemplate },
-            )
-          }
-        />
-      </div>
-
-      <DNSRecordSettings
-        records={editableDNSConfig.records}
-        disabled={
-          managedConfigComponentId === component.id && !!managedConfigTaskId
-        }
-        onChange={(records) =>
-          replaceCoreDNSConfig(
-            updateComponentConfig,
-            refreshPlatformComponents,
-            refreshComponentConfig,
-            component.id,
-            editableDNSConfig,
-            { records },
-          )
-        }
-      />
-
-      <AdvancedDetails>
-        <DetailRow label="Component ID" value={component.id} mono />
-        <DetailRow
-          label="Mounts"
-          value={component.mounts.join(", ") || "None"}
-          mono
-        />
-        {component.notes.map((note) => (
-          <p key={note} className="text-muted-foreground">
-            {note}
-          </p>
-        ))}
-      </AdvancedDetails>
+      <Tabs value={tab} onValueChange={(value) => setTab(String(value))}>
+        <TabsList aria-label="CoreDNS sections">
+          <TabsTab value="overview">Overview</TabsTab>
+          <TabsTab value="records">DNS records</TabsTab>
+          <TabsTab value="configuration">Configuration</TabsTab>
+        </TabsList>
+        <TabsPanel value="configuration" keepMounted className="pt-5">
+          <CoreDnsSettings
+            activeTaskId={
+              managedConfigComponentId === component.id
+                ? managedConfigTaskId
+                : null
+            }
+            upstream={editableDNSConfig.upstream}
+            upstreamAuto={editableDNSConfig.upstreamAuto}
+            tailnetDelegation={editableDNSConfig.tailnetDelegation}
+            corefileTemplate={editableDNSConfig.corefileTemplate}
+            forwarders={editableDNSConfig.forwarders}
+            enabled={platform.dns.enabled}
+            configured={dnsConfig !== undefined}
+            managedFiles={managedConfigFiles}
+            managedConfigLoading={managedConfigLoading}
+            managedConfigError={managedConfigError}
+            onRefreshManagedConfig={() => refreshComponentConfig(component.id)}
+            onEnabled={async (enabled) => {
+              await setComponentEnabled(component.id, enabled);
+              await refreshComponentConfig(component.id);
+              await refreshPlatformComponents();
+            }}
+            onTailnet={(tailnetDelegation) =>
+              replaceCoreDNSConfig(
+                updateComponentConfig,
+                refreshPlatformComponents,
+                refreshComponentConfig,
+                component.id,
+                editableDNSConfig,
+                { tailnetDelegation },
+              )
+            }
+            onAddForwarder={(domain, upstream) =>
+              replaceCoreDNSConfig(
+                updateComponentConfig,
+                refreshPlatformComponents,
+                refreshComponentConfig,
+                component.id,
+                editableDNSConfig,
+                {
+                  forwarders: [
+                    ...editableDNSConfig.forwarders,
+                    { domain, upstream },
+                  ],
+                },
+              )
+            }
+            onRemoveForwarder={(index) =>
+              replaceCoreDNSConfig(
+                updateComponentConfig,
+                refreshPlatformComponents,
+                refreshComponentConfig,
+                component.id,
+                editableDNSConfig,
+                {
+                  forwarders: editableDNSConfig.forwarders.filter(
+                    (_, candidateIndex) => candidateIndex !== index,
+                  ),
+                },
+              )
+            }
+            onSave={(upstream, upstreamAuto, corefileTemplate) =>
+              replaceCoreDNSConfig(
+                updateComponentConfig,
+                refreshPlatformComponents,
+                refreshComponentConfig,
+                component.id,
+                editableDNSConfig,
+                { upstream, upstreamAuto, corefileTemplate },
+              )
+            }
+          />
+        </TabsPanel>
+        <TabsPanel value="records" keepMounted className="pt-5">
+          <DNSRecordSettings
+            records={editableDNSConfig.records}
+            disabled={
+              managedConfigComponentId === component.id && !!managedConfigTaskId
+            }
+            onChange={(records) =>
+              replaceCoreDNSConfig(
+                updateComponentConfig,
+                refreshPlatformComponents,
+                refreshComponentConfig,
+                component.id,
+                editableDNSConfig,
+                { records },
+              )
+            }
+          />
+        </TabsPanel>
+        <TabsPanel value="overview" className="space-y-5 pt-5">
+          <ResourcePanel title="Resolver runtime">
+            <DetailRow label="Runtime" value={component.runtime} />
+            <DetailRow
+              label="Network"
+              value={
+                component.hostNetwork ? "Host network" : "Container network"
+              }
+            />
+            <DetailRow
+              label="Local resolver"
+              value={platform.dns.enabled ? "Enabled" : "Disabled"}
+            />
+          </ResourcePanel>
+          <AdvancedDetails>
+            <DetailRow label="Component ID" value={component.id} mono />
+            <DetailRow
+              label="Mounts"
+              value={component.mounts.join(", ") || "None"}
+              mono
+            />
+            {component.notes.map((note) => (
+              <p key={note} className="text-muted-foreground">
+                {note}
+              </p>
+            ))}
+          </AdvancedDetails>
+        </TabsPanel>
+      </Tabs>
 
       {environmentsWithoutComponentProjection > 0 && (
         <p

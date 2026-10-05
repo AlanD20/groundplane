@@ -18,21 +18,21 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-4 pb-1", className)}>
+    <header className={cn("flex min-w-0 flex-col gap-4 pb-1", className)}>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
           {icon && (
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-primary [&_svg]:size-4.5">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-primary [&_svg]:size-5">
               {icon}
             </div>
           )}
           <div className="flex min-w-0 flex-col gap-1.5">
             {eyebrow && (
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 {eyebrow}
               </span>
             )}
-            <h1 className="break-words text-[27px] font-medium tracking-[-0.04em] leading-tight">
+            <h1 className="break-words text-[25px] font-semibold tracking-[-0.035em] leading-tight">
               {title}
             </h1>
             {description && (
@@ -51,6 +51,6 @@ export function PageHeader({
           {meta}
         </div>
       )}
-    </div>
+    </header>
   );
 }

@@ -12,7 +12,10 @@ export const environmentSections = [
     key: "services",
     label: "Services",
     icon: Boxes,
-    panels: [{ key: "services", label: "Services" }],
+    panels: [
+      { key: "overview", label: "Connected overview" },
+      { key: "services", label: "Service list" },
+    ],
   },
   {
     key: "network",

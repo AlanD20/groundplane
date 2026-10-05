@@ -110,7 +110,7 @@
   --foreground: #f3effa;
   --surface: #1c1626;
   --surface-foreground: #f3effa;
-  --card: #17121f;
+  --card: #1d1827;
   --card-foreground: #f3effa;
   --popover: #19131f;
   --popover-foreground: #f3effa;
@@ -130,8 +130,8 @@
   --warning-foreground: #100d17;
   --info: #c4a3ff;
   --info-foreground: #100d17;
-  --border: #2e243b;
-  --input: #2e243b;
+  --border: #352a43;
+  --input: #352a43;
   --ring: #c4a3ff;
   --chart-1: #c4a3ff;
   --chart-2: #82d9b0;
@@ -225,6 +225,10 @@
   }
 }
 @layer components {
+  .connected-workspace {
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
   .console-page {
     animation: console-enter 180ms ease-out;
   }
