@@ -98,6 +98,10 @@ operator-surface parity. [API usage](api-cli.md) defines those requirements.
 
 ## Console
 
+[Console UX standards](console-ux.md) govern navigation, capability placement,
+language and interaction across resource scopes. They describe the target design;
+the [operator guide](features/console-and-api.md) describes current behavior.
+
 [UI primitives](../console/src/components/ui) own controls and interaction.
 [Shared presentation](../console/src/components/common) composes them.
 [Feature modules](../console/src/features) own requests, state and product

@@ -39,6 +39,7 @@ The [changelog](../CHANGELOG.md) records release changes, not production readine
 - [Architecture](architecture.md): process and module ownership, data flow and code entry points.
 - [Technical decisions](decisions/README.md): reasons, boundaries and consequences.
 - [Coding standards](standards.md): rules that are not obvious from the implementation.
+- [Console UX standards](console-ux.md): scope, navigation, discoverability, language and interaction rules.
 - [Delivery](delivery.md): contribution, testing and release expectations.
 - [Releasing](releasing.md): version preparation, artifacts, publication and Pages.
 - [Agent workflow](agents.md): task authority, bounded delegation and local checkpoints.
