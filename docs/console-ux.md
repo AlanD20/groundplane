@@ -128,7 +128,12 @@ variants. Equivalent summaries, editors, status indicators and empty/error state
 should share their structure and interaction. [Architecture](architecture.md#console)
 owns implementation placement.
 
-Use persistent labels for navigation and important controls. Support keyboard
+Use persistent labels for resource navigation and important controls. The global
+Platform navigation uses a compact vertical icon rail with accessible names and
+labels on hover and keyboard focus. In the secondary navigation, pair destination
+labels with icons, separate groups with space and rules, and distinguish section
+headings from links. Mark the selected destination with shape and weight as well
+as color. Support keyboard
 operation, visible focus, labeled fields and predictable focus return after an
 editor closes. Do not communicate state through color alone or make essential
 actions depend on hover.

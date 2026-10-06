@@ -109,10 +109,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       </a>
       <div className="flex min-h-screen w-full">
         {/* Desktop sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-sidebar lg:flex lg:flex-col">
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[304px] border-r border-border bg-sidebar lg:flex">
           <PlatformNavigation pathname={pathname} />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex h-16 shrink-0 items-center px-4">
+            <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
               <WorkspaceSwitcher
                 workspace={workspace}
                 onNewTenant={() => setNewTenantOpen(true)}
@@ -140,10 +140,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <div className="border-b border-border p-4">
               <Brand />
             </div>
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1">
               <PlatformNavigation pathname={pathname} />
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div className="px-3">
+                <div className="border-b border-border px-3 py-2">
                   <WorkspaceSwitcher
                     workspace={workspace}
                     onNewTenant={() => {
@@ -165,7 +165,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         </Drawer>
 
         {/* Main column */}
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-[304px]">
           <div className="flex min-h-16 items-center gap-2 border-b border-border px-4 sm:px-6 lg:px-7">
             <Button
               variant="outline"

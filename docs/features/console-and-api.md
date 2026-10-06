@@ -15,8 +15,9 @@ including the MVP's single Agent, do not need pagination.
 Navigation follows Platform or Tenant → Project → Environment. Host owns
 Controller and Agent management; Components owns integration settings.
 An Environment opens on a Service overview with Cards and Table display options,
-recent activity and backup protection. One labeled sidebar provides Platform
-navigation and the selected resource’s destinations. Environment destinations
+recent activity and backup protection. A compact vertical icon rail provides
+Platform navigation beside a labeled secondary menu for the selected resource’s
+destinations. Environment destinations
 are visible links under headings, including Variables & files, backing connections
 and their Connection values, Deployments, Backup destinations, and Identity &
 encryption key. Headings organize links without adding intermediate pages.

@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -53,23 +54,30 @@ export function PlatformNavigation({ pathname }: { pathname: string }) {
   return (
     <nav
       aria-label="Platform navigation"
-      className="grid grid-cols-2 gap-1 border-b border-border p-3"
+      className="flex w-16 shrink-0 flex-col items-center gap-3 overflow-y-auto border-r border-border bg-sidebar py-4"
     >
+      <div
+        aria-hidden="true"
+        className="mb-5 flex size-10 shrink-0 items-center justify-center text-primary"
+      >
+        <Layers className="size-6" />
+      </div>
       {links.map(({ label, href, icon: Icon, active }) => (
-        <Link
-          key={href}
-          to={href}
-          aria-current={active ? "page" : undefined}
-          className={cn(
-            "flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-xs outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring",
-            active
-              ? "bg-accent text-primary"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <Icon className="size-4 shrink-0" />
-          <span>{label}</span>
-        </Link>
+        <Tooltip key={href} content={label} side="right">
+          <Link
+            aria-label={label}
+            to={href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-lg outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring",
+              active
+                ? "bg-accent text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon className="size-5 shrink-0" />
+          </Link>
+        </Tooltip>
       ))}
     </nav>
   );

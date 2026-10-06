@@ -1,5 +1,20 @@
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  Layers,
+  KeyRound,
+  GitBranch,
+  Settings,
+  FolderKanban,
+  Activity,
+  Server,
+  Cpu,
+  Database,
+  Package,
+  Boxes,
+  Building2,
+  type LucideIcon,
+} from "lucide-react";
 import {
   WorkspaceNavigation,
   type NavigationGroup,
@@ -47,9 +62,10 @@ export function Sidebar({
   const envPath = env ? `${projectPath}/${encodeURIComponent(env.name)}` : "";
   let parent: { label: string; href: string } | undefined;
   let groups: NavigationGroup[];
-  const item = (label: string, href: string) => ({
+  const item = (label: string, href: string, icon: LucideIcon) => ({
     label,
     href,
+    icon,
     active: pathname === href,
   });
 
@@ -69,6 +85,7 @@ export function Sidebar({
             next.set("serviceTab", entry.key);
             return {
               label: entry.label,
+              icon: entry.icon,
               href: `${envPath}?${next}`,
               active:
                 pathname === envPath &&
@@ -86,6 +103,7 @@ export function Sidebar({
             : section.label,
         items: section.panels.map((panel) => ({
           label: panel.label,
+          icon: panel.icon,
           href: `${envPath}?view=${section.key}&panel=${panel.key}`,
           active: pathname === envPath && current.panel.key === panel.key,
         })),
@@ -93,8 +111,8 @@ export function Sidebar({
       groups.push({
         label: "Related resources",
         items: [
-          item("Project Secrets", `${projectPath}/secrets`),
-          item("Runners", `${tenantPath}/runners?owner=${env.id}`),
+          item("Project Secrets", `${projectPath}/secrets`, KeyRound),
+          item("Runners", `${tenantPath}/runners?owner=${env.id}`, GitBranch),
         ],
       });
     }
@@ -107,10 +125,14 @@ export function Sidebar({
       {
         label: `Project · ${project.name}`,
         items: [
-          item("Environments", projectPath),
-          item("Secrets", `${projectPath}/secrets`),
-          item("Runners", `${tenantPath}/runners?owner=${project.id}`),
-          item("Settings", `${projectPath}/settings`),
+          item("Environments", projectPath, Layers),
+          item("Secrets", `${projectPath}/secrets`, KeyRound),
+          item(
+            "Runners",
+            `${tenantPath}/runners?owner=${project.id}`,
+            GitBranch,
+          ),
+          item("Settings", `${projectPath}/settings`, Settings),
         ],
       },
     ];
@@ -119,10 +141,10 @@ export function Sidebar({
       {
         label: `Tenant · ${tenant?.name ?? workspace.slug}`,
         items: [
-          item("Projects", tenantPath),
-          item("Runners", `${tenantPath}/runners`),
-          item("Tasks", `${tenantPath}/activity`),
-          item("Settings", `${tenantPath}/settings`),
+          item("Projects", tenantPath, FolderKanban),
+          item("Runners", `${tenantPath}/runners`, GitBranch),
+          item("Tasks", `${tenantPath}/activity`, Activity),
+          item("Settings", `${tenantPath}/settings`, Settings),
         ],
       },
     ];
@@ -140,6 +162,7 @@ export function Sidebar({
         label: `Backing Service · ${backing?.name ?? parts[2]}`,
         items: backingDestinations.map((entry) => ({
           label: entry.label,
+          icon: entry.icon,
           href: `${pathname}?tab=${entry.key}`,
           active: selected === entry.key,
         })),
@@ -150,14 +173,18 @@ export function Sidebar({
       {
         label: "Host",
         items: [
-          item("Overview", "/platform/host"),
-          item("Controller", "/platform/host/controller"),
-          item("etcd", "/platform/host/etcd"),
+          item("Overview", "/platform/host", Server),
+          item("Controller", "/platform/host/controller", Cpu),
+          item("etcd", "/platform/host/etcd", Database),
           ...store.platform.agents.map((agent) =>
-            item(`Agent · ${agent.host}`, `/platform/host/agents/${agent.id}`),
+            item(
+              `Agent · ${agent.host}`,
+              `/platform/host/agents/${agent.id}`,
+              Server,
+            ),
           ),
-          item("Images", "/platform/host/images"),
-          item("Components", "/platform/components"),
+          item("Images", "/platform/host/images", Package),
+          item("Components", "/platform/components", Boxes),
         ],
       },
     ];
@@ -166,7 +193,7 @@ export function Sidebar({
       {
         label: "Tenants",
         items: store.tenants.map((entry) =>
-          item(entry.name, `/t/${entry.slug}`),
+          item(entry.name, `/t/${entry.slug}`, Building2),
         ),
       },
     ];
