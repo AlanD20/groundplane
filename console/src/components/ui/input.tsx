@@ -1,6 +1,13 @@
 import { cn } from "@/lib/utils";
+import { useId, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { Button } from "./button";
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function InputControl({
+  className,
+  type,
+  ...props
+}: React.ComponentProps<"input">) {
   return (
     <input
       type={type}
@@ -13,6 +20,51 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       )}
       {...props}
     />
+  );
+}
+
+function SecretInput({
+  id,
+  className,
+  disabled,
+  ...props
+}: Omit<React.ComponentProps<"input">, "type">) {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative w-full min-w-0">
+      <InputControl
+        autoCapitalize="none"
+        spellCheck={false}
+        {...props}
+        id={inputId}
+        disabled={disabled}
+        type={visible ? "text" : "password"}
+        className={cn(className, "pr-24")}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="absolute right-1 top-1/2 -translate-y-1/2"
+        aria-controls={inputId}
+        aria-label={visible ? "Hide secret value" : "Show secret value"}
+        disabled={disabled}
+        onClick={() => setVisible((current) => !current)}
+      >
+        {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+        {visible ? "Hide" : "Show"}
+      </Button>
+    </div>
+  );
+}
+
+function Input({ type, ...props }: React.ComponentProps<"input">) {
+  return type === "password" ? (
+    <SecretInput {...props} />
+  ) : (
+    <InputControl type={type} {...props} />
   );
 }
 
