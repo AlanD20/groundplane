@@ -1,7 +1,13 @@
 import { ImageReference } from "@/components/common/image-reference";
 import { PageHeader } from "@/components/common/page-header";
-import { ResourcePanel } from "@/components/common/resource-panel";
-import { ServiceFormBody } from "@/components/common/service-form-body";
+import {
+  AdvancedDetails,
+  ResourcePanel,
+} from "@/components/common/resource-panel";
+import {
+  ServiceFormBody,
+  type ServiceFormSection,
+} from "@/components/common/service-form-body";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -18,6 +24,7 @@ import {
   DeployDialog,
   RollbackDialog,
 } from "@/features/release/environment-deploy-controls";
+import { EnvVarsCard } from "@/features/entry/environment-entries";
 import { ServiceConfiguration } from "@/features/service/service-configuration";
 import { ServiceOverview } from "@/features/service/service-overview";
 import {
@@ -39,7 +46,6 @@ import {
   ChevronRight,
   CirclePlay,
   CircleStop,
-  FileCog,
   HeartPulse,
   History,
   Network,
@@ -121,7 +127,7 @@ export function ServiceWorkspace({
       : summary.observation.servingReleaseId;
   const [detailError, setDetailError] = useState<string>();
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<ServiceFormSection | null>(null);
   const [operation, setOperation] = useState<ServiceOperation | null>(null);
   const [releaseAction, setReleaseAction] = useState<
     "deploy" | "rollback" | null
@@ -333,73 +339,98 @@ export function ServiceWorkspace({
             </ResourcePanel>
           </TabsPanel>
           <TabsPanel value="configuration" className="pt-5">
-            <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-              <ResourcePanel
-                title="Workload"
-                actions={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditing(true)}
-                  >
-                    <Settings2 /> Edit desired configuration
-                  </Button>
-                }
+            <div className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Edit desired configuration here, then Deploy to apply it to the
+                running Service.
+              </p>
+              <ResourcePanel title="Workload settings">
+                <div className="divide-y divide-border">
+                  <ConfigurationShortcut
+                    icon={<Boxes />}
+                    label="Image"
+                    value={service.image}
+                    onClick={() => setEditing("workload")}
+                  />
+                  <ConfigurationShortcut
+                    icon={<Settings2 />}
+                    label="Runtime and resources"
+                    value={`${service.replicas} replicas · ${service.resources.mem} · ${service.resources.cpus} CPU`}
+                    onClick={() => setEditing("runtime")}
+                  />
+                  <ConfigurationShortcut
+                    icon={<HeartPulse />}
+                    label="Healthcheck"
+                    value={
+                      service.healthcheck
+                        ? `${service.healthcheck.kind} · ${service.healthcheck.target}`
+                        : "Not configured"
+                    }
+                    onClick={() => setEditing("healthcheck")}
+                  />
+                  <ConfigurationShortcut
+                    icon={<Network />}
+                    label="Networking"
+                    value={`${service.zones.length} Zones · ${service.expose.length} exposed ports`}
+                    onClick={() => setEditing("network")}
+                  />
+                </div>
+              </ResourcePanel>
+              <AdvancedDetails title="Entries & files">
+                <EnvVarsCard env={env} service={service} />
+              </AdvancedDetails>
+              <AdvancedDetails
+                title={`Storage · ${service.mounts.length} mounts`}
               >
+                {service.mounts.length ? (
+                  service.mounts.map((mount, index) => (
+                    <p key={index} className="break-words">
+                      {mount.type === "volume" ? mount.volume : mount.file} →{" "}
+                      {mount.mount}
+                    </p>
+                  ))
+                ) : (
+                  <p>No mounts configured.</p>
+                )}
+                <p className="text-muted-foreground">
+                  Service mounts are configured in the Environment Blueprint.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setSearch({ view: "configuration", panel: "blueprint" })
+                  }
+                >
+                  Edit mounts in Blueprint
+                </Button>
+              </AdvancedDetails>
+              <AdvancedDetails title="Technical details & Compose">
                 <ServiceConfiguration
                   service={service}
                   loading={loading}
                   error={detailError}
                 />
-              </ResourcePanel>
-              <ResourcePanel title="Configuration">
-                <div className="divide-y divide-border rounded-xl border border-border">
-                  <ConfigurationShortcut
-                    icon={<HeartPulse />}
-                    label="Healthcheck"
-                    value={service.healthcheck?.kind ?? "Not configured"}
-                    onClick={() => setEditing(true)}
-                  />
-                  <ConfigurationShortcut
-                    icon={<FileCog />}
-                    label="Entries & files"
-                    value={`${service.environment.length + service.envFiles.length} configured`}
-                    onClick={() => setEditing(true)}
-                  />
-                  <ConfigurationShortcut
-                    icon={<Boxes />}
-                    label="Volumes"
-                    value={`${service.mounts.filter((mount) => mount.type === "volume").length} mounted`}
-                    onClick={() => setEditing(true)}
-                  />
-                  <ConfigurationShortcut
-                    icon={<Network />}
-                    label="TCP ports"
-                    value={`${service.expose.length} exposed`}
-                    onClick={() => setEditing(true)}
-                  />
-                  <ConfigurationShortcut
-                    icon={<Trash2 />}
-                    label="Removal"
-                    value="Dependency checked"
-                    destructive
-                    onClick={() => setOperation("remove")}
-                  />
-                </div>
-              </ResourcePanel>
+              </AdvancedDetails>
             </div>
           </TabsPanel>
         </Tabs>
       </section>
-      <Drawer open={editing} onOpenChange={setEditing}>
+      <Drawer
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+      >
         {editing && (
           <ServiceFormBody
-            key={service.id}
+            key={`${service.id}/${editing}`}
+            section={editing}
             env={env}
             workspace={params.tenant}
             initial={service}
             onClose={() => {
-              setEditing(false);
+              setEditing(null);
               setReload((value) => value + 1);
             }}
           />

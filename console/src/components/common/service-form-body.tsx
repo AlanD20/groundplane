@@ -49,11 +49,15 @@ type BackingFields = {
   onPrefixChange: (value: string) => void;
 };
 
+export type ServiceFormSection =
+  "workload" | "network" | "runtime" | "healthcheck";
+
 type ServiceFormBodyProps =
   | {
       env: Environment;
       workspace: string;
       initial?: Service;
+      section?: ServiceFormSection;
       backing?: never;
       onCreateBacking?: never;
       onClose: () => void;
@@ -62,6 +66,7 @@ type ServiceFormBodyProps =
       env?: never;
       workspace?: never;
       initial?: never;
+      section?: never;
       backing: BackingFields;
       onCreateBacking: (
         patch: ServicePatch,
@@ -74,12 +79,14 @@ type ServiceFormBodyProps =
 export function ServiceFormBody({
   env,
   initial,
+  section,
   backing,
   onCreateBacking,
   onClose,
 }: ServiceFormBodyProps) {
   const store = useStore();
   const editing = !!initial;
+  const show = (group: ServiceFormSection) => !section || section === group;
   const isBacking = !!backing;
   const selectedAdapter = store.adapters.find(
     (adapter) => adapter.key === backing?.adapterKey,
@@ -163,7 +170,7 @@ export function ServiceFormBody({
               interval: hcInterval,
               timeout: hcTimeout,
               startPeriod: hcStart,
-              retries: 3,
+              retries: initial?.healthcheck?.retries ?? 3,
             },
       resources: { mem: mem.trim() || "128m", cpus: cpus.trim() || "0.25" },
       expose: expose
@@ -190,7 +197,29 @@ export function ServiceFormBody({
       onCreateBacking(buildPatch(), backing.adapterKey, backing.prefix);
       return;
     }
-    const patch = buildPatch();
+    const values = buildPatch();
+    const patch =
+      !initial || !section
+        ? values
+        : {
+            ...initial,
+            ...(section === "workload" ? { image: values.image } : {}),
+            ...(section === "network"
+              ? { zones: values.zones, expose: values.expose }
+              : {}),
+            ...(section === "runtime"
+              ? {
+                  strategy: values.strategy,
+                  onFailure: values.onFailure,
+                  resources: values.resources,
+                  restart: values.restart,
+                  replicas: values.replicas,
+                }
+              : {}),
+            ...(section === "healthcheck"
+              ? { healthcheck: values.healthcheck }
+              : {}),
+          };
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -213,7 +242,7 @@ export function ServiceFormBody({
           {isBacking
             ? "New backing service"
             : editing
-              ? `Edit service · ${env?.name}`
+              ? `${section ? { workload: "Image", network: "Networking", runtime: "Runtime and resources", healthcheck: "Healthcheck" }[section] : "Edit service"} · ${initial.name}`
               : `Add service · ${env?.name}`}
         </DialogTitle>
       </DialogHeader>
@@ -228,283 +257,299 @@ export function ServiceFormBody({
           <p className="text-xs text-muted-foreground">
             {isBacking
               ? `A backing service is a service plus the adapter that knows how to provision, connect, and back it up. The adapter resolves its immutable managed workload release; operators do not select an image. It follows the same hierarchy: backing project → one environment ("main") → this service. It owns its own network: the zone "${backingZone}" is created with it, and consumers join it as external when they attach. It stays running even with zero consumers; only an explicit Destroy removes it.`
-              : "Saving only stores configuration; it does not start a container. Make the image available on the Agent host, then use Deploy. Deploy does not pull or build images."}
+              : section && section !== "workload"
+                ? "Save updates desired configuration. Deploy when you are ready to apply it to the running Service."
+                : "Saving only stores configuration; it does not start a container. Make the image available on the Agent host, then use Deploy. Deploy does not pull or build images."}
           </p>
-          <FormSection
-            title="Service"
-            description="Name the service and choose its container image."
-          >
-            <div className="flex flex-col gap-4 sm:col-span-2">
-              {isBacking && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="bs-adapter">Adapter</Label>
-                    <Select
-                      id="bs-adapter"
-                      value={backing.adapterKey}
-                      onValueChange={applyAdapter}
-                      options={store.adapters.map((a) => ({
-                        value: a.key,
-                        label: a.key,
-                      }))}
-                    />
+          {show("workload") && (
+            <FormSection
+              title="Service"
+              description="Name the service and choose its container image."
+            >
+              <div className="flex flex-col gap-4 sm:col-span-2">
+                {isBacking && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="bs-adapter">Adapter</Label>
+                      <Select
+                        id="bs-adapter"
+                        value={backing.adapterKey}
+                        onValueChange={applyAdapter}
+                        options={store.adapters.map((a) => ({
+                          value: a.key,
+                          label: a.key,
+                        }))}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="bs-prefix">
+                        Prefix (facts keys on attach — e.g. pg16_URL)
+                      </Label>
+                      <Input
+                        id="bs-prefix"
+                        value={backing.prefix}
+                        onChange={(e) => backing.onPrefixChange(e.target.value)}
+                        placeholder="pg16"
+                      />
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="bs-prefix">
-                      Prefix (facts keys on attach — e.g. pg16_URL)
-                    </Label>
-                    <Input
-                      id="bs-prefix"
-                      value={backing.prefix}
-                      onChange={(e) => backing.onPrefixChange(e.target.value)}
-                      placeholder="pg16"
-                    />
-                  </div>
-                </div>
-              )}
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="sv-name">
-                  {isBacking ? "Name (unique service name)" : "Name"}
-                </Label>
-                <Input
-                  id="sv-name"
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    if (isBacking && !exposeEdited) {
-                      const port =
-                        selectedAdapter?.urlScheme === "redis"
-                          ? "6379"
-                          : "5432";
-                      setExpose(
-                        `${e.target.value.trim().toLowerCase() || "svc"}:${port}`,
-                      );
-                    }
-                  }}
-                  autoFocus
-                  disabled={editing}
-                />
-              </div>
-              {!isBacking && (
+                )}
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-image">Image</Label>
-                  <ImagePicker
-                    id="sv-image"
-                    value={image}
-                    onChange={setImage}
-                  />
-                </div>
-              )}
-              {isBacking && (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-role">Note</Label>
-                  <Input
-                    id="sv-role"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                  />
-                </div>
-              )}
-            </div>
-          </FormSection>
-          <FormSection
-            title="Network"
-            description="Choose network memberships and the ports other services can reach."
-          >
-            <div className="flex flex-col gap-4 sm:col-span-2">
-              {!isBacking && env && env.zones.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <Label>Zones</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {env.zones.map((z) => (
-                      <label
-                        key={z.name}
-                        className="flex items-center gap-1.5 text-xs"
-                      >
-                        <Checkbox
-                          checked={zones.includes(z.name)}
-                          onChange={(e) =>
-                            setZones((prev) =>
-                              e.target.checked
-                                ? [...prev, z.name]
-                                : prev.filter((x) => x !== z.name),
-                            )
-                          }
-                          className="accent-primary"
-                        />
-                        <span>
-                          {z.name}
-                          {z.internal ? " (internal)" : ""}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="sv-expose">Expose ports (comma list)</Label>
-                <Input
-                  id="sv-expose"
-                  value={expose}
-                  onChange={(event) => {
-                    setExpose(event.target.value);
-                    setExposeEdited(true);
-                  }}
-                />
-              </div>
-            </div>
-          </FormSection>
-          <FormSection
-            title="Runtime and resources"
-            description="Set deployment behavior, replicas and resource limits."
-          >
-            <div className="flex flex-col gap-4 sm:col-span-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="sv-strategy">
-                  Strategy (default — chosen per deployment)
-                </Label>
-                <Select
-                  id="sv-strategy"
-                  value={strategy}
-                  onValueChange={(v) => setStrategy(v as Service["strategy"])}
-                  options={[
-                    { value: "blue-green", label: "blue-green" },
-                    { value: "recreate", label: "recreate" },
-                    { value: "rolling", label: "rolling (deferred)" },
-                  ]}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="sv-on-failure">Failure policy (default)</Label>
-                <Select
-                  id="sv-on-failure"
-                  value={onFailure}
-                  onValueChange={(value) =>
-                    setOnFailure(value as "switch_back" | "leave_active")
-                  }
-                  options={[
-                    { value: "switch_back", label: "switch_back" },
-                    { value: "leave_active", label: "leave_active" },
-                  ]}
-                />
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-restart">Restart</Label>
-                  <Select
-                    id="sv-restart"
-                    value={restart}
-                    onValueChange={(v) => setRestart(v as Service["restart"])}
-                    options={[
-                      { value: "unless-stopped", label: "unless-stopped" },
-                      { value: "always", label: "always" },
-                      { value: "no", label: "no" },
-                    ]}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-replicas">Replicas</Label>
-                  <Input
-                    id="sv-replicas"
-                    value={replicas}
-                    onChange={(e) => setReplicas(e.target.value)}
-                    placeholder="1"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-mem">Memory limit</Label>
-                  <Input
-                    id="sv-mem"
-                    value={mem}
-                    onChange={(e) => setMem(e.target.value)}
-                    placeholder="512m"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-cpu">CPU limit (cores)</Label>
-                  <Input
-                    id="sv-cpu"
-                    value={cpus}
-                    onChange={(e) => setCpus(e.target.value)}
-                    placeholder="0.5"
-                  />
-                </div>
-              </div>
-            </div>
-          </FormSection>
-          <FormSection
-            title="Health check"
-            description="Choose how Groundplane checks whether the service is ready."
-          >
-            <div className="flex flex-col gap-4 sm:col-span-2">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-healthcheck-kind">Healthcheck</Label>
-                  <Select
-                    id="sv-healthcheck-kind"
-                    value={hcKind}
-                    onValueChange={(v) =>
-                      setHcKind(v as "http" | "tcp" | "pgrep" | "none")
-                    }
-                    options={[
-                      { value: "http", label: "http" },
-                      { value: "tcp", label: "tcp" },
-                      { value: "pgrep", label: "pgrep" },
-                      { value: "none", label: "none" },
-                    ]}
-                  />
-                </div>
-                <div className="sm:col-span-2 flex flex-col gap-1.5">
-                  <Label htmlFor="sv-healthcheck-target">
-                    {hcKind === "http"
-                      ? "Healthcheck path"
-                      : hcKind === "tcp"
-                        ? "Healthcheck host:port"
-                        : hcKind === "pgrep"
-                          ? "Healthcheck cmd"
-                          : "—"}
+                  <Label htmlFor="sv-name">
+                    {isBacking ? "Name (unique service name)" : "Name"}
                   </Label>
                   <Input
-                    id="sv-healthcheck-target"
-                    value={hcTarget}
-                    onChange={(e) => setHcTarget(e.target.value)}
-                    disabled={hcKind === "none"}
+                    id="sv-name"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (isBacking && !exposeEdited) {
+                        const port =
+                          selectedAdapter?.urlScheme === "redis"
+                            ? "6379"
+                            : "5432";
+                        setExpose(
+                          `${e.target.value.trim().toLowerCase() || "svc"}:${port}`,
+                        );
+                      }
+                    }}
+                    autoFocus
+                    disabled={editing}
                   />
                 </div>
+                {!isBacking && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sv-image">Image</Label>
+                    <ImagePicker
+                      id="sv-image"
+                      value={image}
+                      onChange={setImage}
+                    />
+                  </div>
+                )}
+                {isBacking && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sv-role">Note</Label>
+                    <Input
+                      id="sv-role"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            </FormSection>
+          )}
+          {show("network") && (
+            <FormSection
+              title="Network"
+              description="Choose network memberships and the ports other services can reach."
+            >
+              <div className="flex flex-col gap-4 sm:col-span-2">
+                {!isBacking && env && env.zones.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Zones</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {env.zones.map((z) => (
+                        <label
+                          key={z.name}
+                          className="flex items-center gap-1.5 text-xs"
+                        >
+                          <Checkbox
+                            checked={zones.includes(z.name)}
+                            onChange={(e) =>
+                              setZones((prev) =>
+                                e.target.checked
+                                  ? [...prev, z.name]
+                                  : prev.filter((x) => x !== z.name),
+                              )
+                            }
+                            className="accent-primary"
+                          />
+                          <span>
+                            {z.name}
+                            {z.internal ? " (internal)" : ""}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-healthcheck-interval">Interval</Label>
+                  <Label htmlFor="sv-expose">Expose ports (comma list)</Label>
                   <Input
-                    id="sv-healthcheck-interval"
-                    value={hcInterval}
-                    onChange={(e) => setHcInterval(e.target.value)}
-                    disabled={hcKind === "none"}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-healthcheck-timeout">Timeout</Label>
-                  <Input
-                    id="sv-healthcheck-timeout"
-                    value={hcTimeout}
-                    onChange={(e) => setHcTimeout(e.target.value)}
-                    disabled={hcKind === "none"}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sv-healthcheck-start">Start period</Label>
-                  <Input
-                    id="sv-healthcheck-start"
-                    value={hcStart}
-                    onChange={(e) => setHcStart(e.target.value)}
-                    disabled={hcKind === "none"}
+                    id="sv-expose"
+                    value={expose}
+                    onChange={(event) => {
+                      setExpose(event.target.value);
+                      setExposeEdited(true);
+                    }}
                   />
                 </div>
               </div>
-            </div>
-          </FormSection>
+            </FormSection>
+          )}
+          {show("runtime") && (
+            <FormSection
+              title="Runtime and resources"
+              description="Set deployment behavior, replicas and resource limits."
+            >
+              <div className="flex flex-col gap-4 sm:col-span-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="sv-strategy">
+                    Strategy (default — chosen per deployment)
+                  </Label>
+                  <Select
+                    id="sv-strategy"
+                    value={strategy}
+                    onValueChange={(v) => setStrategy(v as Service["strategy"])}
+                    options={[
+                      { value: "blue-green", label: "blue-green" },
+                      { value: "recreate", label: "recreate" },
+                      { value: "rolling", label: "rolling (deferred)" },
+                    ]}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="sv-on-failure">
+                    Failure policy (default)
+                  </Label>
+                  <Select
+                    id="sv-on-failure"
+                    value={onFailure}
+                    onValueChange={(value) =>
+                      setOnFailure(value as "switch_back" | "leave_active")
+                    }
+                    options={[
+                      { value: "switch_back", label: "switch_back" },
+                      { value: "leave_active", label: "leave_active" },
+                    ]}
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sv-restart">Restart</Label>
+                    <Select
+                      id="sv-restart"
+                      value={restart}
+                      onValueChange={(v) => setRestart(v as Service["restart"])}
+                      options={[
+                        { value: "unless-stopped", label: "unless-stopped" },
+                        { value: "always", label: "always" },
+                        { value: "no", label: "no" },
+                      ]}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sv-replicas">Replicas</Label>
+                    <Input
+                      id="sv-replicas"
+                      value={replicas}
+                      onChange={(e) => setReplicas(e.target.value)}
+                      placeholder="1"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sv-mem">Memory limit</Label>
+                    <Input
+                      id="sv-mem"
+                      value={mem}
+                      onChange={(e) => setMem(e.target.value)}
+                      placeholder="512m"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sv-cpu">CPU limit (cores)</Label>
+                    <Input
+                      id="sv-cpu"
+                      value={cpus}
+                      onChange={(e) => setCpus(e.target.value)}
+                      placeholder="0.5"
+                    />
+                  </div>
+                </div>
+              </div>
+            </FormSection>
+          )}
+          {show("healthcheck") && (
+            <FormSection
+              title="Health check"
+              description="Choose how Groundplane checks whether the service is ready."
+            >
+              <div className="flex flex-col gap-4 sm:col-span-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sv-healthcheck-kind">Healthcheck</Label>
+                    <Select
+                      id="sv-healthcheck-kind"
+                      value={hcKind}
+                      onValueChange={(v) =>
+                        setHcKind(v as "http" | "tcp" | "pgrep" | "none")
+                      }
+                      options={[
+                        { value: "http", label: "http" },
+                        { value: "tcp", label: "tcp" },
+                        { value: "pgrep", label: "pgrep" },
+                        { value: "none", label: "none" },
+                      ]}
+                    />
+                  </div>
+                  {hcKind !== "none" && (
+                    <>
+                      <div className="sm:col-span-2 flex flex-col gap-1.5">
+                        <Label htmlFor="sv-healthcheck-target">
+                          {hcKind === "http"
+                            ? "Healthcheck path"
+                            : hcKind === "tcp"
+                              ? "Healthcheck host:port"
+                              : hcKind === "pgrep"
+                                ? "Healthcheck cmd"
+                                : "—"}
+                        </Label>
+                        <Input
+                          id="sv-healthcheck-target"
+                          value={hcTarget}
+                          onChange={(e) => setHcTarget(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="sv-healthcheck-interval">
+                          Interval
+                        </Label>
+                        <Input
+                          id="sv-healthcheck-interval"
+                          value={hcInterval}
+                          onChange={(e) => setHcInterval(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="sv-healthcheck-timeout">Timeout</Label>
+                        <Input
+                          id="sv-healthcheck-timeout"
+                          value={hcTimeout}
+                          onChange={(e) => setHcTimeout(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="sv-healthcheck-start">
+                          Start period
+                        </Label>
+                        <Input
+                          id="sv-healthcheck-start"
+                          value={hcStart}
+                          onChange={(e) => setHcStart(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </FormSection>
+          )}
         </div>
-        {initial?.adapter === "custom" && (
+        {!section && initial?.adapter === "custom" && (
           <BackingHookFields
             value={hooks}
             onChange={setHooks}

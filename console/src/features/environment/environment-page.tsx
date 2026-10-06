@@ -27,12 +27,10 @@ import { SettingsCard } from "./environment-settings";
 import { Topology } from "./network-topology";
 import { RouterCard } from "./router-card";
 import { RoutesCard } from "./routes-card";
-import { ServicesList } from "./services-list";
 import {
   environmentNavigation,
   environmentSections,
 } from "./workspace-navigation";
-import { ConnectedServiceBoard } from "./connected-service-board";
 import { EnvironmentOverview } from "./environment-overview";
 import { ServiceWorkspace } from "./service-workspace";
 
@@ -103,9 +101,7 @@ export default function EnvironmentPage() {
   );
   const panels: Record<string, React.ReactNode> = {
     overview: <EnvironmentOverview env={env} now={observation.now} />,
-    services: <ConnectedServiceBoard env={env} now={observation.now} />,
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
-    "service-list": <ServicesList env={env} now={observation.now} />,
     zones: <Topology env={env} />,
     routes: <RoutesCard env={env} />,
     attaches: <AttachesCard env={env} />,

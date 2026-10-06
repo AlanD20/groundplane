@@ -72,7 +72,7 @@ export function ImageUsage({
                     environmentPath && owner?.service_id
                       ? owner.backing
                         ? environmentPath
-                        : `${environmentPath}?view=services&service=${encodeURIComponent(owner.service_id)}`
+                        : `${environmentPath}?view=overview&service=${encodeURIComponent(owner.service_id)}`
                       : null;
                   return (
                     <TableRow key={use.id}>

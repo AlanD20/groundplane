@@ -1,7 +1,5 @@
-import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/common/status-badge";
 import { currentServiceObservation } from "@/features/service/service-observation";
-import { environmentSections } from "@/features/environment/workspace-navigation";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import {
@@ -62,7 +60,7 @@ export function Sidebar({
   pathname: string;
 }) {
   const store = useStore();
-  const [search, setSearch] = useSearchParams();
+  const [search] = useSearchParams();
   const parts = pathname.split("/").filter(Boolean);
   const tenant = store.getTenant(workspace.slug);
   const project = projectSlug
@@ -325,27 +323,6 @@ export function Sidebar({
                               </span>
                             </Link>
                           ))}
-                          <div className="my-3 border-t border-border" />
-                          {environmentSections
-                            .filter(
-                              (s) => !["overview", "services"].includes(s.key),
-                            )
-                            .map((section) => (
-                              <Button
-                                key={section.key}
-                                variant="ghost"
-                                size="content"
-                                className="w-full justify-start gap-2 px-2 py-2 text-xs text-muted-foreground"
-                                onClick={() => {
-                                  const next = new URLSearchParams();
-                                  next.set("view", section.key);
-                                  setSearch(next);
-                                }}
-                              >
-                                <section.icon className="size-3.5" />
-                                {section.label}
-                              </Button>
-                            ))}
                         </div>
                       )}
                     </div>

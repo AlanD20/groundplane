@@ -29,17 +29,29 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
-import type { Environment, EnvironmentEntry } from "@/lib/types";
+import type { Environment, EnvironmentEntry, Service } from "@/lib/types";
 import { Plus, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { BulkEntryDrawer } from "./bulk-entry-drawer";
 import { EntryRow } from "./entry-row";
 // ---- Variables (env vars + env files) ----
 
-export function EnvVarsCard({ env }: { env: Environment }) {
+export function EnvVarsCard({
+  env,
+  service,
+}: {
+  env: Environment;
+  service?: Service;
+}) {
   const store = useStore();
   const params = useRequiredParams("tenant");
-  const entries = env.entries;
+  const entries = service
+    ? env.entries.filter(
+        (entry) =>
+          entry.exposure.includes("all") ||
+          entry.exposure.includes(service.name),
+      )
+    : env.entries;
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<"env" | "file">("env");
   const [key, setKey] = useState("");
@@ -54,7 +66,7 @@ export function EnvVarsCard({ env }: { env: Environment }) {
   const [factAttach, setFactAttach] = useState("");
   const [factGrantAttach, setFactGrantAttach] = useState("");
   const [factKey, setFactKey] = useState("");
-  const [exposure, setExposure] = useState<string[]>(["all"]);
+  const [exposure, setExposure] = useState<string[]>([service?.name ?? "all"]);
   const [secret, setSecret] = useState(false);
   const [editing, setEditing] = useState<EnvironmentEntry | null>(null);
   const [removing, setRemoving] = useState<EnvironmentEntry | null>(null);
@@ -118,7 +130,7 @@ export function EnvVarsCard({ env }: { env: Environment }) {
     setFactAttach("");
     setFactGrantAttach("");
     setFactKey("");
-    setExposure(["all"]);
+    setExposure([service?.name ?? "all"]);
     setSecret(false);
     setSaveError(null);
   }
@@ -233,19 +245,27 @@ export function EnvVarsCard({ env }: { env: Environment }) {
         }
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setBulkOpen(true)}
-            >
-              Bulk edit
-            </Button>
+            {!service && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkOpen(true)}
+              >
+                Bulk edit
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
               <Plus className="size-3.5" /> Add entry
             </Button>
           </div>
         }
       >
+        {service && (
+          <p className="text-xs text-muted-foreground">
+            Entries exposed to {service.name}, including shared Entries. Editing
+            a shared Entry affects every Service in its exposure.
+          </p>
+        )}
         <ListToolbar
           label="Entries"
           query={query}

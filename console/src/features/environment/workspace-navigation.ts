@@ -1,6 +1,5 @@
 import {
   Activity,
-  Boxes,
   FileCode2,
   Network,
   Layers,
@@ -14,16 +13,6 @@ export const environmentSections = [
     label: "Overview",
     icon: Layers,
     panels: [{ key: "overview", label: "Environment overview" }],
-  },
-  {
-    key: "services",
-    label: "Services",
-    icon: Boxes,
-    panels: [
-      { key: "services", label: "Services" },
-      { key: "logs", label: "Environment logs" },
-      { key: "service-list", label: "Service list" },
-    ],
   },
   {
     key: "network",
@@ -54,6 +43,7 @@ export const environmentSections = [
     icon: Activity,
     panels: [
       { key: "tasks", label: "Tasks" },
+      { key: "logs", label: "Logs" },
       { key: "releases", label: "Releases" },
       { key: "release-groups", label: "Release groups" },
       { key: "backups", label: "Backups & connectors" },

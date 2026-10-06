@@ -14,19 +14,27 @@ including the MVP's single Agent, do not need pagination.
 
 Navigation follows Platform or Tenant → Project → Environment. Host owns
 Controller and Agent management; Components owns integration settings.
-An Environment opens on a connected Service overview, with a searchable Service
-list beside it. The left rail selects the platform area; the explorer keeps the
+An Environment opens on a Service overview with Cards and Table display options,
+recent activity and backup protection. The left rail selects the platform area; the explorer keeps the
 current Project, Environment and Services visible. Horizontal Environment tabs group Network
 (Zones, Routes, backing connections and Router), Configuration (Blueprint,
-Entries, Attach facts, Volumes and Scripts), Operations (Tasks, Releases,
+Entries, Attach facts, Volumes and Scripts), Operations (Tasks, Logs, Releases,
 Release groups and Backups) and Settings. Project and shared-infrastructure
 links remain available in the sidebar. The breadcrumbs switch resource scope.
 Activity and Task views show the same durable operations, with scope and status
 filters. Opening a Task shows its details; its resource link opens the affected
 page.
-Opening a Service shows its full workspace, with Logs, Configure and Deploy beside the heading. Runtime,
-desired Configuration, Logs and History have separate views; saving configuration
-does not deploy it. Long forms retain their action footer while scrolling.
+Opening a Service shows its workspace with Overview, Logs, Releases and
+Configuration tabs. Configuration opens focused editors for image, runtime and
+resources, healthcheck and networking. Entries & files lists Entries exposed to
+the Service, including shared Entries; editing a shared Entry affects its full
+exposure. Storage shows mounts and links to the Environment Blueprint to edit
+them. Technical details and Compose are expandable. Saving configuration does
+not deploy it. Long forms retain their action footer while scrolling.
+
+Backups shows protection, schedule, sources and Recovery Points first. Edit policy
+opens the policy drawer; expandable destination and technical sections contain
+Connector management, encryption details and adapter steps.
 
 Loading, errors, missing data and expired observations are explicit. The Console
 must not substitute sample data for unavailable health or claim an operation

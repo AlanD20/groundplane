@@ -59,7 +59,7 @@ export function taskPresentation(
   let destination = resolveTaskOperationSurface(task, store);
   if (service && env && project && tenant)
     destination = {
-      href: `/t/${encodeURIComponent(tenant.slug)}/${encodeURIComponent(project.slug)}/${encodeURIComponent(env.name)}?view=services&service=${encodeURIComponent(service.id)}`,
+      href: `/t/${encodeURIComponent(tenant.slug)}/${encodeURIComponent(project.slug)}/${encodeURIComponent(env.name)}?view=overview&service=${encodeURIComponent(service.id)}`,
       label: "Open Service",
       fallback: false,
     };
