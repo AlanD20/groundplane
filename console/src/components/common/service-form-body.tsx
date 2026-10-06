@@ -50,7 +50,7 @@ type BackingFields = {
 };
 
 export type ServiceFormSection =
-  "workload" | "network" | "runtime" | "healthcheck";
+  "workload" | "network" | "runtime" | "healthcheck" | "hooks";
 
 type ServiceFormBodyProps =
   | {
@@ -216,6 +216,7 @@ export function ServiceFormBody({
                   replicas: values.replicas,
                 }
               : {}),
+            ...(section === "hooks" ? { hooks: values.hooks } : {}),
             ...(section === "healthcheck"
               ? { healthcheck: values.healthcheck }
               : {}),
@@ -242,7 +243,7 @@ export function ServiceFormBody({
           {isBacking
             ? "New backing service"
             : editing
-              ? `${section ? { workload: "Image", network: "Networking", runtime: "Runtime and resources", healthcheck: "Healthcheck" }[section] : "Edit service"} · ${initial.name}`
+              ? `${section ? { workload: "Image", network: "Networking", runtime: "Runtime and resources", healthcheck: "Healthcheck", hooks: "Lifecycle hooks" }[section] : "Edit service"} · ${initial.name}`
               : `Add service · ${env?.name}`}
         </DialogTitle>
       </DialogHeader>
@@ -549,7 +550,7 @@ export function ServiceFormBody({
             </FormSection>
           )}
         </div>
-        {!section && initial?.adapter === "custom" && (
+        {show("hooks") && initial?.adapter === "custom" && (
           <BackingHookFields
             value={hooks}
             onChange={setHooks}

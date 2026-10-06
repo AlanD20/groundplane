@@ -99,7 +99,7 @@ function ReleaseGroupForm({
     }
     onOpenChange(false)
 		} catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save release group')
+      setError(cause instanceof Error ? cause.message : 'Unable to save deployment group')
 		} finally {
 			setSaving(false)
 		}
@@ -109,14 +109,14 @@ function ReleaseGroupForm({
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DialogHeader>
-          <DialogTitle>{group ? `Edit ${group.name}` : 'Add release group'}</DialogTitle>
+          <DialogTitle>{group ? `Edit ${group.name}` : 'Add deployment group'}</DialogTitle>
           <DialogDescription>Choose at least two services and set their exact release order. Membership is never inferred.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="release-group-name">Name</Label>
 			<Input id="release-group-name" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="realtime" />
-            {duplicateName && <p className="text-xs text-destructive">A release group with this name already exists.</p>}
+            {duplicateName && <p className="text-xs text-destructive">A deployment group with this name already exists.</p>}
 			{draft.name !== draft.name.trim() && <p className="text-xs text-destructive">Leading or trailing whitespace is not allowed.</p>}
           </div>
           <fieldset className="flex flex-col gap-2">

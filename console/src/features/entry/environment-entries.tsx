@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { EntryReferenceFields } from "./entry-reference-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -44,7 +45,7 @@ export function EnvVarsCard({
   service?: Service;
 }) {
   const store = useStore();
-  const params = useRequiredParams("tenant");
+  const params = useRequiredParams("tenant", "project");
   const entries = service
     ? env.entries.filter(
         (entry) =>
@@ -74,6 +75,7 @@ export function EnvVarsCard({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const project = store.getProject(params.tenant, params.project);
   const table = useTableView(
     entries.filter((entry) =>
       `${entry.key ?? entry.path ?? ""} ${entry.exposure.join(" ")} ${entry.source.kind}`
@@ -164,7 +166,7 @@ export function EnvVarsCard({
         break;
       case "fact":
         if (!factAttach.trim() || !factKey.trim()) {
-          setSaveError("Fact Attach id and fact key are required.");
+          setSaveError("Select a backing connection and connection value.");
           return;
         }
         source = {
@@ -239,8 +241,8 @@ export function EnvVarsCard({
       <ResourcePanel
         title={
           <span className="flex items-center gap-2">
-            <ShieldCheck className="size-4 text-muted-foreground" /> Environment
-            Entries
+            <ShieldCheck className="size-4 text-muted-foreground" /> Variables &
+            files
           </span>
         }
         actions={
@@ -255,7 +257,7 @@ export function EnvVarsCard({
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-              <Plus className="size-3.5" /> Add entry
+              <Plus className="size-3.5" /> Add variable or file
             </Button>
           </div>
         }
@@ -267,7 +269,7 @@ export function EnvVarsCard({
           </p>
         )}
         <ListToolbar
-          label="Entries"
+          label="Variables & files"
           query={query}
           onQueryChange={setQuery}
           sort={table}
@@ -277,7 +279,7 @@ export function EnvVarsCard({
           ]}
         />
         <ResourceTable>
-          <Table aria-label="Environment Entries">
+          <Table aria-label="Variables & files">
             <TableHeader>
               <TableRow>
                 <TableSortHead sort={table} field="name">
@@ -296,10 +298,10 @@ export function EnvVarsCard({
           <p className="p-6 text-center text-xs text-muted-foreground">
             {entries.length
               ? "No Entries match your search."
-              : "No Entries yet."}
+              : "No variables or files yet."}
           </p>
         )}
-        <TablePagination table={table} label="Entries" />
+        <TablePagination table={table} label="Variables & files" />
         <p className="mt-2 text-xs text-muted-foreground">
           Changes update managed files. Running processes receive them on the
           next Deploy.
@@ -313,7 +315,8 @@ export function EnvVarsCard({
         <DrawerContent>
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit Entry" : "Add Entry"} · {env.name}
+              {editing ? "Edit variable or file" : "Add variable or file"} ·{" "}
+              {env.name}
             </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4">
@@ -328,7 +331,7 @@ export function EnvVarsCard({
                     disabled={!!editing}
                     onClick={() => setKind(candidate)}
                   >
-                    {candidate === "env" ? "env variable" : "file"}
+                    {candidate === "env" ? "Variable" : "File"}
                   </Button>
                 ))}
               </div>
@@ -395,9 +398,16 @@ export function EnvVarsCard({
                       key={candidate}
                       variant={sourceKind === candidate ? "default" : "outline"}
                       size="sm"
+                      aria-pressed={sourceKind === candidate}
                       onClick={() => setSourceKind(candidate)}
                     >
-                      {candidate.replace("_", " ")}
+                      {
+                        {
+                          literal: "Direct value",
+                          secret_ref: "Reusable Secret",
+                          fact: "Connection value",
+                        }[candidate]
+                      }
                     </Button>
                   ),
                 )}
@@ -430,51 +440,24 @@ export function EnvVarsCard({
                 )}
               </div>
             )}
-            {sourceKind === "secret_ref" && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="entry-secret-ref">
-                  Reusable Secret reference
-                </Label>
-                <Input
-                  id="entry-secret-ref"
-                  value={secretRef}
-                  onChange={(event) => setSecretRef(event.target.value)}
-                  placeholder="DATABASE_PASSWORD"
-                />
-              </div>
-            )}
-            {sourceKind === "fact" && (
-              <div className="grid gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="entry-fact-attach">Attach id</Label>
-                  <Input
-                    id="entry-fact-attach"
-                    value={factAttach}
-                    onChange={(event) => setFactAttach(event.target.value)}
-                    placeholder="att_..."
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="entry-fact-grant">
-                    Grant Attach id · optional
-                  </Label>
-                  <Input
-                    id="entry-fact-grant"
-                    value={factGrantAttach}
-                    onChange={(event) => setFactGrantAttach(event.target.value)}
-                    placeholder="att_..."
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="entry-fact-key">Fact key</Label>
-                  <Input
-                    id="entry-fact-key"
-                    value={factKey}
-                    onChange={(event) => setFactKey(event.target.value)}
-                    placeholder="pg16_URL"
-                  />
-                </div>
-              </div>
+            {sourceKind !== "literal" && (
+              <EntryReferenceFields
+                env={env}
+                projectId={project?.id}
+                sourceKind={sourceKind}
+                secretRef={secretRef}
+                connectionSource={{
+                  attachId: factAttach,
+                  grantAttachId: factGrantAttach,
+                  key: factKey,
+                }}
+                onSecretChange={setSecretRef}
+                onConnectionChange={(source) => {
+                  setFactAttach(source.attachId);
+                  setFactGrantAttach(source.grantAttachId);
+                  setFactKey(source.key);
+                }}
+              />
             )}
 
             <div className="flex flex-col gap-1.5">
@@ -504,9 +487,7 @@ export function EnvVarsCard({
 
             <label className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5">
               <div className="flex flex-col">
-                <span className="text-sm font-medium">
-                  Secret storage class
-                </span>
+                <span className="text-sm font-medium">Store as secret</span>
                 <span className="text-xs text-muted-foreground">
                   Secret Entries are encrypted and materialize at mode 0600.
                 </span>
@@ -536,7 +517,13 @@ export function EnvVarsCard({
               }
               onClick={() => void saveEntry()}
             >
-              {saving ? "Saving…" : editing ? "Save Entry" : "Add Entry"}
+              {saving
+                ? "Saving…"
+                : editing
+                  ? "Save changes"
+                  : kind === "env"
+                    ? "Add variable"
+                    : "Add file"}
             </Button>
           </DialogFooter>
         </DrawerContent>

@@ -2,10 +2,10 @@ import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { AttachesCard } from "@/features/attach/environment-attaches";
 import { FactsCard } from "@/features/attach/environment-facts";
 import { BackupsCard } from "@/features/backup/environment-backups";
+import { EnvironmentConnectorManager } from "@/features/connectors/environment-connector-manager";
 import { BlueprintState } from "@/features/blueprint/environment-blueprint-state";
 import { EnvVarsCard } from "@/features/entry/environment-entries";
 import { LogViewer, LogStream } from "@/features/logs/log-viewer";
@@ -27,10 +27,7 @@ import { SettingsCard } from "./environment-settings";
 import { Topology } from "./network-topology";
 import { RouterCard } from "./router-card";
 import { RoutesCard } from "./routes-card";
-import {
-  environmentNavigation,
-  environmentSections,
-} from "./workspace-navigation";
+import { environmentNavigation } from "./workspace-navigation";
 import { EnvironmentOverview } from "./environment-overview";
 import { ServiceWorkspace } from "./service-workspace";
 
@@ -115,6 +112,7 @@ export default function EnvironmentPage() {
     releases: <ReleasesCard env={env} />,
     "release-groups": <ReleaseGroupsPanel env={env} />,
     backups: <BackupsCard env={env} />,
+    connectors: <EnvironmentConnectorManager env={env} />,
     settings: <SettingsCard env={env} />,
   };
   const selected = env.services.find((s) => s.id === search.get("service"));
@@ -210,57 +208,16 @@ export default function EnvironmentPage() {
           deleting ? "Environment deletion in progress" : section.label
         }
       >
-        <Tabs
-          value={section.key}
-          onValueChange={(value) => setSearch({ view: String(value) })}
+        <section
+          key={panel.key}
+          aria-label={panel.label}
+          className="min-w-0 space-y-5"
         >
-          <TabsList
-            aria-label="Environment sections"
-            variant="underline"
-            className="mb-6"
-          >
-            {environmentSections.map((item) => (
-              <TabsTab key={item.key} value={item.key}>
-                <item.icon />
-                {item.label}
-              </TabsTab>
-            ))}
-          </TabsList>
-          <TabsPanel value={section.key}>
-            {section.panels.length > 1 ? (
-              <Tabs
-                value={panel.key}
-                onValueChange={(value) =>
-                  setSearch((current) => {
-                    const next = new URLSearchParams(current);
-                    next.set("panel", String(value));
-                    next.delete("service");
-                    return next;
-                  })
-                }
-              >
-                <TabsList aria-label={section.label} className="border-0 pb-0">
-                  {section.panels.map((item) => (
-                    <TabsTab key={item.key} value={item.key}>
-                      {item.label}
-                    </TabsTab>
-                  ))}
-                </TabsList>
-                {section.panels.map((item) => (
-                  <TabsPanel
-                    key={item.key}
-                    value={item.key}
-                    className="min-w-0 space-y-6 pt-6"
-                  >
-                    {panels[item.key]}
-                  </TabsPanel>
-                ))}
-              </Tabs>
-            ) : (
-              panels[panel.key]
-            )}
-          </TabsPanel>
-        </Tabs>
+          {panel.key !== "overview" && (
+            <h2 className="text-lg font-semibold">{panel.label}</h2>
+          )}
+          {panels[panel.key]}
+        </section>
       </fieldset>
     </div>
   );

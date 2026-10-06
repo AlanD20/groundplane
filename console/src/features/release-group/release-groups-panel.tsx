@@ -21,7 +21,7 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
       <CardHeader className="flex-row items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <CardTitle className="flex items-center gap-2">
-            <Workflow className="size-4 text-primary" /> Release groups
+            <Workflow className="size-4 text-primary" /> Deployment groups
             <Badge variant="outline">{env.releaseGroups.length}</Badge>
           </CardTitle>
           <p className="text-xs text-muted-foreground">
@@ -37,12 +37,12 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
           <EmptyState
             icon={<Workflow />}
             title="At least two services are required"
-            description="Add another service before defining a coordinated release group."
+            description="Add another service before defining a coordinated deployment group."
           />
         ) : env.releaseGroups.length === 0 ? (
           <EmptyState
             icon={<Workflow />}
-            title="No release groups"
+            title="No deployment groups"
             description="Create an explicit ordered set when multiple services must release under one task lock."
             action={<Button onClick={() => setAdding(true)}><Plus className="size-4" /> Add group</Button>}
           />

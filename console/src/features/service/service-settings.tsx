@@ -15,16 +15,16 @@ export function ServiceSettings({
   workspace,
   imageAction,
   onSaved,
+  sections,
 }: {
   env: Environment;
   service: Service;
   workspace: string;
   imageAction?: ReactNode;
   onSaved?: () => void;
+  sections?: ServiceFormSection[];
 }) {
-  const [editing, setEditing] = useState<ServiceFormSection | "all" | null>(
-    null,
-  );
+  const [editing, setEditing] = useState<ServiceFormSection | null>(null);
   const rows: {
     section: ServiceFormSection;
     label: string;
@@ -55,53 +55,63 @@ export function ServiceSettings({
   ];
   return (
     <>
-      <ResourcePanel title="Service settings">
+      <ResourcePanel
+        title={
+          sections?.length === 1 && sections[0] === "network"
+            ? "Networks & ports"
+            : "Runtime & image"
+        }
+      >
         <p className="text-sm text-muted-foreground">
-          Save changes here, then deploy to apply them.
+          Saving updates desired configuration, not running containers.{" "}
+          {workspace !== "platform" && "Deploy to apply these changes."}
         </p>
         <div className="divide-y divide-border">
-          {rows.map((row) => (
-            <div
-              key={row.section}
-              className="flex items-center justify-between gap-4 py-5 first:pt-0 last:pb-0"
-            >
-              <div className="min-w-0 space-y-1">
-                <h3 className="text-sm font-medium">{row.label}</h3>
-                <div className="break-words text-sm text-muted-foreground">
-                  {row.value}
+          {rows
+            .filter((row) => !sections || sections.includes(row.section))
+            .map((row) => (
+              <div
+                key={row.section}
+                className="flex items-center justify-between gap-4 py-5 first:pt-0 last:pb-0"
+              >
+                <div className="min-w-0 space-y-1">
+                  <h3 className="text-sm font-medium">{row.label}</h3>
+                  <div className="[overflow-wrap:anywhere] text-sm text-muted-foreground">
+                    {row.value}
+                  </div>
                 </div>
+                {row.section === "workload" && imageAction ? (
+                  imageAction
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Edit ${row.label.toLowerCase()}`}
+                    onClick={() => setEditing(row.section)}
+                  >
+                    Edit
+                  </Button>
+                )}
               </div>
-              {row.section === "workload" && imageAction ? (
-                imageAction
-              ) : (
+            ))}
+          {service.adapter === "custom" &&
+            (!sections || sections.includes("hooks")) && (
+              <div className="flex items-center justify-between gap-4 py-5">
+                <div>
+                  <h3 className="text-sm font-medium">Lifecycle hooks</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Provisioning and runtime commands
+                  </p>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  aria-label={`Edit ${row.label.toLowerCase()}`}
-                  onClick={() => setEditing(row.section)}
+                  onClick={() => setEditing("hooks")}
                 >
-                  Edit
+                  Edit hooks
                 </Button>
-              )}
-            </div>
-          ))}
-          {service.adapter === "custom" && (
-            <div className="flex items-center justify-between gap-4 py-5">
-              <div>
-                <h3 className="text-sm font-medium">Lifecycle hooks</h3>
-                <p className="text-sm text-muted-foreground">
-                  Provisioning and runtime commands
-                </p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditing("all")}
-              >
-                Edit hooks
-              </Button>
-            </div>
-          )}
+            )}
         </div>
       </ResourcePanel>
       <Drawer
@@ -116,7 +126,7 @@ export function ServiceSettings({
             env={env}
             workspace={workspace}
             initial={service}
-            section={editing === "all" ? undefined : editing}
+            section={editing}
             onClose={() => {
               setEditing(null);
               onSaved?.();

@@ -29,7 +29,7 @@ export default function PlatformActivityPage() {
   const scope = useMemo(() => activityScope(filter), [filter]);
   const options = useMemo(() => {
     const result = [
-      { value: "all", label: "All activity" },
+      { value: "all", label: "All Tasks" },
       { value: "platform", label: "Platform" },
     ];
     for (const tenant of store.tenants) {
@@ -59,14 +59,14 @@ export default function PlatformActivityPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Activity" icon={<Activity />} />
+      <PageHeader title="Tasks" icon={<Activity />} />
       <TaskList
         scope={scope}
         surface="activity"
         title="All Tasks"
         filters={
           <Select
-            aria-label="Activity owner"
+            aria-label="Task owner"
             className="w-64 max-w-full"
             value={filter}
             onValueChange={(value) => {

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import {
   TablePagination,
   TableSortHead,
@@ -46,6 +47,7 @@ export function BackupsTab({
         .map((s) => {
           const attach = e.attaches.find((candidate) => candidate.id === s.ref);
           return {
+            href: `/t/${store.tenants.find((tenant) => tenant.id === p.tenantId)?.slug ?? ""}/${p.slug}/${encodeURIComponent(e.name)}?view=operations&panel=backups`,
             project: p.slug,
             environment: e.name,
             services: attach?.service ?? "—",
@@ -181,7 +183,12 @@ export function BackupsTab({
                     </span>
                   </TableCell>
                   <TableCell className="py-2 pr-4 text-xs">
-                    {c.records}
+                    <Link
+                      to={c.href}
+                      className="text-primary underline underline-offset-4"
+                    >
+                      Open backups & restore
+                    </Link>
                   </TableCell>
                   <TableCell className="py-2 pr-4 text-xs text-muted-foreground">
                     {c.enabled ? c.lastRun : "—"}

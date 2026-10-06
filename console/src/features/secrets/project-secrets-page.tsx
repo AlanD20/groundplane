@@ -59,7 +59,7 @@ export default function ProjectSecretsPage() {
   const scoped = store.reusableSecrets.filter(
     (secret) => secret.scope === "project" && secret.projectId === projectId,
   );
-  const inherited = store.reusableSecrets.filter(
+  const fallbacks = store.reusableSecrets.filter(
     (secret) => secret.scope === "platform",
   );
   const error = mutationError ?? store.secretError;
@@ -97,7 +97,7 @@ export default function ProjectSecretsPage() {
         icon={<KeyRound />}
         meta={
           <MetaPill icon={<KeyRound />}>
-            {scoped.length} project-scoped entries
+            {scoped.length} Project Secrets
           </MetaPill>
         }
         actions={
@@ -112,9 +112,15 @@ export default function ProjectSecretsPage() {
       <ResourcePanel
         title="Secret references"
         actions={
-          <HelpHint>defined here or inherited from the platform scope</HelpHint>
+          <HelpHint>
+            Project-owned Secrets take precedence over matching Platform keys
+          </HelpHint>
         }
       >
+        <p className="text-sm text-muted-foreground">
+          Owned by {project.name}. A matching Project key takes precedence over
+          the Platform fallback.
+        </p>
         <ReusableSecretOwnerList
           secrets={scoped}
           loading={store.reusableSecretsLoading}
@@ -128,13 +134,17 @@ export default function ProjectSecretsPage() {
       </ResourcePanel>
 
       <ResourcePanel
-        title="Inherited from platform"
+        title="Platform fallback Secrets"
         actions={
           <HelpHint>used only when this project has no matching key</HelpHint>
         }
       >
+        <p className="text-sm text-muted-foreground">
+          Owned by the Platform and used only when this Project has no matching
+          key. Manage these shared resources in Platform Secrets.
+        </p>
         <ReusableSecretOwnerList
-          secrets={inherited}
+          secrets={fallbacks}
           loading={store.reusableSecretsLoading}
           emptyTitle="No platform fallback Secrets"
           scopeLabel="platform fallback"

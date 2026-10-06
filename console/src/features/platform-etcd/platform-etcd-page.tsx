@@ -135,7 +135,7 @@ export default function PlatformEtcdPage() {
         description="Control-plane store configuration"
       />
       <ResourcePanel
-        title="Configuration"
+        title="etcd configuration"
         actions={
           <Button
             variant="outline"

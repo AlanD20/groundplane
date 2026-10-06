@@ -36,6 +36,8 @@ export default function TenantProjectPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [networkPool, setNetworkPool] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string>();
   const [removingEnvironment, setRemovingEnvironment] =
     useState<Environment | null>(null);
 
@@ -80,6 +82,7 @@ export default function TenantProjectPage() {
             )}
           </>
         }
+        eyebrow={`Tenant · ${tenant.name} / Project`}
         description={project.description}
         icon={<Boxes />}
         meta={
@@ -153,31 +156,48 @@ export default function TenantProjectPage() {
             <p className="text-xs text-muted-foreground">
               One deployable instance of the project. Public routes need the
               ingress components (Caddy + Cloudflare Tunnel), enabled on the
-              environment&apos;s Router tab — never auto-deployed.
+              Environment’s Router page — never auto-deployed.
             </p>
           </div>
+          {createError && (
+            <p role="alert" className="text-sm text-destructive">
+              {createError}
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button
-              disabled={!name.trim() || !networkPool.trim()}
+              disabled={creating || !name.trim() || !networkPool.trim()}
               onClick={async () => {
                 const slug = name
                   .trim()
                   .toLowerCase()
                   .replace(/[^a-z0-9-]/g, "");
-                await store.addEnvironment(
-                  project.id,
-                  slug,
-                  networkPool.trim(),
-                );
-                setOpen(false);
-                setName("");
-                setNetworkPool("");
+                setCreating(true);
+                setCreateError(undefined);
+                try {
+                  await store.addEnvironment(
+                    project.id,
+                    slug,
+                    networkPool.trim(),
+                  );
+                  setOpen(false);
+                  setName("");
+                  setNetworkPool("");
+                } catch (error) {
+                  setCreateError(
+                    error instanceof Error
+                      ? error.message
+                      : "Unable to create Environment",
+                  );
+                } finally {
+                  setCreating(false);
+                }
               }}
             >
-              Create environment
+              {creating ? "Creating…" : "Create environment"}
             </Button>
           </DialogFooter>
         </DrawerContent>

@@ -23,9 +23,10 @@ function DrawerContent({
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm transition-all duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
       <DialogPrimitive.Popup
+        initialFocus={true}
         data-slot="drawer-content"
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col gap-5 overflow-y-auto border-l border-border bg-popover p-6 text-popover-foreground shadow-2xl outline-none",
+          "fixed inset-y-0 right-0 z-50 flex min-w-0 w-full max-w-2xl flex-col gap-5 overflow-y-auto [overflow-wrap:anywhere] [&>*]:min-w-0 border-l border-border bg-popover p-6 text-popover-foreground shadow-2xl outline-none",
           "transition-all duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full",
           className,
         )}

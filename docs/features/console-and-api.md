@@ -15,34 +15,50 @@ including the MVP's single Agent, do not need pagination.
 Navigation follows Platform or Tenant → Project → Environment. Host owns
 Controller and Agent management; Components owns integration settings.
 An Environment opens on a Service overview with Cards and Table display options,
-recent activity and backup protection. The left rail selects the platform area; the explorer keeps the
-current Project, Environment and Services visible. Horizontal Environment tabs group Network
-(Zones, Routes, backing connections and Router), Configuration (Blueprint,
-Entries, Attach facts, Volumes and Scripts), Operations (Tasks, Logs, Releases,
-Release groups and Backups) and Settings. Project and shared-infrastructure
-links remain available in the sidebar. The breadcrumbs switch resource scope.
-Activity and Task views show the same durable operations, with scope and status
-filters. Opening a Task shows its details; its resource link opens the affected
-page.
-Opening a Service shows its workspace with Overview, Logs, Deployments,
-Variables & files and Settings tabs. Settings shows current values with focused
-editors for image, runtime and resources, healthcheck and networking.
-Variables & files lists Entries exposed to the Service, including shared Entries;
-editing a shared Entry affects its full exposure. Service Settings includes a
-Storage editor: select an Environment Volume, set its container path and read-only
-access, or remove a mount. File Entries remain in Variables & files. The full
-configuration and Compose preview are expandable. Saving configuration does not
-deploy it. Long forms retain their action footer while scrolling.
+recent activity and backup protection. One labeled sidebar provides Platform
+navigation and the selected resource’s destinations. Environment destinations
+are visible links under headings, including Variables & files, backing connections
+and their Connection values, Deployments, Backup destinations, and Identity &
+encryption key. Headings organize links without adding intermediate pages.
+Breadcrumbs switch Tenant, Project, Environment and Service scope. On narrow
+screens, Navigate opens the same scrollable navigation.
+
+Opening a Service replaces Environment navigation with that Service’s destinations:
+Overview, Logs, Deployments, Variables & files, Storage, Backing connections,
+Runtime & image, Networking and Configuration report. Runtime, healthcheck,
+networking and custom lifecycle hooks use focused editors. Start/Stop and Deploy
+remain visible actions. Variables & files lists Entries exposed to the Service,
+including shared Entries; editing a shared Entry affects its full exposure.
+The source editor offers Direct value, Reusable Secret and Connection value.
+Connection selectors use published Attach metadata; Secret references offer
+suggestions without revealing plaintext.
+Storage selects Environment Volumes, container paths and read-only access. Removing
+a mount retains the Volume and its data. File Entries remain in Variables & files.
+Backing connections lists this Service’s Attaches, opens the shared connect editor
+with the Service selected, and shows its connection values. Reveal, Hide and Copy
+use the shared value control and configured reveal confirmation.
+
+Project Secrets distinguish Project-owned inputs from matching-key Platform
+fallbacks. Project and Environment Runner links select that owner in the Tenant’s
+shared Runner manager; the owner filter can show other scopes. Tasks show durable
+operations with scope and status filters. Opening a Task shows its details and
+links to the affected resource. A deployment opened from a Service returns to
+that Service’s history. Saving desired configuration does not deploy it.
 
 Backups shows protection, schedule, sources and Recovery Points first. Edit policy
-opens the policy drawer; expandable destination and encryption sections contain
-Connector management, encryption details and adapter steps.
+opens the policy drawer. Backup destinations directly opens the Environment’s
+Connector manager; the same manager is also available beside backup details.
+Named disclosures retain encryption information and adapter steps.
 
 Backing Services open with internal connection information, connected
-applications, containers and persistent storage. Connections holds per-consumer
-connection details; Logs, Backups and Settings are separate tabs. Settings uses
-the same focused editors as Services and contains configuration previews and
-the Destroy runtime confirmation. Tab selection is retained in the URL.
+applications, containers and persistent storage. Their sidebar separates Logs,
+Backing connections, consumer Backups & restore, Runtime & image, Networking and
+Configuration report. Consumer backup rows link to the owning Environment’s
+recovery workflow. Runtime editors identify the shared impact, and Destroy runtime
+retains its explicit confirmation and data-retention explanation. Destinations
+are retained in the URL, including CoreDNS’s Overview, DNS records and Resolver
+settings views. Console preferences contains browser appearance and reveal
+confirmation; resource management remains in its named destination.
 
 Loading, errors, missing data and expired observations are explicit. The Console
 must not substitute sample data for unavailable health or claim an operation

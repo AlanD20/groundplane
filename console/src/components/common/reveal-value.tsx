@@ -72,40 +72,41 @@ export function RevealValue({
       <code className="min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted px-2 py-1 font-mono text-xs [overflow-wrap:anywhere]">
         {revealed ? displayedValue : sensitive ? "•".repeat(12) : "not loaded"}
       </code>
-      {revealed ? (
-        <>
-          <CopyButton className="shrink-0" value={displayedValue ?? ""} />
-          <Button
-            variant="ghost"
-            size="content"
-            type="button"
-            onClick={hide}
-            className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Hide value"
-          >
-            <EyeOff className="size-3.5" />
-          </Button>
-        </>
-      ) : (
-        <Button
-          variant="ghost"
-          size="content"
-          type="button"
-          onClick={() => {
-            if (sensitive && requireRevealConfirm) {
-              setTyped("");
-              setOpen(true);
-            } else {
-              void reveal();
-            }
-          }}
-          className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label={sensitive ? "Reveal value" : "Show value"}
-          disabled={loading}
-        >
-          <Eye className="size-3.5" />
-        </Button>
+      {revealed && (
+        <CopyButton className="shrink-0" value={displayedValue ?? ""} />
       )}
+      <Button
+        variant="ghost"
+        size="content"
+        type="button"
+        onClick={() => {
+          if (loading) return;
+          if (revealed) hide();
+          else if (sensitive && requireRevealConfirm) {
+            setTyped("");
+            setOpen(true);
+          } else void reveal();
+        }}
+        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        aria-label={
+          revealed ? "Hide value" : sensitive ? "Reveal value" : "Show value"
+        }
+        aria-disabled={loading}
+        aria-busy={loading}
+      >
+        {revealed ? (
+          <EyeOff className="size-3.5" />
+        ) : (
+          <Eye className="size-3.5" />
+        )}
+        {loading
+          ? "Loading…"
+          : revealed
+            ? "Hide"
+            : sensitive
+              ? "Reveal"
+              : "Show"}
+      </Button>
       {error && (
         <span className="min-w-0 text-xs text-destructive [overflow-wrap:anywhere]">
           {error}

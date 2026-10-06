@@ -40,12 +40,12 @@ export function ReleasesCard({ env }: { env: Environment }) {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <History className="size-4 text-muted-foreground" /> Release ledger
+          <History className="size-4 text-muted-foreground" /> Deployments
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col">
         <p className="mb-2 text-xs text-muted-foreground">
-          Inspect active and superseded Service Releases. Open a Release for its
+          Deployment history is recorded as Releases. Open a deployment for its
           exact image and deployment details; track execution in Tasks.
         </p>
         <div className="overflow-x-auto rounded-lg border border-border">

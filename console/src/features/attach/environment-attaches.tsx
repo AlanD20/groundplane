@@ -21,19 +21,31 @@ import { Label } from "@/components/ui/label";
 import { AttachFormDialog } from "@/features/environment/attach-form-dialog";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
-import type { Attach, Environment } from "@/lib/types";
+import type { Attach, Environment, Service } from "@/lib/types";
 import { Pencil, Plug, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
 // ---- Attaches ----
 
-export function AttachesCard({ env }: { env: Environment }) {
+export function AttachesCard({
+  env,
+  service,
+}: {
+  env: Environment;
+  service?: Service;
+}) {
   const store = useStore();
+  const attaches = env.attaches.filter(
+    (attach) =>
+      !service ||
+      attach.serviceId === service.id ||
+      attach.service === service.name,
+  );
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const table = useTableView(
-    env.attaches.filter((attach) =>
+    attaches.filter((attach) =>
       `${attach.name} ${attach.service} ${attach.database} ${store.getBackingProject(attach.projectId)?.name}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()),
@@ -52,14 +64,20 @@ export function AttachesCard({ env }: { env: Environment }) {
     <Card>
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2">
-          <Plug className="size-4 text-muted-foreground" /> Attached backing
-          services
+          <Plug className="size-4 text-muted-foreground" /> Backing connections
         </CardTitle>
         <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-          <Plus className="size-3.5" /> Attach backing
+          <Plus className="size-3.5" /> Connect backing service
         </Button>
       </CardHeader>
-      <CardContent className="flex flex-col gap-1.5">
+      <CardContent className="flex flex-col gap-3">
+        <p className="text-xs text-muted-foreground">
+          {service
+            ? `Connections used by ${service.name}.`
+            : `Connections owned by Services in ${env.name}.`}{" "}
+          Each connection is an Attach; its generated values must be explicitly
+          mapped to variables or files.
+        </p>
         <ListToolbar
           label="Connections"
           query={query}
@@ -78,35 +96,42 @@ export function AttachesCard({ env }: { env: Environment }) {
           >
             <Link
               to={`/platform/backing-services/${a.projectId}`}
-              className="flex min-w-0 flex-1 items-center justify-between gap-2 transition-colors hover:border-ring/50"
+              className="flex min-w-0 flex-1 flex-col items-start gap-1 transition-colors hover:border-ring/50"
             >
-              <span className="truncate text-sm font-medium">
+              <span className="text-sm font-medium [overflow-wrap:anywhere]">
+                {a.name} ·{" "}
                 {store.getBackingProject(a.projectId)?.name ?? a.projectId}
               </span>
-              <span className="truncate font-mono text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {a.database !== "—"
                   ? `database ${a.database} · role ${a.role}`
                   : "attached"}
                 {a.service ? ` · for ${a.service}` : ""}
               </span>
             </Link>
+            <RenameAttach env={env} attach={a} />
             <DetachAttach env={env} attach={a} />
           </div>
         ))}
-        {env.attaches.length === 0 && (
+        {attaches.length === 0 && (
           <div className="text-xs text-muted-foreground">
             no backing service attached — connect a Service to a shared backing
             service; provisioning depends on its adapter
           </div>
         )}
-        {env.attaches.length > 0 && !table.total && (
+        {attaches.length > 0 && !table.total && (
           <p className="p-6 text-center text-xs text-muted-foreground">
             No connections match your search.
           </p>
         )}
         <TablePagination table={table} label="Connections" />
       </CardContent>
-      <AttachFormDialog env={env} open={open} onOpenChange={setOpen} />
+      <AttachFormDialog
+        initialServiceId={service?.id}
+        env={env}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </Card>
   );
 }

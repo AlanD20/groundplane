@@ -1,16 +1,13 @@
 import { EmptyState } from "@/components/common/empty-state";
 import { DetailRow } from "@/components/common/detail-row";
 import { PageHeader } from "@/components/common/page-header";
-import {
-  AdvancedDetails,
-  ResourcePanel,
-} from "@/components/common/resource-panel";
+import { ResourcePanel } from "@/components/common/resource-panel";
 import { ServiceSettings } from "@/features/service/service-settings";
 import { CopyButton } from "@/components/common/copy-button";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { PostgresImageUpdate } from "./postgres-image-update";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
+import { backingDestinations } from "@/features/service/workspace-navigation";
 import { LogStream } from "@/features/logs/log-viewer";
 import { ServiceContainers } from "@/features/service/service-containers";
 import { currentServiceObservation } from "@/features/service/service-observation";
@@ -27,7 +24,7 @@ import { BackupsTab } from "./backing-backups";
 import { ConnectionsTab } from "./backing-connections";
 import { DesiredStateTab } from "./backing-desired-state";
 
-type PlatformTab = "overview" | "logs" | "service" | "connections" | "backups";
+type PlatformTab = (typeof backingDestinations)[number]["key"];
 
 export default function BackingServiceDetailPage() {
   const params = useRequiredParams("id");
@@ -37,13 +34,9 @@ export default function BackingServiceDetailPage() {
   const svc = env?.services[0];
   const [search, setSearch] = useSearchParams();
   const requested = search.get("tab");
-  const tab = (
-    ["overview", "logs", "service", "connections", "backups"].includes(
-      requested ?? "",
-    )
-      ? requested
-      : "overview"
-  ) as PlatformTab;
+  const tab =
+    backingDestinations.find((item) => item.key === requested)?.key ??
+    "overview";
   const setTab = (value: PlatformTab) => setSearch({ tab: value });
   const [pendingAction, setPendingAction] = useState<
     "start" | "stop" | "destroy" | null
@@ -139,9 +132,6 @@ export default function BackingServiceDetailPage() {
                 <Power className="size-4" /> Start
               </Button>
             )}
-            {svc.adapter === "postgres:16" && (
-              <PostgresImageUpdate env={env} service={svc} />
-            )}
           </>
         }
       />
@@ -157,153 +147,173 @@ export default function BackingServiceDetailPage() {
         </p>
       )}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as PlatformTab)}>
-        <TabsList variant="underline" aria-label="Backing Service sections">
-          <TabsTab value="overview">Overview</TabsTab>
-          <TabsTab value="logs">Logs</TabsTab>
-          <TabsTab value="connections">Connections</TabsTab>
-          <TabsTab value="backups">Backups</TabsTab>
-          <TabsTab value="service">Settings</TabsTab>
-        </TabsList>
-
-        <TabsPanel value="overview" className="space-y-5 pt-5">
-          <div className="grid items-start gap-5 lg:grid-cols-2">
-            <ResourcePanel
-              title="Connect to this service"
-              actions={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTab("connections")}
-                >
-                  Connection details
-                </Button>
-              }
-            >
-              <DetailRow
-                label="Internal host"
-                value={
-                  <span className="inline-flex items-center gap-2 break-all">
-                    {svc.serviceName ?? svc.name}
-                    <CopyButton
-                      value={svc.serviceName ?? svc.name}
-                      label="Copy internal host"
-                    />
-                  </span>
+      <div className="min-w-0 space-y-5">
+        {tab === "logs" && (
+          <h2 className="text-lg font-semibold">
+            {backingDestinations.find((item) => item.key === tab)?.label}
+          </h2>
+        )}
+        {tab === "overview" && (
+          <div className="space-y-5 pt-5">
+            <div className="grid items-start gap-5 lg:grid-cols-2">
+              <ResourcePanel
+                title="Connect to this service"
+                actions={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTab("connections")}
+                  >
+                    Connection details
+                  </Button>
                 }
-              />
-              {port && <DetailRow label="Port" value={String(port)} />}
-              <p className="text-sm text-muted-foreground">
-                Applications connect through an Attach. Credentials and
-                connection URLs belong to each connection.
-              </p>
-            </ResourcePanel>
-            <ResourcePanel
-              title="Connected applications"
-              actions={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setTab("connections")}
-                >
-                  View all ({g.consumers?.length ?? 0})
-                </Button>
-              }
-            >
-              {(g.consumers ?? []).slice(0, 3).map((consumer) => (
-                <Button
-                  key={consumer.attachId}
-                  variant="ghost"
-                  size="content"
-                  className="flex w-full items-center justify-between gap-3 px-0 py-2 text-left"
-                  onClick={() => setTab("connections")}
-                >
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">
-                      {consumer.service}
+              >
+                <DetailRow
+                  label="Internal host"
+                  value={
+                    <span className="inline-flex items-center gap-2 break-all">
+                      {svc.serviceName ?? svc.name}
+                      <CopyButton
+                        value={svc.serviceName ?? svc.name}
+                        label="Copy internal host"
+                      />
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {consumer.project} / {consumer.environment}
-                    </span>
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {consumer.database || "Network access"}
-                  </span>
-                </Button>
-              ))}
-              {!g.consumers?.length && (
+                  }
+                />
+                {port && <DetailRow label="Port" value={String(port)} />}
                 <p className="text-sm text-muted-foreground">
-                  No applications connected. Add a backing connection from an
-                  application's Environment.
+                  Applications connect through an Attach. Credentials and
+                  connection URLs belong to each connection.
+                </p>
+              </ResourcePanel>
+              <ResourcePanel
+                title="Connected applications"
+                actions={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setTab("connections")}
+                  >
+                    View all ({g.consumers?.length ?? 0})
+                  </Button>
+                }
+              >
+                {(g.consumers ?? []).slice(0, 3).map((consumer) => (
+                  <Button
+                    key={consumer.attachId}
+                    variant="ghost"
+                    size="content"
+                    className="flex w-full items-center justify-between gap-3 px-0 py-2 text-left"
+                    onClick={() => setTab("connections")}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">
+                        {consumer.service}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {consumer.project} / {consumer.environment}
+                      </span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {consumer.database || "Network access"}
+                    </span>
+                  </Button>
+                ))}
+                {!g.consumers?.length && (
+                  <p className="text-sm text-muted-foreground">
+                    No applications connected. Add a backing connection from an
+                    application's Environment.
+                  </p>
+                )}
+              </ResourcePanel>
+            </div>
+            <ServiceContainers
+              observation={observation}
+              onOpenLogs={() => setTab("logs")}
+            />
+            <ResourcePanel title="Persistent storage">
+              {env.volumes.length ? (
+                env.volumes.map((volume) => (
+                  <DetailRow
+                    key={volume.id}
+                    label={volume.slug}
+                    value="Retained when runtime stops or is destroyed"
+                  />
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No managed Volumes.
                 </p>
               )}
             </ResourcePanel>
           </div>
-          <ServiceContainers
-            observation={observation}
-            onOpenLogs={() => setTab("logs")}
-          />
-          <ResourcePanel title="Persistent storage">
-            {env.volumes.length ? (
-              env.volumes.map((volume) => (
-                <DetailRow
-                  key={volume.id}
-                  label={volume.slug}
-                  value="Retained when runtime stops or is destroyed"
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No managed Volumes.
-              </p>
+        )}
+        {tab === "logs" && (
+          <div className="mt-6">
+            {tab === "logs" && (
+              <LogStream target={{ kind: "service", id: svc.id }} />
             )}
-          </ResourcePanel>
-        </TabsPanel>
-        <TabsPanel value="logs" className="mt-6">
-          {tab === "logs" && (
-            <LogStream target={{ kind: "service", id: svc.id }} />
-          )}
-        </TabsPanel>
-        <TabsPanel value="service" className="space-y-5 pt-5">
+          </div>
+        )}
+        {tab === "service" && (
+          <div className="space-y-5 pt-5">
+            <p className="text-sm text-muted-foreground">
+              This instance is shared. Changes can affect every connected
+              application.
+            </p>
+            <ServiceSettings
+              sections={["workload", "runtime", "healthcheck", "hooks"]}
+              env={env}
+              service={svc}
+              workspace="platform"
+              imageAction={
+                svc.adapter === "postgres:16" ? (
+                  <PostgresImageUpdate env={env} service={svc} />
+                ) : undefined
+              }
+            />
+            <ResourcePanel title="Destroy runtime">
+              <p className="text-sm text-muted-foreground">
+                Remove the containers and retain configuration, connections and
+                durable data. Start recreates the runtime.
+              </p>
+              <Button
+                variant="destructive"
+                disabled={
+                  pendingAction !== null || svc.runtimeIntent === "absent"
+                }
+                onClick={() => setDestroyOpen(true)}
+              >
+                <Trash2 /> Destroy runtime
+              </Button>
+            </ResourcePanel>
+          </div>
+        )}
+        {tab === "connections" && (
+          <div className="mt-6 flex flex-col gap-6">
+            <ConnectionsTab g={g} env={env} svc={svc} />
+          </div>
+        )}
+        {tab === "backups" && (
+          <div className="mt-6 flex flex-col gap-4">
+            <BackupsTab g={g} env={env} svc={svc} />
+          </div>
+        )}
+        {tab === "network" && (
           <ServiceSettings
             env={env}
             service={svc}
             workspace="platform"
-            imageAction={
-              svc.adapter === "postgres:16" ? (
-                <PostgresImageUpdate env={env} service={svc} />
-              ) : undefined
-            }
+            sections={["network"]}
           />
-          <AdvancedDetails title="Service & storage configuration">
+        )}
+        {tab === "report" && (
+          <div className="space-y-5">
             <ServiceTab env={env} svc={svc} />
-          </AdvancedDetails>
-          <AdvancedDetails title="Configuration YAML">
             <DesiredStateTab g={g} env={env} svc={svc} />
-          </AdvancedDetails>
-          <ResourcePanel title="Destroy runtime">
-            <p className="text-sm text-muted-foreground">
-              Remove the containers and retain configuration, connections and
-              durable data. Start recreates the runtime.
-            </p>
-            <Button
-              variant="destructive"
-              disabled={
-                pendingAction !== null || svc.runtimeIntent === "absent"
-              }
-              onClick={() => setDestroyOpen(true)}
-            >
-              <Trash2 /> Destroy runtime
-            </Button>
-          </ResourcePanel>
-        </TabsPanel>
-        <TabsPanel value="connections" className="mt-6 flex flex-col gap-6">
-          <ConnectionsTab g={g} env={env} svc={svc} />
-        </TabsPanel>
-        <TabsPanel value="backups" className="mt-6 flex flex-col gap-4">
-          <BackupsTab g={g} env={env} svc={svc} />
-        </TabsPanel>
-      </Tabs>
+          </div>
+        )}
+      </div>
       {destroyOpen && (
         <TaskRunnerDialog
           open

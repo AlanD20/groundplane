@@ -59,6 +59,7 @@ export default function TenantPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title={tenant.name}
+        eyebrow="Tenant"
         description={tenant.description}
         icon={<Boxes />}
         meta={

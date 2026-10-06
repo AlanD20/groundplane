@@ -1,10 +1,7 @@
 import { ServiceStorage } from "@/features/service/service-storage";
 import { ImageReference } from "@/components/common/image-reference";
 import { PageHeader } from "@/components/common/page-header";
-import {
-  AdvancedDetails,
-  ResourcePanel,
-} from "@/components/common/resource-panel";
+import { ResourcePanel } from "@/components/common/resource-panel";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -13,10 +10,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
+import { AttachesCard } from "@/features/attach/environment-attaches";
+import { FactsCard } from "@/features/attach/environment-facts";
+import {
+  serviceDestination,
+  type ServiceDestination,
+} from "@/features/service/workspace-navigation";
 import { LogStream } from "@/features/logs/log-viewer";
 import {
   DeployDialog,
@@ -45,22 +46,10 @@ import {
   CirclePlay,
   CircleStop,
   History,
-  Terminal,
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-
-type ServiceTab =
-  "overview" | "logs" | "releases" | "entries" | "configuration";
-
-const serviceTabs = new Set<ServiceTab>([
-  "overview",
-  "logs",
-  "releases",
-  "entries",
-  "configuration",
-]);
 
 export function ServiceWorkspace({
   env,
@@ -93,16 +82,14 @@ export function ServiceWorkspace({
   const [releaseAction, setReleaseAction] = useState<
     "deploy" | "rollback" | null
   >(null);
-  const requestedTab = search.get("serviceTab") as ServiceTab | null;
-  const tab =
-    requestedTab && serviceTabs.has(requestedTab) ? requestedTab : "overview";
+  const tab = serviceDestination(search);
   const clock = useVisibleServiceObservations({
     environmentIds: [],
     observations: [service.observation],
     refreshEnvironment: store.refreshEnvironmentServices,
   });
   const now = Math.max(listNow, clock.now);
-  const selectTab = (nextTab: ServiceTab) =>
+  const selectTab = (nextTab: ServiceDestination) =>
     setSearch((current) => {
       const next = new URLSearchParams(current);
       if (nextTab === "overview") next.delete("serviceTab");
@@ -154,36 +141,39 @@ export function ServiceWorkspace({
         <div>
           <Button variant="ghost" size="sm" onClick={leaveService}>
             <ArrowLeft />
-            All Services
+            Back to Environment
           </Button>
         </div>
         <PageHeader
           title={service.name}
+          eyebrow={`${params.tenant} / ${params.project} / ${env.name} / Service`}
           icon={<Boxes />}
           description={service.role || `Service in ${env.name}`}
           meta={<ServiceStateBadges service={service} now={now} />}
           actions={
             <>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setOperation(
+                    service.runtimeIntent === "running" ? "stop" : "start",
+                  )
+                }
+              >
+                {service.runtimeIntent === "running" ? (
+                  <CircleStop />
+                ) : (
+                  <CirclePlay />
+                )}
+                {service.runtimeIntent === "running" ? "Stop" : "Start"}
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   className={buttonVariants({ variant: "outline" })}
                 >
-                  Actions <ChevronDown className="size-4" />
+                  Manage <ChevronDown className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem
-                    disabled={service.runtimeIntent === "running"}
-                    onClick={() => setOperation("start")}
-                  >
-                    <CirclePlay /> Start
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={service.runtimeIntent === "stopped"}
-                    onClick={() => setOperation("stop")}
-                  >
-                    <CircleStop /> Stop
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     variant="destructive"
                     disabled={service.runtimeIntent === "absent"}
@@ -214,120 +204,144 @@ export function ServiceWorkspace({
             {detailError}
           </p>
         )}
-        <Tabs
-          value={tab}
-          onValueChange={(value) => selectTab(String(value) as ServiceTab)}
-          className="min-w-0 flex-1"
-        >
-          <TabsList variant="underline" aria-label="Service sections">
-            <TabsTab value="overview">Overview</TabsTab>
-            <TabsTab value="logs">
-              <Terminal /> Logs
-            </TabsTab>
-            <TabsTab value="releases">Deployments</TabsTab>
-            <TabsTab value="entries">Variables & files</TabsTab>
-            <TabsTab value="configuration">Settings</TabsTab>
-          </TabsList>
-          <TabsPanel value="overview" className="pt-5">
-            <ServiceOverview
-              service={service}
-              env={env}
-              now={now}
-              onOpenLogs={() => selectTab("logs")}
-              onOpenDeployments={() => selectTab("releases")}
-            />
-          </TabsPanel>
-          <TabsPanel value="logs" className="pt-5">
-            <LogStream target={{ kind: "service", id: service.id }} />
-          </TabsPanel>
-          <TabsPanel value="releases" className="pt-5">
-            <ResourcePanel
-              title="Deployments"
-              actions={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setReleaseAction("rollback")}
-                >
-                  <History className="size-3.5" />
-                  Rollback
-                </Button>
-              }
-            >
-              {service.releaseLedger?.length ? (
-                <div className="divide-y divide-border rounded-xl border border-border">
-                  {service.releaseLedger.map((release) => (
-                    <Link
-                      key={release.id}
-                      to={`/t/${params.tenant}/${params.project}/${params.env}/releases/${release.id}`}
-                      className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-4 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                    >
-                      <span className="flex size-9 items-center justify-center rounded-lg bg-accent text-primary">
-                        <History className="size-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block font-medium">
-                          <ImageReference value={release.tag} />
+        <div className="min-w-0 space-y-5">
+          {tab === "overview" && (
+            <div className="pt-5">
+              <ServiceOverview
+                service={service}
+                env={env}
+                now={now}
+                onOpenLogs={() => selectTab("logs")}
+                onOpenDeployments={() => selectTab("releases")}
+              />
+            </div>
+          )}
+          {tab === "logs" && (
+            <div className="space-y-4 pt-5">
+              <h2 className="text-lg font-semibold">Logs</h2>
+              <LogStream target={{ kind: "service", id: service.id }} />
+            </div>
+          )}
+          {tab === "releases" && (
+            <div className="pt-5">
+              <ResourcePanel
+                title="Deployments"
+                actions={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReleaseAction("rollback")}
+                  >
+                    <History className="size-3.5" />
+                    Rollback
+                  </Button>
+                }
+              >
+                {service.releaseLedger?.length ? (
+                  <div className="divide-y divide-border rounded-xl border border-border">
+                    {service.releaseLedger.map((release) => (
+                      <Link
+                        key={release.id}
+                        to={`/t/${params.tenant}/${params.project}/${params.env}/releases/${release.id}?service=${service.id}`}
+                        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-4 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                      >
+                        <span className="flex size-9 items-center justify-center rounded-lg bg-accent text-primary">
+                          <History className="size-4" />
                         </span>
-                        <span className="mt-1 block text-[11px] text-muted-foreground">
-                          {formatTimestamp(release.when, "Time unavailable")} ·{" "}
-                          {release.strategy}
+                        <span className="min-w-0">
+                          <span className="block font-medium">
+                            <ImageReference value={release.tag} />
+                          </span>
+                          <span className="mt-1 block text-[11px] text-muted-foreground">
+                            {formatTimestamp(release.when, "Time unavailable")}{" "}
+                            · {release.strategy}
+                          </span>
+                          <span
+                            className="mt-1 block truncate font-mono text-[10px] text-muted-foreground"
+                            title={release.digest || release.id}
+                          >
+                            {release.digest || release.id}
+                          </span>
                         </span>
-                        <span
-                          className="mt-1 block truncate font-mono text-[10px] text-muted-foreground"
-                          title={release.digest || release.id}
-                        >
-                          {release.digest || release.id}
+                        <span className="flex items-center gap-2">
+                          <Badge
+                            variant={
+                              release.status === "active"
+                                ? "primary"
+                                : "outline"
+                            }
+                          >
+                            {release.status}
+                          </Badge>
+                          <ChevronRight className="size-4 text-muted-foreground" />
                         </span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <Badge
-                          variant={
-                            release.status === "active" ? "primary" : "outline"
-                          }
-                        >
-                          {release.status}
-                        </Badge>
-                        <ChevronRight className="size-4 text-muted-foreground" />
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <p role="status" className="text-sm text-muted-foreground">
-                  {loading ? "Loading Release history…" : "No Releases yet."}
-                </p>
-              )}
-            </ResourcePanel>
-          </TabsPanel>
-          <TabsPanel value="entries" className="pt-5">
-            <EnvVarsCard env={env} service={service} />
-          </TabsPanel>
-          <TabsPanel value="configuration" className="space-y-5 pt-5">
-            <ServiceSettings
-              env={env}
-              service={service}
-              workspace={params.tenant}
-              onSaved={() => setReload((value) => value + 1)}
-            />
-            <ServiceStorage
-              env={env}
-              service={service}
-              onSaved={() => setReload((value) => value + 1)}
-              onFiles={() => selectTab("entries")}
-              onVolumes={() =>
-                setSearch({ view: "configuration", panel: "volumes" })
-              }
-            />
-            <AdvancedDetails title="Full configuration & Compose">
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {loading
+                      ? "Loading deployment history…"
+                      : "No deployments yet."}
+                  </p>
+                )}
+              </ResourcePanel>
+            </div>
+          )}
+          {tab === "entries" && (
+            <div className="pt-5">
+              <EnvVarsCard env={env} service={service} />
+            </div>
+          )}
+          {tab === "configuration" && (
+            <div className="space-y-5 pt-5">
+              <ServiceSettings
+                sections={["workload", "runtime", "healthcheck", "hooks"]}
+                env={env}
+                service={service}
+                workspace={params.tenant}
+                onSaved={() => setReload((value) => value + 1)}
+              />
+            </div>
+          )}
+          {tab === "storage" && (
+            <div>
+              <ServiceStorage
+                env={env}
+                service={service}
+                onSaved={() => setReload((value) => value + 1)}
+                onFiles={() => selectTab("entries")}
+                onVolumes={() =>
+                  setSearch({ view: "configuration", panel: "volumes" })
+                }
+              />
+            </div>
+          )}
+          {tab === "report" && (
+            <div>
               <ServiceConfiguration
                 service={service}
                 loading={loading}
                 error={detailError}
               />
-            </AdvancedDetails>
-          </TabsPanel>
-        </Tabs>
+            </div>
+          )}
+          {tab === "connections" && (
+            <div className="space-y-5">
+              <AttachesCard env={env} service={service} />
+              <FactsCard env={env} service={service} />
+            </div>
+          )}
+          {tab === "network" && (
+            <ServiceSettings
+              env={env}
+              service={service}
+              workspace={params.tenant}
+              sections={["network"]}
+              onSaved={() => setReload((value) => value + 1)}
+            />
+          )}
+        </div>
       </section>
       {releaseAction === "deploy" && (
         <DeployDialog

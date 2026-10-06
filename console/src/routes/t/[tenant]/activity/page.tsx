@@ -81,14 +81,14 @@ export default function TenantActivityPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Activity" icon={<Activity />} />
+      <PageHeader title="Tasks" icon={<Activity />} />
       <TaskList
         scope={scope}
         surface="activity"
         title="Tenant Tasks"
         filters={
           <Select
-            aria-label="Activity owner"
+            aria-label="Task owner"
             className="w-64 max-w-full"
             value={effectiveFilter}
             onValueChange={setFilter}

@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "react-router-dom";
+
 import { Select } from "@/components/ui/select";
 import { TaskLink } from "@/components/common/task-link";
 
@@ -27,6 +29,7 @@ import { RunnerInventory } from "./runner-inventory";
 export default function TenantRunnersPage() {
   const params = useRequiredParams("tenant");
   const store = useStore();
+  const [search, setSearch] = useSearchParams();
   const tenant = store.getTenant(params.tenant);
   const tenantId = tenant?.id ?? "";
   const projects = useMemo(
@@ -83,6 +86,25 @@ export default function TenantRunnersPage() {
   const runners = store.runners.filter(
     (runner) => runner.tenantId === tenant.id,
   );
+  const owners = [
+    { value: "all", label: "All owners in this Tenant" },
+    { value: "tenant", label: `Tenant · ${tenant.name}` },
+    ...projects.map((project) => ({
+      value: project.id,
+      label: `Project · ${project.name}`,
+    })),
+    ...environments.map((environment) => ({
+      value: environment.id,
+      label: `Environment · ${environment.label}`,
+    })),
+  ];
+  const owner =
+    owners.find((item) => item.value === search.get("owner"))?.value ?? "all";
+  const visibleRunners = runners.filter(
+    (runner) =>
+      owner === "all" ||
+      (runner.environmentId ?? runner.projectId ?? "tenant") === owner,
+  );
   const normalizedSlug = slug.trim();
   const validSlug =
     /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(normalizedSlug) &&
@@ -102,6 +124,7 @@ export default function TenantRunnersPage() {
           <Button
             disabled={store.runnersLoading || runners.length >= 5}
             onClick={() => {
+              setCreateOwner(owner === "all" ? "tenant" : owner);
               setCreating(true);
               setCreateError(null);
             }}
@@ -118,8 +141,19 @@ export default function TenantRunnersPage() {
         </div>
       )}
 
+      <div className="max-w-md space-y-2">
+        <Label htmlFor="runner-owner-filter">Owner</Label>
+        <Select
+          id="runner-owner-filter"
+          value={owner}
+          options={owners}
+          onValueChange={(value) =>
+            setSearch(value === "all" ? {} : { owner: value })
+          }
+        />
+      </div>
       <RunnerInventory
-        runners={runners}
+        runners={visibleRunners}
         loading={store.runnersLoading}
         error={store.runnerError}
         owner={(runner) =>

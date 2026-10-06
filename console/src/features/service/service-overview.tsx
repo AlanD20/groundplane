@@ -89,7 +89,7 @@ export function ServiceOverview({
         kind:
           store.getBackingProject(attach.projectId)?.name ??
           "Backing connection",
-        href: `/platform/backing-services/${attach.projectId}`,
+        href: `?view=overview&service=${service.id}&serviceTab=connections`,
       })),
     ...service.mounts.map((mount, index) => ({
       key: `mount-${index}-${mount.mount}`,
@@ -104,8 +104,8 @@ export function ServiceOverview({
       kind: `${mount.type === "volume" ? "Persistent Volume" : "File"} · ${mount.mount}`,
       href:
         mount.type === "volume"
-          ? "?view=configuration&panel=volumes"
-          : "?view=configuration&panel=entries",
+          ? `?view=overview&service=${service.id}&serviceTab=storage`
+          : `?view=overview&service=${service.id}&serviceTab=entries`,
     })),
     ...env.routes
       .filter((route) => route.targetServiceId === service.id)

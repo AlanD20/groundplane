@@ -34,10 +34,10 @@ function buildCrumbs(
       overview: "Overview",
       "backing-services": "Backing services",
       components: "Components",
-      activity: "Activity",
-      secrets: "Secret store",
+      activity: "Tasks",
+      secrets: "Secrets",
       host: "Host",
-      settings: "Settings",
+      settings: "Preferences",
     };
     const crumbs: Crumb[] = [{ label: "Platform", href: "/platform/overview" }];
     if (parts[1])
@@ -70,7 +70,7 @@ function buildCrumbs(
       { label: lookups.tenantName(slug), href: `/t/${slug}` },
     ];
     if (parts[2] === "runners") crumbs.push({ label: "Runners" });
-    else if (parts[2] === "activity") crumbs.push({ label: "Activity" });
+    else if (parts[2] === "activity") crumbs.push({ label: "Tasks" });
     else if (parts[2] === "settings") crumbs.push({ label: "Settings" });
     else if (parts[2]) {
       crumbs.push({
@@ -90,17 +90,17 @@ const PLATFORM_SECTIONS: CrumbOption[] = [
   { label: "Overview", href: "/platform/overview" },
   { label: "Backing services", href: "/platform/backing-services" },
   { label: "Components", href: "/platform/components" },
-  { label: "Activity", href: "/platform/activity" },
-  { label: "Secret store", href: "/platform/secrets" },
+  { label: "Tasks", href: "/platform/activity" },
+  { label: "Secrets", href: "/platform/secrets" },
   { label: "Host", href: "/platform/host" },
-  { label: "Settings", href: "/platform/settings" },
+  { label: "Preferences", href: "/platform/settings" },
 ];
 
 function tenantSections(slug: string): CrumbOption[] {
   return [
     { label: "Projects", href: `/t/${slug}` },
     { label: "Runners", href: `/t/${slug}/runners` },
-    { label: "Activity", href: `/t/${slug}/activity` },
+    { label: "Tasks", href: `/t/${slug}/activity` },
     { label: "Settings", href: `/t/${slug}/settings` },
   ];
 }
@@ -163,7 +163,7 @@ function attachOptions(
         const envs = store.getProject(slug, parts[2])?.environments ?? [];
         const envOptions = envs.map((e) => ({
           label: e.name,
-          href: `/t/${slug}/${parts[2]}/${e.name}`,
+          href: `/t/${slug}/${parts[2]}/${encodeURIComponent(e.name)}`,
         }));
         const sectionOptions: CrumbOption[] = [
           { label: "Secrets", href: `/t/${slug}/${parts[2]}/secrets` },

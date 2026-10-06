@@ -38,13 +38,16 @@ function Select({
         id={id}
         aria-label={ariaLabel}
         className={cn(
-          "flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-xs outline-none transition-colors",
+          "flex h-10 min-w-0 max-w-full w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-xs outline-none transition-colors",
           "hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/70",
           "data-[popup-open]:border-ring data-[popup-open]:[&_svg]:rotate-180",
           className,
         )}
       >
-        <SelectPrimitive.Value placeholder={placeholder} />
+        <SelectPrimitive.Value
+          className="min-w-0 flex-1 truncate text-left"
+          placeholder={placeholder}
+        />
         <SelectPrimitive.Icon>
           <ChevronDown className="size-3.5 text-muted-foreground transition-transform duration-150" />
         </SelectPrimitive.Icon>
@@ -57,7 +60,7 @@ function Select({
         >
           <SelectPrimitive.Popup
             className={cn(
-              "max-h-72 min-w-[var(--anchor-width)] overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl outline-none",
+              "max-h-72 max-w-[calc(100vw-2rem)] min-w-[var(--anchor-width)] overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl outline-none",
               "transition-all duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
             )}
           >
@@ -67,7 +70,9 @@ function Select({
                 value={opt.value}
                 className="flex cursor-default items-center justify-between gap-2 rounded-md px-2 py-2 text-sm outline-none select-none data-[selected]:bg-accent data-[selected]:text-primary data-[highlighted]:bg-muted data-[highlighted]:text-foreground"
               >
-                <SelectPrimitive.ItemText>{opt.label}</SelectPrimitive.ItemText>
+                <SelectPrimitive.ItemText className="min-w-0 [overflow-wrap:anywhere]">
+                  {opt.label}
+                </SelectPrimitive.ItemText>
                 <SelectPrimitive.ItemIndicator>
                   <Check className="size-3.5 text-primary" />
                 </SelectPrimitive.ItemIndicator>

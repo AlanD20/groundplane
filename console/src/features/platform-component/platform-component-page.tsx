@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "react-router-dom";
+
 import { DetailRow } from "@/components/common/detail-row";
 import { PageHeader } from "@/components/common/page-header";
 import {
@@ -27,7 +29,13 @@ const kindIcon: Record<string, React.ReactNode> = {
 
 export default function PlatformComponentPage() {
   const params = useRequiredParams("component");
-  const [tab, setTab] = useState("overview");
+  const [search, setSearch] = useSearchParams();
+  const tab = ["overview", "records", "configuration"].includes(
+    search.get("tab") ?? "",
+  )
+    ? search.get("tab")!
+    : "overview";
+  const setTab = (value: string) => setSearch({ tab: value });
   const {
     platform,
     tenantProjects,
@@ -183,7 +191,7 @@ export default function PlatformComponentPage() {
         <TabsList aria-label="CoreDNS sections">
           <TabsTab value="overview">Overview</TabsTab>
           <TabsTab value="records">DNS records</TabsTab>
-          <TabsTab value="configuration">Configuration</TabsTab>
+          <TabsTab value="configuration">Resolver settings</TabsTab>
         </TabsList>
         <TabsPanel value="configuration" keepMounted className="pt-5">
           <CoreDnsSettings

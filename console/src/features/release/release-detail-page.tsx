@@ -12,12 +12,13 @@ import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { ArrowLeft, History } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { fetchReleaseDetail, type ReleaseDetailResponse } from "./api";
 
 export default function ReleaseDetailPage() {
   const params = useRequiredParams("tenant", "project", "env", "id");
   const store = useStore();
+  const [search] = useSearchParams();
   const environment = store.getEnvironment(
     params.tenant,
     params.project,
@@ -25,7 +26,13 @@ export default function ReleaseDetailPage() {
   );
   const [release, setRelease] = useState<ReleaseDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const listPath = `/t/${params.tenant}/${params.project}/${params.env}?view=operations&panel=releases`;
+  const originService = environment?.services.find(
+    (service) => service.id === search.get("service"),
+  );
+  const basePath = `/t/${params.tenant}/${params.project}/${encodeURIComponent(params.env)}`;
+  const listPath = originService
+    ? `${basePath}?view=overview&service=${originService.id}&serviceTab=releases`
+    : `${basePath}?view=operations&panel=releases`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -96,11 +103,12 @@ export default function ReleaseDetailPage() {
             to={listPath}
             className="inline-flex items-center gap-1 hover:text-foreground"
           >
-            <ArrowLeft className="size-3" /> {environment.name} releases
+            <ArrowLeft className="size-3" />{" "}
+            {originService?.name ?? environment.name} deployments
           </Link>
         }
         title={service}
-        description="Service Release · image and execution details"
+        description="Deployment (Release) · image and execution details"
         icon={<History />}
         meta={
           <>

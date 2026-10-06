@@ -54,7 +54,7 @@ export default function ReleaseGroupDetailPage() {
     return (
       <EmptyState
         icon={<Workflow />}
-        title="Release group not found"
+        title="Deployment group not found"
         description={`${params.id} does not exist in ${params.tenant}/${params.project}/${params.env}.`}
         action={
           <Link to={listPath}>
@@ -76,7 +76,8 @@ export default function ReleaseGroupDetailPage() {
             to={listPath}
             className="inline-flex items-center gap-1 hover:text-foreground"
           >
-            <ArrowLeft className="size-3" /> {environment.name} release groups
+            <ArrowLeft className="size-3" /> {environment.name} deployment
+            groups
           </Link>
         }
         title={group.name}
@@ -214,10 +215,10 @@ export default function ReleaseGroupDetailPage() {
         startLabel="Remove group"
         steps={[
           {
-            label: "Validate release group is not locked by another task",
+            label: "Validate deployment group is not locked by another task",
             state: "pending",
           },
-          { label: "Remove release group desired state", state: "pending" },
+          { label: "Remove deployment group desired state", state: "pending" },
           { label: "Preserve member service records", state: "pending" },
         ]}
         onDispatch={() => store.removeReleaseGroup(environment.id, group.id)}

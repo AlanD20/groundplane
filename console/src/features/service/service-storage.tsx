@@ -249,7 +249,7 @@ export function ServiceStorage({
             {!available.length && (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Create a Volume in this Environment’s Storage section, then
+                  Create a Volume in this Environment’s Volumes page, then
                   select it here.
                 </p>
                 {onVolumes && (

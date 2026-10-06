@@ -22,7 +22,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { NavigationRail } from "./navigation-rail";
+import { PlatformNavigation } from "./platform-navigation";
 
 function useWorkspace(pathname: string): {
   kind: "platform" | "tenant";
@@ -101,11 +101,17 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <TooltipProvider>
+      <a
+        href="#console-main"
+        className="sr-only fixed left-4 top-4 z-[100] rounded-md bg-popover p-3 text-sm focus:not-sr-only"
+      >
+        Skip to content
+      </a>
       <div className="flex min-h-screen w-full">
         {/* Desktop sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[294px] border-r border-border bg-sidebar lg:flex">
-          <NavigationRail pathname={pathname} />
-          <div className="flex min-w-0 flex-1 flex-col">
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-sidebar lg:flex lg:flex-col">
+          <PlatformNavigation pathname={pathname} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex h-16 shrink-0 items-center px-4">
               <WorkspaceSwitcher
                 workspace={workspace}
@@ -134,9 +140,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <div className="border-b border-border p-4">
               <Brand />
             </div>
-            <div className="flex min-h-0 flex-1">
-              <NavigationRail pathname={pathname} />
-              <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
+              <PlatformNavigation pathname={pathname} />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="px-3">
                   <WorkspaceSwitcher
                     workspace={workspace}
@@ -159,26 +165,30 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         </Drawer>
 
         {/* Main column */}
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-[294px]">
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
           <div className="flex min-h-16 items-center gap-2 border-b border-border px-4 sm:px-6 lg:px-7">
             <Button
               variant="outline"
-              size="icon"
+              size="sm"
               onClick={() => setMobileOpen(true)}
               className="shrink-0 text-muted-foreground lg:hidden"
             >
               <Menu className="size-5" />
-              <span className="sr-only">Open menu</span>
+              <span>Navigate</span>
             </Button>
             <div className="min-w-0 flex-1">
               <Topbar pathname={pathname} />
             </div>
             <TaskNotifications />
-            <div className="lg:hidden">
+            <div>
               <ThemeToggle />
             </div>
           </div>
-          <main className="mx-auto w-full max-w-[1580px] flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-7 console-content">
+          <main
+            id="console-main"
+            tabIndex={-1}
+            className="mx-auto w-full max-w-[1580px] flex-1 px-4 pb-12 pt-6 outline-none sm:px-6 lg:px-7 console-content"
+          >
             <div className="console-page" key={pathname}>
               {children}
             </div>
