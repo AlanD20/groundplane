@@ -68,37 +68,41 @@ export function BackupScheduleEditor({
       className="flex min-w-0 flex-col gap-3"
       aria-label="Backup schedule"
     >
-      <div className="flex items-center justify-between">
-        <Label htmlFor="bp-schedule">Frequency</Label>
-        <Badge variant="outline">UTC</Badge>
-      </div>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-        <Select
-          id="bp-schedule"
-          aria-label="Frequency"
-          value={preset}
-          disabled={disabled}
-          options={[
-            { value: "hourly", label: "Hourly" },
-            { value: "daily", label: "Daily" },
-            { value: "weekly", label: "Weekly" },
-            { value: "custom", label: "Custom cron" },
-          ]}
-          onValueChange={(next) => {
-            if (
-              next !== "hourly" &&
-              next !== "daily" &&
-              next !== "weekly" &&
-              next !== "custom"
-            )
-              return;
-            setPreset(next);
-            update(next, time, minute, weekday);
-          }}
-        />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex h-7 items-center justify-between">
+            <Label htmlFor="bp-schedule">Frequency</Label>
+            <Badge variant="outline">UTC</Badge>
+          </div>
+          <Select
+            id="bp-schedule"
+            aria-label="Frequency"
+            value={preset}
+            disabled={disabled}
+            options={[
+              { value: "hourly", label: "Hourly" },
+              { value: "daily", label: "Daily" },
+              { value: "weekly", label: "Weekly" },
+              { value: "custom", label: "Custom cron" },
+            ]}
+            onValueChange={(next) => {
+              if (
+                next !== "hourly" &&
+                next !== "daily" &&
+                next !== "weekly" &&
+                next !== "custom"
+              )
+                return;
+              setPreset(next);
+              update(next, time, minute, weekday);
+            }}
+          />
+        </div>
         {preset === "hourly" && (
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="bp-minute">Minute of each hour</Label>
+            <Label htmlFor="bp-minute" className="h-7">
+              Minute of each hour
+            </Label>
             <Input
               id="bp-minute"
               type="number"
@@ -117,7 +121,9 @@ export function BackupScheduleEditor({
         )}
         {(preset === "daily" || preset === "weekly") && (
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="bp-time">Time · UTC</Label>
+            <Label htmlFor="bp-time" className="h-7">
+              Time · UTC
+            </Label>
             <Input
               id="bp-time"
               type="time"
