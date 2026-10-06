@@ -56,12 +56,6 @@ func (repository *Planner) prepareManualVolumeSource(
 		)
 	}
 	headDigest := sha256.Sum256(head.Values[0].Value)
-	services, err := repository.manualBackupVolumeConsumers(
-		ctx, environmentID, attempt.TargetID, evidence.Projection.Record, fixedRevision,
-	)
-	if err != nil {
-		return backupruntime.BackupRunSourceAttemptRecord{}, err
-	}
 	attempt.TargetRevision = evidence.Projection.Revision
 	attempt.Format = backupruntime.BackupRuntimeFormatVolume
 	attempt.Snapshot.Volume = &backupruntime.BackupVolumeSourceSnapshot{
@@ -77,12 +71,11 @@ func (repository *Planner) prepareManualVolumeSource(
 		ComposeVolumeKey:    evidence.Volume.Key,
 		DockerVolumeName:    "gp_vol_" + strings.ToLower(evidence.Volume.ID),
 		AuthorizedVolumeDir: evidence.Environment.Record.VolumeDir,
-		Services:            services,
 	}
 	return attempt, nil
 }
 
-func (repository *Planner) manualBackupVolumeConsumers(
+func (repository *Planner) volumeRestoreConsumers(
 	ctx context.Context,
 	environmentID string,
 	volumeID string,

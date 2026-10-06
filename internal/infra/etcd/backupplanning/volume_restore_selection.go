@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -117,6 +118,20 @@ func (repository *Planner) PrepareVolumeRestoreSelection(ctx context.Context,
 		return zero, err
 	}
 	current := attempt.Snapshot.Volume
+	// Restore changes live data and must stop/recover its consumers. Capture
+	// only reads the Volume and does not require deployed consumer runtimes.
+	volumeEvidence, err := environmentqueries.LoadBackupVolumeProjectionEvidence(
+		ctx, snapshot, input.EnvironmentID, source.TargetID, anchor.ReadRevision,
+	)
+	if err != nil {
+		return zero, err
+	}
+	current.Services, err = selected.volumeRestoreConsumers(
+		ctx, input.EnvironmentID, source.TargetID, volumeEvidence.Projection.Record, anchor.ReadRevision,
+	)
+	if err != nil {
+		return zero, err
+	}
 	projection, artifact, err := selected.manualBackupVolumeArtifact(ctx, current, anchor.ReadRevision)
 	if err != nil {
 		return zero, err

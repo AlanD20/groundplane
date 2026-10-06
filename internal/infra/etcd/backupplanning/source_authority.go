@@ -161,23 +161,6 @@ func (repository *Planner) manualBackupSourceAuthority(
 		}
 		capture.Source = &agentpb.BackupCaptureAuthority_Volume{Volume: &agentpb.BackupVolumeCaptureAuthority{
 			VolumeId: attempt.TargetID, Volume: proto.CloneOf(capture.Resource.Resource), SourceSizeUpperBound: maximum, Projection: projection}}
-		for _, consumer := range attempt.Snapshot.Volume.Services {
-			consumerArtifact, err := addBackupServiceFact(
-				ctx,
-				input.ResolveServiceFact,
-				scope,
-				consumer.ServiceID,
-				run.EnvironmentID,
-				fixedRevision,
-			)
-			if err != nil {
-				return nil, err
-			}
-			if err := appendBackupArtifact(artifacts, consumerArtifact); err != nil {
-				return nil, err
-			}
-			authority.ConsumerServiceIds = append(authority.ConsumerServiceIds, consumer.ServiceID)
-		}
 	}
 	return executionplan.SealBackupStepAuthority(authority)
 }
