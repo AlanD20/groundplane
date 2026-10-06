@@ -81,7 +81,9 @@ export function CaddyTemplateEditor({
             checked={custom}
             onCheckedChange={(checked) => {
               setCustom(checked);
-              if (!checked) {
+              if (checked) {
+                if (value === "") onChange("{gp.routes}\n");
+              } else {
                 generation.current++;
                 setReading(false);
                 setReadError(null);
