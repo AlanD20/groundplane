@@ -174,7 +174,7 @@ export function TaskOverview({
       {task.status === "failed" && !task.note && (
         <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
           {failed.length
-            ? `Failed step: ${failed.map((step) => step.label).join(", ")}. `
+            ? `Failed action: ${failed.map((step) => step.action ?? "Execution details unavailable").join(", ")}. `
             : ""}
           No detailed failure message is available in this Task response. Use
           its ID below to find the diagnostic in the Controller or Agent logs.

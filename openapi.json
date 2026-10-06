@@ -6298,6 +6298,9 @@
           }
         ],
         "properties": {
+          "action": {
+            "type": "string"
+          },
           "kind": {
             "enum": [
               "operation",
@@ -6316,10 +6319,16 @@
           },
           "status": {
             "type": "string"
+          },
+          "timeout_seconds": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
           "name",
+          "action",
           "status",
           "kind"
         ],

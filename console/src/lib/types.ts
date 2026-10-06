@@ -409,6 +409,8 @@ export type TaskStepState = "pending" | "running" | "done" | "failed";
 
 export type TaskStep = {
   label: string;
+  action?: string;
+  timeoutSeconds?: number;
   state: TaskStepState;
   detail?: string;
 };

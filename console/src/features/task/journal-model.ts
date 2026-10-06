@@ -172,6 +172,8 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     finishedAt,
     steps: task.steps?.map((step) => ({
       label: step.name,
+      action: step.action,
+      timeoutSeconds: step.timeout_seconds,
       detail: step.script_slug,
       state: taskStepState(step.status),
     })),

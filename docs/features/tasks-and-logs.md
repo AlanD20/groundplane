@@ -26,8 +26,11 @@ The link opens that exact Task, not a filtered history list; it can be copied or
 opened in another tab. The inspector refreshes pending/running status until the
 Task finishes. A rejected request without a Task ID has no Task to open.
 The inspector leads with the action, affected resource, status and execution
-timing. The execution terminal shows durable step transitions, timestamps and
-attempts, not shell commands or stdout. Unavailable failure details are
+timing. The execution terminal names the actual operations from the Task's exact
+retained plan, with state transitions, timestamps, attempts and timeouts. It does
+not expose shell commands, credentials or stdout. If the plan is no longer
+available, it identifies missing execution details instead of inventing step names.
+Unavailable failure details are
 identified explicitly, not inferred from a failed status. Exact IDs and plan
 hashes remain available under Technical details.
 

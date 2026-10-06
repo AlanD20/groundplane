@@ -98,6 +98,7 @@ type Server struct {
 	agentTaskWake           func()
 	console                 fs.FS
 	tasks                   taskQueries
+	taskDescriptions        TaskDescriptionReader
 	taskEventStreams        taskEventStreamOpener
 	logs                    *servicelogs.Service
 	routePolicies           map[string]routePolicy
@@ -171,6 +172,7 @@ type Options struct {
 	AgentTaskWake           func()
 	Console                 fs.FS
 	Tasks                   *etcd.TaskRepository
+	TaskDescriptions        TaskDescriptionReader
 	Logs                    *servicelogs.Service
 }
 
@@ -261,6 +263,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		agentTaskWake:           options.AgentTaskWake,
 		console:                 options.Console,
 		tasks:                   options.Tasks,
+		taskDescriptions:        options.TaskDescriptions,
 		logs:                    options.Logs,
 		routePolicies:           make(map[string]routePolicy),
 	}

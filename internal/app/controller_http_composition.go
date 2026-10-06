@@ -140,6 +140,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		TenantChanges:           dependencies.hierarchy.tenantChanges,
 		Console:                 dependencies.bootstrap.consoleAssets,
 		Tasks:                   dependencies.authority.tasks,
+		TaskDescriptions:        dependencies.execution.planResolver,
 		Logs:                    serviceReads.logs,
 	})
 	return &Controller{

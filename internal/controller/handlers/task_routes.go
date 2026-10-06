@@ -214,6 +214,7 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
+	s.describeTask(ctx, task.Record, &response)
 	return &taskOutput{Body: response}, nil
 }
 

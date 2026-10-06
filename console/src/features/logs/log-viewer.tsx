@@ -205,12 +205,12 @@ export function LogStream({ target }: { target: LogTarget }) {
           events.map((event) => (
             <div
               key={event.sequence}
-              className="grid grid-cols-[5rem_6rem_4rem_minmax(12rem,1fr)] gap-3 border-b border-border py-1"
+              className="grid grid-cols-[5rem_minmax(0,1fr)_4rem] gap-x-3 gap-y-1 border-b border-border py-2 xl:grid-cols-[5rem_minmax(10rem,18rem)_4rem_minmax(0,1fr)]"
             >
               <span className="text-muted-foreground">
                 {new Date(event.timestamp).toLocaleTimeString()}
               </span>
-              <span className="truncate text-primary">
+              <span className="min-w-0 whitespace-normal break-words text-primary">
                 {event.service_name}
               </span>
               <span
@@ -222,7 +222,7 @@ export function LogStream({ target }: { target: LogTarget }) {
               >
                 {event.stream}
               </span>
-              <span className="whitespace-pre-wrap break-all">
+              <span className="col-span-3 min-w-0 whitespace-pre-wrap break-all xl:col-span-1">
                 {event.line}
                 {event.truncated ? " [truncated]" : ""}
               </span>

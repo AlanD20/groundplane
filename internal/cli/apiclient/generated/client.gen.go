@@ -3039,12 +3039,14 @@ type TaskImageFetch struct {
 
 // TaskStep defines model for TaskStep.
 type TaskStep struct {
-	Kind       TaskStepKind `json:"kind"`
-	Name       string       `json:"name"`
-	ScriptId   *string      `json:"script_id,omitempty"`
-	ScriptSlug *string      `json:"script_slug,omitempty"`
-	Status     string       `json:"status"`
-	union      json.RawMessage
+	Action         string       `json:"action"`
+	Kind           TaskStepKind `json:"kind"`
+	Name           string       `json:"name"`
+	ScriptId       *string      `json:"script_id,omitempty"`
+	ScriptSlug     *string      `json:"script_slug,omitempty"`
+	Status         string       `json:"status"`
+	TimeoutSeconds *int32       `json:"timeout_seconds,omitempty"`
+	union          json.RawMessage
 }
 
 // TaskStepKind defines model for TaskStep.Kind.
@@ -5051,6 +5053,11 @@ func (t TaskStep) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	object["action"], err = json.Marshal(t.Action)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'action': %w", err)
+	}
+
 	object["kind"], err = json.Marshal(t.Kind)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
@@ -5080,6 +5087,12 @@ func (t TaskStep) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error marshaling 'status': %w", err)
 	}
 
+	if t.TimeoutSeconds != nil {
+		object["timeout_seconds"], err = json.Marshal(t.TimeoutSeconds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'timeout_seconds': %w", err)
+		}
+	}
 	b, err = json.Marshal(object)
 	return b, err
 }
@@ -5093,6 +5106,13 @@ func (t *TaskStep) UnmarshalJSON(b []byte) error {
 	err = json.Unmarshal(b, &object)
 	if err != nil {
 		return err
+	}
+
+	if raw, found := object["action"]; found {
+		err = json.Unmarshal(raw, &t.Action)
+		if err != nil {
+			return fmt.Errorf("error reading 'action': %w", err)
+		}
 	}
 
 	if raw, found := object["kind"]; found {
@@ -5127,6 +5147,13 @@ func (t *TaskStep) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Status)
 		if err != nil {
 			return fmt.Errorf("error reading 'status': %w", err)
+		}
+	}
+
+	if raw, found := object["timeout_seconds"]; found {
+		err = json.Unmarshal(raw, &t.TimeoutSeconds)
+		if err != nil {
+			return fmt.Errorf("error reading 'timeout_seconds': %w", err)
 		}
 	}
 

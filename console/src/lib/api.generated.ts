@@ -3471,12 +3471,15 @@ export interface components {
             requested: string;
         };
         TaskStep: {
+            action: string;
             /** @enum {string} */
             kind: "operation" | "script";
             name: string;
             script_id?: string;
             script_slug?: string;
             status: string;
+            /** Format: int32 */
+            timeout_seconds?: number;
         } & ({
             /** @constant */
             kind?: "operation";

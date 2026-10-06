@@ -101,13 +101,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
               task.steps?.findIndex((step) => step.label === event.step_id) ??
               -1;
             const step = index >= 0 ? task.steps![index] : undefined;
-            const name = step?.detail
-              ? `Script ${step.detail}`
-              : step && !/^[a-z]+_[A-Z0-9]{20,}$/.test(step.label)
-                ? step.label.replaceAll("_", " ")
-                : index >= 0
-                  ? `Step ${index + 1}`
-                  : "Execution step";
+            const name = step?.action ?? "Execution details unavailable";
             const color =
               event.state === "completed"
                 ? "text-emerald-400"
@@ -115,17 +109,26 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
                   ? "text-rose-400"
                   : "text-violet-300";
             return (
-              <div key={event.sequence} className="flex gap-3">
+              <div
+                key={event.sequence}
+                className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 py-1 sm:grid-cols-[auto_5rem_minmax(0,1fr)]"
+              >
                 <time
                   className="shrink-0 text-slate-500"
                   dateTime={event.received_at}
                 >
                   {new Date(event.received_at).toLocaleTimeString()}
                 </time>
-                <span className={`w-20 shrink-0 ${color}`}>{event.state}</span>
-                <span className="min-w-0 break-words">
+                <span className={color}>{event.state}</span>
+                <span className="col-span-2 min-w-0 break-words sm:col-span-1">
                   {name}
                   {event.attempt > 1 ? ` · attempt ${event.attempt}` : ""}
+                  {step?.timeoutSeconds ? (
+                    <span className="text-slate-500">
+                      {" "}
+                      · timeout {step.timeoutSeconds}s
+                    </span>
+                  ) : null}
                 </span>
               </div>
             );
@@ -138,7 +141,8 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Recorded step transitions, not shell output.
+        Actual plan actions and recorded state changes. Command output is not
+        captured here.
       </p>
     </section>
   );
