@@ -519,6 +519,7 @@ func seedBackupPolicyVolumeProjection(
 	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
 	volume testenvironmentprojection.EnvironmentVolumeIdentity,
 	seed int64,
+	additionalVolumes ...testenvironmentprojection.EnvironmentVolumeIdentity,
 ) testenvironmentqueries.BackupVolumeProjectionEvidence {
 	t.Helper()
 	hierarchy, err := newHierarchyRepository(store)
@@ -527,12 +528,15 @@ func seedBackupPolicyVolumeProjection(
 	}
 	task := environmentBlueprintTestTask(t, project.Record, environment.Record, seed)
 	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	projection.Volumes = []testenvironmentprojection.EnvironmentVolumeIdentity{volume}
+	projection.Volumes = append([]testenvironmentprojection.EnvironmentVolumeIdentity{volume}, additionalVolumes...)
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
 		t.Fatal(err)
 	}
-	artifact.Volumes = []*agentpb.ComposeVolume{{VolumeId: volume.ID, ComposeName: volume.Key}}
+	artifact.Volumes = make([]*agentpb.ComposeVolume, len(projection.Volumes))
+	for index, selected := range projection.Volumes {
+		artifact.Volumes[index] = &agentpb.ComposeVolume{VolumeId: selected.ID, ComposeName: selected.Key}
+	}
 	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
 		t.Fatal(err)

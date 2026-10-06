@@ -7,9 +7,11 @@ import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func mustBackupPolicyScheduleTransition(
@@ -98,6 +100,7 @@ func PrepareBackupPolicyReplacement(
 			0,
 		)
 	}
+	var volumeProjection *environmentqueries.BackupVolumeProjectionEvidence
 	for _, source := range candidate.Sources {
 		plan.compare(
 			BackupPolicyCompareSource,
@@ -138,6 +141,19 @@ func PrepareBackupPolicyReplacement(
 				0,
 			)
 		case "volume":
+			// Volumes share one Environment Blueprint snapshot, not separate fences.
+			if volumeProjection != nil {
+				if source.Volume.Projection.Revision != volumeProjection.Projection.Revision ||
+					source.Volume.Projection.Record.RevisionID != volumeProjection.Projection.Record.RevisionID ||
+					source.Volume.ProjectionRoot != volumeProjection.ProjectionRoot {
+					plan.Clear()
+					return backupPolicyReplacementPlan{}, errs.New(
+						errs.KindStateConflict, "backup Volumes must use the same Blueprint snapshot",
+					)
+				}
+				continue
+			}
+			volumeProjection = source.Volume
 			plan.compare(
 				backupPolicyCompareVolume,
 				source.Volume.Volume.ID,
