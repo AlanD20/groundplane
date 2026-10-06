@@ -50,7 +50,6 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	if intent.Status != taskjournal.TaskStatusPending {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate is not pending")
 	}
-
 	zoneSet := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
 		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
@@ -74,7 +73,6 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-
 	keys := make([]string, 0, 3+len(intent.Candidates)+(2*len(zones)))
 	keys = append(
 		keys,
@@ -104,7 +102,6 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	if err != nil || headRevisionID != desiredRevisionID {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
 	}
-
 	change := componentTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
@@ -149,7 +146,6 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			Key: componentrecord.RecordKey(active.Desired.ID), ModRevision: value.ModRevision,
 		})
 	}
-
 	zoneRecords := make(map[string]zonerecord.Record, len(zones))
 	registries := make(map[string]networkreservations.ComponentAddressRegistry, len(zones))
 	registryValues := make(map[string]*etcdstore.KeyValue, len(zones))
@@ -182,7 +178,6 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		}
 		change.conditions = append(change.conditions, registryCondition)
 	}
-
 	if err := componentplanning.ValidateComponentTaskReservations(intent, registries); err != nil {
 		return componentTaskChange{}, err
 	}
@@ -213,7 +208,6 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		registries[removed.ZoneID()] = replacement
 		changedRegistries[removed.ZoneID()] = struct{}{}
 	}
-
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		for _, candidate := range intent.Candidates {
 			promoted, promoteErr := componentrecord.SetRuntime(

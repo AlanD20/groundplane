@@ -5,7 +5,10 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
@@ -67,4 +70,66 @@ func TestBlueprintComponentCompletionReconcilesHostResolution(t *testing.T) {
 		}
 	}
 	t.Fatal("Blueprint Component completion did not publish DNS projection")
+}
+
+// DNS-04, TASK-03: restoring a failed Blueprint must not require its newly
+// introduced Routes to exist in the applied predecessor or publish them to DNS.
+func TestBlueprintRestorationKeepsAppliedRoutes(t *testing.T) {
+	for _, status := range []taskjournal.TaskStatus{
+		taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			ctx := context.Background()
+			store := newMemoryTaskStore()
+			repository, err := newTaskRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := taskJournalTime()
+			task := validTaskRecord(now)
+			task.Type = taskjournal.TaskUpdate
+			task.Target = ids.NewAt(ids.KindEnvironment, now, 2201)
+			pinComponentTaskDesiredRevision(&task)
+			task.Params[componentTaskBlueprintProcedureParam] = componentTaskBlueprintProcedureCandidateReleases
+			task.Params[releaserender.TaskReleasePublicationParam] = ids.NewULID()
+			delete(task.Params, taskjournal.TaskResourceKindParam)
+			records := componentTaskLifecycleRecords(t, task.Target, now, true)
+			seedComponentTaskLifecycle(t, store, task, records)
+			key := environmentchanges.ComponentTaskIntentKey(task.ID)
+			read, err := store.Get(ctx, key)
+			if err != nil || read.Entry == nil {
+				t.Fatalf("read Component intent: %v", err)
+			}
+			intent, err := environmentchanges.DecodeComponentTaskIntent(read.Entry.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			intent.RouteProjection = &environmentchanges.ComponentTaskRouteProjection{
+				Routes: []environmentchanges.ComponentTaskRouteCandidate{{
+					Desired: core.Route{
+						ID: ids.NewAt(ids.KindRoute, now, 2202), Host: "new.example.test", Path: "/",
+						TargetServiceID: records.candidate.Runtime.GeneratedServices[0],
+						TargetPort:      8080, Exposure: "public",
+					}, DesiredGeneration: 1,
+				}},
+			}
+			encoded, err := environmentchanges.EncodeComponentTaskIntent(intent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seedTaskRepositoryValue(t, store, key, encoded)
+			read, err = store.Get(ctx, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, routes, components, err := repository.hostResolutionTerminalOverlay(ctx, task, status, read.ReadRevision)
+			if err != nil {
+				t.Fatalf("restored Blueprint DNS reconciliation: %v", err)
+			}
+			if len(routes) != 0 ||
+				components[records.current.Desired.ID].Runtime.PinnedIPv4 != records.current.Runtime.PinnedIPv4 {
+				t.Fatal("restoration projected candidate Routes or replaced the previous router address")
+			}
+		})
+	}
 }

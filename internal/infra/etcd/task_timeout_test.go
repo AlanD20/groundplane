@@ -136,6 +136,54 @@ func TestTaskRepositoryRecoveryExpiryMovesBoundedRowsToProofRequired(t *testing.
 	}
 }
 
+func TestRecoveryReconnectRenewsExpiredProofWindow(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := validTaskRecord(taskJournalTime())
+	createLifecycleTask(t, repository, task)
+	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 118)
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 4, task.CreatedAt.Add(time.Second))
+	if err != nil || !found {
+		t.Fatalf("claim = %#v, %t, %v", claim, found, err)
+	}
+	original := seedRecoveryTimeoutAssignment(t, store, claim)
+	if _, err := repository.ExpireTimedOutTasks(ctx, original.RecoveryDeadline); err != nil {
+		t.Fatal(err)
+	}
+	current, err := repository.GetTaskAssignment(ctx, task.ID)
+	if err != nil || !current.RecoveryProofRequired {
+		t.Fatalf("proof-required assignment = %#v, %v", current, err)
+	}
+	before := time.Now().UTC()
+	if err := repository.incrementAssignmentEpoch(ctx, current, nil); err != nil {
+		t.Fatal(err)
+	}
+	renewed, err := repository.GetTaskAssignment(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := renewed.Assignment.Record
+	if !record.RecoveryExecutionDeadline.After(before) ||
+		record.RecoveryExecutionDeadline.After(time.Now().UTC().Add(releaseRecoveryProofExecutionBudget)) ||
+		!record.Deadline.Equal(original.Deadline) || !record.RecoveryDeadline.Equal(original.RecoveryDeadline) ||
+		record.RestorationAuthoritySHA256 != original.RestorationAuthoritySHA256 ||
+		record.ReleaseRecoveryRecordSHA256 != original.ReleaseRecoveryRecordSHA256 ||
+		record.ExecutionEpoch != current.Assignment.Record.ExecutionEpoch+1 {
+		t.Fatalf("renewed proof assignment changed pinned authority or retained expired window: %#v", record)
+	}
+	if err := repository.incrementAssignmentEpoch(ctx, renewed, nil); err != nil {
+		t.Fatal(err)
+	}
+	reconnected, err := repository.GetTaskAssignment(ctx, task.ID)
+	if err != nil || !reconnected.Assignment.Record.RecoveryExecutionDeadline.Equal(record.RecoveryExecutionDeadline) {
+		t.Fatalf("live proof window was extended: %#v, %v", reconnected, err)
+	}
+}
+
 func seedRecoveryTimeoutAssignment(
 	t *testing.T,
 	store *memoryTaskStore,

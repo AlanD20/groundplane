@@ -5,6 +5,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -21,6 +22,9 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 	defer clear(taskValue)
 	record := current.Assignment.Record
 	record.ExecutionEpoch++
+	if current.RecoveryProofRequired && !record.RecoveryExecutionDeadline.After(time.Now().UTC()) {
+		record.RecoveryExecutionDeadline = time.Now().UTC().Add(releaseRecoveryProofExecutionBudget)
+	}
 	encoded, err := taskassignments.EncodeTaskAssignment(record)
 	if err != nil {
 		return err

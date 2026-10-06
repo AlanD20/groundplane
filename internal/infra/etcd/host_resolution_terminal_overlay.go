@@ -6,6 +6,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -99,7 +100,8 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 					componentOverride[candidate.Candidate.Desired.ID] = promoted
 				}
 			}
-			if intent.RouteProjection != nil {
+			if intent.RouteProjection != nil && (terminalStatus == taskjournal.TaskStatusCompleted ||
+				task.Params[releaserender.TaskReleasePublicationParam] == "") {
 				for _, candidate := range intent.RouteProjection.Routes {
 					route, routeErr := repository.routeAtRevision(ctx, candidate.Desired.ID, revision)
 					if routeErr != nil {
