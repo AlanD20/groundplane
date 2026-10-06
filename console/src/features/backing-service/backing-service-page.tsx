@@ -2,14 +2,14 @@ import { EmptyState } from "@/components/common/empty-state";
 import { DetailRow } from "@/components/common/detail-row";
 import { PageHeader } from "@/components/common/page-header";
 import {
+  AdvancedDetails,
   ResourcePanel,
-  SummaryItem,
-  SummaryStrip,
 } from "@/components/common/resource-panel";
-import { ServiceFormBody } from "@/components/common/service-form-body";
+import { ServiceSettings } from "@/features/service/service-settings";
+import { CopyButton } from "@/components/common/copy-button";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { PostgresImageUpdate } from "./postgres-image-update";
 import { Button } from "@/components/ui/button";
-import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { LogStream } from "@/features/logs/log-viewer";
 import { ServiceContainers } from "@/features/service/service-containers";
@@ -20,15 +20,14 @@ import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { ArrowLeft, Database, Power, PowerOff, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ServiceTab } from "./service-tab";
 
 import { BackupsTab } from "./backing-backups";
 import { ConnectionsTab } from "./backing-connections";
 import { DesiredStateTab } from "./backing-desired-state";
 
-type PlatformTab =
-  "overview" | "logs" | "service" | "connections" | "state" | "backups";
+type PlatformTab = "overview" | "logs" | "service" | "connections" | "backups";
 
 export default function BackingServiceDetailPage() {
   const params = useRequiredParams("id");
@@ -36,12 +35,21 @@ export default function BackingServiceDetailPage() {
   const g = store.getBackingProject(params.id);
   const env = g?.environments?.[0];
   const svc = env?.services[0];
-  const [tab, setTab] = useState<PlatformTab>("overview");
+  const [search, setSearch] = useSearchParams();
+  const requested = search.get("tab");
+  const tab = (
+    ["overview", "logs", "service", "connections", "backups"].includes(
+      requested ?? "",
+    )
+      ? requested
+      : "overview"
+  ) as PlatformTab;
+  const setTab = (value: PlatformTab) => setSearch({ tab: value });
   const [pendingAction, setPendingAction] = useState<
     "start" | "stop" | "destroy" | null
   >(null);
   const [actionError, setActionError] = useState("");
-  const [editOpen, setEditOpen] = useState(false);
+  const [destroyOpen, setDestroyOpen] = useState(false);
   const observationRefresh = useVisibleServiceObservations({
     environmentIds: env ? [env.id] : [],
     observations: svc ? [svc.observation] : [],
@@ -77,24 +85,6 @@ export default function BackingServiceDetailPage() {
       : adapter?.urlScheme === "pgsql"
         ? 5432
         : undefined;
-  // Backups are per consumer: count the attach-backed sources across all
-  // environments that attach this backing project.
-  const consumerBackupCount = store.tenantProjects.reduce(
-    (n, p) =>
-      n +
-      (p.environments ?? []).reduce(
-        (m, e) =>
-          m +
-          (e.backup?.sources ?? []).filter(
-            (source) =>
-              source.kind === "attach" &&
-              e.attaches.find((attach) => attach.id === source.ref)
-                ?.projectId === g.id,
-          ).length,
-        0,
-      ),
-    0,
-  );
   const runLifecycle = async (action: "start" | "stop" | "destroy") => {
     setPendingAction(action);
     setActionError("");
@@ -149,14 +139,9 @@ export default function BackingServiceDetailPage() {
                 <Power className="size-4" /> Start
               </Button>
             )}
-            <Button
-              variant="destructive"
-              disabled={pendingAction !== null}
-              onClick={() => void runLifecycle("destroy")}
-              title="Remove runtime and retain durable data"
-            >
-              <Trash2 className="size-4" /> Destroy
-            </Button>
+            {svc.adapter === "postgres:16" && (
+              <PostgresImageUpdate env={env} service={svc} />
+            )}
           </>
         }
       />
@@ -165,16 +150,6 @@ export default function BackingServiceDetailPage() {
           {actionError}
         </p>
       )}
-      <Drawer open={editOpen} onOpenChange={setEditOpen}>
-        {editOpen && (
-          <ServiceFormBody
-            env={env}
-            workspace="platform"
-            initial={svc}
-            onClose={() => setEditOpen(false)}
-          />
-        )}
-      </Drawer>
       {observationRefresh.refreshError && (
         <p role="alert" className="text-sm text-destructive">
           Runtime refresh failed; evidence will expire locally.{" "}
@@ -182,97 +157,167 @@ export default function BackingServiceDetailPage() {
         </p>
       )}
 
-      <SummaryStrip>
-        <SummaryItem label="Runtime">
-          <span className="capitalize">{observation.state}</span>
-        </SummaryItem>
-        <SummaryItem label="Consumers">{g.consumers?.length ?? 0}</SummaryItem>
-        <SummaryItem label="Persistent data">
-          {env.volumes[0]?.slug ?? "None"}
-        </SummaryItem>
-        <SummaryItem label="Network">
-          {env.zones.map((zone) => zone.name).join(", ") || "None"}
-        </SummaryItem>
-      </SummaryStrip>
-
       <Tabs value={tab} onValueChange={(v) => setTab(v as PlatformTab)}>
-        <TabsList aria-label="Backing Service sections">
+        <TabsList variant="underline" aria-label="Backing Service sections">
           <TabsTab value="overview">Overview</TabsTab>
           <TabsTab value="logs">Logs</TabsTab>
-          <TabsTab value="service">Configuration</TabsTab>
           <TabsTab value="connections">Connections</TabsTab>
-          <TabsTab value="state">Desired state</TabsTab>
           <TabsTab value="backups">Backups</TabsTab>
+          <TabsTab value="service">Settings</TabsTab>
         </TabsList>
 
-        <TabsPanel value="overview" className="mt-6">
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-            <ServiceContainers observation={observation} />
-            <div className="flex flex-col gap-6">
-              <ResourcePanel title="Connections">
-                <DetailRow
-                  label="Attaches"
-                  value={String(g.consumers?.length ?? 0)}
-                />
-                <DetailRow
-                  label="Consumer services"
-                  value={String(
-                    new Set(
-                      (g.consumers ?? []).map(
-                        (consumer) =>
-                          `${consumer.project}/${consumer.environment}/${consumer.service}`,
-                      ),
-                    ).size,
-                  )}
-                />
-                <DetailRow
-                  label="Endpoint"
-                  value={`${svc.serviceName ?? svc.name}${port ? `:${port}` : ""}`}
-                  mono
-                />
-                <DetailRow
-                  label="Environment"
-                  value={`Platform / ${env.name}`}
-                />
-              </ResourcePanel>
-              <ResourcePanel title="Runtime configuration">
-                <DetailRow label="Image" value={svc.image} mono />
-                <DetailRow label="Runtime intent" value={svc.runtimeIntent} />
-                <DetailRow label="Strategy" value={svc.strategy} />
-                <DetailRow
-                  label="Backup sources"
-                  value={String(consumerBackupCount)}
-                />
-              </ResourcePanel>
-            </div>
+        <TabsPanel value="overview" className="space-y-5 pt-5">
+          <div className="grid items-start gap-5 lg:grid-cols-2">
+            <ResourcePanel
+              title="Connect to this service"
+              actions={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTab("connections")}
+                >
+                  Connection details
+                </Button>
+              }
+            >
+              <DetailRow
+                label="Internal host"
+                value={
+                  <span className="inline-flex items-center gap-2 break-all">
+                    {svc.serviceName ?? svc.name}
+                    <CopyButton
+                      value={svc.serviceName ?? svc.name}
+                      label="Copy internal host"
+                    />
+                  </span>
+                }
+              />
+              {port && <DetailRow label="Port" value={String(port)} />}
+              <p className="text-sm text-muted-foreground">
+                Applications connect through an Attach. Credentials and
+                connection URLs belong to each connection.
+              </p>
+            </ResourcePanel>
+            <ResourcePanel
+              title="Connected applications"
+              actions={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTab("connections")}
+                >
+                  View all ({g.consumers?.length ?? 0})
+                </Button>
+              }
+            >
+              {(g.consumers ?? []).slice(0, 3).map((consumer) => (
+                <Button
+                  key={consumer.attachId}
+                  variant="ghost"
+                  size="content"
+                  className="flex w-full items-center justify-between gap-3 px-0 py-2 text-left"
+                  onClick={() => setTab("connections")}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">
+                      {consumer.service}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {consumer.project} / {consumer.environment}
+                    </span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {consumer.database || "Network access"}
+                  </span>
+                </Button>
+              ))}
+              {!g.consumers?.length && (
+                <p className="text-sm text-muted-foreground">
+                  No applications connected. Add a backing connection from an
+                  application's Environment.
+                </p>
+              )}
+            </ResourcePanel>
           </div>
+          <ServiceContainers
+            observation={observation}
+            onOpenLogs={() => setTab("logs")}
+          />
+          <ResourcePanel title="Persistent storage">
+            {env.volumes.length ? (
+              env.volumes.map((volume) => (
+                <DetailRow
+                  key={volume.id}
+                  label={volume.slug}
+                  value="Retained when runtime stops or is destroyed"
+                />
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No managed Volumes.
+              </p>
+            )}
+          </ResourcePanel>
         </TabsPanel>
         <TabsPanel value="logs" className="mt-6">
           {tab === "logs" && (
             <LogStream target={{ kind: "service", id: svc.id }} />
           )}
         </TabsPanel>
-        <TabsPanel value="service" className="mt-6 flex flex-col gap-6">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setEditOpen(true)}>
-              Edit configuration
+        <TabsPanel value="service" className="space-y-5 pt-5">
+          <ServiceSettings
+            env={env}
+            service={svc}
+            workspace="platform"
+            imageAction={
+              svc.adapter === "postgres:16" ? (
+                <PostgresImageUpdate env={env} service={svc} />
+              ) : undefined
+            }
+          />
+          <AdvancedDetails title="Service & storage configuration">
+            <ServiceTab env={env} svc={svc} />
+          </AdvancedDetails>
+          <AdvancedDetails title="Configuration YAML">
+            <DesiredStateTab g={g} env={env} svc={svc} />
+          </AdvancedDetails>
+          <ResourcePanel title="Destroy runtime">
+            <p className="text-sm text-muted-foreground">
+              Remove the containers and retain configuration, connections and
+              durable data. Start recreates the runtime.
+            </p>
+            <Button
+              variant="destructive"
+              disabled={
+                pendingAction !== null || svc.runtimeIntent === "absent"
+              }
+              onClick={() => setDestroyOpen(true)}
+            >
+              <Trash2 /> Destroy runtime
             </Button>
-            {svc.adapter === "postgres:16" && (
-              <PostgresImageUpdate env={env} service={svc} />
-            )}
-          </div>
-          <ServiceTab env={env} svc={svc} />
+          </ResourcePanel>
         </TabsPanel>
         <TabsPanel value="connections" className="mt-6 flex flex-col gap-6">
           <ConnectionsTab g={g} env={env} svc={svc} />
-        </TabsPanel>
-        <TabsPanel value="state" className="mt-6 flex flex-col gap-4">
-          <DesiredStateTab g={g} env={env} svc={svc} />
         </TabsPanel>
         <TabsPanel value="backups" className="mt-6 flex flex-col gap-4">
           <BackupsTab g={g} env={env} svc={svc} />
         </TabsPanel>
       </Tabs>
+      {destroyOpen && (
+        <TaskRunnerDialog
+          open
+          onOpenChange={setDestroyOpen}
+          title={`Destroy runtime · ${g.name}`}
+          description="Remove this Backing Service's containers. Configuration, connections and durable data are retained; Start recreates the runtime."
+          type="destroy"
+          target={svc.name}
+          workspace="platform"
+          startLabel="Destroy runtime"
+          steps={[]}
+          onDispatch={() => store.runBackingRuntimeAction(g.id, "destroy")}
+        />
+      )}
     </div>
   );
 }

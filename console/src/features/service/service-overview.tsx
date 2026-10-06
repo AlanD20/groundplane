@@ -3,8 +3,6 @@ import { ImageReference } from "@/components/common/image-reference";
 import {
   AdvancedDetails,
   ResourcePanel,
-  SummaryItem,
-  SummaryStrip,
 } from "@/components/common/resource-panel";
 import { Button } from "@/components/ui/button";
 import { formatTimestamp } from "@/lib/format-timestamp";
@@ -14,7 +12,6 @@ import {
   Boxes,
   ChevronRight,
   Database,
-  ExternalLink,
   HardDrive,
   Network,
   Route,
@@ -37,13 +34,13 @@ export function ServiceOverview({
   env,
   now = Date.now(),
   onOpenLogs,
-  onOpenConfiguration,
+  onOpenDeployments,
 }: {
   service: Service;
   env: Environment;
   now?: number;
   onOpenLogs?: () => void;
-  onOpenConfiguration?: () => void;
+  onOpenDeployments?: () => void;
 }) {
   const store = useStore();
   const observation = currentServiceObservation(service.observation, now);
@@ -78,6 +75,7 @@ export function ServiceOverview({
       icon: <Network />,
       name,
       kind: "Network Zone",
+      href: "?view=network&panel=zones",
     })),
     ...env.attaches
       .filter(
@@ -104,6 +102,10 @@ export function ServiceOverview({
             )?.slug ?? mount.volume)
           : mount.file,
       kind: `${mount.type === "volume" ? "Persistent Volume" : "File"} · ${mount.mount}`,
+      href:
+        mount.type === "volume"
+          ? "?view=configuration&panel=volumes"
+          : "?view=configuration&panel=entries",
     })),
     ...env.routes
       .filter((route) => route.targetServiceId === service.id)
@@ -112,6 +114,7 @@ export function ServiceOverview({
         icon: <Route />,
         name: `${route.host}${route.path}`,
         kind: "HTTP Route",
+        href: "?view=network&panel=routes",
       })),
   ];
   const healthcheckSummary = !service.healthcheck
@@ -132,10 +135,11 @@ export function ServiceOverview({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {service.runtimeIntent === "stopped" ||
-            service.runtimeIntent === "absent"
-              ? "Last deployed image"
-              : "Current deployment"}
+            {servingRelease
+              ? "Serving deployment"
+              : presentedRelease
+                ? "Last deployment"
+                : "Configured image"}
           </p>
           <h2 className="mt-1 min-w-0 font-semibold [&_span]:text-base">
             <ImageReference
@@ -159,35 +163,30 @@ export function ServiceOverview({
         )}
       </section>
 
-      <SummaryStrip>
-        <SummaryItem label="Containers">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border pb-5 text-sm">
+        <span>
+          <span className="text-muted-foreground">Containers </span>
           {observation.state === "unavailable"
             ? "Not reported"
             : `${totalContainers} / ${observation.expectedReplicas}`}
-        </SummaryItem>
-        <SummaryItem label="Healthcheck">{healthcheckSummary}</SummaryItem>
-        <SummaryItem
-          label={zoneNames.length === 1 ? "Network Zone" : "Network Zones"}
-        >
-          {zoneNames.join(", ") || "None"}
-        </SummaryItem>
-        <SummaryItem label="Runtime intent">
-          {service.runtimeIntent}
-        </SummaryItem>
-      </SummaryStrip>
-
-      <div className="grid min-w-0 gap-5 xl:grid-cols-2">
-        <ServiceContainers observation={observation} onOpenLogs={onOpenLogs} />
-        <ResourcePanel
-          title="Connected resources"
-          actions={
-            onOpenConfiguration ? (
-              <Button variant="link" size="sm" onClick={onOpenConfiguration}>
-                Manage <ExternalLink className="size-3.5" />
-              </Button>
-            ) : undefined
-          }
-        >
+        </span>
+        <span>
+          <span className="text-muted-foreground">Healthcheck </span>
+          {healthcheckSummary}
+        </span>
+        {onOpenLogs && (
+          <Button variant="outline" size="sm" onClick={onOpenLogs}>
+            View logs
+          </Button>
+        )}
+        {onOpenDeployments && (
+          <Button variant="ghost" size="sm" onClick={onOpenDeployments}>
+            Deployment history
+          </Button>
+        )}
+      </div>
+      <div className="space-y-5">
+        <ResourcePanel title="Connected resources">
           {connected.length ? (
             <div className="divide-y divide-border rounded-xl border border-border">
               {connected.map((resource) => {
@@ -235,7 +234,8 @@ export function ServiceOverview({
         </ResourcePanel>
       </div>
 
-      <AdvancedDetails>
+      <ServiceContainers observation={observation} onOpenLogs={onOpenLogs} />
+      <AdvancedDetails title="Agent report & Service ID">
         <DetailRow label="Service ID" value={service.id} mono />
         <DetailRow
           label="Configured image"

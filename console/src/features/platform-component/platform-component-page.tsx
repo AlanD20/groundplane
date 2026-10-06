@@ -291,7 +291,7 @@ export default function PlatformComponentPage() {
               value={platform.dns.enabled ? "Enabled" : "Disabled"}
             />
           </ResourcePanel>
-          <AdvancedDetails>
+          <AdvancedDetails title="Component ID & mounts">
             <DetailRow label="Component ID" value={component.id} mono />
             <DetailRow
               label="Mounts"

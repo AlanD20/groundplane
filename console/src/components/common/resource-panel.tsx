@@ -72,10 +72,10 @@ export function SummaryItem({
 }
 
 export function AdvancedDetails({
-  title = "Technical details",
+  title,
   children,
 }: {
-  title?: string;
+  title: string;
   children: ReactNode;
 }) {
   return (

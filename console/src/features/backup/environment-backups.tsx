@@ -389,7 +389,7 @@ export function BackupsCard({ env }: { env: Environment }) {
       >
         <EnvironmentConnectorManager env={env} />
       </AdvancedDetails>
-      <AdvancedDetails title="Technical details · encryption & backup adapters">
+      <AdvancedDetails title="Encryption & backup steps">
         <div className="grid gap-3 sm:grid-cols-3">
           <PolicyCell label="Strategy" value={deriveStrategy(store, env)} />
           <PolicyCell

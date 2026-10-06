@@ -24,17 +24,24 @@ links remain available in the sidebar. The breadcrumbs switch resource scope.
 Activity and Task views show the same durable operations, with scope and status
 filters. Opening a Task shows its details; its resource link opens the affected
 page.
-Opening a Service shows its workspace with Overview, Logs, Releases and
-Configuration tabs. Configuration opens focused editors for image, runtime and
-resources, healthcheck and networking. Entries & files lists Entries exposed to
+Opening a Service shows its workspace with Overview, Logs, Deployments,
+Variables & files and Settings tabs. Settings shows current values with focused
+editors for image, runtime and resources, healthcheck and networking.
+Variables & files lists Entries exposed to
 the Service, including shared Entries; editing a shared Entry affects its full
 exposure. Storage shows mounts and links to the Environment Blueprint to edit
-them. Technical details and Compose are expandable. Saving configuration does
+them. The full configuration and Compose preview are expandable. Saving configuration does
 not deploy it. Long forms retain their action footer while scrolling.
 
 Backups shows protection, schedule, sources and Recovery Points first. Edit policy
-opens the policy drawer; expandable destination and technical sections contain
+opens the policy drawer; expandable destination and encryption sections contain
 Connector management, encryption details and adapter steps.
+
+Backing Services open with internal connection information, connected
+applications, containers and persistent storage. Connections holds per-consumer
+connection details; Logs, Backups and Settings are separate tabs. Settings uses
+the same focused editors as Services and contains configuration previews and
+the Destroy runtime confirmation. Tab selection is retained in the URL.
 
 Loading, errors, missing data and expired observations are explicit. The Console
 must not substitute sample data for unavailable health or claim an operation

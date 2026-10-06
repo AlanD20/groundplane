@@ -82,8 +82,80 @@ export function ConnectionsTab({
   );
   return (
     <>
+      <ResourcePanel title="Consumer connections">
+        <CollectionToolbar
+          query={query}
+          onQueryChange={setQuery}
+          label="Consumers"
+        />
+        <ResourceTable>
+          <Table aria-label="Backing Service consumers">
+            <TableHeader>
+              <TableRow>
+                <TableSortHead sort={table} field="service">
+                  Service
+                </TableSortHead>
+                <TableSortHead sort={table} field="environment">
+                  Environment
+                </TableSortHead>
+                <TableSortHead sort={table} field="database">
+                  Database
+                </TableSortHead>
+                <TableHead>Connection</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {table.rows.map((c) => (
+                <ResourceRow key={c.attachId} onOpen={() => setSelected(c)}>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="content"
+                      className="justify-start text-xs"
+                      onClick={() => setSelected(c)}
+                    >
+                      {c.service}
+                    </Button>
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      to={`/t/${c.tenant}/${c.project}/${encodeURIComponent(c.environment)}?view=network&panel=attaches`}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      {c.project}/{c.environment}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{c.database || "—"}</TableCell>
+                  <TableCell>
+                    {!adapter?.custom ? (
+                      <ConsumerConnectionActions
+                        consumer={c}
+                        authentication={svc.authentication}
+                      />
+                    ) : svc.hooks?.attach ? (
+                      "Custom provisioning"
+                    ) : (
+                      "Network access"
+                    )}
+                  </TableCell>
+                </ResourceRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ResourceTable>
+        {!rows.length && (
+          <p className="py-5 text-xs text-muted-foreground">
+            {g.consumers?.length
+              ? "No matching consumers."
+              : "No consumer Attaches yet."}
+          </p>
+        )}
+        <TablePagination table={table} label="Consumers" />
+      </ResourcePanel>
       {adapter && (
-        <AdvancedDetails title={`Adapter details · ${svc.adapter}`}>
+        <AdvancedDetails
+          title={`Provisioning & connection fields · ${svc.adapter}`}
+        >
           <div className="flex flex-col gap-3">
             {adapter?.custom ? (
               <p className="text-xs text-muted-foreground">
@@ -208,76 +280,6 @@ export function ConnectionsTab({
         </AdvancedDetails>
       )}
 
-      <ResourcePanel title="Consumer connections">
-        <CollectionToolbar
-          query={query}
-          onQueryChange={setQuery}
-          label="Consumers"
-        />
-        <ResourceTable>
-          <Table aria-label="Backing Service consumers">
-            <TableHeader>
-              <TableRow>
-                <TableSortHead sort={table} field="service">
-                  Service
-                </TableSortHead>
-                <TableSortHead sort={table} field="environment">
-                  Environment
-                </TableSortHead>
-                <TableSortHead sort={table} field="database">
-                  Database
-                </TableSortHead>
-                <TableHead>Connection</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {table.rows.map((c) => (
-                <ResourceRow key={c.attachId} onOpen={() => setSelected(c)}>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="content"
-                      className="justify-start text-xs"
-                      onClick={() => setSelected(c)}
-                    >
-                      {c.service}
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      to={`/t/${c.tenant}/${c.project}/${encodeURIComponent(c.environment)}?view=network&panel=attaches`}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      {c.project}/{c.environment}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{c.database || "—"}</TableCell>
-                  <TableCell>
-                    {!adapter?.custom ? (
-                      <ConsumerConnectionActions
-                        consumer={c}
-                        authentication={svc.authentication}
-                      />
-                    ) : svc.hooks?.attach ? (
-                      "Custom provisioning"
-                    ) : (
-                      "Network access"
-                    )}
-                  </TableCell>
-                </ResourceRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ResourceTable>
-        {!rows.length && (
-          <p className="py-5 text-xs text-muted-foreground">
-            {g.consumers?.length
-              ? "No matching consumers."
-              : "No consumer Attaches yet."}
-          </p>
-        )}
-        <TablePagination table={table} label="Consumers" />
-      </ResourcePanel>
       <Dialog
         open={Boolean(selected)}
         onOpenChange={(open) => {

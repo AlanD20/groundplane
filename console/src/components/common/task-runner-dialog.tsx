@@ -261,7 +261,7 @@ export function TaskRunnerDialog({
       </DialogHeader>
 
       <details className="text-xs text-muted-foreground">
-        <summary>Technical target</summary>
+        <summary>Operation target</summary>
         <code className="mt-2 block break-all font-mono">{target}</code>
       </details>
 

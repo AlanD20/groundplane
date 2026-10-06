@@ -60,16 +60,16 @@ export function ServiceContainers({
                       className="block truncate text-sm font-medium"
                       title={item.name}
                     >
-                      {item.name}
+                      Replica {item.replica}
                     </span>
                     <span className="mt-1 block min-w-0 text-xs text-muted-foreground">
                       <ImageReference value={item.image} />
                     </span>
                     <span
                       className="mt-1 block truncate text-[11px] text-muted-foreground"
-                      title={item.id}
+                      title={`${item.name} · ${item.id}`}
                     >
-                      {item.id.slice(0, 12)} · replica {item.replica}
+                      {item.name}
                     </span>
                   </span>
                   <span className="flex flex-wrap items-center justify-end gap-2">

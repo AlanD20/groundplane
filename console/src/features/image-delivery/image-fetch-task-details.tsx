@@ -38,7 +38,7 @@ export function ImageFetchTaskDetails({ task }: { task: ActivityEntry }) {
     {task.status === 'failed' && !progress.error_detail && <p className="text-sm text-muted-foreground">No failure explanation was recorded for this attempt. The Controller log contains its diagnostic.</p>}
     <TaskJournalMetadata entry={task} />
     <details className="rounded-lg border border-border p-3">
-      <summary className="cursor-pointer text-sm font-medium">Technical details</summary>
+      <summary className="cursor-pointer text-sm font-medium">Image digest & Task identifiers</summary>
       <dl className="mt-3 space-y-3 text-xs">
         {[['Requested image', fetch.requested], ['Selected digest', fetch.image], ['Task', task.id], ['Operation', task.operationId]].map(([label, value]) => value && <div key={label}>
           <dt className="mb-1 text-muted-foreground">{label}</dt>

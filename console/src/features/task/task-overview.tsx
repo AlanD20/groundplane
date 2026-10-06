@@ -181,7 +181,7 @@ export function TaskOverview({
         </p>
       )}
       <TaskExecutionTerminal task={task} />
-      <AdvancedDetails>
+      <AdvancedDetails title="Task identifiers & execution metadata">
         <dl className="mt-3 space-y-3 text-xs">
           {[
             ["Task ID", task.id],

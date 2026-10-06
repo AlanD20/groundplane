@@ -11,6 +11,7 @@ import {
 } from "@/features/service/api";
 import { listAllZones } from "@/features/environment/network-api";
 import { listAllEntries } from "@/features/entry/api";
+import { listAllVolumes } from "@/features/volume/api";
 import { backingConsumers } from "./consumer-projection";
 import { controllerRequest } from "@/lib/controller-json-request";
 type EnvironmentResponse =
@@ -46,6 +47,7 @@ export async function listAllBackingProjects(
         serviceResponse,
         zones,
         entries,
+        volumes,
       ] = await Promise.all([
         controllerRequest<ProjectShowResponse>(
           `/projects/${encodeURIComponent(facade.project_id)}`,
@@ -64,6 +66,7 @@ export async function listAllBackingProjects(
         ),
         listAllZones(facade.environment_id, signal),
         listAllEntries(facade.environment_id, signal),
+        listAllVolumes(controllerRequest, facade.environment_id, signal),
       ]);
       const service = {
         ...serviceFromAPI(serviceResponse),
@@ -74,6 +77,7 @@ export async function listAllBackingProjects(
         zones,
         services: [service],
         entries,
+        volumes,
         routes: [],
         attaches: [],
         components: [],
