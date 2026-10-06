@@ -108,6 +108,12 @@ explicit for staged forms. An immediately applied control must communicate that
 behavior and report pending, success and failure; do not mix immediate and staged
 edits without distinguishing them.
 
+Separate initial loading from background refresh. Once loaded, keep content and
+open editors mounted while revalidating; preserve drafts, focus and scroll, and
+do not disable a form merely because a poll is in flight. Keep refresh failures
+visible until a successful read, with stale or unavailable state explained.
+Actual saves, resource changes and action prerequisites retain their own locks.
+
 Name actions by their effect. Saving desired configuration is not deploying it;
 accepted work is not completed work; completed work is not proof of application
 health. Surface relevant pending changes and Task progress next to the affected

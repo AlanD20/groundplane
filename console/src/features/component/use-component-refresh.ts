@@ -42,6 +42,7 @@ export function useComponentRefresh(
   ) => void,
 ): ComponentRefreshActions {
   const configEpoch = useRef(0);
+  const loadedConfigComponent = useRef<string | null>(null);
   const refreshPlatformComponents = useCallback(
     async (signal?: AbortSignal) => {
       const hydrated = hydratePlatformComponents(
@@ -61,14 +62,18 @@ export function useComponentRefresh(
   const refreshComponentConfig = useCallback(
     async (componentId: string, signal?: AbortSignal) => {
       const epoch = ++configEpoch.current;
+      if (loadedConfigComponent.current !== componentId)
+        loadedConfigComponent.current = null;
+      const loading = loadedConfigComponent.current !== componentId;
       update((draft) => {
         if (draft.managedConfigComponentId !== componentId) {
           draft.managedConfigFiles = [];
           draft.managedConfigTaskId = null;
         }
         draft.managedConfigComponentId = componentId;
-        draft.managedConfigLoading = true;
-        draft.managedConfigError = null;
+        // Keep a loaded preview mounted throughout background task polling.
+        draft.managedConfigLoading = loading;
+        if (draft.managedConfigLoading) draft.managedConfigError = null;
       });
       try {
         const response = await controllerRequest<ComponentConfigResponse>(
@@ -83,6 +88,7 @@ export function useComponentRefresh(
           generatedDirectives: file.generated_directives,
         }));
         if (signal?.aborted || configEpoch.current !== epoch) return files;
+        loadedConfigComponent.current = componentId;
         update((draft) => {
           draft.managedConfigTaskId = response.active_task_id ?? null;
           draft.managedConfigFiles = files;

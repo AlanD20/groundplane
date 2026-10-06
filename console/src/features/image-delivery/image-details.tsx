@@ -59,7 +59,7 @@ export function ImageDetails({
       </SummaryStrip>
       {unavailable && (
         <p role="status" className="text-xs text-warning">
-          Usage may be out of date while inventory is unavailable or refreshing.
+          Usage may be out of date because inventory could not be refreshed.
         </p>
       )}
       <Tabs defaultValue="usage">
