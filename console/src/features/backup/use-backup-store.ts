@@ -5,7 +5,7 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
-import type { operations } from "@/lib/api.generated";
+import type { components, operations } from "@/lib/api.generated";
 import { assertOptionalBackupPolicyKeep } from "@/lib/backup-policy-contract";
 import { exportBackupKey } from "./backup-key-export";
 import type {
@@ -37,6 +37,7 @@ type BackupRestoreTaskAccepted =
   operations["backup.restore"]["responses"][202]["content"]["application/json"];
 type BackupKeyRotateResponse =
   operations["backup.key.rotate"]["responses"][202]["content"]["application/json"];
+type TaskAccepted = components["schemas"]["TaskAccepted"];
 type AttachPageResponse =
   operations["attach.list"]["responses"][200]["content"]["application/json"];
 
@@ -501,6 +502,23 @@ export function useBackupStore({
     [assertEnvironmentMutable, request],
   );
 
+  const deleteRecoveryPoint = useCallback(
+    async (
+      environmentId: string,
+      recoveryPointId: string,
+      idempotencyKey: string,
+    ): Promise<string> => {
+      assertEnvironmentMutable(environmentId, "Recovery Point deletion");
+      const response = await request<TaskAccepted>(
+        `/environments/${encodeURIComponent(environmentId)}/recovery-points/${encodeURIComponent(recoveryPointId)}`,
+        202,
+        { method: "DELETE", idempotencyKey },
+      );
+      return requiredTaskId(response, "Recovery Point deletion");
+    },
+    [assertEnvironmentMutable, request],
+  );
+
   const rotateBackupKey = useCallback(
     async (environmentId: string): Promise<string> => {
       assertEnvironmentMutable(environmentId, "Backup key rotation");
@@ -533,6 +551,7 @@ export function useBackupStore({
       replaceBackupPolicy,
       runBackup,
       restoreBackup,
+      deleteRecoveryPoint,
       rotateBackupKey,
       exportBackupKey,
     }),
@@ -544,6 +563,7 @@ export function useBackupStore({
       replaceBackupPolicy,
       runBackup,
       restoreBackup,
+      deleteRecoveryPoint,
       rotateBackupKey,
     ],
   );

@@ -260,7 +260,9 @@ func ValidateBackupPruneExecutionStep(
 	prune := authority.GetPrune()
 	point := item.Prune.Point
 	if prune == nil || len(prune.Objects) != 1 || !proto.Equal(prune.RetentionPolicy, item.RetentionPolicy) ||
-		item.Prune.OperationID != dispatch.OperationID || item.PruneRevision <= 0 || item.SourceRevision <= 0 ||
+		item.Prune.OperationID != dispatch.OperationID || item.PruneRevision < 0 ||
+		(item.PruneRevision == 0 && (item.Prune.State != backupruntime.BackupPrunePending ||
+			item.Prune.TaskID != "" || item.Prune.DispatchAttempts != 0)) || item.SourceRevision <= 0 ||
 		point.EnvironmentID != dispatch.EnvironmentID || dispatch.RecoveryPointIDs[index] != point.ID ||
 		plan.GetBackupScope().GetEnvironment().GetModRevision() != item.EnvironmentRevision ||
 		authority.StepDeadlineUnixNano != uint64(dispatch.CreatedAt.Add(30*time.Minute).UnixNano()) {

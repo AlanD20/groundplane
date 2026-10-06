@@ -80,6 +80,7 @@ type Server struct {
 	backupPolicies          BackupPolicyReader
 	backupPolicyMutations   BackupPolicyMutator
 	recoveryPoints          RecoveryPointReader
+	recoveryPointRemover    RecoveryPointRemover
 	backupRuns              BackupRunMutator
 	backupRestores          BackupRestorer
 	backupKeyMutations      BackupKeyMutator
@@ -155,6 +156,7 @@ type Options struct {
 	BackupPolicyMutations   BackupPolicyMutator
 	RecoveryPoints          RecoveryPointReader
 	BackupRuns              BackupRunMutator
+	RecoveryPointRemover    RecoveryPointRemover
 	BackupRestores          BackupRestorer
 	BackupKeyMutations      BackupKeyMutator
 	BackupKeyExports        BackupKeyExporter
@@ -245,6 +247,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		backupPolicies:          options.BackupPolicies,
 		backupPolicyMutations:   options.BackupPolicyMutations,
 		recoveryPoints:          options.RecoveryPoints,
+		recoveryPointRemover:    options.RecoveryPointRemover,
 		backupRuns:              options.BackupRuns,
 		backupRestores:          options.BackupRestores,
 		backupKeyMutations:      options.BackupKeyMutations,
@@ -296,6 +299,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerBackupPolicies()
 	s.registerRecoveryPoints()
 	s.registerBackupRuns()
+	s.registerRecoveryPointRemoval()
 	s.registerBackupRestore()
 	s.registerBackupKeyRoutes()
 	s.registerVolumes()

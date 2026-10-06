@@ -34,12 +34,22 @@ func ValidatePendingBackupPruneAuthority(
 	if len(values) != 5 {
 		return CorruptBackupRuntimeRecord()
 	}
-	if values[0] == nil || values[0].ModRevision != version.Revision {
-		return errs.New(errs.KindStateConflict, "backup prune authority changed")
-	}
-	storedPrune, err := DecodeBackupRecoveryPointPruneRecord(values[0].Value)
-	if err != nil || storedPrune != version.Record {
-		return CorruptBackupRuntimeRecord()
+	// A zero revision is an initial selection: its tombstone must be absent
+	// until the same transaction publishes the assigned deletion Task.
+	if version.Revision == 0 {
+		if values[0] != nil || version.Record.State != BackupPrunePending ||
+			version.Record.TaskID != "" || version.Record.DispatchAttempts != 0 ||
+			validateBackupRecoveryPointPruneRecord(version.Record) != nil {
+			return errs.New(errs.KindStateConflict, "recovery point deletion is already selected")
+		}
+	} else {
+		if values[0] == nil || values[0].ModRevision != version.Revision {
+			return errs.New(errs.KindStateConflict, "backup prune authority changed")
+		}
+		storedPrune, err := DecodeBackupRecoveryPointPruneRecord(values[0].Value)
+		if err != nil || storedPrune != version.Record {
+			return CorruptBackupRuntimeRecord()
+		}
 	}
 	if values[1] == nil || values[2] == nil || values[3] == nil || values[4] == nil ||
 		values[1].Version != 1 || values[2].Version != 1 || values[3].Version != 1 ||

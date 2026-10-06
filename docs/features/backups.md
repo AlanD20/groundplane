@@ -121,11 +121,34 @@ private object locators are not public recovery evidence.
 
 Retention keeps the newest verified points per source. Lowering `keep` takes
 effect after its next successful backup. Disabling a policy or removing a source
-does not delete points. There is no ordinary operator point-delete action.
+does not delete points.
 
-Remote cleanup must prove absence of the exact selected object before releasing
-its records and Connector references. Uncertain cleanup retains the credentials
-and ownership needed to retry. Bucket listing is not ownership proof.
+Delete one verified Point explicitly with its stable id:
+
+```sh
+groundplane backup remove-point rp_01J00000000000000000000000 \
+  --idempotency-key storefront-point-delete-20261006-001
+```
+
+The command returns a Task to follow. It permanently removes that recovery
+artifact; it does not change the original target, current policy or other Points.
+Manual selection launches the same system-owned cleanup Task used by retention.
+Deletion is blocked while an Environment Backup, Restore, retention prune or key
+rotation is active. The Task removes only the exact object captured by that Point.
+
+The API action is the bodyless
+`DELETE /api/v1/environments/{id}/recovery-points/{point}`. It requires
+`Idempotency-Key` and returns HTTP 202 `TaskAccepted` with `task_id`. After an
+uncertain response, replay the same key, Environment and Point rather than
+starting a new deletion intent.
+
+Manual deletion and retention cleanup must prove absence of the exact selected
+object before releasing its Point record and Connector references. A remote
+cleanup failure retains the Point, locator, references and operation authority.
+The cleanup scheduler retries that same selection within its bounded attempt
+limit; ordinary Task Retry and Abort are unavailable for prune Tasks. A selected
+Point is no longer offered for Restore while cleanup is pending. Bucket listing
+is not ownership proof.
 
 Environment removal cleans up its owned points and proven orphan objects before
 retiring Backup scheduling, policy, key and Connector authority. It preserves

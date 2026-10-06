@@ -972,6 +972,46 @@ Raw receipts and the original rejected setup remain ignored locally. More than
 50 Points, hidden-tab resume, injected read failures and blanket release/CI
 qualification were not established here. No push, tag or compatibility path.
 
+**H93 — Manual Recovery Point deletion, selected Ubuntu amd64 R2 journey
+PASS on 2026-10-06. BAK-20 PARTIAL.**
+
+The tested Controller was `0.0.1-qa-point-delete-20261006-r2`, bytes
+`sha256:3d7feae3487a4d357f38175d6b3b1678b9445770be022d02ec31e412346e66b5`.
+The final `r3` delivery additionally hides unsupported Abort in the deletion
+dialog, with bytes
+`sha256:a604b76ee69eea0d9cb2534c6e3bbd67c0671cb191d876eb92038a4093eb8e0f`.
+Both used the unchanged H92 Agent and GP's normal protected Controller updater.
+These artifact identities identify uncommitted source builds.
+
+One fresh encrypted Backup produced five verified test Points: Config, two
+Volumes and two credential-owning PostgreSQL Attaches. Independent authenticated
+R2 HEAD requests confirmed the exact captured object identities before deletion.
+GP's bodyless API, CLI `backup remove-point` and Console confirmation then removed
+only those test Points. Independent R2 HEAD returned 404 for all five archives;
+the original five Points, Backup Policy, Volume IDs and running container IDs
+were unchanged. The Console linked its Task and refreshed the list without a
+page reload. No VM reset, direct provider deletion or source removal was used.
+
+Replaying the completed API request returned its original Task after its Point
+was gone. Selecting another Point under that key returned `idempotency.mismatch`.
+A focused storage regression proved that a Restore admitted after selection
+rejects deletion atomically, without hiding the Point or publishing a partial
+Task. Existing prune lifecycle/failure checks and selected race checks passed.
+API generation, Console build and affected vet checks passed. Architecture still
+reports the pre-existing Runner file and application wiring total findings;
+root-etcd remains below the approved 75,000-line cap. Full CI was not rerun.
+
+The first live publication exposed a missing accepted response: its Task ran,
+but the first HTTP reply was empty. The corrected publication returns its owned
+Task response; fresh CLI and Console requests then linked and completed their
+Tasks normally. The failed receipt is retained locally. Cleanup uses the existing
+system-owned prune lifecycle, not a new operator Retry/Abort contract.
+
+Live remote-deletion fault injection, exhausted retries, arm64 and blanket
+Backup/Restore release qualification were not established by this run. Test
+artifacts were removed through GP; unrelated archives and private credentials
+were preserved. No push, tag or compatibility path was introduced.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

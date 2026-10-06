@@ -9,7 +9,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { useState } from "react";
-import { RefreshCw, Terminal } from "lucide-react";
+import { RefreshCw, Terminal, Trash2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
 } from "@/features/backup/environment-backup-projection";
 import { BackupPolicyDialog } from "@/features/backup/backup-policy-dialog";
 import { RestoreDialog } from "@/features/backup/restore-dialog";
+import { RecoveryPointDeleteDialog } from "@/features/backup/recovery-point-delete-dialog";
 import type { RecoveryPoint } from "@/features/backup/types";
 import { TaskLink } from "@/components/common/task-link";
 import { useBackupRefresh } from "./use-backup-refresh";
@@ -61,6 +62,7 @@ export function BackupsCard({ env }: { env: Environment }) {
   );
   const [policyOpen, setPolicyOpen] = useState(false);
   const [restorePoint, setRestorePoint] = useState<RecoveryPoint | null>(null);
+  const [deletePoint, setDeletePoint] = useState<RecoveryPoint | null>(null);
   const [runTaskId, setRunTaskId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   useBackupRefresh(env.id, true);
@@ -353,13 +355,22 @@ export function BackupsCard({ env }: { env: Environment }) {
                         {point.status}
                       </TableCell>
                       <TableCell className="px-3 py-2 text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setRestorePoint(point)}
-                        >
-                          Restore
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setRestorePoint(point)}
+                          >
+                            Restore
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setDeletePoint(point)}
+                          >
+                            <Trash2 className="size-3.5" /> Delete
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -470,6 +481,14 @@ export function BackupsCard({ env }: { env: Environment }) {
           point={restorePoint}
           onClose={() => setRestorePoint(null)}
           onTask={setRunTaskId}
+        />
+      )}
+      {deletePoint && (
+        <RecoveryPointDeleteDialog
+          key={`${env.id}/${deletePoint.id}`}
+          env={env}
+          point={deletePoint}
+          onClose={() => setDeletePoint(null)}
         />
       )}
     </>

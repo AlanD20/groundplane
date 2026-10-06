@@ -39,6 +39,7 @@ export function TaskRunnerDialog({
   startDisabled = false,
   confirmText,
   destructive,
+  abortable = true,
   onCommit,
   onSettled,
   onDispatch,
@@ -58,6 +59,7 @@ export function TaskRunnerDialog({
   startDisabled?: boolean;
   confirmText?: string;
   destructive?: boolean;
+  abortable?: boolean;
   onCommit?: () => void;
   onSettled?: () => Promise<void>;
   onDispatch: () => Promise<string | null>;
@@ -459,7 +461,7 @@ export function TaskRunnerDialog({
               {taskStatusLabel}
             </span>
             <div className="flex gap-2">
-              {taskInFlight && (
+              {taskInFlight && abortable && (
                 <Button
                   variant="destructive"
                   disabled={aborting || abortRequested}

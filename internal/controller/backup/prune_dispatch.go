@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -26,13 +27,18 @@ const backupPruneRoute = "/system/backup-retention/{id}/prune"
 // pending under the original operation id, so a later tick retries them.
 type BackupPruneService struct {
 	runtime               *etcd.BackupRuntimeRepository
-	idempotency           backupRunIdempotency
+	idempotency           backupPruneIdempotency
 	now                   func() time.Time
 	manifestCleanupCursor string
 }
 
+type backupPruneIdempotency interface {
+	backupRunIdempotency
+	PreparePointRemoval(context.Context, string, string) (backupRunEvidence, error)
+}
+
 func NewBackupPruneService(runtime *etcd.BackupRuntimeRepository,
-	idempotency backupRunIdempotency,
+	idempotency backupPruneIdempotency,
 ) (*BackupPruneService, error) {
 	if runtime == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "backup prune service dependencies are required")
@@ -97,7 +103,7 @@ func (service *BackupPruneService) dispatch(ctx context.Context,
 	selected []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 ) error {
 	first := selected[0].Record
-	taskID, planID := ids.New(ids.KindTask), ids.New(ids.KindPlan)
+	taskID := ids.New(ids.KindTask)
 	createdAt := service.now().UTC().Truncate(time.Millisecond)
 	for _, item := range selected {
 		if !createdAt.After(item.Record.UpdatedAt) {
@@ -109,28 +115,6 @@ func (service *BackupPruneService) dispatch(ctx context.Context,
 		return err
 	}
 	defer prepared.Publication.Clear()
-	steps := make([]taskjournal.TaskStepRecord, len(selected))
-	executionIDs := make([]string, len(selected))
-	for index := range steps {
-		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
-		executionIDs[index] = ids.NewULID()
-	}
-	task := etcd.TaskRecord{
-		ID: taskID, OperationID: first.OperationID, Owner: prepared.Owner,
-		Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
-		PlanID: planID, Type: taskjournal.TaskBackupPrune, Target: first.Point.EnvironmentID,
-		Steps: steps, TimeoutSeconds: int64(executionplan.MaximumBackupPruneStepTimeoutSeconds),
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
-		CreatedAt: createdAt, UpdatedAt: createdAt,
-	}
-	sealed, err := BuildBackupPrunePlan(BackupPrunePlanInput{
-		Task: task, Scope: prepared.Scope, Dispatch: prepared.Dispatch,
-		Evidence: prepared.Evidence, ExecutionIDs: executionIDs,
-	})
-	if err != nil {
-		return err
-	}
-	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
 	key := "prune:" + taskID
 	locator := idempotencyrecord.IdempotencyLocator{
 		Method: http.MethodPost, Route: backupPruneRoute, Key: key,
@@ -146,19 +130,52 @@ func (service *BackupPruneService) dispatch(ctx context.Context,
 	} else if exists {
 		return nil
 	}
+	_, err = service.publishPrepared(ctx, prepared, locator, evidence, taskjournal.TaskActorSystem)
+	return err
+}
+
+func (service *BackupPruneService) publishPrepared(ctx context.Context,
+	prepared etcd.PreparedBackupPrune, locator idempotencyrecord.IdempotencyLocator,
+	evidence backupRunEvidence, actor taskjournal.TaskActor,
+) (idempotencyrecord.IdempotencyResponse, error) {
+	zero := idempotencyrecord.IdempotencyResponse{}
+	dispatch := prepared.Dispatch
+	taskID, createdAt := dispatch.TaskID, dispatch.CreatedAt
+	steps := make([]taskjournal.TaskStepRecord, len(dispatch.RecoveryPointIDs))
+	executionIDs := make([]string, len(steps))
+	for index := range steps {
+		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
+		executionIDs[index] = ids.NewULID()
+	}
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: dispatch.OperationID, Owner: prepared.Owner,
+		Actor: actor, Executor: taskjournal.TaskExecutorAgent,
+		PlanID: ids.New(ids.KindPlan), Type: taskjournal.TaskBackupPrune, Target: dispatch.EnvironmentID,
+		Steps: steps, TimeoutSeconds: int64(executionplan.MaximumBackupPruneStepTimeoutSeconds),
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
+		CreatedAt: createdAt, UpdatedAt: createdAt,
+	}
+	sealed, err := BuildBackupPrunePlan(BackupPrunePlanInput{
+		Task: task, Scope: prepared.Scope, Dispatch: prepared.Dispatch,
+		Evidence: prepared.Evidence, ExecutionIDs: executionIDs,
+	})
+	if err != nil {
+		return zero, err
+	}
+	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
 	body, err := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: taskID})
 	if err != nil {
-		return errs.Wrap(errs.KindInternal, err)
+		return zero, errs.Wrap(errs.KindInternal, err)
 	}
 	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
+		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}
 	marker, err := service.idempotency.NewMarker(evidence, locator, response, taskID, createdAt)
 	clear(body)
 	if err != nil {
-		return err
+		return zero, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -166,11 +183,14 @@ func (service *BackupPruneService) dispatch(ctx context.Context,
 	if publishErr != nil {
 		if !errors.Is(publishErr, errs.New(errs.KindStorageUnavailable, "")) &&
 			!errors.Is(publishErr, context.DeadlineExceeded) {
-			return publishErr
+			return zero, publishErr
 		}
-		_, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, publishErr)
-		return err
+		resolved, err := service.idempotency.ResolveUnknown(ctx, locator, evidence, publishErr)
+		return resolved.Response, err
 	}
-	_, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	return err
+	resolved, err := service.idempotency.ResolveKnown(ctx, evidence, result)
+	if err == nil && resolved.Kind == requestidempotency.ResolutionApplied {
+		resolved.Response = response
+	}
+	return resolved.Response, err
 }

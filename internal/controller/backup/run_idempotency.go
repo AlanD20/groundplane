@@ -67,11 +67,25 @@ func (service *durableBackupRunIdempotency) Prepare(
 	environmentID string,
 	route string,
 ) (backupRunEvidence, error) {
+	return service.prepareBodyless(ctx, http.MethodPost, environmentID, route,
+		[]requestidempotency.PathBinding{{Name: "id", Value: environmentID}})
+}
+
+func (service *durableBackupRunIdempotency) PreparePointRemoval(
+	ctx context.Context, environmentID, pointID string,
+) (backupRunEvidence, error) {
+	return service.prepareBodyless(ctx, http.MethodDelete, environmentID, recoveryPointRemovalRoute,
+		[]requestidempotency.PathBinding{{Name: "id", Value: environmentID}, {Name: "point", Value: pointID}})
+}
+
+func (service *durableBackupRunIdempotency) prepareBodyless(
+	ctx context.Context, method, environmentID, route string, path []requestidempotency.PathBinding,
+) (backupRunEvidence, error) {
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
-		Method: http.MethodPost,
+		Method: method,
 		Route:  route,
 		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
-		Path:   []requestidempotency.PathBinding{{Name: "id", Value: environmentID}},
+		Path:   path,
 		Query:  requestidempotency.Object(),
 		Body:   requestidempotency.NoBody(),
 	})

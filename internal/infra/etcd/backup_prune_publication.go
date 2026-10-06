@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppruneevidence"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -54,7 +55,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 	for index := range pending {
 		version := pending[index]
 		record := version.Record
-		if version.Revision <= 0 || record.State != backupruntime.BackupPrunePending || record.TaskID != "" ||
+		if version.Revision < 0 || record.State != backupruntime.BackupPrunePending || record.TaskID != "" ||
 			record.DispatchAttempts >= backupruntime.MaximumBackupPruneDispatchAttempts ||
 			record.OperationID != dispatch.OperationID ||
 			(index > 0 && (record.PolicyRevision != pending[0].Record.PolicyRevision || record.PolicySHA256 != pending[0].Record.PolicySHA256)) ||
@@ -113,8 +114,9 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 			return backupPruneTransactionPlan{}, err
 		}
 	}
-	planEvidence, err := repository.loadBackupPruneExecutionEvidence(
+	planEvidence, err := backuppruneevidence.LoadExecutionEvidence(
 		ctx,
+		repository,
 		pending,
 		anchor.Values,
 		anchor.ReadRevision,
@@ -141,7 +143,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		start := 1 + index*5
 		for offset := range 5 {
 			conditions = append(conditions, etcdstore.Condition{
-				Key: keys[start+offset], ModRevision: anchor.Values[start+offset].ModRevision,
+				Key: keys[start+offset], ModRevision: etcdstore.RevisionOf(anchor.Values[start+offset]),
 			})
 		}
 		mutations = append(mutations, etcdstore.Mutation{

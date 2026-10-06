@@ -19,10 +19,10 @@ type backupPolicySourceReference struct {
 	Target string
 }
 
-// backup: policy show | policy set [...] | run | points | restore
-// <source> | rotate-key | export-key. Per-environment, toggleable off,
-// fully selectable sources. See mvp.md, "Backup", and blueprint.md,
-// "x-gp-backup".
+// backup: policy show | policy set [...] | run | points | remove-point
+// <point> | restore <source> | rotate-key | export-key. Per-environment,
+// toggleable off, fully selectable sources. See mvp.md, "Backup", and
+// blueprint.md, "x-gp-backup".
 func newBackupCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "backup",
@@ -169,6 +169,33 @@ func newBackupCmd() *cobra.Command {
 	}
 	points.Flags().StringVar(&pointCursor, "cursor", "", "opaque continuation cursor from a previous page")
 	cmd.AddCommand(points)
+
+	var removePointKey string
+	removePoint := &cobra.Command{
+		Use:   "remove-point <point>",
+		Short: "Delete one recovery point and its stored object",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			environmentID, err := backupPolicyEnvironmentID(cmd)
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.RemoveRecoveryPoint(
+				cmd.Context(), environmentID, args[0], removePointKey,
+			)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
+		},
+	}
+	removePoint.Flags().StringVar(
+		&removePointKey,
+		"idempotency-key",
+		"",
+		"reuse for an uncertain request with exactly the same inputs",
+	)
+	cmd.AddCommand(removePoint)
 
 	var point, ageIdentityPath, restoreKey string
 	restore := &cobra.Command{

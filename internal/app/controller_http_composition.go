@@ -3,16 +3,16 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
-	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"time"
 
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/handlers"
+	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
+	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
@@ -71,8 +71,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		dependencies.agentRuntime.Registry,
 	)
 	if err != nil {
-		// Preserve the initialization error; cleanup is best-effort.
-		_ = dependencies.platform.Close()
+		_ = dependencies.platform.Close() // Preserve the initialization error; cleanup is best-effort.
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
 	}
@@ -120,6 +119,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		BackupPolicies:          dependencies.backup.policies,
 		BackupPolicyMutations:   dependencies.backup.policies,
 		RecoveryPoints:          dependencies.backup.points,
+		RecoveryPointRemover:    dependencies.backup.retention,
 		BackupRuns:              dependencies.backup.runs,
 		BackupRestores:          dependencies.backup.restores,
 		BackupKeyMutations:      dependencies.backup.keys,

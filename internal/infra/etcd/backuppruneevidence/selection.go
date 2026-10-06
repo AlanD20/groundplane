@@ -1,4 +1,4 @@
-package etcd
+package backuppruneevidence
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 
 	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppruneevidence"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -17,8 +16,8 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
-	ctx context.Context,
+func LoadExecutionEvidence(
+	ctx context.Context, repository FixedReader,
 	pending []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 	authorityValues []*etcdstore.KeyValue,
 	readRevision int64,
@@ -33,8 +32,8 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 		if err := backupruntime.ValidatePendingBackupPruneAuthority(authorityValues[start:start+5], version); err != nil {
 			return nil, err
 		}
-		item, err := repository.loadBackupPrunePointExecutionEvidence(
-			ctx,
+		item, err := LoadPointExecutionEvidence(
+			ctx, repository,
 			version,
 			authorityValues[start+1],
 			readRevision,
@@ -47,8 +46,8 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 	return evidence, nil
 }
 
-func (repository *BackupRuntimeRepository) loadBackupPrunePointExecutionEvidence(
-	ctx context.Context,
+func LoadPointExecutionEvidence(
+	ctx context.Context, repository FixedReader,
 	version etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 	pointValue *etcdstore.KeyValue,
 	readRevision int64,
@@ -86,14 +85,14 @@ func (repository *BackupRuntimeRepository) loadBackupPrunePointExecutionEvidence
 			"backup prune plan evidence changed",
 		)
 	}
-	if err := backuppruneevidence.ValidateNoDeletion(
+	if err := ValidateNoDeletion(
 		fixed.Values[4],
 		deletionrecord.DeletionTargetConnector,
 		point.ConnectorID,
 	); err != nil {
 		return backupplanning.PruneExecutionEvidence{}, err
 	}
-	authority, err := backuppruneevidence.LoadConnectorAuthority(
+	authority, err := LoadConnectorAuthority(
 		ctx,
 		repository,
 		connector,
@@ -126,6 +125,6 @@ func (repository *BackupRuntimeRepository) loadBackupPrunePointExecutionEvidence
 		ConnectorBucket: connector.Connector.Bucket, ConnectorPrefix: connector.Connector.Prefix,
 		ConnectorRegion: connector.Connector.Region, ConnectorPathStyle: connector.Connector.PathStyle,
 		RetentionPolicy: &agentpb.RevisionDigest{ModRevision: version.Record.PolicyRevision, Sha256: policyDigest},
-		PointSHA256:     backuppruneevidence.RevisionDigest(pointValue).Sha256, ConnectorAuthority: authority,
+		PointSHA256:     RevisionDigest(pointValue).Sha256, ConnectorAuthority: authority,
 	}, nil
 }

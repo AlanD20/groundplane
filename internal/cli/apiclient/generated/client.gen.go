@@ -3542,6 +3542,11 @@ type BackupPointsListParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// BackupPointsRemoveParams defines parameters for BackupPointsRemove.
+type BackupPointsRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EnvironmentRenameParams defines parameters for EnvironmentRename.
 type EnvironmentRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -5714,6 +5719,11 @@ type ClientInterface interface {
 	// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
 	BackupPointsList(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// BackupPointsRemove Permanently delete one Recovery Point archive
+	//
+	// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
+	BackupPointsRemove(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// EnvironmentRenameWithBody Rename an environment
 	//
 	// Takes any type of body and a specified content type.
@@ -7539,6 +7549,21 @@ func (c *Client) EnvironmentLogs(ctx context.Context, id string, params *Environ
 // Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
 func (c *Client) BackupPointsList(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackupPointsListRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupPointsRemove Permanently delete one Recovery Point archive
+//
+// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
+func (c *Client) BackupPointsRemove(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupPointsRemoveRequest(c.Server, id, point, params)
 	if err != nil {
 		return nil, err
 	}
@@ -12311,6 +12336,60 @@ func NewBackupPointsListRequest(server string, id string, params *BackupPointsLi
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewBackupPointsRemoveRequest constructs an http.Request for the BackupPointsRemove method
+func NewBackupPointsRemoveRequest(server string, id string, point string, params *BackupPointsRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "point", point, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/recovery-points/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -17340,6 +17419,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
 	BackupPointsListWithResponse(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*BackupPointsListResponse, error)
 
+	// BackupPointsRemoveWithResponse Permanently delete one Recovery Point archive
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
+	BackupPointsRemoveWithResponse(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, reqEditors ...RequestEditorFn) (*BackupPointsRemoveResponse, error)
+
 	// EnvironmentRenameWithBodyWithResponse Rename an environment
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -20959,6 +21045,61 @@ func (r BackupPointsListResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackupPointsListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackupPointsRemoveResponse202Headers the declared response headers of an HTTP 202 response for BackupPointsRemove
+type BackupPointsRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type BackupPointsRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BackupPointsRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackupPointsRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupPointsRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupPointsRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupPointsRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupPointsRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupPointsRemoveResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -26154,6 +26295,19 @@ func (c *ClientWithResponses) BackupPointsListWithResponse(ctx context.Context, 
 	return ParseBackupPointsListResponse(rsp)
 }
 
+// BackupPointsRemoveWithResponse Permanently delete one Recovery Point archive
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
+func (c *ClientWithResponses) BackupPointsRemoveWithResponse(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, reqEditors ...RequestEditorFn) (*BackupPointsRemoveResponse, error) {
+	rsp, err := c.BackupPointsRemove(ctx, id, point, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupPointsRemoveResponse(rsp)
+}
+
 // EnvironmentRenameWithBodyWithResponse Rename an environment
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -29812,6 +29966,52 @@ func ParseBackupPointsListResponse(rsp *http.Response) (*BackupPointsListRespons
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseBackupPointsRemoveResponse parses an HTTP response from a BackupPointsRemoveWithResponse call
+func ParseBackupPointsRemoveResponse(rsp *http.Response) (*BackupPointsRemoveResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupPointsRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers BackupPointsRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

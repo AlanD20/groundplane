@@ -135,8 +135,8 @@ func backupRuntimeSealedPrunePlan(
 	for index, version := range pending {
 		point := version.Record.Point
 		pointEntry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointKey(point.ID))
-		evidence, err := repository.loadBackupPrunePointExecutionEvidence(
-			context.Background(), version, pointEntry, read.ReadRevision,
+		evidence, err := backuppruneevidence.LoadPointExecutionEvidence(
+			context.Background(), repository, version, pointEntry, read.ReadRevision,
 		)
 		if err != nil {
 			t.Fatal(err)

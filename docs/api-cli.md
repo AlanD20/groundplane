@@ -97,9 +97,10 @@ groundplane service list --env env_01J00000000000000000000000 --id --output json
 
 Some commands already take ids, including Task actions, Route detail actions
 and Component detail actions. Backup Restore takes a stable source id (`spt_…`),
-not an Attach name or Volume slug. Follow each command's help rather than assuming
-every positional argument is a slug. Secret commands use Project scope, or
-explicit `--platform`; there is no Environment Secret scope.
+not an Attach name or Volume slug; Backup Point removal takes a stable Point id
+(`rp_…`). Follow each command's help rather than assuming every positional
+argument is a slug. Secret commands use Project scope, or explicit `--platform`;
+there is no Environment Secret scope.
 
 Global `--host` selects the Controller. Route creation uses `--hostname` for
 the application's hostname. Exact parsing and aliases belong to [the CLI](../internal/cli).
@@ -219,6 +220,18 @@ HTTP 202 returns acceptance with a `task_id`; read
 `GET /api/v1/tasks/{task_id}` for progress and outcome. Some action responses
 contain additional fields; keep the full response when needed.
 
+Delete one verified Recovery Point without a request body:
+
+```sh
+curl -sS -X DELETE \
+  http://127.0.0.1:8080/api/v1/environments/env_01J00000000000000000000000/recovery-points/rp_01J00000000000000000000000 \
+  -H 'Idempotency-Key: storefront-point-delete-20261006-001'
+```
+
+The HTTP 202 response identifies the deletion Task. The
+[Backups guide](features/backups.md#recovery-points-and-retention) owns the
+operation fences, exact-object absence proof and remote-failure behavior.
+
 | Response | Meaning |
 | --- | --- |
 | `200` | Read or synchronous update succeeded |
@@ -263,11 +276,12 @@ execution attempt after failure.
 
 The CLI generates keys automatically. Most commands have no operator-supplied
 replay key, so rerunning them is a new request. Blueprint Apply exposes the
-recovery flags in its guide; Image Fetch, Image Remove and Backup Restore expose
-`--idempotency-key`. Supply and retain that key before Restore when you need to
-resolve uncertain acceptance. See [Restore](features/backups.md#restore-and-downtime)
-for source selection, overwrite, downtime and Retry restrictions. Use the API
-when automation needs explicit replay control for other implemented operations.
+recovery flags in its guide; Image Fetch, Image Remove, Backup Restore and Backup
+Point removal expose `--idempotency-key`. Supply and retain that key before
+Restore or Point removal when you need to resolve uncertain acceptance. See
+[Backups](features/backups.md) for Point-deletion safety and Restore source
+selection, overwrite, downtime and Retry restrictions. Use the API when automation
+needs explicit replay control for other implemented operations.
 
 ## Blueprint requests
 

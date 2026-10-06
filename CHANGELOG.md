@@ -49,6 +49,9 @@ Initial single-host release.
 - Show each Recovery Point's original Connector and storage destination in the
   Console, CLI and API. The Console refreshes Backup results and encryption-key
   metadata automatically, with a linked Task for key rotation.
+- Delete an individual Recovery Point through the Console, CLI or API. Protected
+  cleanup verifies archive absence before releasing its references and leaves
+  source data unchanged.
 
 ### Runner CI/CD
 

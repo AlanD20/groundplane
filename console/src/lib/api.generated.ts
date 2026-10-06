@@ -651,6 +651,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/recovery-points/{point}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Permanently delete one Recovery Point archive */
+        delete: operations["backup.points.remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/rename": {
         parameters: {
             query?: never;
@@ -5605,6 +5622,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecoveryPointPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backup.points.remove": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+                point: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
