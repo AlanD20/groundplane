@@ -50,6 +50,8 @@ export function ConnectorCreateDrawer({
   ) => Promise<void>;
 }) {
   const [name, setName] = useState("");
+  const [provider, setProvider] = useState("");
+  const [accountId, setAccountId] = useState("");
   const [endpoint, setEndpoint] = useState("");
   const [bucket, setBucket] = useState("");
   const [prefix, setPrefix] = useState("backups/");
@@ -76,19 +78,28 @@ export function ConnectorCreateDrawer({
     createIntentRef.current = null;
   };
   const normalizedName = name.trim();
+  const isR2 = provider === "r2";
+  const normalizedAccountId = accountId.trim().toLowerCase();
+  const resolvedEndpoint = isR2
+    ? `https://${normalizedAccountId}.r2.cloudflarestorage.com`
+    : endpoint.trim();
   const duplicate = existingNames.includes(normalizedName);
   const valid =
     normalizedName !== "" &&
     !duplicate &&
-    endpoint.trim() !== "" &&
+    provider !== "" &&
+    (isR2
+      ? /^[a-f0-9]{32}$/.test(normalizedAccountId)
+      : endpoint.trim() !== "" && region.trim() !== "" && addressing !== "") &&
     bucket.trim() !== "" &&
-    addressing !== "" &&
     accessKey.value.trim() !== "" &&
     secretKey.value.trim() !== "";
 
   function reset() {
     invalidateCreateIntent();
     setName("");
+    setProvider("");
+    setAccountId("");
     setEndpoint("");
     setBucket("");
     setPrefix("backups/");
@@ -111,11 +122,34 @@ export function ConnectorCreateDrawer({
         <DialogHeader>
           <DialogTitle>New connector : {env.name}</DialogTitle>
           <DialogDescription>
-            Create an environment-owned S3-compatible destination. Credential
-            references are preferred over direct values.
+            Choose where this Environment stores its backups.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            id="connector-provider"
+            label="Provider"
+            className="sm:col-span-2"
+          >
+            <Select
+              id="connector-provider"
+              value={provider}
+              onValueChange={(value) => {
+                invalidateCreateIntent();
+                setProvider(value);
+                setAccountId("");
+                setEndpoint("");
+                setRegion("");
+                setAddressing("");
+                setSubmitError(null);
+              }}
+              options={[
+                { value: "", label: "Select a backup provider" },
+                { value: "r2", label: "Cloudflare R2" },
+                { value: "s3", label: "Other S3-compatible storage" },
+              ]}
+            />
+          </Field>
           <Field id="connector-name" label="Name" className="sm:col-span-2">
             <Input
               id="connector-name"
@@ -133,21 +167,44 @@ export function ConnectorCreateDrawer({
               </p>
             )}
           </Field>
-          <Field
-            id="connector-endpoint"
-            label="Endpoint"
-            className="sm:col-span-2"
-          >
-            <Input
+          {isR2 ? (
+            <Field
+              id="connector-account-id"
+              label="Cloudflare account ID"
+              className="sm:col-span-2"
+            >
+              <Input
+                id="connector-account-id"
+                value={accountId}
+                onChange={(event) => {
+                  invalidateCreateIntent();
+                  setAccountId(event.target.value);
+                }}
+                placeholder="32-character account ID"
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                Find it on your R2 Overview page. Region and addressing are
+                configured automatically.
+              </p>
+            </Field>
+          ) : provider === "s3" ? (
+            <Field
               id="connector-endpoint"
-              value={endpoint}
-              onChange={(event) => {
-                invalidateCreateIntent();
-                setEndpoint(event.target.value);
-              }}
-              placeholder="https://account.r2.cloudflarestorage.com"
-            />
-          </Field>
+              label="Endpoint"
+              className="sm:col-span-2"
+            >
+              <Input
+                id="connector-endpoint"
+                value={endpoint}
+                onChange={(event) => {
+                  invalidateCreateIntent();
+                  setEndpoint(event.target.value);
+                }}
+                placeholder="https://s3.example.com"
+              />
+            </Field>
+          ) : null}
           <Field id="connector-bucket" label="Bucket">
             <Input
               id="connector-bucket"
@@ -159,17 +216,19 @@ export function ConnectorCreateDrawer({
               placeholder="groundplane-backups"
             />
           </Field>
-          <Field id="connector-region" label="Region">
-            <Input
-              id="connector-region"
-              value={region}
-              onChange={(event) => {
-                invalidateCreateIntent();
-                setRegion(event.target.value);
-              }}
-              placeholder="auto"
-            />
-          </Field>
+          {provider === "s3" && (
+            <Field id="connector-region" label="Region">
+              <Input
+                id="connector-region"
+                value={region}
+                onChange={(event) => {
+                  invalidateCreateIntent();
+                  setRegion(event.target.value);
+                }}
+                placeholder="auto"
+              />
+            </Field>
+          )}
           <Field id="connector-prefix" label="Prefix" className="sm:col-span-2">
             <Input
               id="connector-prefix"
@@ -181,28 +240,30 @@ export function ConnectorCreateDrawer({
               placeholder="backups/"
             />
           </Field>
-          <Field
-            id="connector-addressing"
-            label="Addressing"
-            className="sm:col-span-2"
-          >
-            <Select
+          {provider === "s3" && (
+            <Field
               id="connector-addressing"
-              value={addressing}
-              onValueChange={(value) => {
-                invalidateCreateIntent();
-                setAddressing(value as "path" | "virtual" | "");
-              }}
-              options={[
-                { value: "", label: "Select addressing behavior" },
-                { value: "path", label: "Path style : endpoint/bucket/key" },
-                {
-                  value: "virtual",
-                  label: "Virtual hosted : bucket.endpoint/key",
-                },
-              ]}
-            />
-          </Field>
+              label="Addressing"
+              className="sm:col-span-2"
+            >
+              <Select
+                id="connector-addressing"
+                value={addressing}
+                onValueChange={(value) => {
+                  invalidateCreateIntent();
+                  setAddressing(value as "path" | "virtual" | "");
+                }}
+                options={[
+                  { value: "", label: "Select addressing behavior" },
+                  { value: "path", label: "Path style : endpoint/bucket/key" },
+                  {
+                    value: "virtual",
+                    label: "Virtual hosted : bucket.endpoint/key",
+                  },
+                ]}
+              />
+            </Field>
+          )}
           <CredentialField
             id="connector-access-key"
             label="Access key"
@@ -263,11 +324,11 @@ export function ConnectorCreateDrawer({
                     kind: "s3-compatible",
                     scope: "environment",
                     scopeRef: env.id,
-                    endpoint: endpoint.trim(),
+                    endpoint: resolvedEndpoint,
                     bucket: bucket.trim(),
                     prefix: normalizedPrefix(prefix),
-                    region: region.trim() || "auto",
-                    pathStyle: addressing === "path",
+                    region: isR2 ? "auto" : region.trim(),
+                    pathStyle: isR2 || addressing === "path",
                     credentials: {
                       accessKey: toCredential(accessKey),
                       secretKey: toCredential(secretKey),

@@ -43,6 +43,11 @@ export function ScriptsCard({ env }: { env: Environment }) {
     setAddOpen(false);
     setEditing(null);
   }
+  const servingServices = new Set(
+    env.deploys
+      .filter((release) => release.status === "active")
+      .map((release) => release.service),
+  );
 
   return (
     <>
@@ -104,6 +109,13 @@ export function ScriptsCard({ env }: { env: Environment }) {
                     ? ` · +${script.body.split("\n").length - 1} lines`
                     : ""}
                 </span>
+                {!servingServices.has(script.service) && (
+                  <span className="text-xs text-muted-foreground">
+                    Deploy {script.service} before running this Script manually.
+                    {script.when === "pre-deploy" &&
+                      " This hook runs automatically during Deploy."}
+                  </span>
+                )}
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <span className="font-mono text-xs text-muted-foreground">
@@ -112,7 +124,9 @@ export function ScriptsCard({ env }: { env: Environment }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!!runningRequest}
+                  disabled={
+                    !!runningRequest || !servingServices.has(script.service)
+                  }
                   onClick={async () => {
                     setRunError(undefined);
                     setRunningRequest(script.id);
