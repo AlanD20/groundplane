@@ -264,17 +264,29 @@ func mutateComponentBlueprint(
 		len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
 		return errs.New(errs.KindInternal, "Environment Blueprint root file is corrupt")
 	}
-	components := yamlMappingValue(document.Content[0], "x-gp-components")
-	if components == nil || components.Kind != yaml.MappingNode {
-		return errs.New(errs.KindStateConflict, "Environment Blueprint has no authored Components")
-	}
 	capability, err := environmentComponentCapability(kind)
 	if err != nil {
 		return err
 	}
+	components := yamlMappingValue(document.Content[0], "x-gp-components")
+	if components == nil {
+		components = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		if err := replaceYAMLMappingValue(document.Content[0], "x-gp-components", components); err != nil {
+			return err
+		}
+	}
+	if components.Kind != yaml.MappingNode {
+		return errs.New(errs.KindInternal, "Environment Blueprint Components mapping is corrupt")
+	}
 	matched := yamlMappingValue(components, string(capability))
 	if matched == nil {
-		return errs.New(errs.KindStateConflict, "Component is not authored by the current Blueprint")
+		matched = &yaml.Node{}
+		if err := matched.Encode(core.ComponentSpec{Implementation: kind}); err != nil {
+			return errs.Wrap(errs.KindInternal, err)
+		}
+		if err := replaceYAMLMappingValue(components, string(capability), matched); err != nil {
+			return err
+		}
 	}
 	implementation := yamlMappingValue(matched, "implementation")
 	if implementation == nil || implementation.Value != string(kind) {
