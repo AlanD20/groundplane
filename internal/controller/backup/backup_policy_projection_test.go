@@ -15,7 +15,7 @@ func TestBackupPolicyAPIProjectsExactStableFields(t *testing.T) {
 	created := time.Date(2026, 8, 24, 9, 10, 11, 0, time.FixedZone("test", 3600))
 	rotated := created.Add(time.Hour)
 	got := backupPolicyAPI(testbackupqueries.BackupPolicyProjection{
-		Enabled: true, Frequency: "*-*-* 03:15:00", Keep: 7, Encryption: "age",
+		Enabled: true, Frequency: "15 3 * * *", Keep: 7, Encryption: "age",
 		ConnectorID: "con_01AAAAAAAAAAAAAAAAAAAAAAAA", AgeRecipient: "age1recipient", KeyEra: 2,
 		KeyCreatedAt: created, KeyRotatedAt: rotated,
 		Sources: []testbackupqueries.BackupPolicySourceProjection{

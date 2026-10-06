@@ -167,7 +167,7 @@ func TestBackupPolicySetResolvesLabelsAndPreservesSourceOrder(t *testing.T) {
 		"policy",
 		"set",
 		"--connector", "archive",
-		"--frequency", "Tue *-*-* 04:30:00",
+		"--frequency", "30 4 * * TUE",
 		"--keep", "7",
 		"--encryption", "age",
 		"--source", "attach:database",
@@ -202,7 +202,7 @@ func TestBackupPolicySetHonorsGlobalIDMode(t *testing.T) {
 		"policy",
 		"set",
 		"--connector", backupPolicyConnectorID,
-		"--frequency", "Tue *-*-* 04:30:00",
+		"--frequency", "30 4 * * TUE",
 		"--keep", "7",
 		"--encryption", "age",
 		"--source", "attach:"+backupPolicyAttachID,
@@ -237,7 +237,7 @@ func TestBackupPolicySetDispatchesMaximumPublicKeep(t *testing.T) {
 		"policy",
 		"set",
 		"--connector", backupPolicyConnectorID,
-		"--frequency", "Tue *-*-* 04:30:00",
+		"--frequency", "30 4 * * TUE",
 		"--keep", "9007199254740991",
 		"--encryption", "age",
 		"--source", "attach:"+backupPolicyAttachID,
@@ -410,7 +410,7 @@ func assertBackupPolicySetRequest(
 	if body.Frequency == nil || body.Keep == nil || body.Encryption == nil || body.ConnectorID == nil {
 		t.Fatalf("configured policy is missing optional fields: %#v", body)
 	}
-	if *body.Frequency != "Tue *-*-* 04:30:00" || *body.Keep != expectedKeep || *body.Encryption != "age" {
+	if *body.Frequency != "30 4 * * TUE" || *body.Keep != expectedKeep || *body.Encryption != "age" {
 		t.Errorf("configured policy fields = %#v", body)
 	}
 	if *body.ConnectorID != backupPolicyConnectorID {
@@ -481,7 +481,7 @@ func environmentPageJSON() string {
 
 func configuredBackupPolicyJSON(enabled bool) string {
 	return fmt.Sprintf(
-		`{"enabled":%t,"frequency":"Tue *-*-* 04:30:00","keep":7,`+
+		`{"enabled":%t,"frequency":"30 4 * * TUE","keep":7,`+
 			`"encryption":"age","connector_id":%q,"sources":[`+
 			`{"id":"spt_01ARZ3NDEKTSV4RRFFQ69G5FAA","kind":"attach","target_id":%q},`+
 			`{"id":"spt_01ARZ3NDEKTSV4RRFFQ69G5FAB","kind":"volume","target_id":%q},`+

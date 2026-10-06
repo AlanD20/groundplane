@@ -353,7 +353,7 @@ func seedEnvironmentBlueprintCurrentBackupPolicy(
 		ctx, testbackuppolicy.BackupPolicyReplacementInput{
 			EnvironmentID: fixture.environment.Record.ID,
 			Enabled:       true,
-			Frequency:     "*-*-* 03:00:00",
+			Frequency:     "0 3 * * *",
 			Keep:          8,
 			Encryption:    "none",
 			ConnectorID:   fixture.connector.Record.Connector.ID,

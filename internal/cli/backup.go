@@ -120,7 +120,7 @@ func newBackupCmd() *cobra.Command {
 	}
 	set.Flags().StringVar(&connector, "connector", "", "Connector label, or stable id with --id")
 	set.Flags().
-		StringVar(&frequency, "frequency", "", "UTC daily or weekly expression, e.g. '*-*-* 03:15:00'")
+		StringVar(&frequency, "frequency", "", "five-field UTC cron expression, e.g. '15 3 * * *'")
 	set.Flags().StringVar(&keep, "keep", "", "how many previous recovery points to retain")
 	set.Flags().StringVar(&encryption, "encryption", "", "age | none")
 	set.Flags().

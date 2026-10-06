@@ -26,7 +26,7 @@ func TestBackupRuntimeRecordCodecsRoundTrip(t *testing.T) {
 			record := BackupScheduleCursorRecord{
 				EnvironmentID:   testBackupEnvironmentID,
 				PolicyRevision:  7,
-				Frequency:       "*-*-* 03:00:00",
+				Frequency:       "0 3 * * *",
 				EnabledAt:       createdAt,
 				LastEvaluatedAt: updatedAt,
 				NextDueAt:       updatedAt.Add(time.Hour),

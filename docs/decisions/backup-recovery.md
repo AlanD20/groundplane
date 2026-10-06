@@ -6,6 +6,14 @@
 
 ## Recovery is driven by a sealed snapshot
 
+Backup schedules use one five-field UTC cron format across authored state and
+human interfaces. [The schedule owner](../../internal/common/backupschedule)
+parses fields and finds the latest missed occurrence directly, rather than
+replaying every missed minute. Controller coordination still prevents overlap
+and repeated dispatch. Replacing the old stored calendar grammar advances the
+storage epoch: an old Controller cannot safely read or roll back new policies.
+No dual parser or old-format alias is retained.
+
 Each Environment has at most one Backup Policy. A run freezes the policy,
 Connector, ordered source catalog, relevant desired revisions, prior Service
 intent, encryption era, deadlines, object targets, and restore dependencies

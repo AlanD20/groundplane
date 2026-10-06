@@ -30,6 +30,7 @@ import { BackupPolicyDialog } from "@/features/backup/backup-policy-dialog";
 import { RestoreDialog } from "@/features/backup/restore-dialog";
 import type { RecoveryPoint } from "@/features/backup/types";
 import { TaskLink } from "@/components/common/task-link";
+import { backupScheduleDescription } from "./backup-schedule";
 import {
   TablePagination,
   TableSortHead,
@@ -176,7 +177,7 @@ export function BackupsCard({ env }: { env: Environment }) {
           />
           <PolicyCell
             label="Frequency · UTC"
-            value={backup.frequency ?? "not configured"}
+            value={backup.frequency ? backupScheduleDescription(backup.frequency) : "not configured"}
           />
           <PolicyCell
             label="Retention"

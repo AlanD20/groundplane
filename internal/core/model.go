@@ -462,7 +462,7 @@ type BackupSource struct {
 // blueprint.md, "x-gp-backup").
 type BackupPolicy struct {
 	Enabled     bool           `yaml:"enabled"                json:"enabled"`
-	Frequency   string         `yaml:"frequency,omitempty"    json:"frequency,omitempty"` // systemd calendar expr
+	Frequency   string         `yaml:"frequency,omitempty"    json:"frequency,omitempty"` // five-field UTC cron
 	Keep        int64          `yaml:"keep,omitempty"         json:"keep,omitempty"`
 	Encryption  string         `yaml:"encryption,omitempty"   json:"encryption,omitempty"` // "age" | "none"
 	ConnectorID string         `yaml:"connector_id,omitempty" json:"connector_id,omitempty"`

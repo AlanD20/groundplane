@@ -104,7 +104,7 @@ func TestC15ConnectorRemovalDistinguishesDisabledAndEnabledPolicyReferences(t *t
 			policy := testbackuppolicy.BackupPolicyRecord{
 				EnvironmentID: fixture.environment.Record.ID,
 				Enabled:       test.enabled,
-				Frequency:     "*-*-* 03:00:00",
+				Frequency:     "0 3 * * *",
 				Keep:          7,
 				Encryption:    "age",
 				ConnectorID:   fixture.connector.Record.Connector.ID,

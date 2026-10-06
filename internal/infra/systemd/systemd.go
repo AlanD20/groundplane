@@ -1,11 +1,10 @@
-// Package systemd handles Groundplane-owned native unit control and
-// backup-schedule calendar validation. Native release recovery is ADR0074.
+// Package systemd handles Groundplane-owned native unit control.
 //
 // DOCUMENTED os/exec EXCEPTION (docs/standards.md, section 5):
 // this package is one of the three listed exceptions ("systemd unit
 // control inside internal/infra") allowed to shell out directly rather
-// than going through internal/common/runner.Runner — systemctl/
-// systemd-analyze invocations are host-lifecycle operations tightly
+// than going through internal/common/runner.Runner — systemctl
+// invocations are host-lifecycle operations tightly
 // coupled to this package's own reasoning about unit state, not general
 // adapter/task-step execution.
 package systemd
@@ -27,28 +26,6 @@ const systemUnitDirectory = "/etc/systemd/system"
 
 var managedUnits = map[string]struct{}{
 	"groundplane-controller.service": {},
-}
-
-// ValidateCalendar shells out to `systemd-analyze calendar <expr>` to
-// validate a backup policy's Frequency before it's saved.
-func ValidateCalendar(ctx context.Context, expr string) error {
-	cmd := exec.CommandContext(ctx, "systemd-analyze", "calendar", expr)
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		return nil
-	}
-	if contextErr := ctx.Err(); contextErr != nil {
-		return contextErr
-	}
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: execute calendar validator: %w", err))
-	}
-	detail := strings.TrimSpace(string(output))
-	if detail == "" {
-		detail = exitErr.Error()
-	}
-	return errs.Newf(errs.KindValidationFailed, "systemd: invalid calendar expression %q: %s", expr, detail)
 }
 
 // InstallUnit validates and atomically replaces one Groundplane-owned service

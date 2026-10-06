@@ -150,7 +150,7 @@ func validReplacementCandidate(t *testing.T) ReplacementCandidate {
 			Revision: 1, ReadRevision: 1,
 		},
 		Replacement: backuppolicy.BackupPolicyRecord{
-			EnvironmentID: environmentID, Frequency: "*-*-* 03:00:00", Keep: 7,
+			EnvironmentID: environmentID, Frequency: "0 3 * * *", Keep: 7,
 			Encryption: "age", ConnectorID: connectorID, SourceIDs: []string{sourceID}, UpdatedAt: now,
 		},
 		Sources: []SourceEvidence{{
@@ -236,7 +236,7 @@ func replacementBudgetCandidate(t *testing.T, count int) ReplacementCandidate {
 	candidate.Current = &keyvalue.Versioned[backuppolicy.BackupPolicyRecord]{
 		Record: backuppolicy.BackupPolicyRecord{
 			EnvironmentID: candidate.Replacement.EnvironmentID, Enabled: true,
-			Frequency: "*-*-* 02:00:00", Keep: 3, Encryption: "none",
+			Frequency: "0 2 * * *", Keep: 3, Encryption: "none",
 			ConnectorID: oldConnectorID, SourceIDs: []string{candidate.Replacement.SourceIDs[0]}, UpdatedAt: now.Add(-time.Second),
 		},
 		Revision: 1, ReadRevision: 1,

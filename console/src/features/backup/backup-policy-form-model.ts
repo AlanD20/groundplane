@@ -6,8 +6,7 @@ import {
 } from "@/lib/backup-policy-contract";
 import type { BackupPolicyReplacement } from "@/features/backup/types";
 
-export const BACKUP_FREQUENCY =
-  /^(?:\*-\*-\*|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \*-\*-\*) (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+import { backupScheduleError } from "./backup-schedule";
 
 export const MAX_BACKUP_POLICY_SOURCES = 12;
 
@@ -23,11 +22,8 @@ export function validateBackupPolicy(
   );
   if (new Set(sourceKeys).size !== sourceKeys.length)
     return "Each source can be selected only once.";
-  if (
-    input.frequency !== undefined &&
-    !BACKUP_FREQUENCY.test(input.frequency)
-  ) {
-    return "Enter a valid daily or weekly UTC frequency.";
+  if (input.frequency !== undefined && backupScheduleError(input.frequency)) {
+    return "Enter a valid five-field UTC cron expression.";
   }
   if (input.keep !== undefined && !isValidBackupPolicyKeep(input.keep)) {
     return `Retention must be an integer between 1 and ${MAXIMUM_BACKUP_POLICY_KEEP}.`;
@@ -46,7 +42,7 @@ export function validateBackupPolicy(
     input.sources.length > 0;
   if (configured) {
     if (input.frequency === undefined)
-      return "A configured policy requires a daily or weekly UTC frequency.";
+      return "A configured policy requires a UTC cron schedule.";
     if (input.keep === undefined)
       return "A configured policy requires a positive retention count.";
     if (input.encryption === undefined)

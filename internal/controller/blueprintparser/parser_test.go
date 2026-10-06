@@ -786,7 +786,7 @@ func TestParseAcceptsMaximumBackupPolicyKeep(t *testing.T) {
 	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
 		"root.yaml": environmentRoot(`x-gp-backup:
   enabled: true
-  frequency: "*-*-* 03:15:00"
+  frequency: "15 3 * * *"
   keep: 9007199254740991
   encryption: none
   connector: backups
@@ -852,7 +852,7 @@ func TestParseAcceptsConfiguredDisabledBackupWithoutConnector(t *testing.T) {
 	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
 		"root.yaml": environmentRoot(`x-gp-backup:
   enabled: false
-  frequency: "*-*-* 03:15:00"
+  frequency: "15 3 * * *"
   keep: 7
   encryption: age
   sources: [{kind: config}]
@@ -872,7 +872,7 @@ func TestParseRejectsEnabledBackupWithOmittedKeep(t *testing.T) {
 	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
 		"root.yaml": environmentRoot(`x-gp-backup:
   enabled: true
-  frequency: "*-*-* 03:15:00"
+  frequency: "15 3 * * *"
   encryption: none
   connector: backups
   sources: [{kind: config}]
@@ -888,7 +888,7 @@ func TestParseRejectsBackupPolicyKeepAboveMaximum(t *testing.T) {
 	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
 		"root.yaml": environmentRoot(`x-gp-backup:
   enabled: true
-  frequency: "*-*-* 03:15:00"
+  frequency: "15 3 * * *"
   keep: 9007199254740992
   encryption: none
   connector: backups

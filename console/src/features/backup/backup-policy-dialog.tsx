@@ -26,6 +26,8 @@ import type {
   BackupPolicySourceInput,
 } from "@/features/backup/types";
 import { Checkbox } from "@/components/ui/checkbox";
+import { BackupScheduleEditor } from "./backup-schedule-editor";
+import { DEFAULT_BACKUP_FREQUENCY } from "./backup-schedule";
 import {
   backupPolicyConfigured,
   deriveStrategy,
@@ -176,7 +178,7 @@ export function BackupPolicyDialog({
                   setEnabled(next);
                   if (next) {
                     if (openedEmpty.current && !frequency) {
-                      setFrequency("*-*-* 03:15:00");
+                      setFrequency(DEFAULT_BACKUP_FREQUENCY);
                       autoFilledFrequency.current = true;
                     }
                     if (
@@ -421,25 +423,14 @@ export function BackupPolicyDialog({
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="bp-freq">Frequency · UTC</Label>
-                  <Input
-                    id="bp-freq"
-                    disabled={policyState.saving}
-                    value={frequency}
-                    onChange={(event) => {
-                      autoFilledFrequency.current = false;
-                      setFrequency(event.target.value);
-                    }}
-                    placeholder="*-*-* 03:15:00"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Daily: <span className="font-mono">*-*-* HH:MM:SS</span>.
-                    Weekly:{" "}
-                    <span className="font-mono">Mon *-*-* HH:MM:SS</span>. Exact
-                    spacing, UTC only.
-                  </p>
-                </div>
+                <BackupScheduleEditor
+                  value={frequency}
+                  disabled={policyState.saving}
+                  onChange={(next) => {
+                    autoFilledFrequency.current = false;
+                    setFrequency(next);
+                  }}
+                />
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="bp-keep">Retention (backups kept)</Label>
                   <Input

@@ -38,7 +38,7 @@ or `--tenant`, `--project` and `--env`. With an existing Connector named
 
 ```sh
 groundplane backup policy set --connector r2-backups \
-  --frequency '*-*-* 03:15:00' --keep 3 --encryption age \
+  --frequency '15 3 * * *' --keep 3 --encryption age \
   --source attach:api-db --source volume:storefront-data --source config
 groundplane backup policy show --output json
 groundplane backup run
@@ -57,7 +57,7 @@ disables and unconfigures it. Neither action deletes existing Points.
 
 ## Policy and scheduling
 
-Enabling requires a valid whole-second daily or weekly UTC frequency, a
+Enabling requires a valid five-field UTC cron frequency, a
 same-Environment Connector, at least one source and a positive retention count
 (`keep`, at most 9007199254740991). Encryption is `age` or `none`; Config sources
 require `age`. A disabled policy may be unconfigured. Replacing the policy is a
@@ -71,6 +71,12 @@ The Controller owns scheduling, not host cron. After downtime it considers only
 the latest missed occurrence. An overlapping Environment operation records a
 skipped occurrence instead of queueing it. Repeated ticks and backward clock
 movement must not duplicate runs.
+
+The Console offers Hourly, Daily, Weekly and Custom cron controls, a readable
+summary and the next three scheduled UTC times. Blueprint/API/CLI use the same
+cron expression; the controls do not introduce a second stored format. For example,
+`15 * * * *` runs hourly at minute 15 and `15 3 * * SUN` runs Sundays at 03:15.
+See [the frequency grammar](../blueprint.md#x-gp-backup) for supported fields.
 
 Manual run requires an enabled policy and uses its entire stored source list.
 An accepted run pins the policy, sources, credentials' authority, formats and key

@@ -30,7 +30,7 @@ func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testi
 	ctx := context.Background()
 	direct, err := fixture.repository.PrepareBackupPolicyReplacement(ctx, testbackuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: fixture.environment.Record.ID, Enabled: false,
-		Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "age",
+		Frequency: "0 2 * * *", Keep: 7, Encryption: "age",
 		ConnectorID: fixture.connector.Record.Connector.ID,
 		Sources: []testbackuppolicy.BackupPolicySourceSelection{{
 			Kind: core.BackupSourceConfig, TargetID: fixture.environment.Record.ID,
@@ -155,7 +155,7 @@ func TestBlueprintBackupCanonicalValidationRejectsDisabledConfigWithoutAge(t *te
 		context.Background(),
 		testbackuppolicy.BackupPolicyReplacementInput{
 			EnvironmentID: fixture.environment.Record.ID, Enabled: false,
-			Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "none",
+			Frequency: "0 2 * * *", Keep: 7, Encryption: "none",
 			ConnectorID: fixture.connector.Record.Connector.ID,
 			Sources: []testbackuppolicy.BackupPolicySourceSelection{{
 				Kind: core.BackupSourceConfig, TargetID: fixture.environment.Record.ID,
@@ -179,7 +179,7 @@ func TestBlueprintBackupCandidateVolumePublishesWithFinalAuthority(t *testing.T)
 	prepared, err := fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(
 		ctx, testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 			EnvironmentID: fixture.environment.Record.ID, TaskID: task.ID,
-			ReadRevision: beforePreparation, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7,
+			ReadRevision: beforePreparation, Enabled: true, Frequency: "0 2 * * *", Keep: 7,
 			Encryption: "none", ConnectorName: fixture.connector.Record.Connector.Name,
 			Sources: []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{{
 				CandidateID: sourceID, Kind: core.BackupSourceVolume, TargetID: volumeID,
@@ -275,7 +275,7 @@ func TestBlueprintBackupPreparationDefersSourceAndKeyWritesAndReusesStableSource
 		ctx,
 		testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 			EnvironmentID: fixture.environment.Record.ID, TaskID: taskID,
-			ReadRevision: before, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7,
+			ReadRevision: before, Enabled: true, Frequency: "0 2 * * *", Keep: 7,
 			Encryption: "age", ConnectorName: fixture.connector.Record.Connector.Name,
 			Sources: []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{{
 				CandidateID: sourceID, Kind: core.BackupSourceVolume, TargetID: volumeID,
@@ -344,7 +344,7 @@ func TestBlueprintBackupPreparationDefersSourceAndKeyWritesAndReusesStableSource
 		ctx,
 		testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 			EnvironmentID: fixture.environment.Record.ID, TaskID: retryTaskID,
-			ReadRevision: fixture.store.revision, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7,
+			ReadRevision: fixture.store.revision, Enabled: true, Frequency: "0 2 * * *", Keep: 7,
 			Encryption: "age", ConnectorName: fixture.connector.Record.Connector.Name,
 			Sources: []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{{
 				CandidateID: ids.NewAt(ids.KindBackupSource, fixture.now, 3999),
@@ -373,7 +373,7 @@ func TestBlueprintBackupMaximumSourcesProducesTwelveDurableTriples(t *testing.T)
 	}
 	input := testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 		EnvironmentID: fixture.environment.Record.ID, TaskID: taskID,
-		ReadRevision: fixture.store.revision, Enabled: true, Frequency: "*-*-* 03:00:00", Keep: 3,
+		ReadRevision: fixture.store.revision, Enabled: true, Frequency: "0 3 * * *", Keep: 3,
 		Encryption: "none", ConnectorName: fixture.connector.Record.Connector.Name,
 		CreatedAt: fixture.now,
 	}

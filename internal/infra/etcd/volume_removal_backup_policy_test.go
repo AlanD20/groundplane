@@ -45,7 +45,7 @@ func TestVolumeRemovalBackupPolicyPreparationPreservesHistory(t *testing.T) {
 				ctx,
 				testbackuppolicy.BackupPolicyReplacementInput{
 					EnvironmentID: fixture.environment.Record.ID, Enabled: test.enabled,
-					Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "age",
+					Frequency: "0 2 * * *", Keep: 7, Encryption: "age",
 					ConnectorID: fixture.connector.Record.Connector.ID, Sources: selections,
 				},
 			)
@@ -226,7 +226,7 @@ func TestVolumeRemovalBackupPolicyMaximumFragmentBudget(t *testing.T) {
 	}
 	input := testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 		EnvironmentID: fixture.environment.Record.ID, TaskID: taskID,
-		ReadRevision: fixture.store.revision, Enabled: true, Frequency: "*-*-* 03:00:00", Keep: 3,
+		ReadRevision: fixture.store.revision, Enabled: true, Frequency: "0 3 * * *", Keep: 3,
 		Encryption: "none", ConnectorName: fixture.connector.Record.Connector.Name, CreatedAt: fixture.now,
 	}
 	for index := range testbackuppolicy.MaximumBackupPolicySources {

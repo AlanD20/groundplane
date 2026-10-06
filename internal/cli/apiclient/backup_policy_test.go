@@ -50,7 +50,7 @@ func TestSetBackupPolicySendsExactProtectedJSON(t *testing.T) {
 		writer.WriteHeader(http.StatusOK)
 		if _, err := io.WriteString(
 			writer,
-			`{"enabled":true,"frequency":"Tue *-*-* 04:30:00","keep":7,`+
+			`{"enabled":true,"frequency":"30 4 * * TUE","keep":7,`+
 				`"encryption":"age","connector_id":"con_1","sources":`+
 				`[{"id":"spt_1","kind":"attach","target_id":"att_1"}]}`,
 		); err != nil {
@@ -63,7 +63,7 @@ func TestSetBackupPolicySendsExactProtectedJSON(t *testing.T) {
 		context.Background(),
 		"env_1",
 		apiTypes.BackupPolicyReplacementRequest{
-			Enabled: true, Frequency: "Tue *-*-* 04:30:00", Keep: 7,
+			Enabled: true, Frequency: "30 4 * * TUE", Keep: 7,
 			Encryption: apiTypes.BackupEncryptionAge, ConnectorID: "con_1",
 			Sources: []apiTypes.BackupSourceInput{
 				{Kind: apiTypes.BackupSourceAttach, TargetID: "att_1"},
@@ -114,7 +114,7 @@ func TestListVolumesSendsEnvironmentQuery(t *testing.T) {
 
 func assertBackupPolicyClientInput(t *testing.T, input apiTypes.BackupPolicyReplacementRequest) {
 	t.Helper()
-	if !input.Enabled || input.Frequency != "Tue *-*-* 04:30:00" || input.Keep != 7 {
+	if !input.Enabled || input.Frequency != "30 4 * * TUE" || input.Keep != 7 {
 		t.Errorf("policy fields = %#v", input)
 	}
 	if input.Encryption != apiTypes.BackupEncryptionAge || input.ConnectorID != "con_1" {

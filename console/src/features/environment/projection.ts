@@ -58,7 +58,7 @@ export function environmentFromAPI(
     scripts: [],
     backup: {
       enabled: false,
-      frequency: "*-*-* 03:15:00",
+      frequency: "15 3 * * *",
       keep: 7,
       encryption: "age",
       sources: [],

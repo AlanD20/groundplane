@@ -22,7 +22,7 @@ func TestBackupPolicyRecordRoundTripsCompleteEnabledState(t *testing.T) {
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	record := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Enabled:       true, Frequency: "*-*-* 03:15:00", Keep: 7, Encryption: "age",
+		Enabled:       true, Frequency: "15 3 * * *", Keep: 7, Encryption: "age",
 		ConnectorID: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		SourceIDs: []string{
 			"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -53,7 +53,7 @@ func TestBackupPolicyRecordEnforcesMaximumPublicKeep(t *testing.T) {
 	record := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Enabled:       true,
-		Frequency:     "*-*-* 03:15:00",
+		Frequency:     "15 3 * * *",
 		Keep:          testbackuppolicy.MaximumBackupPolicyKeep,
 		Encryption:    "none",
 		ConnectorID:   "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -105,7 +105,7 @@ func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T
 			t.Parallel()
 			record := base
 			if fields&frequencyField != 0 {
-				record.Frequency = "*-*-* 03:15:00"
+				record.Frequency = "15 3 * * *"
 			}
 			if fields&keepField != 0 {
 				record.Keep = 1
@@ -134,7 +134,7 @@ func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T
 		})
 	}
 	configured := base
-	configured.Frequency = "*-*-* 03:15:00"
+	configured.Frequency = "15 3 * * *"
 	configured.Keep = 1
 	configured.Encryption = "none"
 	configured.ConnectorID = "con_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -150,7 +150,7 @@ func TestBackupPolicyRecordRetainsConfigurationAfterLastVolumeSource(t *testing.
 	t.Parallel()
 	record := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Frequency:     "*-*-* 03:15:00", Keep: 7, Encryption: "age",
+		Frequency:     "15 3 * * *", Keep: 7, Encryption: "age",
 		ConnectorID: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		UpdatedAt:   time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC),
 	}

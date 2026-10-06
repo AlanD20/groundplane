@@ -424,7 +424,7 @@ func (fixture *backupPolicyReplacementFixture) policyInput(
 	input := testbackuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: fixture.environment.Record.ID,
 		Enabled:       enabled,
-		Frequency:     "*-*-* 03:00:00",
+		Frequency:     "0 3 * * *",
 		Keep:          7,
 		Encryption:    encryption,
 		ConnectorID:   connectorID,
@@ -688,7 +688,7 @@ func backupSchedulePolicyInput(
 	volume := fixture.sources[0].Source.Record
 	return testbackuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: fixture.environment.Record.ID,
-		Enabled:       enabled, Frequency: "*-*-* 03:00:00", Keep: 7,
+		Enabled:       enabled, Frequency: "0 3 * * *", Keep: 7,
 		Encryption: "none", ConnectorID: fixture.connector.Record.Connector.ID,
 		Sources: []testbackuppolicy.BackupPolicySourceSelection{{
 			Kind: core.BackupSourceVolume, TargetID: volume.TargetID,

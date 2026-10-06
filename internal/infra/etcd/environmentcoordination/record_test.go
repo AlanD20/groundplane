@@ -23,7 +23,7 @@ func TestEnvironmentCoordinationRecordRoundTripsCompleteSchedule(t *testing.T) {
 		ScheduleClockFloor: lastEvaluatedAt,
 		CurrentBackupScheduleState: &CurrentBackupScheduleState{
 			PolicyDigest:    "26c0b60b0baf19530342375ef75108ff8feefb8b8f9c231a8595b4cad436de60",
-			Frequency:       "*-*-* 03:15:00",
+			Frequency:       "15 3 * * *",
 			EnabledAt:       enabledAt,
 			LastEvaluatedAt: lastEvaluatedAt,
 			UpdatedAt:       lastEvaluatedAt,
@@ -78,7 +78,7 @@ func TestEnvironmentCoordinationRecordRejectsInvalidAndOversizedState(t *testing
 		ScheduleClockFloor: floor,
 		CurrentBackupScheduleState: &CurrentBackupScheduleState{
 			PolicyDigest:    strings.Repeat("a", 64),
-			Frequency:       "*-*-* 03:15:00",
+			Frequency:       "15 3 * * *",
 			EnabledAt:       floor,
 			LastEvaluatedAt: floor.Add(-time.Second),
 			UpdatedAt:       floor,
@@ -124,7 +124,7 @@ func TestBackupPolicyScheduleDigestBindsCanonicalPolicy(t *testing.T) {
 	policy := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: coordinationTestEnvironmentID,
 		Enabled:       true,
-		Frequency:     "*-*-* 03:15:00",
+		Frequency:     "15 3 * * *",
 		Keep:          7,
 		Encryption:    "none",
 		ConnectorID:   "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -138,7 +138,7 @@ func TestBackupPolicyScheduleDigestBindsCanonicalPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backupPolicyScheduleDigest() error = %v", err)
 	}
-	const golden = "4943b66263a15ae97a5bc2a568631b1594c9c7d29932ff6eef1947ed5aed046f"
+	const golden = "a631e203e171c4db3b1d23da340a015227c481d21ae86f6de1c59b6ee1b31b5e"
 	repeated, err := PolicyScheduleDigest(policy)
 	if err != nil || digest != golden || repeated != golden {
 		t.Fatalf("repeated digests = %q and %q, want %q; error = %v", digest, repeated, golden, err)
@@ -160,7 +160,7 @@ func TestBackupPolicyScheduleDigestRejectsEquivalentNonUTCTimestamp(t *testing.T
 	t.Parallel()
 	policy := coordinationTestPolicy(time.Date(
 		2026, 8, 24, 10, 0, 0, 0, time.FixedZone("equivalent-zero-offset", 0),
-	), "*-*-* 03:15:00")
+	), "15 3 * * *")
 	if _, err := PolicyScheduleDigest(policy); !errors.Is(
 		err,
 		errs.New(errs.KindValidationFailed, ""),
@@ -174,7 +174,7 @@ func TestBackupPolicyScheduleDigestRejectsEquivalentNonUTCTimestamp(t *testing.T
 func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
-	oldPolicy := coordinationTestPolicy(base, "*-*-* 03:15:00")
+	oldPolicy := coordinationTestPolicy(base, "15 3 * * *")
 	oldDigest, err := PolicyScheduleDigest(oldPolicy)
 	if err != nil {
 		t.Fatalf("backupPolicyScheduleDigest(old) error = %v", err)
@@ -213,7 +213,7 @@ func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 			current: EnvironmentCoordinationRecord{
 				EnvironmentID: coordinationTestEnvironmentID, ScheduleClockFloor: base,
 			},
-			replacement:       coordinationTestPolicy(base, "*-*-* 03:15:00"),
+			replacement:       coordinationTestPolicy(base, "15 3 * * *"),
 			now:               base.Add(time.Hour),
 			wantSchedule:      true,
 			wantEnabledAt:     base.Add(time.Hour),
@@ -223,7 +223,7 @@ func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 		{
 			name:              "frequency change reseeds",
 			current:           existing,
-			replacement:       coordinationTestPolicy(base, "Mon *-*-* 03:15:00"),
+			replacement:       coordinationTestPolicy(base, "15 3 * * MON"),
 			now:               base.Add(3 * time.Hour),
 			wantSchedule:      true,
 			wantEnabledAt:     base.Add(3 * time.Hour),
@@ -326,7 +326,7 @@ func TestEnvironmentCoordinationRewritePreservesExactBytes(t *testing.T) {
 		"\"schedule_clock_floor\":\"2026-08-24T12:00:00Z\"," +
 		"\"current_backup_schedule_state\":{" +
 		"\"policy_digest\":\"26c0b60b0baf19530342375ef75108ff8feefb8b8f9c231a8595b4cad436de60\"," +
-		"\"frequency\":\"*-*-* 03:15:00\"," +
+		"\"frequency\":\"15 3 * * *\"," +
 		"\"enabled_at\":\"2026-08-24T10:00:00Z\"," +
 		"\"last_evaluated_at\":\"2026-08-24T11:00:00Z\"," +
 		"\"updated_at\":\"2026-08-24T12:00:00Z\"}} }")

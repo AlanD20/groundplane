@@ -48,7 +48,7 @@ func TestEnvironmentBlueprintBackupPreparationClearsRawExistingAgeKeyBuffers(t *
 		ctx, testbackuppolicy.BackupPolicyReplacementInput{
 			EnvironmentID: fixture.environment.Record.ID,
 			Enabled:       true,
-			Frequency:     "*-*-* 02:00:00",
+			Frequency:     "0 2 * * *",
 			Keep:          7,
 			Encryption:    "age",
 			ConnectorID:   fixture.connector.Record.Connector.ID,

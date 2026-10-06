@@ -109,7 +109,7 @@ func volumePolicyProjectionFixture(
 		baseline = candidate
 	}
 	baseline.Backup = &testenvironmentprojection.EnvironmentBlueprintBackupPolicy{
-		Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "age",
+		Enabled: true, Frequency: "0 2 * * *", Keep: 7, Encryption: "age",
 		ConnectorID: ids.NewAt(ids.KindConnector, at, 30),
 		Sources: []testenvironmentprojection.EnvironmentBlueprintBackupPolicySource{{
 			ID: ids.NewAt(

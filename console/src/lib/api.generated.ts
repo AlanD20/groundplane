@@ -1812,6 +1812,7 @@ export interface components {
             enabled: boolean;
             /** @enum {string} */
             encryption?: "age" | "none";
+            /** @description Five-field UTC cron expression. */
             frequency?: string;
             /** Format: int64 */
             keep?: number;
@@ -1836,6 +1837,7 @@ export interface components {
             enabled: boolean;
             /** @enum {string} */
             encryption?: "age" | "none";
+            /** @description Five-field cron expression in UTC: minute hour day-of-month month weekday. No seconds, macros or timezone prefixes. */
             frequency?: string;
             /** Format: int64 */
             keep?: number;

@@ -16,7 +16,7 @@ func ValidBackupPolicyKeep(keep int64) bool {
 // BackupPolicyReplacementRequest is one complete desired policy document.
 type BackupPolicyReplacementRequest struct {
 	Enabled     bool                `json:"enabled"`
-	Frequency   string              `json:"frequency,omitempty" pattern:"^(\\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$"`
+	Frequency   string              `json:"frequency,omitempty" maxLength:"256" doc:"Five-field cron expression in UTC: minute hour day-of-month month weekday. No seconds, macros or timezone prefixes."`
 	Keep        int64               `json:"keep,omitempty" minimum:"1" maximum:"9007199254740991"`
 	Encryption  BackupEncryption    `json:"encryption,omitempty" enum:"age,none"`
 	ConnectorID string              `json:"connector_id,omitempty" pattern:"^con_[0-9A-HJKMNP-TV-Z]{26}$"`
@@ -33,7 +33,7 @@ const (
 // BackupPolicy is the effective Environment policy projection.
 type BackupPolicy struct {
 	Enabled      bool             `json:"enabled"`
-	Frequency    string           `json:"frequency,omitempty" pattern:"^(\\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$"`
+	Frequency    string           `json:"frequency,omitempty" maxLength:"256" doc:"Five-field UTC cron expression."`
 	Keep         int64            `json:"keep,omitempty" minimum:"1" maximum:"9007199254740991"`
 	Encryption   BackupEncryption `json:"encryption,omitempty" enum:"age,none"`
 	ConnectorID  string           `json:"connector_id,omitempty"`

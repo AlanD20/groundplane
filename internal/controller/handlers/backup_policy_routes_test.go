@@ -28,7 +28,7 @@ func TestBackupPolicyRoutesExposeEffectiveDisabledAndProtectedReplacement(t *tes
 	if got.Code != http.StatusOK || shown.Enabled || shown.Sources == nil || len(shown.Sources) != 0 {
 		t.Fatalf("GET status/body = %d, %q", got.Code, got.Body.String())
 	}
-	body := `{"enabled":true,"frequency":"*-*-* 03:15:00","keep":2,"encryption":"age",` +
+	body := `{"enabled":true,"frequency":"15 3 * * *","keep":2,"encryption":"age",` +
 		`"connector_id":"con_01AAAAAAAAAAAAAAAAAAAAAAAA","sources":[` +
 		`{"kind":"volume","target_id":"vol_01AAAAAAAAAAAAAAAAAAAAAAAA"}]}`
 	put := httptest.NewRequest(
@@ -191,14 +191,14 @@ func (service *backupPolicyRouteTestService) SetBackupPolicy(
 	service.setCalls++
 	service.input = input
 	policy := apiTypes.BackupPolicy{
-		Enabled: true, Frequency: "*-*-* 03:15:00", Keep: 2,
+		Enabled: true, Frequency: "15 3 * * *", Keep: 2,
 		Encryption:  apiTypes.BackupEncryptionAge,
 		ConnectorID: "con_01AAAAAAAAAAAAAAAAAAAAAAAA", Sources: []apiTypes.BackupSource{},
 	}
 	representation := service.representation
 	if representation == nil {
 		representation = []byte(
-			`{"enabled":true,"frequency":"*-*-* 03:15:00","keep":2,` +
+			`{"enabled":true,"frequency":"15 3 * * *","keep":2,` +
 				`"encryption":"age","connector_id":"con_01AAAAAAAAAAAAAAAAAAAAAAAA","sources":[]}`,
 		)
 	}

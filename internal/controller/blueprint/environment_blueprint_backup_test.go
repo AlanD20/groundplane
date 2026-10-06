@@ -129,7 +129,7 @@ func TestEnvironmentBlueprintBackupOmissionAndPresentLabelResolution(t *testing.
 	_, _, err = service.prepareEnvironmentBlueprintBackup(
 		context.Background(), environmentID, taskID, 19,
 		&core.BackupSpec{
-			Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 2, Encryption: "age",
+			Enabled: true, Frequency: "0 2 * * *", Keep: 2, Encryption: "age",
 			Connector: "archive-store", Sources: []core.BackupSourceSpec{
 				{Kind: core.BackupSourceConfig},
 				{Kind: core.BackupSourceVolume, Ref: "archive"},
@@ -385,7 +385,7 @@ func TestEnvironmentBlueprintBackupValidationResolvesFixedRevisionDependencies(t
 	err := service.validateEnvironmentBlueprintBackup(
 		context.Background(), environmentID, 47,
 		&core.BackupSpec{
-			Enabled: false, Frequency: "*-*-* 02:00:00", Keep: 2, Encryption: "age",
+			Enabled: false, Frequency: "0 2 * * *", Keep: 2, Encryption: "age",
 			Sources: []core.BackupSourceSpec{
 				{Kind: core.BackupSourceConfig},
 				{Kind: core.BackupSourceVolume, Ref: "archive"},

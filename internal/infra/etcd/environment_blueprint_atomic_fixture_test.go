@@ -270,7 +270,7 @@ func publishEnvironmentBlueprintAtomicShape(
 				TaskID:            task.ID,
 				ReadRevision:      fixedRevision,
 				Enabled:           true,
-				Frequency:         "*-*-* 04:00:00",
+				Frequency:         "0 4 * * *",
 				Keep:              12,
 				Encryption:        "age",
 				ConnectorName:     fixture.connector.Record.Connector.Name,

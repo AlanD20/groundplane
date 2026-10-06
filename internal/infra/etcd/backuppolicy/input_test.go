@@ -19,7 +19,7 @@ func TestReplacementInputProtectsConfigEncryptionAndSourceIdentity(t *testing.T)
 	config := BackupPolicySourceSelection{Kind: core.BackupSourceConfig, TargetID: environmentID}
 	valid := BackupPolicyReplacementInput{
 		EnvironmentID: environmentID,
-		Frequency:     "*-*-* 03:00:00",
+		Frequency:     "0 3 * * *",
 		Keep:          7,
 		Encryption:    "age",
 		ConnectorID:   connectorID,

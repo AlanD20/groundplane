@@ -686,7 +686,7 @@ Backup policy is Environment desired state, not Compose topology:
 ```yaml
 x-gp-backup:
   enabled: true
-  frequency: "*-*-* 03:15:00"
+  frequency: "15 3 * * *"
   keep: 3
   encryption: age
   connector: r2-backups
@@ -703,8 +703,15 @@ Environment's Entries and has no `ref`. Attach `ref` is a credential-owning
 PostgreSQL Attach name; Volume `ref` is its public slug (`x-gp-slug`), not its
 immutable Compose key. Valkey and Custom Attach backup sources are unsupported.
 
-`frequency` is a whole-second UTC daily or weekly expression, for example
-`"*-*-* 03:15:00"` or `"Sun *-*-* 03:15:00"`; it is not a cron expression.
+`frequency` is a five-field cron expression evaluated in UTC: minute (0–59),
+hour (0–23), day of month (1–31), month (1–12) and weekday (0–6, Sunday first).
+Use `"15 * * * *"` for hourly at minute 15, `"15 3 * * *"` for daily at
+03:15, or `"15 3 * * SUN"` for Sundays at 03:15. Fields support `*`, comma
+lists, inclusive ranges and positive steps, such as `"0 */6 * * *"`.
+Months and weekdays also accept case-insensitive three-letter names. If both
+day-of-month and weekday are restricted, either matching day runs the backup.
+Impossible calendar dates are rejected. There is no seconds/year field, macro,
+timezone prefix or Quartz extension. The old calendar-shaped grammar is removed.
 `encryption` is `age` or `none`; Config sources require `age`. Select 1 through
 12 distinct sources in explicit order for a configured policy.
 `keep` is an integer from 1 through

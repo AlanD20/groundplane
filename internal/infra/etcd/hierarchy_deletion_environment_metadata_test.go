@@ -35,7 +35,7 @@ func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
 				EnvironmentID: environmentID, ScheduleClockFloor: fixture.now,
 			}
 			if scenario == "configured" {
-				policy.Frequency, policy.Keep, policy.Encryption = "*-*-* 00:00:00", 3, "none"
+				policy.Frequency, policy.Keep, policy.Encryption = "0 0 * * *", 3, "none"
 				policy.ConnectorID = ids.NewAt(ids.KindConnector, fixture.now, 9901)
 			}
 			if scenario == "foreign-owner" {
@@ -43,7 +43,7 @@ func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
 			}
 			if scenario == "active-schedule" {
 				coordination.CurrentBackupScheduleState = &environmentcoordination.CurrentBackupScheduleState{
-					PolicyDigest: strings.Repeat("a", 64), Frequency: "*-*-* 00:00:00",
+					PolicyDigest: strings.Repeat("a", 64), Frequency: "0 0 * * *",
 					EnabledAt: fixture.now, LastEvaluatedAt: fixture.now, UpdatedAt: fixture.now,
 				}
 			}

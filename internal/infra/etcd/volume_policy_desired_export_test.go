@@ -435,7 +435,7 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 	policy := newBackupPolicyReplacementFixture(t, true)
 	volume := policy.sources[0].Source.Record
 	seed, err := policy.repository.PrepareBackupPolicyReplacement(ctx, testbackuppolicy.BackupPolicyReplacementInput{
-		EnvironmentID: policy.environment.Record.ID, Enabled: true, Frequency: "*-*-* 02:00:00",
+		EnvironmentID: policy.environment.Record.ID, Enabled: true, Frequency: "0 2 * * *",
 		Keep: 7, Encryption: "none", ConnectorID: policy.connector.Record.Connector.ID,
 		Sources: []testbackuppolicy.BackupPolicySourceSelection{
 			{Kind: core.BackupSourceVolume, TargetID: volume.TargetID},
@@ -463,7 +463,7 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 				{ID: volume.TargetID, Slug: "backup-data", Key: "backup-data"},
 			},
 			Backup: &testenvironmentprojection.EnvironmentBlueprintBackupPolicy{
-				Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "none",
+				Enabled: true, Frequency: "0 2 * * *", Keep: 7, Encryption: "none",
 				ConnectorID: policy.connector.Record.Connector.ID,
 				Sources: []testenvironmentprojection.EnvironmentBlueprintBackupPolicySource{
 					{ID: volume.ID, Kind: volume.Kind, TargetID: volume.TargetID},
@@ -623,7 +623,7 @@ func (fixture *VolumePolicyDesiredFixture) UseMaximumSelection(t *testing.T) {
 	first := fixture.policy.sources[0].Source.Record
 	input := testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 		EnvironmentID: projection.EnvironmentID, TaskID: projection.RevisionID,
-		ReadRevision: fixture.Revision(), Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "none",
+		ReadRevision: fixture.Revision(), Enabled: true, Frequency: "0 2 * * *", Keep: 7, Encryption: "none",
 		ConnectorName: fixture.policy.connector.Record.Connector.Name, CreatedAt: fixture.policy.now.Add(time.Minute),
 		Sources: []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
 			{CandidateID: first.ID, Kind: first.Kind, TargetID: first.TargetID},

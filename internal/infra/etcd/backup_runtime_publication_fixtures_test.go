@@ -417,7 +417,7 @@ func seedBackupRuntimePublicationEvidence(
 	defer clear(facts.Ciphertext)
 	snapshot.ConsumerServiceID = attach.ServiceID
 	policy := testbackuppolicy.BackupPolicyRecord{
-		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
+		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "0 2 * * *", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: []string{source.SourceID}, UpdatedAt: run.CreatedAt,
 	}
@@ -638,7 +638,7 @@ func extendBackupRuntimePublicationSources(
 		}
 	}
 	policyValue, err := testbackuppolicy.EncodeBackupPolicyRecord(testbackuppolicy.BackupPolicyRecord{
-		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
+		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "0 2 * * *", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: sourceIDs, UpdatedAt: run.CreatedAt,
 	})
@@ -831,7 +831,7 @@ func configureBackupRuntimeConfigRun(
 		ConfigSnapshotID: run.TaskID,
 	}}
 	policyValue, err := testbackuppolicy.EncodeBackupPolicyRecord(testbackuppolicy.BackupPolicyRecord{
-		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
+		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "0 2 * * *", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: []string{source.SourceID}, UpdatedAt: run.CreatedAt,
 	})

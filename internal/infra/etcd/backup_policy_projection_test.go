@@ -50,7 +50,7 @@ func TestBackupPolicyTypedPreparationCommitsStableProjection(t *testing.T) {
 	input := testbackuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: fixture.environment.Record.ID,
 		Enabled:       true,
-		Frequency:     "Mon *-*-* 03:00:00",
+		Frequency:     "0 3 * * MON",
 		Keep:          7,
 		Encryption:    "age",
 		ConnectorID:   fixture.connector.Record.Connector.ID,
@@ -146,7 +146,7 @@ func TestBackupPolicyDisabledReplacementRetainsDeletedConnectorWithoutFence(t *t
 	volume := fixture.sources[0].Source.Record
 	input := testbackuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: fixture.environment.Record.ID,
-		Frequency:     "*-*-* 03:00:00",
+		Frequency:     "0 3 * * *",
 		Keep:          7,
 		Encryption:    "none",
 		ConnectorID:   connectorID,
@@ -217,7 +217,7 @@ func TestBackupPolicyTypedPreparationRejectsForeignTargetBeforeCatalogCreation(t
 	_, err = fixture.repository.PrepareBackupPolicyReplacement(
 		context.Background(), testbackuppolicy.BackupPolicyReplacementInput{
 			EnvironmentID: fixture.environment.Record.ID,
-			Frequency:     "*-*-* 03:00:00",
+			Frequency:     "0 3 * * *",
 			Keep:          7,
 			Encryption:    "none",
 			ConnectorID:   fixture.connector.Record.Connector.ID,
@@ -249,7 +249,7 @@ func TestBackupPolicyTypedReplacementFencesDesiredHeadRace(t *testing.T) {
 		context.Background(), testbackuppolicy.BackupPolicyReplacementInput{
 			EnvironmentID: fixture.environment.Record.ID,
 			Enabled:       true,
-			Frequency:     "*-*-* 03:00:00",
+			Frequency:     "0 3 * * *",
 			Keep:          7,
 			Encryption:    "none",
 			ConnectorID:   fixture.connector.Record.Connector.ID,
@@ -412,7 +412,7 @@ func commitEnabledBackupPolicyProjection(t *testing.T, fixture *backupPolicyRepl
 		context.Background(), testbackuppolicy.BackupPolicyReplacementInput{
 			EnvironmentID: fixture.environment.Record.ID,
 			Enabled:       true,
-			Frequency:     "*-*-* 03:00:00",
+			Frequency:     "0 3 * * *",
 			Keep:          7,
 			Encryption:    "none",
 			ConnectorID:   fixture.connector.Record.Connector.ID,

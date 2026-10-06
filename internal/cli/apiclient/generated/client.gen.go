@@ -1206,13 +1206,15 @@ type BackupPolicy struct {
 	ConnectorId  *string                 `json:"connector_id,omitempty"`
 	Enabled      bool                    `json:"enabled"`
 	Encryption   *BackupPolicyEncryption `json:"encryption,omitempty"`
-	Frequency    *string                 `json:"frequency,omitempty"`
-	Keep         *int64                  `json:"keep,omitempty"`
-	KeyCreatedAt *time.Time              `json:"key_created_at,omitempty"`
-	KeyEra       *int64                  `json:"key_era,omitempty"`
-	KeyRotatedAt *time.Time              `json:"key_rotated_at,omitempty"`
-	NextRunAt    *time.Time              `json:"next_run_at"`
-	Sources      []BackupSource          `json:"sources"`
+
+	// Frequency Five-field UTC cron expression.
+	Frequency    *string        `json:"frequency,omitempty"`
+	Keep         *int64         `json:"keep,omitempty"`
+	KeyCreatedAt *time.Time     `json:"key_created_at,omitempty"`
+	KeyEra       *int64         `json:"key_era,omitempty"`
+	KeyRotatedAt *time.Time     `json:"key_rotated_at,omitempty"`
+	NextRunAt    *time.Time     `json:"next_run_at"`
+	Sources      []BackupSource `json:"sources"`
 }
 
 // BackupPolicyEncryption defines model for BackupPolicy.Encryption.
@@ -1227,9 +1229,11 @@ type BackupPolicyReplacementRequest struct {
 	ConnectorId *string                                   `json:"connector_id,omitempty"`
 	Enabled     bool                                      `json:"enabled"`
 	Encryption  *BackupPolicyReplacementRequestEncryption `json:"encryption,omitempty"`
-	Frequency   *string                                   `json:"frequency,omitempty"`
-	Keep        *int64                                    `json:"keep,omitempty"`
-	Sources     []BackupSourceInput                       `json:"sources"`
+
+	// Frequency Five-field cron expression in UTC: minute hour day-of-month month weekday. No seconds, macros or timezone prefixes.
+	Frequency *string             `json:"frequency,omitempty"`
+	Keep      *int64              `json:"keep,omitempty"`
+	Sources   []BackupSourceInput `json:"sources"`
 }
 
 // BackupPolicyReplacementRequestEncryption defines model for BackupPolicyReplacementRequest.Encryption.
