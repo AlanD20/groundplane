@@ -28,11 +28,11 @@ export function PageHeader({
           )}
           <div className="flex min-w-0 flex-col gap-1.5">
             {eyebrow && (
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground [overflow-wrap:anywhere]">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground [overflow-wrap:anywhere]">
                 {eyebrow}
               </span>
             )}
-            <h1 className="[overflow-wrap:anywhere] text-[25px] font-semibold tracking-[-0.035em] leading-tight">
+            <h1 className="[overflow-wrap:anywhere] text-[28px] font-semibold tracking-tight leading-tight">
               {title}
             </h1>
             {description && (

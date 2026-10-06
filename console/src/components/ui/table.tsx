@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 export function Table({ className, ...props }: ComponentProps<"table">) {
   return (
     <table
-      className={cn("w-full caption-bottom text-left text-xs", className)}
+      className={cn("w-full caption-bottom text-left text-sm", className)}
       {...props}
     />
   );
@@ -31,7 +31,7 @@ export function TableHead({ className, ...props }: ComponentProps<"th">) {
     <th
       scope="col"
       className={cn(
-        "relative border-b border-border bg-background px-5 py-3 text-[10px] font-normal text-muted-foreground",
+        "relative border-b border-border bg-background px-5 py-3 text-xs font-medium text-muted-foreground",
         className,
       )}
       {...props}
@@ -41,7 +41,7 @@ export function TableHead({ className, ...props }: ComponentProps<"th">) {
 export function TableCell({ className, ...props }: ComponentProps<"td">) {
   return (
     <td
-      className={cn("px-5 py-4 align-middle text-[11px]", className)}
+      className={cn("px-5 py-4 align-middle text-sm", className)}
       {...props}
     />
   );

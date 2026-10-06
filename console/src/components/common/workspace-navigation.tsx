@@ -21,7 +21,7 @@ export function WorkspaceNavigation({
           key={group.label}
           className="space-y-1 border-t border-border pt-5 first:border-t-0 first:pt-0"
         >
-          <h2 className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground [overflow-wrap:anywhere]">
+          <h2 className="px-3 pb-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground [overflow-wrap:anywhere]">
             {group.label}
           </h2>
           {group.items.map((item) => (
@@ -30,7 +30,7 @@ export function WorkspaceNavigation({
               to={item.href}
               aria-current={item.active ? "page" : undefined}
               className={cn(
-                "flex min-h-10 items-start gap-3 rounded-r-md rounded-l-sm border-l-2 border-transparent px-3 py-2.5 text-[13px] leading-5 outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]",
+                "flex min-h-10 items-start gap-3 rounded-r-md rounded-l-sm border-l-2 border-transparent px-3 py-2.5 text-sm leading-5 outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]",
                 item.active
                   ? "border-l-primary bg-accent font-semibold text-accent-foreground"
                   : "text-sidebar-foreground hover:text-foreground",

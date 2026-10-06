@@ -132,6 +132,12 @@ variants. Equivalent summaries, editors, status indicators and empty/error state
 should share their structure and interaction. [Architecture](architecture.md#console)
 owns implementation placement.
 
+Use locally bundled IBM Plex Sans for interface text and IBM Plex Mono for code,
+logs and machine-readable values. Shared controls and navigation use 14px text;
+secondary text uses 12–13px, section headings 18–20px and page titles 28px.
+Use regular, medium and semibold weights for text, controls and headings. Prefer
+these shared sizes over tiny local overrides; check wrapping in narrow layouts.
+
 Use persistent labels for resource navigation and important controls. The global
 Platform navigation uses a compact vertical icon rail with accessible names and
 labels on hover and keyboard focus. In the secondary navigation, pair destination

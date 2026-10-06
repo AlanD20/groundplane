@@ -63,7 +63,7 @@ export function SummaryItem({
 }) {
   return (
     <div className="min-w-0 rounded-xl border border-border bg-card p-5">
-      <dt className="mb-1 text-[11px] text-muted-foreground">{label}</dt>
+      <dt className="mb-1 text-xs text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words text-lg font-medium tracking-tight tabular-nums">
         {children}
       </dd>

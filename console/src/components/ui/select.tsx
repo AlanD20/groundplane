@@ -38,7 +38,7 @@ function Select({
         id={id}
         aria-label={ariaLabel}
         className={cn(
-          "flex h-10 min-w-0 max-w-full w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-xs outline-none transition-colors",
+          "flex h-10 min-w-0 max-w-full w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors",
           "hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/70",
           "data-[popup-open]:border-ring data-[popup-open]:[&_svg]:rotate-180",
           className,
