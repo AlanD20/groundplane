@@ -43,9 +43,11 @@ with the Service selected, and shows its connection values. Reveal, Hide and Cop
 use the shared value control and configured reveal confirmation.
 
 Project Secrets distinguish Project-owned inputs from matching-key Platform
-fallbacks. The Tenant’s Runner manager filters Tenant-, Project- and
-Environment-owned Runners. Local navigation stays within its scope; use the
-parent link or breadcrumbs to reach Project Secrets and Tenant operations. Tasks
+fallbacks. Runners appears in Tenant, Project and Environment navigation. Project
+and Environment views show Runners owned by that resource and preselect that
+fixed owner when creating one. The Tenant view retains its cross-scope owner
+filter. These views reuse the same lifecycle actions without leaving the selected
+workspace. Use parent links or breadcrumbs to reach other scopes. Tasks
 show durable
 operations with scope and status filters. Opening a Task shows its details and
 links to the affected resource. A deployment opened from a Service returns to

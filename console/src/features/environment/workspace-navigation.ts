@@ -1,4 +1,5 @@
 import {
+  GitBranch,
   Route,
   Plug,
   KeyRound,
@@ -54,6 +55,7 @@ export const environmentSections = [
     label: "Delivery & recovery",
     icon: Activity,
     panels: [
+      { key: "runners", label: "Runners", icon: GitBranch },
       { key: "tasks", label: "Tasks", icon: Activity },
       { key: "logs", label: "Logs", icon: Terminal },
       { key: "releases", label: "Deployments", icon: History },

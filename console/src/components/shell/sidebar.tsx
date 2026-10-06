@@ -131,7 +131,16 @@ export function Sidebar({
       {
         label: `Project · ${project.name}`,
         items: [
-          item("Environments", projectPath, Layers),
+          {
+            ...item("Environments", projectPath, Layers),
+            active:
+              pathname === projectPath && search.get("view") !== "runners",
+          },
+          {
+            ...item("Runners", `${projectPath}?view=runners`, GitBranch),
+            active:
+              pathname === projectPath && search.get("view") === "runners",
+          },
           item("Secrets", `${projectPath}/secrets`, KeyRound),
           item("Settings", `${projectPath}/settings`, Settings),
         ],

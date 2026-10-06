@@ -41,6 +41,7 @@ function runnerStatus(runner: Runner) {
 
 export function RunnerInventory({
   runners,
+  tenantCount,
   loading,
   error,
   owner,
@@ -49,6 +50,7 @@ export function RunnerInventory({
   onRemove,
 }: {
   runners: Runner[];
+  tenantCount: number;
   loading: boolean;
   error: string | null;
   owner: (runner: Runner) => { scope: string; name: string };
@@ -140,8 +142,8 @@ export function RunnerInventory({
   return (
     <>
       <SummaryStrip>
-        <SummaryItem label="Runners">
-          {unavailable ? "Not available" : `${runners.length} / 5`}
+        <SummaryItem label="Runners in this view">
+          {unavailable ? "Not available" : runners.length}
         </SummaryItem>
         <SummaryItem label="Online">
           {unavailable
@@ -155,8 +157,8 @@ export function RunnerInventory({
             ? "Not available"
             : runners.filter((runner) => runner.lifecycle === "failed").length}
         </SummaryItem>
-        <SummaryItem label="Build pipeline">
-          <span className="text-sm">Build → push → fetch → deploy</span>
+        <SummaryItem label="Tenant capacity">
+          {unavailable ? "Not available" : `${tenantCount} / 5`}
         </SummaryItem>
       </SummaryStrip>
       <ResourcePanel title="Runners">

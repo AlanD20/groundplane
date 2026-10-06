@@ -26,7 +26,13 @@ import type { Runner } from "@/lib/types";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { RunnerInventory } from "./runner-inventory";
 
-export default function TenantRunnersPage() {
+export default function RunnerManager({
+  scope,
+  embedded = false,
+}: {
+  scope?: { kind: "Project" | "Environment"; id: string; name: string };
+  embedded?: boolean;
+}) {
   const params = useRequiredParams("tenant");
   const store = useStore();
   const [search, setSearch] = useSearchParams();
@@ -55,6 +61,7 @@ export default function TenantRunnersPage() {
   const [creating, setCreating] = useState(false);
   const [createSlug, setCreateSlug] = useState("");
   const [createOwner, setCreateOwner] = useState("tenant");
+  const [runnerProvider, setRunnerProvider] = useState("github");
   const [githubUrl, setGithubUrl] = useState("");
   const [labels, setLabels] = useState("");
   const [registrationToken, setRegistrationToken] = useState("");
@@ -99,7 +106,9 @@ export default function TenantRunnersPage() {
     })),
   ];
   const owner =
-    owners.find((item) => item.value === search.get("owner"))?.value ?? "all";
+    scope?.id ??
+    owners.find((item) => item.value === search.get("owner"))?.value ??
+    "all";
   const visibleRunners = runners.filter(
     (runner) =>
       owner === "all" ||
@@ -113,26 +122,42 @@ export default function TenantRunnersPage() {
     (runner) => runner.id !== editing?.id && runner.slug === normalizedSlug,
   );
 
+  const createAction = (
+    <Button
+      disabled={store.runnersLoading || runners.length >= 5}
+      onClick={() => {
+        setCreateOwner(owner === "all" ? "tenant" : owner);
+        setCreating(true);
+        setCreateError(null);
+      }}
+    >
+      <Plus className="size-4" /> Create Runner
+    </Button>
+  );
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow={`Tenant · ${tenant.name}`}
-        title="GitHub Runners"
-        description="Trusted CI/CD · Tenant, Project or Environment ownership."
-        icon={<GitBranch />}
-        actions={
-          <Button
-            disabled={store.runnersLoading || runners.length >= 5}
-            onClick={() => {
-              setCreateOwner(owner === "all" ? "tenant" : owner);
-              setCreating(true);
-              setCreateError(null);
-            }}
-          >
-            <Plus className="size-4" /> Create Runner
-          </Button>
-        }
-      />
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            GitHub Actions Runners owned by this {scope?.kind}.
+          </p>
+          {createAction}
+        </div>
+      ) : (
+        <PageHeader
+          eyebrow={
+            scope ? `${scope.kind} · ${scope.name}` : `Tenant · ${tenant.name}`
+          }
+          title="GitHub Runners"
+          description={
+            scope
+              ? `Runners owned by this ${scope.kind}.`
+              : "Trusted CI/CD · Tenant, Project or Environment ownership."
+          }
+          icon={<GitBranch />}
+          actions={createAction}
+        />
+      )}
 
       {acceptedTaskId && (
         <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm">
@@ -141,19 +166,22 @@ export default function TenantRunnersPage() {
         </div>
       )}
 
-      <div className="max-w-md space-y-2">
-        <Label htmlFor="runner-owner-filter">Owner</Label>
-        <Select
-          id="runner-owner-filter"
-          value={owner}
-          options={owners}
-          onValueChange={(value) =>
-            setSearch(value === "all" ? {} : { owner: value })
-          }
-        />
-      </div>
+      {!scope && (
+        <div className="max-w-md space-y-2">
+          <Label htmlFor="runner-owner-filter">Owner</Label>
+          <Select
+            id="runner-owner-filter"
+            value={owner}
+            options={owners}
+            onValueChange={(value) =>
+              setSearch(value === "all" ? {} : { owner: value })
+            }
+          />
+        </div>
+      )}
       <RunnerInventory
         runners={visibleRunners}
+        tenantCount={runners.length}
         loading={store.runnersLoading}
         error={store.runnerError}
         owner={(runner) =>
@@ -251,6 +279,16 @@ export default function TenantRunnersPage() {
             <fieldset className="space-y-4 rounded-lg border border-border p-4">
               <legend className="px-2 text-xs font-medium">Ownership</legend>
               <div className="space-y-2">
+                <Label htmlFor="runner-create-provider">Provider</Label>
+                <Select
+                  id="runner-create-provider"
+                  value={runnerProvider}
+                  onValueChange={setRunnerProvider}
+                  options={[{ value: "github", label: "GitHub Actions" }]}
+                  disabled={submittingCreate}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="runner-create-slug">Slug</Label>
                 <Input
                   id="runner-create-slug"
@@ -265,17 +303,27 @@ export default function TenantRunnersPage() {
                   id="runner-create-owner"
                   value={createOwner}
                   onValueChange={setCreateOwner}
-                  options={[
-                    { value: "tenant", label: `Tenant · ${tenant.slug}` },
-                    ...projects.map((project) => ({
-                      value: project.id,
-                      label: `Project · ${project.slug}`,
-                    })),
-                    ...environments.map((environment) => ({
-                      value: environment.id,
-                      label: `Environment · ${environment.label}`,
-                    })),
-                  ]}
+                  disabled={!!scope}
+                  options={
+                    scope
+                      ? [
+                          {
+                            value: scope.id,
+                            label: `${scope.kind} · ${scope.name}`,
+                          },
+                        ]
+                      : [
+                          { value: "tenant", label: `Tenant · ${tenant.slug}` },
+                          ...projects.map((project) => ({
+                            value: project.id,
+                            label: `Project · ${project.slug}`,
+                          })),
+                          ...environments.map((environment) => ({
+                            value: environment.id,
+                            label: `Environment · ${environment.label}`,
+                          })),
+                        ]
+                  }
                 />
                 <p className="text-xs text-muted-foreground">
                   Owner is permanent. Trusted workflows use normal GP CLI/API

@@ -26,11 +26,13 @@ import {
   Plus,
 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import RunnerManager from "@/features/runners/runner-manager";
+import { Link, useSearchParams } from "react-router-dom";
 
 export default function TenantProjectPage() {
   const params = useRequiredParams("tenant", "project");
   const store = useStore();
+  const [search] = useSearchParams();
   const tenant = store.getTenant(params.tenant);
   const project = store.getProject(params.tenant, params.project);
   const [open, setOpen] = useState(false);
@@ -57,6 +59,14 @@ export default function TenantProjectPage() {
       />
     );
   }
+
+  if (search.get("view") === "runners")
+    return (
+      <RunnerManager
+        key={project.id}
+        scope={{ kind: "Project", id: project.id, name: project.name }}
+      />
+    );
 
   const envs = project.environments ?? [];
   const svcCount = envs.reduce((n, e) => n + e.services.length, 0);

@@ -1,3 +1,4 @@
+import RunnerManager from "@/features/runners/runner-manager";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -97,6 +98,13 @@ export default function EnvironmentPage() {
     />
   );
   const panels: Record<string, React.ReactNode> = {
+    runners: (
+      <RunnerManager
+        key={env.id}
+        embedded
+        scope={{ kind: "Environment", id: env.id, name: env.name }}
+      />
+    ),
     overview: <EnvironmentOverview env={env} now={observation.now} />,
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
     zones: <Topology env={env} />,
