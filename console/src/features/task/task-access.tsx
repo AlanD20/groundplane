@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { useStore } from "@/lib/store";
 import type { ActivityEntry } from "@/lib/types";
 import { Bell, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -70,18 +70,6 @@ export function TaskNotifications() {
     };
   }, [notifications]);
 
-  // Toast dismissal never discards the operation from the notification center.
-  useEffect(() => {
-    const terminal = toasts.filter(
-      (item) => tasks[item.id] && isTerminal(tasks[item.id]),
-    );
-    if (!terminal.length) return;
-    const timer = setTimeout(
-      () => terminal.forEach((item) => dismissAcceptedTask(item.id)),
-      10000,
-    );
-    return () => clearTimeout(timer);
-  }, [toasts, tasks]);
   return (
     <>
       <Button
@@ -106,17 +94,16 @@ export function TaskNotifications() {
           className="pointer-events-none fixed right-4 top-20 z-40 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2"
         >
           {toasts.map(({ id }) => (
-            <div
-              key={id}
-              className="pointer-events-auto rounded-xl border border-border bg-card p-4 shadow-lg animate-in fade-in slide-in-from-top-2"
-            >
+            <TaskToast key={id} id={id}>
               <TaskNotificationRow
                 id={id}
                 task={tasks[id]}
                 error={errors[id]}
               />
               <div className="mt-3 flex items-center justify-between">
-                <TaskLink taskId={id}>Open Task</TaskLink>
+                <TaskLink taskId={id} onClick={() => dismissAcceptedTask(id)}>
+                  Open Task
+                </TaskLink>
                 <Button
                   variant="ghost"
                   size="icon-xs"
@@ -126,7 +113,7 @@ export function TaskNotifications() {
                   <X className="size-3.5" />
                 </Button>
               </div>
-            </div>
+            </TaskToast>
           ))}
         </section>,
         document.body,
@@ -161,6 +148,20 @@ export function TaskNotifications() {
         </DrawerContent>
       </Drawer>
     </>
+  );
+}
+
+function TaskToast({ id, children }: { id: string; children: ReactNode }) {
+  // Lifetime belongs to this visible toast, not to polling or Task completion.
+  // Dismissal retains the Task and its unread state in the notification center.
+  useEffect(() => {
+    const timer = setTimeout(() => dismissAcceptedTask(id), 8000);
+    return () => clearTimeout(timer);
+  }, [id]);
+  return (
+    <div className="pointer-events-auto rounded-xl border border-border bg-card p-4 shadow-lg animate-in fade-in slide-in-from-top-2">
+      {children}
+    </div>
   );
 }
 
