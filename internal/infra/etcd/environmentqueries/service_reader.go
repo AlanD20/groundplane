@@ -47,7 +47,7 @@ func (repository *ServiceReader) GetServiceRevision(
 		ctx,
 		repository.store,
 		servicerecord.DesiredSelection{
-			Services:     projection.Record.DesiredServices,
+			Services:     servicesWithVolumeMounts(projection.Record),
 			Revision:     projection.Revision,
 			ReadRevision: projection.ReadRevision,
 		},
@@ -84,7 +84,7 @@ func (repository *ServiceReader) GetServiceByName(
 				ctx,
 				repository.store,
 				servicerecord.DesiredSelection{
-					Services:     projection.Record.DesiredServices,
+					Services:     servicesWithVolumeMounts(projection.Record),
 					Revision:     projection.Revision,
 					ReadRevision: projection.ReadRevision,
 				},
@@ -136,7 +136,7 @@ func (repository *ServiceReader) ListServices(
 			ctx,
 			repository.store,
 			servicerecord.DesiredSelection{
-				Services:     projection.Record.DesiredServices,
+				Services:     servicesWithVolumeMounts(projection.Record),
 				Revision:     projection.Revision,
 				ReadRevision: projection.ReadRevision,
 			},

@@ -1,3 +1,4 @@
+import { ServiceStorage } from "@/features/service/service-storage";
 import { ImageReference } from "@/components/common/image-reference";
 import { PageHeader } from "@/components/common/page-header";
 import {
@@ -309,30 +310,15 @@ export function ServiceWorkspace({
               workspace={params.tenant}
               onSaved={() => setReload((value) => value + 1)}
             />
-            <ResourcePanel title="Storage">
-              {service.mounts.length ? (
-                service.mounts.map((mount, index) => (
-                  <p key={index} className="break-words">
-                    {mount.type === "volume" ? mount.volume : mount.file} →{" "}
-                    {mount.mount}
-                  </p>
-                ))
-              ) : (
-                <p>No mounts configured.</p>
-              )}
-              <p className="text-muted-foreground">
-                Service mounts are configured in the Environment Blueprint.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setSearch({ view: "configuration", panel: "blueprint" })
-                }
-              >
-                Edit mounts in Blueprint
-              </Button>
-            </ResourcePanel>
+            <ServiceStorage
+              env={env}
+              service={service}
+              onSaved={() => setReload((value) => value + 1)}
+              onFiles={() => selectTab("entries")}
+              onVolumes={() =>
+                setSearch({ view: "configuration", panel: "volumes" })
+              }
+            />
             <AdvancedDetails title="Full configuration & Compose">
               <ServiceConfiguration
                 service={service}

@@ -46,7 +46,7 @@ func TestServiceRemovalCandidatePreservesAbsentRuntimeFiles(t *testing.T) {
 		tenantID,
 		projectID,
 		environment, testenvironmentprojection.EnvironmentComposeProjection{}, false,
-		record, testservices.ServiceMutationReferences{}, true,
+		record, testservices.ServiceMutationReferences{}, true, nil,
 		currentRevisionID,
 		1,
 	)

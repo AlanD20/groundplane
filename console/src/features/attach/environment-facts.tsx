@@ -100,15 +100,16 @@ export function FactRow({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <span className="font-mono text-[11px] text-muted-foreground">{k}</span>
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-[11px] text-foreground">
+      <div className="flex min-w-0 max-w-full flex-1 items-start gap-2">
+        <span className="min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] text-foreground [overflow-wrap:anywhere]">
           {error ?? value ?? (secret ? "••••••••" : "not loaded")}
         </span>
-        {value ? <CopyButton value={value} /> : null}
+        {value ? <CopyButton className="shrink-0" value={value} /> : null}
         <Button
           variant="ghost"
+          className="shrink-0"
           size="sm"
           disabled={loading}
           onClick={() => {

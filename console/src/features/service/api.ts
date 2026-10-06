@@ -22,7 +22,7 @@ export type ServiceMutationInput = Pick<
   | "restart"
   | "replicas"
   | "hooks"
->;
+> & { volumeMounts?: { volume: string; mount: string; ro: boolean }[] };
 
 export function serviceFromAPI(service: ServiceDocument): Service {
   if (
@@ -98,7 +98,12 @@ export function serviceFromAPI(service: ServiceDocument): Service {
     command: service.command?.join(" "),
     mounts: (service.mounts ?? []).map((mount) =>
       mount.volume
-        ? { type: "volume" as const, volume: mount.volume, mount: mount.mount }
+        ? {
+            type: "volume" as const,
+            volume: mount.volume,
+            mount: mount.mount,
+            ro: mount.ro ?? false,
+          }
         : {
             type: "file" as const,
             file: mount.file ?? "",
@@ -164,6 +169,7 @@ export function serviceMutationBody(input: ServiceMutationInput) {
     restart: input.restart,
     replicas: input.replicas,
     hooks: input.hooks,
+    volume_mounts: input.volumeMounts,
   };
 }
 

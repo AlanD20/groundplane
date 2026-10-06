@@ -83,7 +83,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 grid w-[calc(100vw-2rem)] max-h-[90dvh] overflow-y-auto max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl outline-none",
+          "fixed left-1/2 top-1/2 z-50 grid min-w-0 grid-cols-[minmax(0,1fr)] [overflow-wrap:anywhere] w-[calc(100vw-2rem)] max-h-[90dvh] overflow-y-auto max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl outline-none",
           "transition-all duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
           className,
         )}

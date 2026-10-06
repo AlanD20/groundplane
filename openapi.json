@@ -5836,6 +5836,13 @@
           "strategy": {
             "type": "string"
           },
+          "volume_mounts": {
+            "description": "Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy.",
+            "items": {
+              "$ref": "#/components/schemas/ServiceVolumeMount"
+            },
+            "type": "array"
+          },
           "zones": {
             "items": {
               "type": "string"
@@ -6032,6 +6039,27 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ServiceVolumeMount": {
+        "additionalProperties": false,
+        "properties": {
+          "mount": {
+            "description": "Absolute container path",
+            "type": "string"
+          },
+          "ro": {
+            "type": "boolean"
+          },
+          "volume": {
+            "description": "Stable Volume id in this Environment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "volume",
+          "mount"
+        ],
         "type": "object"
       },
       "Task": {

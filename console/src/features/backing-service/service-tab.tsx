@@ -1,4 +1,3 @@
-import { CopyButton } from "@/components/common/copy-button";
 import { DetailRow } from "@/components/common/detail-row";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import { useStore } from "@/lib/store";
@@ -161,12 +160,10 @@ export function Row({
   label,
   value,
   mono,
-  masked,
 }: {
   label: string;
   value: string;
   mono?: boolean;
-  masked?: boolean;
 }) {
   return (
     <DetailRow
@@ -175,7 +172,6 @@ export function Row({
       value={
         <span className="inline-flex min-w-0 items-start gap-2">
           <span className="min-w-0 break-all">{value}</span>
-          {masked && <CopyButton value={value} />}
         </span>
       }
     />

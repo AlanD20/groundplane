@@ -102,6 +102,7 @@ func newServiceCmd() *cobra.Command {
 
 	var editImage, editStrategy, editOnFailure, editMemory, editRestart, editHooksFile string
 	var editZones, editExpose []string
+	var editMountsFile string
 	var editCPUs float64
 	var editReplicas int
 	edit := &cobra.Command{
@@ -164,6 +165,19 @@ func newServiceCmd() *cobra.Command {
 					return err
 				}
 			}
+			if cmd.Flags().Changed("mounts-file") {
+				input.VolumeMounts, err = loadServiceVolumeMounts(cmd, editMountsFile)
+				if err != nil {
+					return err
+				}
+				for index := range *input.VolumeMounts {
+					mount := &(*input.VolumeMounts)[index]
+					mount.Volume, err = resolveVolumeTarget(cmd, mount.Volume)
+					if err != nil {
+						return err
+					}
+				}
+			}
 			edited, err := app.Client.EditService(cmd.Context(), id, input)
 			if err != nil {
 				return err
@@ -172,6 +186,8 @@ func newServiceCmd() *cobra.Command {
 			return app.Out.RenderOne(fields, values, edited)
 		},
 	}
+	edit.Flags().
+		StringVar(&editMountsFile, "mounts-file", "", "replacement Volume mounts JSON array using Volume slugs (--id for ids); [] unmounts all; - reads stdin")
 	edit.Flags().StringVar(&editImage, "image", "", "container image")
 	edit.Flags().
 		StringVar(&editHooksFile, "hooks-file", "", "replacement custom hook configuration JSON; {} clears, omission preserves; - reads stdin")

@@ -2912,7 +2912,10 @@ type ServiceEdit struct {
 	Resources   ServiceResources          `json:"resources"`
 	Restart     string                    `json:"restart"`
 	Strategy    string                    `json:"strategy"`
-	Zones       *[]string                 `json:"zones"`
+
+	// VolumeMounts Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy.
+	VolumeMounts *[]ServiceVolumeMount `json:"volume_mounts,omitempty"`
+	Zones        *[]string             `json:"zones"`
 }
 
 // ServiceHealthcheck defines model for ServiceHealthcheck.
@@ -2969,6 +2972,16 @@ type ServiceReplicaCounts struct {
 type ServiceResources struct {
 	Cpus *float64 `json:"cpus,omitempty"`
 	Mem  *string  `json:"mem,omitempty"`
+}
+
+// ServiceVolumeMount defines model for ServiceVolumeMount.
+type ServiceVolumeMount struct {
+	// Mount Absolute container path
+	Mount string `json:"mount"`
+	Ro    *bool  `json:"ro,omitempty"`
+
+	// Volume Stable Volume id in this Environment
+	Volume string `json:"volume"`
 }
 
 // Task defines model for Task.

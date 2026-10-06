@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
-import { CopyButton } from './copy-button'
-import { useStore } from '@/lib/store'
-import { cn } from '@/lib/utils'
+import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { CopyButton } from "./copy-button";
+import { useStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -12,10 +12,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // Masked value with an optional typed-confirmation reveal (never cached,
 // never logged). The typed confirmation is a PLATFORM-wide preference — off by
@@ -25,90 +25,101 @@ export function RevealValue({
   loadValue,
   label,
   className,
-  confirmWord = 'reveal',
+  confirmWord = "reveal",
   sensitive = true,
 }: {
-  loadValue: () => Promise<string>
-  label?: string
-  className?: string
-  confirmWord?: string
-  sensitive?: boolean
+  loadValue: () => Promise<string>;
+  label?: string;
+  className?: string;
+  confirmWord?: string;
+  sensitive?: boolean;
 }) {
-  const { requireRevealConfirm } = useStore()
-  const [open, setOpen] = useState(false)
-  const [revealed, setRevealed] = useState(false)
-  const [loadedValue, setLoadedValue] = useState<string>()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [typed, setTyped] = useState('')
+  const { requireRevealConfirm } = useStore();
+  const [open, setOpen] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const [loadedValue, setLoadedValue] = useState<string>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
 
-  const displayedValue = loadedValue
+  const displayedValue = loadedValue;
 
   async function reveal(): Promise<boolean> {
-    setError(null)
-    setLoading(true)
+    setError(null);
+    setLoading(true);
     try {
-      setLoadedValue(await loadValue())
-      setRevealed(true)
-      return true
+      setLoadedValue(await loadValue());
+      setRevealed(true);
+      return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to reveal value')
-      return false
+      setError(
+        cause instanceof Error ? cause.message : "Unable to reveal value",
+      );
+      return false;
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   function hide() {
-    setRevealed(false)
-    setLoadedValue(undefined)
-    setError(null)
+    setRevealed(false);
+    setLoadedValue(undefined);
+    setError(null);
   }
 
   return (
-    <div className={cn('flex items-center gap-1', className)}>
-      <code className="truncate rounded-md bg-muted px-2 py-1 font-mono text-xs">
-        {revealed ? displayedValue : sensitive ? '•'.repeat(12) : 'not loaded'}
+    <div className={cn("flex min-w-0 max-w-full items-start gap-1", className)}>
+      <code className="min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted px-2 py-1 font-mono text-xs [overflow-wrap:anywhere]">
+        {revealed ? displayedValue : sensitive ? "•".repeat(12) : "not loaded"}
       </code>
       {revealed ? (
         <>
-          <CopyButton value={displayedValue ?? ''} />
-          <Button variant="ghost" size="content"
+          <CopyButton className="shrink-0" value={displayedValue ?? ""} />
+          <Button
+            variant="ghost"
+            size="content"
             type="button"
             onClick={hide}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Hide value"
           >
             <EyeOff className="size-3.5" />
           </Button>
         </>
       ) : (
-        <Button variant="ghost" size="content"
+        <Button
+          variant="ghost"
+          size="content"
           type="button"
           onClick={() => {
             if (sensitive && requireRevealConfirm) {
-              setTyped('')
-              setOpen(true)
+              setTyped("");
+              setOpen(true);
             } else {
-              void reveal()
+              void reveal();
             }
           }}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label={sensitive ? 'Reveal value' : 'Show value'}
+          className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={sensitive ? "Reveal value" : "Show value"}
           disabled={loading}
         >
           <Eye className="size-3.5" />
         </Button>
       )}
-      {error && <span className="text-xs text-destructive">{error}</span>}
+      {error && (
+        <span className="min-w-0 text-xs text-destructive [overflow-wrap:anywhere]">
+          {error}
+        </span>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reveal {label ?? 'secret'}</DialogTitle>
+            <DialogTitle>Reveal {label ?? "secret"}</DialogTitle>
             <DialogDescription>
-              This value is sensitive and never cached or logged. Type{' '}
-              <span className="font-mono text-foreground">{confirmWord}</span> to reveal it.
+              This value is sensitive and never cached or logged. Type{" "}
+              <span className="font-mono text-foreground">{confirmWord}</span>{" "}
+              to reveal it.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
@@ -129,15 +140,15 @@ export function RevealValue({
               disabled={typed !== confirmWord || loading}
               onClick={() => {
                 void reveal().then((success) => {
-                  if (success) setOpen(false)
-                })
+                  if (success) setOpen(false);
+                });
               }}
             >
-              {loading ? 'Revealing…' : 'Reveal value'}
+              {loading ? "Revealing…" : "Reveal value"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

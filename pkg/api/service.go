@@ -34,6 +34,12 @@ type ServiceMount struct {
 	RO     bool   `json:"ro,omitempty"`
 }
 
+type ServiceVolumeMount struct {
+	Volume string `json:"volume" doc:"Stable Volume id in this Environment"`
+	Mount  string `json:"mount" doc:"Absolute container path"`
+	RO     bool   `json:"ro,omitempty"`
+}
+
 type ServiceDependency struct {
 	Condition string   `json:"condition"`
 	Phases    []string `json:"phases,omitempty"`
@@ -97,16 +103,17 @@ type ServiceCreate struct {
 }
 
 type ServiceEdit struct {
-	Image       string                    `json:"image"`
-	Zones       []string                  `json:"zones"`
-	Strategy    string                    `json:"strategy"`
-	OnFailure   OnFailure                 `json:"on_failure"`
-	Healthcheck ServiceHealthcheck        `json:"healthcheck"`
-	Resources   ServiceResources          `json:"resources"`
-	Expose      []string                  `json:"expose"`
-	Restart     string                    `json:"restart"`
-	Replicas    int                       `json:"replicas"`
-	Hooks       *BackingHookConfiguration `json:"hooks,omitempty"`
+	VolumeMounts *[]ServiceVolumeMount     `json:"volume_mounts,omitempty" doc:"Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy."`
+	Image        string                    `json:"image"`
+	Zones        []string                  `json:"zones"`
+	Strategy     string                    `json:"strategy"`
+	OnFailure    OnFailure                 `json:"on_failure"`
+	Healthcheck  ServiceHealthcheck        `json:"healthcheck"`
+	Resources    ServiceResources          `json:"resources"`
+	Expose       []string                  `json:"expose"`
+	Restart      string                    `json:"restart"`
+	Replicas     int                       `json:"replicas"`
+	Hooks        *BackingHookConfiguration `json:"hooks,omitempty"`
 }
 
 type ServiceObservationState string

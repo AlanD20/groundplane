@@ -21,6 +21,25 @@ interrupted removal keeps its identity and recovery information; Retry does not
 repeat a physical deletion when its exact directory absence has already been
 proved.
 
+### Mount a Volume
+
+In a Service, open **Settings → Storage → Add mount**, choose an existing
+Environment Volume and enter its absolute container path, such as `/app/data`.
+Mounts can be read-only. Save the configuration, then Deploy the Service to
+apply it. Removing a mount keeps the Volume and its data.
+
+The CLI offers `service edit <name> --mounts-file mounts.json`. The file replaces
+all Volume mounts for that Service; `[]` removes them all. Omit the option to
+preserve them. Volume names are scoped slugs; use `--id` for stable ids.
+
+```json
+[{"volume": "data", "mount": "/app/data", "ro": false}]
+```
+
+The Service edit API accepts `volume_mounts` with stable Volume ids and the same
+replacement semantics. File mounts and other native Compose configuration are
+preserved. File Entries are managed through their own path and exposure settings.
+
 ## Entries
 
 An Entry can use a literal value, a reusable Secret or an Attach fact. Exposure is

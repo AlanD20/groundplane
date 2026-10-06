@@ -68,6 +68,7 @@ type EnvironmentServiceMutationAudit struct {
 	Request        *EnvironmentServiceMutationRequest
 }
 type EnvironmentServiceMutationRequest struct {
+	VolumeMounts  *[]core.Mount    `json:"volume_mounts,omitempty"`
 	EnvironmentID string           `json:"environment_id,omitempty"`
 	Name          string           `json:"name,omitempty"`
 	Image         string           `json:"image"`

@@ -3351,6 +3351,8 @@ export interface components {
             resources: components["schemas"]["ServiceResources"];
             restart: string;
             strategy: string;
+            /** @description Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy. */
+            volume_mounts?: components["schemas"]["ServiceVolumeMount"][];
             zones: string[] | null;
         };
         ServiceHealthcheck: {
@@ -3407,6 +3409,13 @@ export interface components {
             /** Format: double */
             cpus?: number;
             mem?: string;
+        };
+        ServiceVolumeMount: {
+            /** @description Absolute container path */
+            mount: string;
+            ro?: boolean;
+            /** @description Stable Volume id in this Environment */
+            volume: string;
         };
         Task: {
             /**

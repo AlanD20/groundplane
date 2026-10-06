@@ -24,6 +24,7 @@ const (
 )
 
 type ServiceArtifactMutation struct {
+	VolumeMounts     *[]ServiceArtifactVolumeMount
 	Action           ServiceArtifactAction
 	Desired          core.Service
 	Zones            []ServiceArtifactZone
@@ -116,6 +117,11 @@ func MutateEnvironmentServiceArtifact(
 		}
 		if err := applyDirectServiceDesired(services.Content[found+1], mutation.Desired); err != nil {
 			return nil, err
+		}
+		if mutation.VolumeMounts != nil {
+			if err := replaceServiceArtifactVolumeMounts(services.Content[found+1], *mutation.VolumeMounts); err != nil {
+				return nil, err
+			}
 		}
 		owned.Services[metadataIndex].ExpectedReplicas = uint32(mutation.Desired.Replicas)
 		owned.Services[metadataIndex].ImageReference = mutation.Desired.Image

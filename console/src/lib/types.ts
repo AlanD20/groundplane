@@ -30,7 +30,7 @@ export type Healthcheck = {
 };
 
 export type Mount =
-  | { type: "volume"; volume: string; mount: string }
+  | { type: "volume"; volume: string; mount: string; ro?: boolean }
   | { type: "file"; file: string; mount: string; ro: boolean };
 
 // An environment-level env var entry: a stable id, a key (the name the

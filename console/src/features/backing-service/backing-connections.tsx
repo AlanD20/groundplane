@@ -89,7 +89,10 @@ export function ConnectionsTab({
           label="Consumers"
         />
         <ResourceTable>
-          <Table aria-label="Backing Service consumers">
+          <Table
+            className="min-w-[640px] table-fixed [overflow-wrap:anywhere]"
+            aria-label="Backing Service consumers"
+          >
             <TableHeader>
               <TableRow>
                 <TableSortHead sort={table} field="service">
@@ -101,7 +104,7 @@ export function ConnectionsTab({
                 <TableSortHead sort={table} field="database">
                   Database
                 </TableSortHead>
-                <TableHead>Connection</TableHead>
+                <TableHead className="w-[40%]">Connection</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -126,7 +129,7 @@ export function ConnectionsTab({
                     </Link>
                   </TableCell>
                   <TableCell>{c.database || "—"}</TableCell>
-                  <TableCell>
+                  <TableCell className="w-[40%] min-w-0 whitespace-normal">
                     {!adapter?.custom ? (
                       <ConsumerConnectionActions
                         consumer={c}
@@ -205,7 +208,7 @@ export function ConnectionsTab({
               </p>
             )}
             <div className="flex flex-col gap-1.5 text-sm">
-              <div className="flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 [overflow-wrap:anywhere]">
                 <span className="text-muted-foreground">Network</span>
                 <span className="font-mono text-xs">
                   owns/joins:{" "}
@@ -217,7 +220,7 @@ export function ConnectionsTab({
                     .join(", ") || "—"}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 [overflow-wrap:anywhere]">
                 <span className="text-muted-foreground">Healthcheck</span>
                 <span className="font-mono text-xs">
                   {svc.healthcheck
@@ -225,7 +228,7 @@ export function ConnectionsTab({
                     : "none"}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 [overflow-wrap:anywhere]">
                 <span className="text-muted-foreground">Volume</span>
                 <span className="font-mono text-xs">
                   {svc.mounts.find((m) => m.type === "volume")?.volume ??
@@ -294,17 +297,20 @@ export function ConnectionsTab({
             <>
               <div
                 key={`${selected.environment}-${selected.service}-${selected.attachId}`}
-                className="rounded-xl border border-border bg-card p-4"
+                className="min-w-0 rounded-xl border border-border bg-card p-4"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-sm">
+                <div className="flex min-w-0 flex-col gap-3">
+                  <span className="min-w-0 font-mono text-sm [overflow-wrap:anywhere]">
                     {selected.project} / {selected.environment}{" "}
                     <span className="text-muted-foreground">
                       · {selected.service}
                     </span>
                   </span>
                   {!adapter?.custom && (
-                    <div className="flex items-center gap-1">
+                    <div className="min-w-0 space-y-1.5">
+                      <p className="text-xs text-muted-foreground">
+                        Connection string
+                      </p>
                       <ConsumerConnectionActions
                         consumer={selected}
                         authentication={svc.authentication}
@@ -350,16 +356,6 @@ export function ConnectionsTab({
                       label="Host"
                       value={`${svc.serviceName}:${adapter?.urlScheme === "redis" ? 6379 : 5432}`}
                       mono
-                    />
-                    <Row
-                      label="Connection"
-                      value={
-                        selected.connectionFactKey
-                          ? "available through explicit reveal"
-                          : "unavailable"
-                      }
-                      mono
-                      masked={svc.authentication !== "none"}
                     />
                   </div>
                 )}

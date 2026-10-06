@@ -135,7 +135,7 @@ export function ReusableSecretOwnerList({
                       {formatTimestamp(secret.updatedAt, "Not reported")}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex min-w-0 max-w-full items-start justify-end gap-2">
                         <RevealValue
                           loadValue={() => onReveal(secret)}
                           label={secret.key}

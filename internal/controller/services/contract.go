@@ -58,6 +58,17 @@ func serviceDesiredFromCreate(input apiTypes.ServiceCreate) core.Service {
 
 func applyServiceEdit(current core.Service, input apiTypes.ServiceEdit) core.Service {
 	desired := current
+	if input.VolumeMounts != nil {
+		desired.Mounts = nil
+		for _, mount := range current.Mounts {
+			if mount.File != "" {
+				desired.Mounts = append(desired.Mounts, mount)
+			}
+		}
+		for _, mount := range *input.VolumeMounts {
+			desired.Mounts = append(desired.Mounts, core.Mount{Volume: mount.Volume, Mount: mount.Mount, RO: mount.RO})
+		}
+	}
 	desired.Image = input.Image
 	desired.Zones = append([]string(nil), input.Zones...)
 	desired.Strategy = core.Strategy(input.Strategy)
@@ -137,6 +148,20 @@ func serviceEditIntentValue(input apiTypes.ServiceEdit) requestidempotency.Value
 		input.Restart,
 		input.Replicas,
 	)
+	if input.VolumeMounts != nil {
+		mounts := make([]requestidempotency.Value, len(*input.VolumeMounts))
+		for index, mount := range *input.VolumeMounts {
+			mounts[index] = requestidempotency.Object(
+				requestidempotency.Field{Name: "volume", Value: requestidempotency.String(mount.Volume)},
+				requestidempotency.Field{Name: "mount", Value: requestidempotency.String(mount.Mount)},
+				requestidempotency.Field{Name: "ro", Value: requestidempotency.Bool(mount.RO)},
+			)
+		}
+		value = requestidempotency.Object(
+			requestidempotency.Field{Name: "service", Value: value},
+			requestidempotency.Field{Name: "volume_mounts", Value: requestidempotency.List(mounts...)},
+		)
+	}
 	if input.Hooks == nil {
 		return value
 	}

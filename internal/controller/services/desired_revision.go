@@ -80,7 +80,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	}
 	candidate, err := buildServiceDesiredProjection(
 		tenant.Record.ID, project.Record.ID, environment.Record, projection.Record, hasProjection,
-		record, references, current == nil,
+		record, references, current == nil, request.VolumeMounts,
 		candidateRevisionID, generation,
 	)
 	if err != nil {
@@ -106,7 +106,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	}
 	candidate, err = buildServiceDesiredProjection(
 		tenant.Record.ID, project.Record.ID, environment.Record, projection.Record, hasProjection,
-		record, references, current == nil,
+		record, references, current == nil, request.VolumeMounts,
 		claim.RevisionID, generation,
 	)
 	if err != nil {
@@ -221,6 +221,7 @@ func buildServiceDesiredProjection(
 	record servicerecord.ServiceRecord,
 	references servicerecord.ServiceMutationReferences,
 	create bool,
+	volumeMounts *[]core.Mount,
 	revisionID string,
 	generation uint64,
 ) (projectionrecord.EnvironmentComposeProjection, error) {
@@ -270,12 +271,16 @@ func buildServiceDesiredProjection(
 			)
 		}
 	}
+	mounts, err := replaceServiceVolumeMounts(&candidate, record.Desired.ID, volumeMounts)
+	if err != nil {
+		return projectionrecord.EnvironmentComposeProjection{}, err
+	}
 	action := composerender.ServiceArtifactEdit
 	if create {
 		action = composerender.ServiceArtifactCreate
 	}
 	mutated, err := composerender.MutateEnvironmentServiceArtifact(artifact, composerender.ServiceArtifactMutation{
-		Action: action, Desired: record.Desired,
+		Action: action, Desired: record.Desired, VolumeMounts: mounts,
 		Zones:      serviceArtifactZones(references),
 		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
@@ -294,7 +299,7 @@ func buildServiceDesiredProjection(
 	normalizedArtifact, err = composerender.MutateEnvironmentServiceArtifact(
 		normalizedArtifact,
 		composerender.ServiceArtifactMutation{
-			Action: action, Desired: record.Desired,
+			Action: action, Desired: record.Desired, VolumeMounts: mounts,
 			Zones:      serviceArtifactZones(references),
 			ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 			PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
@@ -457,8 +462,16 @@ func serviceMutationAuditFromCreate(input apiTypes.ServiceCreate) blueprints.Env
 }
 
 func serviceMutationAuditFromEdit(input apiTypes.ServiceEdit) blueprints.EnvironmentServiceMutationRequest {
+	var mounts *[]core.Mount
+	if input.VolumeMounts != nil {
+		values := make([]core.Mount, len(*input.VolumeMounts))
+		for index, mount := range *input.VolumeMounts {
+			values[index] = core.Mount{Volume: mount.Volume, Mount: mount.Mount, RO: mount.RO}
+		}
+		mounts = &values
+	}
 	return blueprints.EnvironmentServiceMutationRequest{
-		Image: input.Image, Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
+		VolumeMounts: mounts, Image: input.Image, Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
 		OnFailure: core.OnFailure(input.OnFailure), Healthcheck: serviceHealthcheckToCore(input.Healthcheck),
 		Resources: core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs},
 		Expose:    append([]string(nil), input.Expose...), Restart: input.Restart, Replicas: input.Replicas,

@@ -27,11 +27,12 @@ page.
 Opening a Service shows its workspace with Overview, Logs, Deployments,
 Variables & files and Settings tabs. Settings shows current values with focused
 editors for image, runtime and resources, healthcheck and networking.
-Variables & files lists Entries exposed to
-the Service, including shared Entries; editing a shared Entry affects its full
-exposure. Storage shows mounts and links to the Environment Blueprint to edit
-them. The full configuration and Compose preview are expandable. Saving configuration does
-not deploy it. Long forms retain their action footer while scrolling.
+Variables & files lists Entries exposed to the Service, including shared Entries;
+editing a shared Entry affects its full exposure. Service Settings includes a
+Storage editor: select an Environment Volume, set its container path and read-only
+access, or remove a mount. File Entries remain in Variables & files. The full
+configuration and Compose preview are expandable. Saving configuration does not
+deploy it. Long forms retain their action footer while scrolling.
 
 Backups shows protection, schedule, sources and Recovery Points first. Edit policy
 opens the policy drawer; expandable destination and encryption sections contain
