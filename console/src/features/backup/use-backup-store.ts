@@ -346,8 +346,10 @@ export function useBackupStore({
         (policyGenerations.current.get(environmentId) ?? 0) + 1;
       policyGenerations.current.set(environmentId, generation);
       updatePolicy(environmentId, (policy) => {
-        policy.loading = true;
-        policy.loadError = null;
+        // Loaded data stays usable while it is revalidated. This flag is for
+        // the initial read, not every poll; consumers use it to lock editors.
+        policy.loading = !policy.loaded;
+        if (!policy.loaded) policy.loadError = null;
       });
       const pending = (async () => {
         try {
@@ -403,9 +405,12 @@ export function useBackupStore({
       pointGenerations.current.set(environmentId, generation);
       updatePolicy(environmentId, (policy) => {
         if (cursor) policy.recoveryPoints.loadingMore = true;
-        else policy.recoveryPoints.loading = true;
-        policy.recoveryPoints.loadError = null;
-        policy.recoveryPoints.failedCursor = null;
+        else policy.recoveryPoints.loading = !policy.recoveryPoints.loaded;
+        // Keep a refresh failure visible until a successful read replaces it.
+        if (!policy.recoveryPoints.loaded) {
+          policy.recoveryPoints.loadError = null;
+          policy.recoveryPoints.failedCursor = null;
+        }
       });
       const pending = (async () => {
         try {
