@@ -49,10 +49,12 @@ export function ConnectorViewDialog({
               <Detail
                 label="Access key"
                 value={credentialLabel(connector.credentials.accessKey)}
+                copyable={false}
               />
               <Detail
                 label="Secret key"
                 value={credentialLabel(connector.credentials.secretKey)}
+                copyable={false}
               />
             </dl>
             <div className="flex flex-col gap-1.5">
@@ -89,11 +91,31 @@ export function ConnectorViewDialog({
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function Detail({
+  label,
+  value,
+  copyable = true,
+}: {
+  label: string;
+  value: string;
+  copyable?: boolean;
+}) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="break-all font-mono text-xs">{value}</dd>
+      <dd className="min-w-0 break-all font-mono text-xs">
+        {copyable && value ? (
+          <CopyButton
+            value={value}
+            label={`Copy ${label.toLowerCase()}`}
+            className="max-w-full justify-start px-0 py-0.5 font-mono text-xs text-foreground"
+          >
+            {value}
+          </CopyButton>
+        ) : (
+          value || "—"
+        )}
+      </dd>
     </div>
   );
 }

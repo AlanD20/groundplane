@@ -201,14 +201,14 @@ export function BackupPolicyDialog({
                 <div className="flex flex-col gap-1.5">
                   <Label>Sources · what to back up</Label>
                   <p className="text-xs text-muted-foreground">
-                    One source per attach, not per service — a shared attach
-                    (api + worker + scheduler) is backed up once. One run backs
-                    up every selected source in the order shown below. Select
-                    only what you need — at most 12 sources.
+                    One source per database — connections reusing its
+                    credentials are not separate sources. One run backs up every
+                    selected source in the order shown below. Select only what
+                    you need — at most 12 sources.
                   </p>
                   {attachOptions.length === 0 && (
                     <p className="text-xs text-muted-foreground">
-                      no supported PostgreSQL attaches yet
+                      No PostgreSQL database-owning connections yet.
                     </p>
                   )}
                   {unsupportedAttachSources.map((source) => (

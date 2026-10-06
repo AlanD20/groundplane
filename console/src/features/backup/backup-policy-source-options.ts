@@ -8,12 +8,12 @@ export function backupPolicySourceOptions(
   sources: BackupPolicySourceInput[],
 ) {
   const backup = policyState.policy;
-  // Sources: one per attach (never per service — a shared attach is never
-  // backed up twice), any subset of volumes, and the environment's CONFIG
-  // (env entries: vars, files, secrets — values included, age-encrypted).
+  // Only credential owners represent distinct databases; reusing connections
+  // must not offer the same database as another source.
   const attachOptions = policyState.attaches.filter((attach) => {
     const backing = store.getBackingProject(attach.backingProjectId);
     return (
+      attach.credential.mode === "new" &&
       backing?.environments?.[0]?.services.find(
         (service) => service.id === attach.backingServiceId,
       )?.adapter === "postgres:16"

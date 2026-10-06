@@ -147,13 +147,21 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                         )}
                         <Badge variant="outline">{connector.kind}</Badge>
                       </div>
-                      <span className="break-all font-mono text-xs text-muted-foreground">
+                      <CopyButton
+                        value={`s3://${connector.bucket}/${normalizedPrefix(connector.prefix)}`}
+                        label="Copy destination"
+                        className="max-w-full justify-start px-0 py-0.5 font-mono text-xs"
+                      >
                         s3://{connector.bucket}/
                         {normalizedPrefix(connector.prefix)}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
+                      </CopyButton>
+                      <CopyButton
+                        value={connector.endpoint}
+                        label="Copy endpoint"
+                        className="max-w-full justify-start px-0 py-0.5 text-xs"
+                      >
                         {connector.endpoint}
-                      </span>
+                      </CopyButton>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center justify-end gap-1">

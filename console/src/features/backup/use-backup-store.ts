@@ -201,6 +201,7 @@ async function listBackupPolicyAttaches(
         name: attach.name,
         backingProjectId: attach.backing_project_id,
         backingServiceId: attach.backing_service_id,
+        credential: attach.credential,
       })),
     );
     cursor = page.next_cursor ?? "";

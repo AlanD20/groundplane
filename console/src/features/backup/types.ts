@@ -1,4 +1,5 @@
 import type { HealthState } from "@/lib/types";
+import type { components } from "@/lib/api.generated";
 // A backup source is an ATTACH's database, a VOLUME, or the environment's
 // CONFIG (env entries: vars, files, secrets — values included, age-encrypted).
 // One source per attach, never per service, so a shared attach (api + worker +
@@ -73,6 +74,7 @@ export type BackupPolicyState = {
     name: string;
     backingProjectId: string;
     backingServiceId: string;
+    credential: components["schemas"]["AttachCredential"];
   }[];
   volumes: { id: string; slug: string; key: string }[];
   loaded: boolean;
