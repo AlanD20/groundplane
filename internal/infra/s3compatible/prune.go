@@ -81,7 +81,7 @@ func (adapter *Adapter) headPruneAuthority(
 		) != authority.Evidence.StoredSizeBytes {
 		return false, conflictError()
 	}
-	discriminator, err := outputDiscriminator(output.VersionId, output.ETag)
+	discriminator, err := observedDiscriminator(output.VersionId, output.ETag, &authority.Discriminator)
 	if err != nil {
 		return false, err
 	}

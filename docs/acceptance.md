@@ -867,6 +867,111 @@ the previously recorded verifier-helper timeouts. Failed-patch recovery,
 connection interruption, injected Backup/Restore failures, arm64, public
 installation and blanket Gate B/release qualification are not established here.
 
+**H90 — actual Cloudflare R2 Connector Backup FAIL on 2026-10-05;
+Restore NOT RUN.**
+
+The H89 candidate and patched PostgreSQL instance were reused with a new
+Connector targeting an operator-provided R2 test bucket and a unique prefix.
+Authenticated read preflight passed. Backup Task
+`task_01M46DNMKQW3MWKCSY6D1XEJCY` uploaded its encrypted artifact, then failed
+HEAD verification with `storage.unavailable`. No verified Recovery Point was
+published and no Restore or database mutation was attempted.
+
+The retained run records the upload's returned VersionId. A bounded SDK probe
+inside the same Agent independently reproduced successful PUT followed by
+HTTP 501 `NotImplemented` for VersionId-selected HEAD. ETag-selected HEAD and
+conditional DELETE succeeded on that probe's exact owned object. That candidate
+preferred a returned VersionId; its successful MinIO journey did not qualify R2.
+No provider-selection workaround or production-code change was made in H90.
+
+The previous Backup Policy was restored through the API. The failed Task,
+Connector and GP-owned uploaded orphan remain retained for normal product
+reconciliation; they were not manually rewritten or deleted. The diagnostic
+object and Agent probe executables were removed. Private credentials and raw
+receipts remain ignored. This is a demonstrated provider-integration blocker,
+not a failed credential check or a passing Backup/Restore result.
+
+**H91 — actual Cloudflare R2 encrypted PostgreSQL Backup and Restore,
+selected amd64 journey PASS on 2026-10-05.**
+
+The scoped correction selects a returned ETag before sealing a new upload's
+identity. HEAD, GET and protected deletion retain that exact identity; they do
+not switch fields after an error. Explicit `NotImplemented` responses are
+provider rejections rather than transient unavailability. The affected race
+checks, vet, architecture and formatting passed, including an integrated
+PUT/HEAD/GET/prune regression with both response fields present.
+
+The disposable H89 host received the candidate through the protected maintainer
+updater without a reset. Controller version was `0.0.1-qa-r2-identity`, with bytes
+`sha256:91eedbe9e04ffe939942008a653f1336dffa681fecfb8cff9a70757bc8224191`;
+the Agent image was
+`sha256:8cebc3880b2b5afaa13e81ea953eb05107444aa1e11c568a45a08bc259461a09`.
+The database remained upstream PostgreSQL 16.13 with the same independent
+authenticated toolbox. The source changes were not yet committed at build time;
+these artifact identities identify the tested candidate.
+
+A new Connector used the operator-provided R2 test bucket and an initially empty,
+unique prefix. Backup Task `task_01M46F30B6JC9E9X0WW97TACTJ` completed and published
+one verified encrypted PostgreSQL Attach Recovery Point. Independent R2 listing,
+HEAD and GET found exactly one object matching its stored size and age envelope;
+the source database still contained both original rows.
+
+After replacing those rows with a different value, Restore Task
+`task_01M46F34AZMMQAMZ4M7P98AT2H` completed. Independent SQL reads returned both
+original rows. Database image and exact mount properties were unchanged; consumer
+container identities were retained and running. The R2 object's ciphertext hash
+was unchanged after Restore. The original Backup Policy was restored through
+the API, and final host observation reported healthy Controller, Agent and etcd.
+
+The H90 failed Task and uploaded orphan remain retained with their original
+VersionId authority. H91 does not rewrite that authority or prove reconciliation
+of that old incident. Its diagnostic object was removed; the new verified Point
+and isolated fixture remain available for inspection. This run does not qualify
+live R2 retention/deletion, multipart, Config/Volume sources, injected failures,
+arm64, public installation or a blanket Backup/Restore release gate. No push or
+tag was made. Full CI retains the previously recorded verifier-helper timeouts.
+
+**H92 — Backup Console key controls, captured storage and automatic refresh,
+selected Ubuntu amd64 journey PASS on 2026-10-05. BAK-14/19 PARTIAL.**
+
+The protected maintainer update loaded `0.0.1-qa-backup-console` without a reset.
+Controller bytes were
+`sha256:b950fd6412c59487c6eb8d05bbd0d0b3b4bb7765656414dcb4c7656185e529c1`;
+the Agent image was
+`sha256:a545d74abd43855e6075faa91abb25c474a9c7b51a77245340d03e4c690e82a9`.
+The source edits were uncommitted at build time, awaiting signing-key unlock.
+Console build, regenerated API clients, architecture, vet and the existing HTTP
+private-data redaction check passed. No new rendering or static contract test
+was added; the column-string-only CLI table test was removed.
+
+Before the fix, the deployed Settings page disabled Rotate and claimed no key,
+although API metadata reported era 1. After the fix, directly opening Settings
+loaded that metadata and enabled the key controls. No existing key or policy was
+changed during verification of that page.
+
+In a separate disposable Environment, browser rotation Task
+`task_01M46JH887DV7NEDR22DS9X40F` completed. Settings showed a different public
+recipient and era 2 without reloading. Three browser-triggered Config Backups
+created distinct verified Points, first using Connector A and then Connector B.
+Each new row appeared automatically. With keep=2, the newest B Point and preceding
+A Point remained; their displayed bucket/prefix and API snapshots matched their
+respective original destinations rather than the current policy's Connector.
+CLI JSON on the pre-existing fixture also returned each Point's captured storage.
+The affected browser reported no console errors or warnings.
+
+The fixture's first direct Entry setup returned HTTP 409 before mutation. Its
+retained receipt was continued through the ordinary initial Blueprint Apply,
+after which the Entry was accepted. The first refusal's precise cause was not
+investigated; this run does not repair or qualify that separate path.
+The complete isolated Environment,
+Points and Connectors were subsequently removed through GP's normal protected
+removal, preserving the pre-existing PostgreSQL data, policies and keys.
+Final host observation reported healthy Controller, Agent and etcd.
+
+Raw receipts and the original rejected setup remain ignored locally. More than
+50 Points, hidden-tab resume, injected read failures and blanket release/CI
+qualification were not established here. No push, tag or compatibility path.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

@@ -209,7 +209,7 @@ func TestWireCompleteMultipartConditional(t *testing.T) {
 		}},
 	)
 	if err != nil || restart || object.Discriminator != (backupobject.Discriminator{
-		Kind: backupobject.DiscriminatorVersionID, Value: "null",
+		Kind: backupobject.DiscriminatorETag, Value: `"wire-etag"`,
 	}) {
 		t.Fatalf("completeMultipart() = %#v, restart = %t, error = %v", object, restart, err)
 	}
@@ -416,7 +416,7 @@ func TestWireDeleteUsesOneAttemptPerMutation(t *testing.T) {
 }
 
 // Rationale: VersionId identity is defined by header/query presence. An empty
-// provider value must outrank ETag and remain an explicitly present empty
+// provider value selected without an ETag remains an explicitly present empty
 // versionId query on every exact version-addressed operation.
 func TestWirePresentEmptyVersionIDRoundTrips(t *testing.T) {
 	body := []byte("empty version artifact")
@@ -435,7 +435,6 @@ func TestWirePresentEmptyVersionIDRoundTrips(t *testing.T) {
 		switch request.Method {
 		case http.MethodPut:
 			response.Header()["X-Amz-Version-Id"] = []string{""}
-			response.Header().Set("ETag", `"must-not-win"`)
 		case http.MethodHead:
 			if deleted.Load() {
 				response.WriteHeader(http.StatusNotFound)
@@ -484,8 +483,7 @@ func TestWirePresentEmptyVersionIDRoundTrips(t *testing.T) {
 }
 
 // Rationale: provider discriminator bounds must be enforced after real SDK
-// header decoding, with a fixed rejection and no ETag fallback for a present
-// oversized VersionId.
+// header decoding, with a fixed rejection for oversized selected evidence.
 func TestWireRejectsOversizedProviderDiscriminatorEvidence(t *testing.T) {
 	body := []byte("oversized discriminator artifact")
 	for _, test := range []struct {
@@ -493,7 +491,7 @@ func TestWireRejectsOversizedProviderDiscriminatorEvidence(t *testing.T) {
 		versionID *string
 		etag      string
 	}{
-		{"VersionId", aws.String(strings.Repeat("v", 1025)), `"must-not-win"`},
+		{"VersionId", aws.String(strings.Repeat("v", 1025)), ""},
 		{"ETag", nil, strings.Repeat("e", 1025)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -503,7 +501,9 @@ func TestWireRejectsOversizedProviderDiscriminatorEvidence(t *testing.T) {
 				if test.versionID != nil {
 					response.Header().Set("X-Amz-Version-Id", *test.versionID)
 				}
-				response.Header().Set("ETag", test.etag)
+				if test.etag != "" {
+					response.Header().Set("ETag", test.etag)
+				}
 			}))
 			defer server.Close()
 			_, err := newWireAdapter(t, server, true).PutExact(

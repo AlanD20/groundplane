@@ -97,6 +97,10 @@ export type RecoveryPointState = {
 
 type RecoveryPointBase = {
   id: string;
+  connectorId: string;
+  connectorEndpoint: string;
+  connectorBucket: string;
+  connectorPrefix: string;
   sourceId: string;
   sourceKind: BackupSource["kind"];
   targetId: string;

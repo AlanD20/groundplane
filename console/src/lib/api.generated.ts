@@ -2786,6 +2786,10 @@ export interface components {
             slug: string;
         };
         RecoveryPoint: {
+            connector_bucket: string;
+            connector_endpoint: string;
+            connector_id: string;
+            connector_prefix: string;
             /** Format: date-time */
             created_at: string;
             encrypted: boolean;

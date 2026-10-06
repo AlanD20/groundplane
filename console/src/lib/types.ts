@@ -211,22 +211,6 @@ export type EnvFile = {
   exposedTo?: string;
 };
 
-// The environment's age keypair for backup encryption: generated LAZILY the
-// first time backups are enabled (never at creation — a staging/dev env that
-// never backs up gets no key). Backups are encrypted with the PUBLIC
-// recipient (safe in desired state). The PRIVATE identity is Controller-only,
-// never part of this public Environment shape or an ordinary Secret/EnvFile,
-// and is returned only by explicit export.
-export type EnvAgeKey = {
-  recipient: string; // age1… — the encryption recipient, referenced by the backup policy
-  generatedAt: string;
-  lastRotatedAt?: string;
-  // key era: 1 = the original keypair, incremented on every rotation.
-  // Recovery points record the era they were encrypted under — restoring a
-  // point from a rotated-away era requires the previously exported identity.
-  keyEra: number;
-};
-
 export type BlueprintFileAudit = {
   path: string;
   part: string;
@@ -267,7 +251,6 @@ export type Environment = {
   entries: EnvironmentEntry[];
   envVars: EnvVar[]; // all-services env vars (exposure: all services)
   files: EnvFile[];
-  age?: EnvAgeKey; // lazy: generated when backups are first enabled
   scripts: Script[];
   backup?: BackupPolicy; // tenant environments only; backing environments never own a policy
   retention: { inactiveSlotDays: number; keepImages: number };

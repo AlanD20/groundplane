@@ -83,7 +83,7 @@ func TestEndpointAndRegionTransportBoundaries(t *testing.T) {
 }
 
 // Rationale: invalid SDK-returned evidence is a provider contract rejection;
-// a present invalid VersionId must not fall back to an otherwise valid ETag.
+// a present invalid ETag must not fall back to an otherwise valid VersionId.
 func TestProviderDiscriminatorEvidenceFailsClosed(t *testing.T) {
 	invalidUTF8 := string([]byte{0xff})
 	for _, test := range []struct {
@@ -91,7 +91,7 @@ func TestProviderDiscriminatorEvidenceFailsClosed(t *testing.T) {
 		versionID *string
 		etag      *string
 	}{
-		{"invalid VersionId precedence", &invalidUTF8, aws.String(`"valid-etag"`)},
+		{"invalid ETag precedence", aws.String("version"), &invalidUTF8},
 		{"invalid ETag", nil, &invalidUTF8},
 	} {
 		t.Run(test.name, func(t *testing.T) {

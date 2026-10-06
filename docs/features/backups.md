@@ -134,9 +134,15 @@ Restore prevents removal; unavailable remote cleanup keeps the parent fenced.
 
 List verified Points with `groundplane backup points --output json`. Each includes
 its Point id (`rp_…`), source id, original target, capture time, size, encryption
-and key era. Follow `next_cursor` with `--cursor` to load older records; the API
+and key era, plus the captured Connector id, endpoint, bucket and prefix. Those
+storage fields belong to that Point, not today's policy. Changing a policy's
+Connector does not move existing backups or change their Restore destination.
+Follow `next_cursor` with `--cursor` to load older records; the API
 supplies 50 per page. The Console's **Load more** action extends its
-loaded list; sorting applies to that loaded list.
+loaded list; sorting applies to that loaded list. While the Backup page is visible,
+it refreshes automatically to reflect completed runs and retention cleanup.
+With `keep: 2`, another successful run creates a new Point but the retained count
+returns to two per source after the oldest is pruned.
 
 ## Restore and downtime
 
@@ -208,7 +214,9 @@ attempt requires a new request with the identity. The input is one UTF-8 identit
 line of at most 4 KiB.
 
 Open **Environment → Settings → Encryption key** for **Export identity** and
-**Rotate key**. The current CLI key commands require a stable Environment id
+**Rotate key**. Settings loads the current key metadata from Backup Policy and
+updates the recipient and era after rotation. Follow the linked Task to inspect
+completion or failure. The current CLI key commands require a stable Environment id
 in `--env`; they do not resolve its
 name. Use `--id` consistently:
 

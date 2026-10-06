@@ -178,6 +178,8 @@ func classifyProviderFailure(err error) providerFailure {
 		return providerFailureAbsent
 	case "ConditionalRequestConflict", "OperationAborted", "PreconditionFailed":
 		return providerFailureConflict
+	case "NotImplemented":
+		return providerFailureRejected
 	case "AccessDenied", "ExpiredToken", "ExpiredTokenException", "InvalidAccessKeyId", "InvalidToken",
 		"SignatureDoesNotMatch", "TokenRefreshRequired", "UnrecognizedClientException":
 		return providerFailureRejected

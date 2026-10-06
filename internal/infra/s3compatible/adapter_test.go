@@ -89,6 +89,60 @@ func TestPutExactSmallObject(t *testing.T) {
 	}
 }
 
+// CON-08, BAK-18: R2 emits VersionId without supporting version-selected HEAD.
+// The selected ETag must survive upload, verification, download and pruning.
+func TestETagIdentitySurvivesReturnedVersionID(t *testing.T) {
+	body := []byte("R2 artifact")
+	artifact := testArtifact(body, backupobject.EncryptionNone)
+	etag := aws.String(`"r2-etag"`)
+	version := aws.String("provider-version")
+	deleted := false
+	checkIdentity := func(versionID, ifMatch *string) {
+		t.Helper()
+		if versionID != nil || aws.ToString(ifMatch) != *etag {
+			t.Fatal("conditional operation did not retain its selected ETag")
+		}
+	}
+	fake := &fakeS3{
+		putObject: func(*s3.PutObjectInput, []func(*s3.Options)) (*s3.PutObjectOutput, error) {
+			return &s3.PutObjectOutput{VersionId: version, ETag: etag}, nil
+		},
+		headObject: func(input *s3.HeadObjectInput) (*s3.HeadObjectOutput, error) {
+			checkIdentity(input.VersionId, input.IfMatch)
+			if deleted {
+				return nil, providerTestError{status: http.StatusNotFound, code: "NoSuchKey"}
+			}
+			return &s3.HeadObjectOutput{ContentLength: aws.Int64(int64(len(body))), Metadata: artifact.Metadata(), VersionId: version, ETag: etag}, nil
+		},
+		getObject: func(input *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
+			checkIdentity(input.VersionId, input.IfMatch)
+			return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(body)), ContentLength: aws.Int64(int64(len(body))), Metadata: artifact.Metadata(), VersionId: version, ETag: etag}, nil
+		},
+		deleteObject: func(input *s3.DeleteObjectInput, _ []func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+			checkIdentity(input.VersionId, input.IfMatch)
+			deleted = true
+			return &s3.DeleteObjectOutput{}, nil
+		},
+	}
+	adapter := mustAdapter(t, fake)
+	object, err := adapter.PutExact(context.Background(), artifact, bytes.NewReader(body))
+	if err != nil || object.Discriminator.Kind != backupobject.DiscriminatorETag {
+		t.Fatalf("upload identity = %#v, error = %v", object.Discriminator, err)
+	}
+	if head, err := adapter.HeadExact(context.Background(), artifact, &object.Discriminator); err != nil || !head.Present {
+		t.Fatalf("verification = %#v, %v", head, err)
+	}
+	var restored bytes.Buffer
+	if err := adapter.GetExact(context.Background(), object, &restored); err != nil || !bytes.Equal(restored.Bytes(), body) {
+		t.Fatalf("download error = %v, body = %q", err, restored.Bytes())
+	}
+	authority := backupobject.PruneAuthority{Key: artifact.Key, EnvironmentID: artifact.EnvironmentID, SourceID: artifact.SourceID, RecoveryPointID: artifact.RecoveryPointID, Evidence: artifact.Evidence, Discriminator: object.Discriminator}
+	authority.MetadataCount, authority.MetadataSHA256 = artifact.MetadataEvidence()
+	if err := adapter.PruneExact(context.Background(), authority); err != nil || !deleted {
+		t.Fatalf("prune error = %v, deleted = %t", err, deleted)
+	}
+}
+
 // Rationale: multipart sizing must remain deterministic at the threshold and
 // at 5 TiB and never exceed the provider's 10,000-part limit.
 func TestMultipartPartSizeFormula(t *testing.T) {

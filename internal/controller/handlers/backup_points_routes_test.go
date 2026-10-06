@@ -30,7 +30,8 @@ func (stub *recoveryPointReaderStub) ListRecoveryPoints(
 }
 
 // Rationale: only the exact verified public projection may cross the HTTP
-// boundary; storage locators, digests, Connector data, and verification time stay private.
+// boundary; captured Connector metadata is public, but object locators,
+// digests, recipients and verification details must stay private.
 func TestRecoveryPointRouteProjectsVerifiedRedactedItems(t *testing.T) {
 	createdAt := time.Date(2026, time.August, 27, 12, 0, 0, 123000000, time.UTC)
 	reader := &recoveryPointReaderStub{page: testkeyvalue.Page[testbackupruntime.BackupRecoveryPointRecord]{
@@ -41,6 +42,7 @@ func TestRecoveryPointRouteProjectsVerifiedRedactedItems(t *testing.T) {
 						ID: "rp_01J00000000000000000000000", EnvironmentID: testBackupPointsRouteEnvironmentID,
 						SourceID: "spt_01J00000000000000000000000", SourceKind: testbackupruntime.BackupRuntimeSourceVolume,
 						TargetID: "vol_01J00000000000000000000000", ConnectorID: "con_01J00000000000000000000000",
+						ConnectorEndpoint: "https://objects.example.com", ConnectorBucket: "original-bucket", ConnectorPrefix: "original-prefix",
 						ObjectKey: "private-object-key", SourceFormat: testbackupruntime.BackupRuntimeFormatVolume,
 						Encryption: testbackupruntime.BackupRuntimeEncryptionAge, KeyEra: 3, Recipient: "private-recipient",
 						CreatedAt: createdAt,
@@ -102,7 +104,7 @@ func TestRecoveryPointRouteProjectsVerifiedRedactedItems(t *testing.T) {
 		t.Fatalf("page exposes fixed revision: %s", response.Body.String())
 	}
 	for _, field := range []string{
-		"environment_id", "connector_id", "object_key", "source_format", "sha256",
+		"environment_id", "object_key", "source_format", "sha256",
 		"recipient", "verified_at", "locator", "size",
 	} {
 		if _, present := raw.Items[0][field]; present {

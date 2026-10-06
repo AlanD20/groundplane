@@ -10,7 +10,7 @@ import (
 // Recovery Point collection. JSON and YAML continue to render the API page.
 func RecoveryPointTable(points []apiTypes.RecoveryPoint) ([]string, [][]string) {
 	headers := []string{
-		"ID", "SOURCE_ID", "SOURCE_KIND", "TARGET_ID", "CREATED_AT",
+		"ID", "CONNECTOR_ID", "BUCKET", "PREFIX", "ENDPOINT", "SOURCE_ID", "SOURCE_KIND", "TARGET_ID", "CREATED_AT",
 		"SIZE_BYTES", "ENCRYPTED", "KEY_ERA", "STATUS",
 	}
 	rows := make([][]string, len(points))
@@ -21,6 +21,10 @@ func RecoveryPointTable(points []apiTypes.RecoveryPoint) ([]string, [][]string) 
 		}
 		rows[index] = []string{
 			point.ID,
+			point.ConnectorID,
+			point.ConnectorBucket,
+			point.ConnectorPrefix,
+			point.ConnectorEndpoint,
 			point.SourceID,
 			string(point.SourceKind),
 			point.TargetID,

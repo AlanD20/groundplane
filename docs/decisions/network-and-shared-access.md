@@ -130,11 +130,15 @@ fresh upload only after authoritative absence. Ambiguous deletion rereads the
 exact key and version before deciding whether success or another conditional
 attempt is safe.
 
-Provider version identifiers are preserved literally. Absent, present-empty,
-and present-literal-`null` are distinct states. A present VersionId is the
-immutable discriminator; only an absent VersionId uses the verified ETag.
-Invalid or mismatched provider evidence fails closed and never falls back to
-the other discriminator.
+New uploads select a valid returned ETag for conditional access. A returned
+VersionId alone does not prove a provider supports version-targeted operations;
+R2 returns one while rejecting version-selected HEAD. If an ETag is absent,
+the returned VersionId remains a literal identity: absent, present-empty and
+present-literal-`null` are distinct states. Once an identity is sealed, reads,
+deletion and reconciliation must retain its exact kind and value. Invalid or
+mismatched selected evidence fails closed; a failed request never switches to
+the other discriminator. Unsupported provider operations are rejection, not
+temporary unavailability.
 
 A backup becomes durable only after upload and exact `HeadObject`
 verification. Connector credentials need the narrow object-prefix and

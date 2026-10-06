@@ -78,14 +78,18 @@ func (s *Server) listRecoveryPoints(
 
 func recoveryPointResponse(record backupruntime.BackupRecoveryPointRecord) apiTypes.RecoveryPoint {
 	return apiTypes.RecoveryPoint{
-		ID:         record.ID,
-		SourceID:   record.SourceID,
-		SourceKind: apiTypes.BackupSourceKind(record.SourceKind),
-		TargetID:   record.TargetID,
-		CreatedAt:  record.CreatedAt.UTC().Format(time.RFC3339),
-		SizeBytes:  int64(record.Evidence.StoredSizeBytes),
-		Encrypted:  record.Encryption == backupruntime.BackupRuntimeEncryptionAge,
-		KeyEra:     record.KeyEra,
-		Status:     apiTypes.RecoveryPointVerified,
+		ID:                record.ID,
+		ConnectorID:       record.ConnectorID,
+		ConnectorEndpoint: record.ConnectorEndpoint,
+		ConnectorBucket:   record.ConnectorBucket,
+		ConnectorPrefix:   record.ConnectorPrefix,
+		SourceID:          record.SourceID,
+		SourceKind:        apiTypes.BackupSourceKind(record.SourceKind),
+		TargetID:          record.TargetID,
+		CreatedAt:         record.CreatedAt.UTC().Format(time.RFC3339),
+		SizeBytes:         int64(record.Evidence.StoredSizeBytes),
+		Encrypted:         record.Encryption == backupruntime.BackupRuntimeEncryptionAge,
+		KeyEra:            record.KeyEra,
+		Status:            apiTypes.RecoveryPointVerified,
 	}
 }

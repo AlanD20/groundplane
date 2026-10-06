@@ -73,7 +73,7 @@ func TestArtifactRejectsUnequalUnencryptedEvidence(t *testing.T) {
 }
 
 // Rationale: a provider's literal VersionId "null" is immutable evidence and
-// must remain distinct from the ETag fallback used only when VersionId is absent.
+// must remain distinct from a separately selected ETag identity.
 func TestDiscriminatorPreservesLiteralNullVersion(t *testing.T) {
 	version := Discriminator{Kind: DiscriminatorVersionID, Value: "null"}
 	etag := Discriminator{Kind: DiscriminatorETag, Value: "null"}

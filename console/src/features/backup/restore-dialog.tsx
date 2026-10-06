@@ -66,6 +66,7 @@ export function RestoreDialog({ env, point, onClose, onTask }: {
         <dl className="grid gap-3 rounded-lg border border-border bg-surface p-4 text-sm">
           <div><dt className="text-muted-foreground">Recovery Point</dt><dd className="break-all font-mono text-xs">{point.id}</dd></div>
           <div><dt className="text-muted-foreground">Captured</dt><dd>{new Date(point.createdAt).toLocaleString()}</dd></div>
+          <div><dt className="text-muted-foreground">Original storage</dt><dd className="break-all text-xs">s3://{point.connectorBucket}/{point.connectorPrefix}</dd><dd className="break-all text-xs text-muted-foreground">{point.connectorId}</dd></div>
           <div><dt className="text-muted-foreground">Target</dt><dd>{target}</dd><dd className="break-all font-mono text-xs text-muted-foreground">{point.targetId}</dd></div>
         </dl>
         <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">

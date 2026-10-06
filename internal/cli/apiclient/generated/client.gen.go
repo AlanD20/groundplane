@@ -2320,15 +2320,19 @@ type ProjectRename struct {
 
 // RecoveryPoint defines model for RecoveryPoint.
 type RecoveryPoint struct {
-	CreatedAt  time.Time               `json:"created_at"`
-	Encrypted  bool                    `json:"encrypted"`
-	Id         string                  `json:"id"`
-	KeyEra     *int64                  `json:"key_era,omitempty"`
-	SizeBytes  int64                   `json:"size_bytes"`
-	SourceId   string                  `json:"source_id"`
-	SourceKind RecoveryPointSourceKind `json:"source_kind"`
-	Status     RecoveryPointStatus     `json:"status"`
-	TargetId   string                  `json:"target_id"`
+	ConnectorBucket   string                  `json:"connector_bucket"`
+	ConnectorEndpoint string                  `json:"connector_endpoint"`
+	ConnectorId       string                  `json:"connector_id"`
+	ConnectorPrefix   string                  `json:"connector_prefix"`
+	CreatedAt         time.Time               `json:"created_at"`
+	Encrypted         bool                    `json:"encrypted"`
+	Id                string                  `json:"id"`
+	KeyEra            *int64                  `json:"key_era,omitempty"`
+	SizeBytes         int64                   `json:"size_bytes"`
+	SourceId          string                  `json:"source_id"`
+	SourceKind        RecoveryPointSourceKind `json:"source_kind"`
+	Status            RecoveryPointStatus     `json:"status"`
+	TargetId          string                  `json:"target_id"`
 }
 
 // RecoveryPointSourceKind defines model for RecoveryPoint.SourceKind.

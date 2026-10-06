@@ -8,7 +8,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { RefreshCw, Terminal } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,7 @@ import { BackupPolicyDialog } from "@/features/backup/backup-policy-dialog";
 import { RestoreDialog } from "@/features/backup/restore-dialog";
 import type { RecoveryPoint } from "@/features/backup/types";
 import { TaskLink } from "@/components/common/task-link";
+import { useBackupRefresh } from "./use-backup-refresh";
 import { backupScheduleDescription } from "./backup-schedule";
 import {
   TablePagination,
@@ -62,12 +63,7 @@ export function BackupsCard({ env }: { env: Environment }) {
   const [restorePoint, setRestorePoint] = useState<RecoveryPoint | null>(null);
   const [runTaskId, setRunTaskId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
-  useEffect(() => {
-    void store.loadBackupPolicy(env.id).catch(() => undefined);
-  }, [env.id, store.loadBackupPolicy]);
-  useEffect(() => {
-    void store.loadRecoveryPoints(env.id).catch(() => undefined);
-  }, [env.id, store.loadRecoveryPoints]);
+  useBackupRefresh(env.id, true);
   const activeConnector = store.connectors.find(
     (connector) =>
       connector.scopeRef === env.id && connector.id === backup.connectorId,
@@ -183,7 +179,7 @@ export function BackupsCard({ env }: { env: Environment }) {
             label="Retention"
             value={
               backup.keep !== undefined
-                ? `keep ${backup.keep} backups`
+                ? `keep ${backup.keep} points per source`
                 : "not configured"
             }
           />
@@ -286,6 +282,9 @@ export function BackupsCard({ env }: { env: Environment }) {
                       Point
                     </TableHead>
                     <TableHead className="px-3 py-2 font-medium">
+                      Connector / storage
+                    </TableHead>
+                    <TableHead className="px-3 py-2 font-medium">
                       Source
                     </TableHead>
                     <TableHead className="px-3 py-2 font-medium">
@@ -321,6 +320,19 @@ export function BackupsCard({ env }: { env: Environment }) {
                     <TableRow key={point.id}>
                       <TableCell className="px-3 py-2 font-mono text-primary">
                         {point.id}
+                      </TableCell>
+                      <TableCell
+                        className="max-w-64 px-3 py-2"
+                        title={`${point.connectorId}\n${point.connectorEndpoint}`}
+                      >
+                        <div className="font-medium">
+                          {store.connectors.find(
+                            (connector) => connector.id === point.connectorId,
+                          )?.name ?? point.connectorId}
+                        </div>
+                        <div className="break-all text-xs text-muted-foreground">
+                          s3://{point.connectorBucket}/{point.connectorPrefix}
+                        </div>
                       </TableCell>
                       <TableCell className="px-3 py-2 font-mono">
                         {point.sourceKind} · {point.sourceId}

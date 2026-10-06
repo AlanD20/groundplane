@@ -37,7 +37,7 @@ func validateRemoteObject(
 		!maps.Equal(metadata, artifact.Metadata()) {
 		return backupobject.Discriminator{}, conflictError()
 	}
-	discriminator, err := outputDiscriminator(versionID, etag)
+	discriminator, err := observedDiscriminator(versionID, etag, expected)
 	if err != nil {
 		return backupobject.Discriminator{}, err
 	}
@@ -48,21 +48,38 @@ func validateRemoteObject(
 }
 
 func outputDiscriminator(versionID, etag *string) (backupobject.Discriminator, error) {
-	if versionID != nil {
-		discriminator := backupobject.Discriminator{
-			Kind: backupobject.DiscriminatorVersionID, Value: *versionID,
-		}
-		if err := discriminator.Validate(); err != nil {
-			return backupobject.Discriminator{}, rejectedError()
-		}
-		return discriminator, nil
-	}
+	// A returned VersionId does not prove version-targeted operations exist.
+	// Prefer the conditional ETag contract before sealing an upload identity.
 	if etag != nil {
-		discriminator := backupobject.Discriminator{Kind: backupobject.DiscriminatorETag, Value: *etag}
-		if err := discriminator.Validate(); err != nil {
-			return backupobject.Discriminator{}, rejectedError()
+		return checkedDiscriminator(backupobject.DiscriminatorETag, etag)
+	}
+	return checkedDiscriminator(backupobject.DiscriminatorVersionID, versionID)
+}
+
+func observedDiscriminator(
+	versionID, etag *string, expected *backupobject.Discriminator,
+) (backupobject.Discriminator, error) {
+	if expected == nil {
+		return outputDiscriminator(versionID, etag)
+	}
+	// An acknowledged identity is immutable, including its selected kind.
+	// Never substitute a different response field after a failed operation.
+	switch expected.Kind {
+	case backupobject.DiscriminatorETag:
+		return checkedDiscriminator(expected.Kind, etag)
+	case backupobject.DiscriminatorVersionID:
+		return checkedDiscriminator(expected.Kind, versionID)
+	default:
+		return backupobject.Discriminator{}, rejectedError()
+	}
+}
+
+func checkedDiscriminator(kind backupobject.DiscriminatorKind, value *string) (backupobject.Discriminator, error) {
+	if value != nil {
+		discriminator := backupobject.Discriminator{Kind: kind, Value: *value}
+		if discriminator.Validate() == nil {
+			return discriminator, nil
 		}
-		return discriminator, nil
 	}
 	return backupobject.Discriminator{}, rejectedError()
 }

@@ -76,15 +76,19 @@ type RecoveryPointStatus string
 const RecoveryPointVerified RecoveryPointStatus = "verified"
 
 type RecoveryPoint struct {
-	ID         string              `json:"id"`
-	SourceID   string              `json:"source_id"`
-	SourceKind BackupSourceKind    `json:"source_kind" enum:"attach,volume,config"`
-	TargetID   string              `json:"target_id"`
-	CreatedAt  string              `json:"created_at" format:"date-time"`
-	SizeBytes  int64               `json:"size_bytes"`
-	Encrypted  bool                `json:"encrypted"`
-	KeyEra     int                 `json:"key_era,omitempty"`
-	Status     RecoveryPointStatus `json:"status" enum:"verified"`
+	ID                string              `json:"id"`
+	ConnectorID       string              `json:"connector_id"`
+	ConnectorEndpoint string              `json:"connector_endpoint"`
+	ConnectorBucket   string              `json:"connector_bucket"`
+	ConnectorPrefix   string              `json:"connector_prefix"`
+	SourceID          string              `json:"source_id"`
+	SourceKind        BackupSourceKind    `json:"source_kind" enum:"attach,volume,config"`
+	TargetID          string              `json:"target_id"`
+	CreatedAt         string              `json:"created_at" format:"date-time"`
+	SizeBytes         int64               `json:"size_bytes"`
+	Encrypted         bool                `json:"encrypted"`
+	KeyEra            int                 `json:"key_era,omitempty"`
+	Status            RecoveryPointStatus `json:"status" enum:"verified"`
 }
 
 type RecoveryPointPage struct {

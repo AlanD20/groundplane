@@ -28,6 +28,8 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { CopyButton } from "@/components/common/copy-button";
 import { cn } from "@/lib/utils";
 import type { Environment } from "@/lib/types";
+import { TaskLink } from "@/components/common/task-link";
+import { useBackupRefresh } from "@/features/backup/use-backup-refresh";
 
 // ---- Shared-infra facts ----
 
@@ -51,6 +53,10 @@ export function SettingsCard({ env }: { env: Environment }) {
   const [confirmTyped, setConfirmTyped] = useState("");
   const [keyAction, setKeyAction] = useState<"rotate" | "export" | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [keyTaskId, setKeyTaskId] = useState<string | null>(null);
+  const backupState = store.getBackupPolicyState(env.id);
+  const backup = backupState.policy;
+  useBackupRefresh(env.id, false);
   const keyExportController = useRef<AbortController | null>(null);
   const deletionFailure = store.getEnvironmentDeletionFailure(env.id);
 
@@ -230,10 +236,10 @@ export function SettingsCard({ env }: { env: Environment }) {
           <Button
             variant="outline"
             size="sm"
-            disabled={!env.age || keyAction !== null}
+            disabled={!backupState.loaded || Boolean(backupState.loadError) || !backup.ageRecipient || keyAction !== null}
             onClick={async () => {
               if (
-                !env.age ||
+                !backup.ageRecipient ||
                 !window.confirm(
                   "Rotate this Environment age key? Previous recovery points require the previously exported identity.",
                 )
@@ -243,7 +249,7 @@ export function SettingsCard({ env }: { env: Environment }) {
               setKeyError(null);
               try {
                 const taskID = await store.rotateBackupKey(env.id);
-                setKeyError(`Rotation task ${taskID} dispatched.`);
+                setKeyTaskId(taskID);
               } catch (error) {
                 setKeyError(
                   error instanceof Error
@@ -265,7 +271,7 @@ export function SettingsCard({ env }: { env: Environment }) {
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-1.5">
-          {env.age ? (
+          {backup.ageRecipient ? (
             <>
               <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
                 <span className="font-mono text-[11px] text-muted-foreground">
@@ -273,9 +279,9 @@ export function SettingsCard({ env }: { env: Environment }) {
                 </span>
                 <span className="flex items-center gap-2">
                   <span className="truncate font-mono text-xs text-foreground">
-                    {env.age.recipient}
+                    {backup.ageRecipient}
                   </span>
-                  <CopyButton value={env.age.recipient} />
+                  <CopyButton value={backup.ageRecipient} />
                 </span>
               </div>
               <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -323,23 +329,23 @@ export function SettingsCard({ env }: { env: Environment }) {
                 recovery. Rotating affects new backups only; previous recovery
                 points need the previously exported identity.
               </p>
-              {env.age.lastRotatedAt && (
+              {backup.keyEra && (
                 <p className="text-xs text-muted-foreground">
-                  generated {env.age.generatedAt} · last rotated{" "}
-                  {env.age.lastRotatedAt}
+                  Era {backup.keyEra} · generated {backup.keyCreatedAt}
+                  {backup.keyRotatedAt && ` · last rotated ${backup.keyRotatedAt}`}
                 </p>
-              )}
-              {keyError && (
-                <p className="text-xs text-muted-foreground">{keyError}</p>
               )}
             </>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Not generated yet — the keypair is created lazily when backups are
-              first enabled on the Backups tab. A staging/dev environment that
-              never backs up gets no key at all.
+              {!backupState.loaded
+                ? "Loading encryption key…"
+                : "No encryption key yet. Enable age-encrypted backups on the Backups tab to generate one."}
             </p>
           )}
+          {backupState.loadError && <p role="alert" className="text-xs text-destructive">{backupState.loadError}</p>}
+          {keyError && <p role="alert" className="text-xs text-destructive">{keyError}</p>}
+          {keyTaskId && <p className="text-xs text-muted-foreground">Key rotation: <TaskLink taskId={keyTaskId}>Open Task</TaskLink></p>}
         </CardContent>
       </Card>
 

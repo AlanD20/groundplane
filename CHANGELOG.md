@@ -46,6 +46,9 @@ Initial single-host release.
 - Retain Backup cleanup and Attach deprovisioning through hierarchy-deletion
   failures; remote Backup absence is proved before Volume destruction or
   credential revocation.
+- Show each Recovery Point's original Connector and storage destination in the
+  Console, CLI and API. The Console refreshes Backup results and encryption-key
+  metadata automatically, with a linked Task for key rotation.
 
 ### Runner CI/CD
 

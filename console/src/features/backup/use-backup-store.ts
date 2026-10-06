@@ -7,10 +7,7 @@ import {
 } from "react";
 import type { operations } from "@/lib/api.generated";
 import { assertOptionalBackupPolicyKeep } from "@/lib/backup-policy-contract";
-import {
-  ControllerTransportError,
-  controllerResponseError,
-} from "@/lib/controller-request-errors";
+import { exportBackupKey } from "./backup-key-export";
 import type {
   BackupPolicyDocument,
   BackupPolicyReplacement,
@@ -147,6 +144,19 @@ function recoveryPointFromAPI(point: RecoveryPointPageItem): RecoveryPoint {
   if (!Number.isSafeInteger(point.size_bytes) || point.size_bytes <= 0) {
     throw new Error("Controller returned an invalid Recovery Point size");
   }
+  const base = {
+    id: point.id,
+    connectorId: point.connector_id,
+    connectorEndpoint: point.connector_endpoint,
+    connectorBucket: point.connector_bucket,
+    connectorPrefix: point.connector_prefix,
+    sourceId: point.source_id,
+    sourceKind: point.source_kind,
+    targetId: point.target_id,
+    createdAt: point.created_at,
+    sizeBytes: point.size_bytes,
+    status: "verified" as const,
+  };
   if (point.encrypted) {
     const keyEra = point.key_era ?? 0;
     if (!Number.isSafeInteger(keyEra) || keyEra < 1) {
@@ -155,15 +165,9 @@ function recoveryPointFromAPI(point: RecoveryPointPageItem): RecoveryPoint {
       );
     }
     return {
-      id: point.id,
-      sourceId: point.source_id,
-      sourceKind: point.source_kind,
-      targetId: point.target_id,
-      createdAt: point.created_at,
-      sizeBytes: point.size_bytes,
+      ...base,
       encrypted: true,
       keyEra,
-      status: "verified",
     };
   }
   if (point.key_era !== undefined)
@@ -171,14 +175,8 @@ function recoveryPointFromAPI(point: RecoveryPointPageItem): RecoveryPoint {
       "Controller returned an era for an unencrypted Recovery Point",
     );
   return {
-    id: point.id,
-    sourceId: point.source_id,
-    sourceKind: point.source_kind,
-    targetId: point.target_id,
-    createdAt: point.created_at,
-    sizeBytes: point.size_bytes,
+    ...base,
     encrypted: false,
-    status: "verified",
   };
 }
 
@@ -231,74 +229,6 @@ function requiredTaskId(
   return response.task_id;
 }
 
-async function exportBackupKey(
-  environmentId: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  const path = `/environments/${encodeURIComponent(environmentId)}/export-key`;
-  let response: globalThis.Response | null = null;
-  let blob: Blob | null = null;
-  let objectURL: string | null = null;
-  let anchor: HTMLAnchorElement | null = null;
-  try {
-    try {
-      response = await fetch(`/api/v1${path}`, {
-        method: "POST",
-        headers: { Accept: "text/plain" },
-        cache: "no-store",
-        signal,
-      });
-    } catch (error) {
-      throw new ControllerTransportError(
-        `POST ${path}: ${error instanceof Error ? error.message : "request failed before an HTTP response"}`,
-        error,
-      );
-    }
-    if (response.status !== 200)
-      throw await controllerResponseError(response, "POST", path);
-    if (response.headers.get("Cache-Control")?.toLowerCase() !== "no-store") {
-      throw new Error(
-        "Controller backup key export response is not marked no-store",
-      );
-    }
-    if (
-      response.headers.get("Content-Type")?.toLowerCase() !==
-      "text/plain; charset=utf-8"
-    ) {
-      throw new Error(
-        "Controller backup key export response has an invalid content type",
-      );
-    }
-    const disposition = response.headers.get("Content-Disposition") ?? "";
-    const filenamePattern = new RegExp(
-      '^attachment; filename="(groundplane-' +
-        environmentId +
-        '-age-era-[1-9][0-9]*-identity\\.txt)"$',
-    );
-    const filename = disposition.match(filenamePattern)?.[1];
-    if (!filename)
-      throw new Error(
-        "Controller backup key export response has an invalid attachment name",
-      );
-    blob = await response.blob();
-    objectURL = URL.createObjectURL(blob);
-    anchor = document.createElement("a");
-    anchor.href = objectURL;
-    anchor.download = filename;
-    anchor.click();
-  } finally {
-    if (anchor) {
-      anchor.removeAttribute("href");
-      anchor.remove();
-    }
-    if (objectURL) URL.revokeObjectURL(objectURL);
-    anchor = null;
-    objectURL = null;
-    blob = null;
-    response = null;
-  }
-}
-
 export function useBackupStore({
   active,
   request,
@@ -311,6 +241,7 @@ export function useBackupStore({
   const policyLoads = useRef(new Map<string, Promise<void>>());
   const pointGenerations = useRef(new Map<string, number>());
   const pointLoads = useRef(new Map<string, Promise<void>>());
+  const loadedPointCounts = useRef(new Map<string, number>());
   const policySaves = useRef(
     new Map<
       string,
@@ -424,10 +355,23 @@ export function useBackupStore({
           if (pointGenerations.current.get(environmentId) !== generation)
             return;
           const items = (response.items ?? []).map(recoveryPointFromAPI);
+          let nextCursor = response.next_cursor;
+          // A refresh preserves the loaded extent, using one new fixed-revision
+          // cursor chain rather than mixing old pages with a new head page.
+          const loadedCount = loadedPointCounts.current.get(environmentId) ?? 0;
+          while (!cursor && nextCursor && items.length < loadedCount) {
+            const page = await request<RecoveryPointPageResponse>(
+              `/environments/${encodeURIComponent(environmentId)}/recovery-points?${new URLSearchParams({ cursor: nextCursor })}`, 200,
+            );
+            if (pointGenerations.current.get(environmentId) !== generation) return;
+            items.push(...(page.items ?? []).map(recoveryPointFromAPI));
+            nextCursor = page.next_cursor;
+          }
+          loadedPointCounts.current.set(environmentId, cursor ? loadedCount + items.length : items.length);
           updatePolicy(environmentId, (policy) => {
             const points = policy.recoveryPoints;
             points.items = cursor ? [...points.items, ...items] : items;
-            points.nextCursor = response.next_cursor ?? null;
+            points.nextCursor = nextCursor ?? null;
             points.loaded = true;
             points.loading = false;
             points.loadingMore = false;

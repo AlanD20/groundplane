@@ -3981,6 +3981,18 @@
       "RecoveryPoint": {
         "additionalProperties": false,
         "properties": {
+          "connector_bucket": {
+            "type": "string"
+          },
+          "connector_endpoint": {
+            "type": "string"
+          },
+          "connector_id": {
+            "type": "string"
+          },
+          "connector_prefix": {
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -4022,6 +4034,10 @@
         },
         "required": [
           "id",
+          "connector_id",
+          "connector_endpoint",
+          "connector_bucket",
+          "connector_prefix",
           "source_id",
           "source_kind",
           "target_id",
@@ -8771,7 +8787,14 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "default": {
             "content": {
@@ -8885,14 +8908,7 @@
                 }
               }
             },
-            "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+            "description": "OK"
           },
           "default": {
             "content": {

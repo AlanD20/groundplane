@@ -29,6 +29,13 @@ it does not redefine the [product contract](mvp.md) or authorize implementation.
 
 ## Release boundary
 
+The scoped object-identity correction passed actual Cloudflare R2 encrypted
+PostgreSQL Backup and known-row Restore on amd64 in
+[H91](acceptance.md#upstream-postgresql-patch-and-backup-tooling). R2 retention,
+multipart, Config/Volume sources and arm64 remain unqualified. The earlier H90
+upload remains an orphan with its original VersionId authority; the new pass
+does not establish reconciliation of that incident.
+
 The earlier hosting assessment excluded Backup/Restore; it did not establish
 a Gate B pass or data-loss acceptance. Failed-rollout recovery remains part
 of hosting safety and is distinct from restoring a database backup.
