@@ -3,6 +3,7 @@ import type {
   Connector,
   ConnectorCreateInput,
   ConnectorCredentialInput,
+  ConnectorEditInput,
 } from "@/lib/types";
 import type { ConnectorMutationIntent } from "@/lib/connector-intent";
 import { controllerRequest } from "@/lib/controller-json-request";
@@ -14,6 +15,7 @@ import {
 } from "./removal-storage";
 import {
   connectorFromAPI,
+  connectorEditRequest,
   listEnvironmentConnectors,
   listAllConnectors,
   type ConnectorResponse,
@@ -28,6 +30,12 @@ export type ConnectorState = {
 export type ConnectorActions = {
   addConnector: (
     c: ConnectorCreateInput,
+    intent: ConnectorMutationIntent,
+  ) => Promise<Connector>;
+  editConnector: (
+    id: string,
+    input: ConnectorEditInput,
+    etag: string,
     intent: ConnectorMutationIntent,
   ) => Promise<Connector>;
   removeConnector: (
@@ -310,6 +318,31 @@ export function useConnectorStore(
         });
         throw error;
       }
+    },
+    editConnector: async (id, input, etag, intent) => {
+      const edited = connectorFromAPI(
+        await controllerRequest<ConnectorResponse>(
+          `/connectors/${encodeURIComponent(id)}`,
+          200,
+          {
+            method: "PATCH",
+            body: connectorEditRequest(input),
+            idempotencyKey: intent.idempotencyKey,
+            ifMatch: etag,
+          },
+        ),
+      );
+      connectorEnvironmentGenerations.current.set(
+        edited.scopeRef,
+        (connectorEnvironmentGenerations.current.get(edited.scopeRef) ?? 0) + 1,
+      );
+      update((draft) => {
+        draft.connectors = draft.connectors.map((candidate) =>
+          candidate.id === edited.id ? edited : candidate,
+        );
+        draft.connectorError = null;
+      });
+      return edited;
     },
     removeConnector: async (id, intent) => {
       const pendingTask = [...pendingConnectorRemovals.current.entries()].find(

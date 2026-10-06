@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectormutations "github.com/AlanD20/groundplane/internal/infra/etcd/connectormutations"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -107,7 +108,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
 	}
 	clear(credentials.Ciphertext)
-	referenceConditions, err := requireConnectorReferencePrefixesEmpty(
+	referenceConditions, err := connectormutations.RequireConnectorReferencesUnused(
 		ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
 	)
 	if err != nil {
@@ -313,7 +314,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	clear(credentials.Ciphertext)
 	referenceConditions := []etcdstore.Condition(nil)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		referenceConditions, err = requireConnectorReferencePrefixesEmpty(
+		referenceConditions, err = connectormutations.RequireConnectorReferencesUnused(
 			ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
 		)
 		if err != nil {
@@ -434,7 +435,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 		}
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		if _, err := requireConnectorReferencePrefixesEmpty(
+		if _, err := connectormutations.RequireConnectorReferencesUnused(
 			ctx, repository.store, task.Target, environmentID, revision,
 		); err != nil {
 			return err

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Database, Eye, Plug, Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Database, Eye, Pencil, Plug, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +14,10 @@ import {
 import { useStore } from "@/lib/store";
 import { isNoResponseTransportUncertainty } from "@/lib/controller-request-errors";
 import type { Connector, Environment } from "@/lib/types";
-import { ConnectorCreateDrawer } from "./connector-create-drawer";
+import { ConnectorEditorDrawer } from "./connector-editor-drawer";
 import { ConnectorViewDialog } from "./connector-view-dialog";
 import { normalizedPrefix } from "./connector-display";
+import { getConnectorEditSnapshot, type ConnectorEditSnapshot } from "./api";
 export function EnvironmentConnectorManager({ env }: { env: Environment }) {
   const store = useStore();
   const project = store.getProjectById(env.projectId);
@@ -45,6 +46,13 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
   );
   const [createOpen, setCreateOpen] = useState(false);
   const [viewing, setViewing] = useState<Connector | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSnapshot, setEditSnapshot] =
+    useState<ConnectorEditSnapshot | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const editLoadGeneration = useRef(0);
+  const editLoadAbort = useRef<AbortController | null>(null);
   const [removing, setRemoving] = useState<Connector | null>(null);
   const [removeIntent, setRemoveIntent] = useState<{
     environmentId: string;
@@ -55,7 +63,67 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
   useEffect(() => {
     setRemoving(null);
     setRemoveIntent(null);
+    closeEdit();
   }, [env.id]);
+
+  useEffect(
+    () => () => {
+      editLoadGeneration.current += 1;
+      editLoadAbort.current?.abort();
+    },
+    [],
+  );
+
+  function closeEdit() {
+    editLoadGeneration.current += 1;
+    editLoadAbort.current?.abort();
+    editLoadAbort.current = null;
+    setEditingId(null);
+    setEditSnapshot(null);
+    setEditLoading(false);
+    setEditError(null);
+  }
+
+  function loadEdit(connectorId: string) {
+    editLoadGeneration.current += 1;
+    const generation = editLoadGeneration.current;
+    editLoadAbort.current?.abort();
+    const controller = new AbortController();
+    editLoadAbort.current = controller;
+    setEditingId(connectorId);
+    setEditSnapshot(null);
+    setEditLoading(true);
+    setEditError(null);
+    void getConnectorEditSnapshot(connectorId, controller.signal).then(
+      (snapshot) => {
+        if (
+          controller.signal.aborted ||
+          editLoadGeneration.current !== generation
+        )
+          return;
+        if (snapshot.connector.scopeRef !== env.id) {
+          setEditLoading(false);
+          setEditError("Connector belongs to another environment");
+          return;
+        }
+        setEditSnapshot(snapshot);
+        setEditLoading(false);
+      },
+      (error: unknown) => {
+        if (
+          controller.signal.aborted ||
+          editLoadGeneration.current !== generation
+        )
+          return;
+        setEditLoading(false);
+        setEditError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load current Connector metadata",
+        );
+      },
+    );
+  }
 
   const beginRemove = (connector: Connector) => {
     setRemoving(connector);
@@ -180,6 +248,15 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                     <Button
                       variant="ghost"
                       size="icon-sm"
+                      onClick={() => loadEdit(connector.id)}
+                      aria-label={`Edit connector ${connector.name}`}
+                      title="Edit connector"
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
                       className="text-muted-foreground hover:text-destructive"
                       onClick={() =>
                         policyAuthoritative && !active && beginRemove(connector)
@@ -216,14 +293,42 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
         </CardContent>
       </Card>
 
-      <ConnectorCreateDrawer
+      <ConnectorEditorDrawer
+        mode="create"
         open={createOpen}
         onOpenChange={setCreateOpen}
         env={env}
         existingNames={connectors.map((connector) => connector.name)}
         secretOptions={secretOptions}
-        onCreate={async (connector, intent) => {
+        onSave={async (connector, intent) => {
           await store.addConnector(connector, intent);
+        }}
+      />
+
+      <ConnectorEditorDrawer
+        mode="edit"
+        open={editingId !== null}
+        onOpenChange={(open) => {
+          if (!open) closeEdit();
+        }}
+        env={env}
+        existingNames={connectors.map((connector) => connector.name)}
+        secretOptions={secretOptions}
+        snapshot={editSnapshot}
+        loading={editLoading}
+        loadError={editError}
+        onReload={() => {
+          if (editingId) loadEdit(editingId);
+        }}
+        onSave={async (input, etag, intent) => {
+          if (!editSnapshot)
+            throw new Error("Current Connector metadata is unavailable");
+          await store.editConnector(
+            editSnapshot.connector.id,
+            input,
+            etag,
+            intent,
+          );
         }}
       />
 

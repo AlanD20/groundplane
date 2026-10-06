@@ -62,7 +62,7 @@ Successful deletion must leave no retained value copy.
 ### S3-compatible Connectors
 
 A Connector belongs to exactly one Environment. Names are unique within that
-Environment and immutable. Connector lookup and Backup Policy selection never
+Environment and can be renamed. Connector lookup and Backup Policy selection never
 fall back to another Environment, Project, or the Platform.
 
 The MVP supports only `s3-compatible`. Its operator decisions are:
@@ -82,7 +82,7 @@ chooses exactly one source:
 
 - `secret_ref` names a reusable `env_var` Secret key and resolves it at use
   time through the owning Environment's Project then Platform fallback; or
-- direct `value` is a non-empty write-only creation input encrypted as
+- direct `value` is a non-empty write-only input encrypted as
   Connector-subordinate state.
 
 A direct Connector credential is not returned and does not become a reusable
@@ -92,7 +92,23 @@ deletion is not blocked by a Connector; later use resolves the remaining
 fallback or fails closed.
 
 Connector CRUD performs no endpoint or credential probe. Create and reads are
-synchronous. Delete uses a Controller finalizer and is blocked by an enabled
+synchronous. Edit changes supplied settings only and keeps the stable id, owner
+and kind. Use **Edit** in the Environment's Connectors list, `connector edit`,
+or `PATCH /connectors/{id}`. API edits require the exact `ETag` from a fresh
+detail read in `If-Match` and an `Idempotency-Key`; stale edits fail rather than
+overwrite newer changes. Omitted credentials retain their current sources and
+encrypted values. Enter a replacement value or Secret reference to rotate one
+credential without revealing either existing value.
+
+Editing is blocked during active Environment Backup, Restore, rotation, prune
+or deletion operations. Endpoint, bucket, prefix, region and addressing cannot
+change while Recovery Points or orphan cleanup still retain that destination.
+Create a new Connector for a different destination while keeping old backups.
+Name and credential changes remain available when idle; replacement credentials
+must retain access to the existing objects. GP does not copy old credentials or
+rewrite historical Recovery Points, and saving does not probe provider access.
+
+Delete uses a Controller finalizer and is blocked by an enabled
 Backup Policy, any Recovery Point, or orphan authority that still retains the
 Connector. Failed or uncertain remote cleanup must retain the credential and
 reference authority needed for retry and diagnosis.

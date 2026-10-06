@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// connector: list | add | show | remove.
+// connector: list | add | show | edit | remove.
 func newConnectorCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "connector", Short: "Environment S3-compatible backup connectors"}
 	cmd.AddCommand(&cobra.Command{
@@ -99,6 +99,7 @@ func newConnectorCmd() *cobra.Command {
 	add.Flags().StringVar(&secretKeySecret, "secret-key-secret", "", "env_var Secret key for secret_key")
 	add.Flags().StringVar(&secretKeyValueFile, "secret-key-value-file", "", "read direct secret_key from PATH, or -")
 	cmd.AddCommand(add)
+	cmd.AddCommand(newConnectorEditCmd())
 
 	cmd.AddCommand(&cobra.Command{
 		Use: "show <name>", Short: "Show connector metadata", Args: cobra.ExactArgs(1),
@@ -146,7 +147,7 @@ func connectorPathStyle(cmd *cobra.Command, pathStyle bool, virtualHostedStyle b
 	if pathChanged == virtualChanged || pathChanged && !pathStyle || virtualChanged && !virtualHostedStyle {
 		return false, errs.New(
 			errs.KindValidationFailed,
-			"connector add requires exactly one of --path-style or --virtual-hosted-style",
+			"connector addressing requires exactly one of --path-style or --virtual-hosted-style",
 		)
 	}
 	return pathChanged, nil

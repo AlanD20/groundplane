@@ -1565,6 +1565,24 @@ type ConnectorCredentialInput1 struct {
 	Value string `json:"value"`
 }
 
+// ConnectorEditRequest defines model for ConnectorEditRequest.
+type ConnectorEditRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ConnectorEditRequest.json
+	Schema      *string `json:"$schema,omitempty"`
+	Bucket      *string `json:"bucket,omitempty"`
+	Credentials *struct {
+		AccessKey *ConnectorCredentialInput `json:"access_key,omitempty"`
+		SecretKey *ConnectorCredentialInput `json:"secret_key,omitempty"`
+	} `json:"credentials,omitempty"`
+	Endpoint  *string `json:"endpoint,omitempty"`
+	Name      *string `json:"name,omitempty"`
+	PathStyle *bool   `json:"path_style,omitempty"`
+	Prefix    *string `json:"prefix,omitempty"`
+	Region    *string `json:"region,omitempty"`
+}
+
 // ControllerConfigDocument defines model for ControllerConfigDocument.
 type ControllerConfigDocument struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -3417,6 +3435,12 @@ type ConnectorRemoveParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ConnectorEditParams defines parameters for ConnectorEdit.
+type ConnectorEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+	IfMatch        string `json:"If-Match"`
+}
+
 // ControllerConfigSetParams defines parameters for ControllerConfigSet.
 type ControllerConfigSetParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -3899,6 +3923,9 @@ type ComponentEnableJSONRequestBody = ComponentEnableRequest
 
 // ConnectorCreateJSONRequestBody defines body for ConnectorCreate for application/json ContentType.
 type ConnectorCreateJSONRequestBody = ConnectorCreateRequest
+
+// ConnectorEditJSONRequestBody defines body for ConnectorEdit for application/json ContentType.
+type ConnectorEditJSONRequestBody = ConnectorEditRequest
 
 // ControllerConfigSetJSONRequestBody defines body for ControllerConfigSet for application/json ContentType.
 type ControllerConfigSetJSONRequestBody = ControllerConfigReplacement
@@ -5473,6 +5500,20 @@ type ClientInterface interface {
 	// Corresponds with GET /connectors/{id} (the `ConnectorShow` operationId).
 	ConnectorShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ConnectorEditWithBody Edit an Environment connector
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /connectors/{id} (the `ConnectorEdit` operationId).
+	ConnectorEditWithBody(ctx context.Context, id string, params *ConnectorEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConnectorEdit Edit an Environment connector
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /connectors/{id} (the `ConnectorEdit` operationId).
+	ConnectorEdit(ctx context.Context, id string, params *ConnectorEditParams, body ConnectorEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ControllerConfigShow Show the exact Controller startup configuration
 	//
 	// Corresponds with GET /controller/config (the `ControllerConfigShow` operationId).
@@ -6944,6 +6985,40 @@ func (c *Client) ConnectorRemove(ctx context.Context, id string, params *Connect
 // Corresponds with GET /connectors/{id} (the `ConnectorShow` operationId).
 func (c *Client) ConnectorShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewConnectorShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ConnectorEditWithBody Edit an Environment connector
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /connectors/{id} (the `ConnectorEdit` operationId).
+func (c *Client) ConnectorEditWithBody(ctx context.Context, id string, params *ConnectorEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectorEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ConnectorEdit Edit an Environment connector
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /connectors/{id} (the `ConnectorEdit` operationId).
+func (c *Client) ConnectorEdit(ctx context.Context, id string, params *ConnectorEditParams, body ConnectorEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectorEditRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10957,6 +11032,75 @@ func NewConnectorShowRequest(server string, id string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewConnectorEditRequest calls the generic ConnectorEdit builder with application/json body
+func NewConnectorEditRequest(server string, id string, params *ConnectorEditParams, body ConnectorEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewConnectorEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewConnectorEditRequestWithBody constructs an http.Request for the ConnectorEdit method, with any body, and a specified content type
+func NewConnectorEditRequestWithBody(server string, id string, params *ConnectorEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/connectors/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
 	}
 
 	return req, nil
@@ -16954,6 +17098,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /connectors/{id} (the `ConnectorShow` operationId).
 	ConnectorShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ConnectorShowResponse, error)
 
+	// ConnectorEditWithBodyWithResponse Edit an Environment connector
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /connectors/{id} (the `ConnectorEdit` operationId).
+	ConnectorEditWithBodyWithResponse(ctx context.Context, id string, params *ConnectorEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectorEditResponse, error)
+
+	// ConnectorEditWithResponse Edit an Environment connector
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /connectors/{id} (the `ConnectorEdit` operationId).
+	ConnectorEditWithResponse(ctx context.Context, id string, params *ConnectorEditParams, body ConnectorEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorEditResponse, error)
+
 	// ControllerConfigShowWithResponse Show the exact Controller startup configuration
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -19476,6 +19634,11 @@ func (r ConnectorRemoveResponse) ContentType() string {
 	return ""
 }
 
+// ConnectorShowResponse200Headers the declared response headers of an HTTP 200 response for ConnectorShow
+type ConnectorShowResponse200Headers struct {
+	ETag *string
+}
+
 type ConnectorShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19483,6 +19646,8 @@ type ConnectorShowResponse struct {
 	JSON200 *Connector
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ConnectorShowResponse200Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -19518,6 +19683,61 @@ func (r ConnectorShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ConnectorShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ConnectorEditResponse200Headers the declared response headers of an HTTP 200 response for ConnectorEdit
+type ConnectorEditResponse200Headers struct {
+	ContentType *string
+}
+
+type ConnectorEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Connector
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ConnectorEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ConnectorEditResponse) GetJSON200() *Connector {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ConnectorEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ConnectorEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ConnectorEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConnectorEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ConnectorEditResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -25488,6 +25708,32 @@ func (c *ClientWithResponses) ConnectorShowWithResponse(ctx context.Context, id 
 	return ParseConnectorShowResponse(rsp)
 }
 
+// ConnectorEditWithBodyWithResponse Edit an Environment connector
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /connectors/{id} (the `ConnectorEdit` operationId).
+func (c *ClientWithResponses) ConnectorEditWithBodyWithResponse(ctx context.Context, id string, params *ConnectorEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectorEditResponse, error) {
+	rsp, err := c.ConnectorEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectorEditResponse(rsp)
+}
+
+// ConnectorEditWithResponse Edit an Environment connector
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /connectors/{id} (the `ConnectorEdit` operationId).
+func (c *ClientWithResponses) ConnectorEditWithResponse(ctx context.Context, id string, params *ConnectorEditParams, body ConnectorEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorEditResponse, error) {
+	rsp, err := c.ConnectorEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectorEditResponse(rsp)
+}
+
 // ControllerConfigShowWithResponse Show the exact Controller startup configuration
 //
 // Returns a wrapper object for the known response body format(s).
@@ -28568,6 +28814,65 @@ func ParseConnectorShowResponse(rsp *http.Response) (*ConnectorShowResponse, err
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ConnectorShowResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseConnectorEditResponse parses an HTTP response from a ConnectorEditWithResponse call
+func ParseConnectorEditResponse(rsp *http.Response) (*ConnectorEditResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConnectorEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Connector
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ConnectorEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

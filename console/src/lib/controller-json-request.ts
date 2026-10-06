@@ -13,6 +13,8 @@ export async function controllerRequest<Response>(
     body?: unknown;
     signal?: AbortSignal;
     idempotencyKey?: string;
+    ifMatch?: string;
+    onResponseHeaders?: (headers: Headers) => void;
   } = {},
 ): Promise<Response> {
   const method = init.method ?? "GET";
@@ -20,6 +22,7 @@ export async function controllerRequest<Response>(
   if (init.body !== undefined) headers.set("Content-Type", "application/json");
   if (method !== "GET")
     headers.set("Idempotency-Key", init.idempotencyKey ?? newULID());
+  if (init.ifMatch) headers.set("If-Match", init.ifMatch);
   const requestBody =
     init.body === undefined ? undefined : JSON.stringify(init.body);
   let response: globalThis.Response;
@@ -40,6 +43,7 @@ export async function controllerRequest<Response>(
   if (response.status !== expectedStatus) {
     throw await controllerResponseError(response, method, path);
   }
+  init.onResponseHeaders?.(response.headers);
   const body: unknown = await response.json();
   if (method !== "GET") reportAcceptedTasks(body);
   return body as Response;

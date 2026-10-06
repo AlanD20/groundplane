@@ -13,7 +13,7 @@ type persistenceStore interface {
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
-// Repository owns Connector creation and its hierarchy/credential fences.
+// Repository owns Connector mutation preparation and hierarchy/credential fences.
 type Repository struct {
 	*connectorrecord.Reader
 	store persistenceStore

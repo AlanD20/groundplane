@@ -44,7 +44,7 @@ type ConnectorCredential struct {
 	SecretRef string                  `json:"secret_ref,omitempty"`
 }
 
-// ConnectorCredentialInput is accepted only on connector creation. Exactly
+// ConnectorCredentialInput is accepted on connector creation and editing. Exactly
 // one of SecretRef or Value is supplied and direct Value is write-only.
 type ConnectorCredentialInput struct {
 	SecretRef string `json:"secret_ref,omitempty"`
@@ -75,4 +75,16 @@ type ConnectorCreateRequest struct {
 	Region      string                              `json:"region"`
 	PathStyle   *bool                               `json:"path_style" nullable:"false"`
 	Credentials map[string]ConnectorCredentialInput `json:"credentials"`
+}
+
+// ConnectorEditRequest changes only supplied fields. Omitted credentials retain
+// their current sources and encrypted values; ownership and kind cannot change.
+type ConnectorEditRequest struct {
+	Name        *string                             `json:"name,omitempty" nullable:"false"`
+	Endpoint    *string                             `json:"endpoint,omitempty" nullable:"false"`
+	Bucket      *string                             `json:"bucket,omitempty" nullable:"false"`
+	Prefix      *string                             `json:"prefix,omitempty" nullable:"false"`
+	Region      *string                             `json:"region,omitempty" nullable:"false"`
+	PathStyle   *bool                               `json:"path_style,omitempty" nullable:"false"`
+	Credentials map[string]ConnectorCredentialInput `json:"credentials,omitempty" nullable:"false"`
 }

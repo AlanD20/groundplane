@@ -691,7 +691,7 @@ func (store *memoryHierarchyStore) Transact(
 	mutations []testkeyvalue.Mutation,
 ) (testkeyvalue.TransactionResult, error) {
 	for _, condition := range conditions {
-		value := store.valueAt(condition.Key, store.revision)
+		value := store.conditionValue(condition)
 		actualRevision := int64(0)
 		if value != nil {
 			actualRevision = value.ModRevision
@@ -699,7 +699,7 @@ func (store *memoryHierarchyStore) Transact(
 		if actualRevision != condition.ModRevision {
 			failureReads := make([]*testkeyvalue.KeyValue, len(conditions))
 			for index, failedCondition := range conditions {
-				failureReads[index] = store.valueAt(failedCondition.Key, store.revision)
+				failureReads[index] = store.conditionValue(failedCondition)
 			}
 			return testkeyvalue.TransactionResult{
 				Succeeded: false, Revision: store.revision, FailureReads: failureReads,
@@ -731,6 +731,23 @@ func (store *memoryHierarchyStore) Transact(
 		store.history[mutation.Key] = append(store.history[mutation.Key], version)
 	}
 	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
+}
+
+func (store *memoryHierarchyStore) conditionValue(condition testkeyvalue.Condition) *testkeyvalue.KeyValue {
+	if !condition.Prefix {
+		return store.valueAt(condition.Key, store.revision)
+	}
+	var selected *testkeyvalue.KeyValue
+	for key := range store.history {
+		if !strings.HasPrefix(key, condition.Key) {
+			continue
+		}
+		value := store.valueAt(key, store.revision)
+		if value != nil && (selected == nil || key < selected.Key) {
+			selected = value
+		}
+	}
+	return selected
 }
 
 func (store *memoryHierarchyStore) TransactEnvironmentBlueprint(

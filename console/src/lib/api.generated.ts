@@ -383,7 +383,8 @@ export interface paths {
         delete: operations["connector.remove"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Edit an Environment connector */
+        patch: operations["connector.edit"];
         trace?: never;
     };
     "/controller/config": {
@@ -2052,6 +2053,24 @@ export interface components {
         } | {
             value: string;
         });
+        ConnectorEditRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ConnectorEditRequest.json
+             */
+            readonly $schema?: string;
+            bucket?: string;
+            credentials?: {
+                access_key?: components["schemas"]["ConnectorCredentialInput"];
+                secret_key?: components["schemas"]["ConnectorCredentialInput"];
+            };
+            endpoint?: string;
+            name?: string;
+            path_style?: boolean;
+            prefix?: string;
+            region?: string;
+        };
         ControllerConfigDocument: {
             /**
              * Format: uri
@@ -4674,6 +4693,7 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4712,6 +4732,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "connector.edit": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectorEditRequest"];
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Updated connector */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connector"];
                 };
             };
             /** @description Error */

@@ -26,6 +26,13 @@ type ConnectorReader interface {
 }
 
 type ConnectorMutator interface {
+	EditConnector(
+		context.Context,
+		string,
+		int64,
+		apiTypes.ConnectorEditRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 	CreateConnector(
 		context.Context,
 		string,
@@ -64,6 +71,7 @@ type connectorPageOutput struct {
 }
 
 type connectorOutput struct {
+	ETag string `header:"ETag"`
 	Body apiTypes.Connector
 }
 
@@ -74,6 +82,7 @@ type connectorMutationOutput struct {
 }
 
 func (s *Server) registerConnectors() {
+	s.registerConnectorEditing()
 	connectorSchema := s.API.OpenAPI().Components.Schemas.Schema(
 		reflect.TypeFor[apiTypes.Connector](),
 		true,
@@ -189,7 +198,10 @@ func (s *Server) showConnector(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &connectorOutput{Body: connectorAPI(record.Record)}, nil
+	return &connectorOutput{
+		ETag: strconv.Quote(strconv.FormatInt(record.Revision, 10)),
+		Body: connectorAPI(record.Record),
+	}, nil
 }
 
 func (s *Server) removeConnector(

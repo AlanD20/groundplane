@@ -377,6 +377,18 @@ export type ConnectorCreateInput = Omit<Connector, "id" | "credentials"> & {
   };
 };
 
+export type ConnectorEditInput = Partial<
+  Pick<
+    Connector,
+    "name" | "endpoint" | "bucket" | "prefix" | "region" | "pathStyle"
+  >
+> & {
+  credentials?: {
+    accessKey?: ConnectorCredentialInput;
+    secretKey?: ConnectorCredentialInput;
+  };
+};
+
 export type Tenant = {
   id: string;
   slug: string;

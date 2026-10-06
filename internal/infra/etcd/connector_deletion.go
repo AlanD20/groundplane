@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
-	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectormutations "github.com/AlanD20/groundplane/internal/infra/etcd/connectormutations"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -110,7 +109,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		return IdempotencyTransactionResult{}, connectorrecord.CorruptRecord()
 	}
 	clear(credentials.Ciphertext)
-	referenceConditions, err := requireConnectorReferencePrefixesEmpty(
+	referenceConditions, err := connectormutations.RequireConnectorReferencesUnused(
 		ctx, repository.store, connector.ID, connector.EnvironmentID, fence.ReadRevision(),
 	)
 	if err != nil {
@@ -276,74 +275,6 @@ func validateConnectorDeletionEnvelope(
 	return nil
 }
 
-func requireConnectorReferencePrefixesEmpty(
-	ctx context.Context,
-	store hierarchyStore,
-	connectorID string,
-	environmentID string,
-	revision int64,
-) ([]etcdstore.Condition, error) {
-	prefixes := []string{
-		backuppolicy.BackupPolicyConnectorReferencePrefix(connectorID),
-		backupruntime.BackupRecoveryPointConnectorPrefix + connectorID + "/",
-		backupruntime.BackupOrphanConnectorPrefix + connectorID + "/",
-	}
-	conditions := make([]etcdstore.Condition, 0, len(prefixes))
-	for index, prefix := range prefixes {
-		result, err := store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: prefix, Limit: 1, Revision: revision,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if result == nil ||
-			result.ReadRevision != revision ||
-			len(result.Values) > 1 {
-			return nil, errs.New(errs.KindInternal, "connector reference prefix read is incomplete")
-		}
-		if len(result.Values) != 0 {
-			return nil, classifyConnectorReference(index, result.Values[0], connectorID, environmentID)
-		}
-		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
-	}
-	return conditions, nil
-}
-
-func classifyConnectorReference(
-	index int,
-	value etcdstore.KeyValue,
-	connectorID string,
-	environmentID string,
-) error {
-	switch index {
-	case 0:
-		expectedKey := backuppolicy.BackupPolicyConnectorReferenceKey(connectorID, environmentID)
-		if value.Key != expectedKey ||
-			string(value.Value) != environmentID {
-			return errs.New(errs.KindInternal, "connector reference prefix is corrupt")
-		}
-		return errs.New(errs.KindResourceInUse, "connector is referenced by an enabled backup policy")
-	case 1:
-		recoveryPointID := string(value.Value)
-		expectedKey, err := backupruntime.BackupRecoveryPointConnectorIndexKey(connectorID, recoveryPointID)
-		if err != nil ||
-			value.Key != expectedKey {
-			return errs.New(errs.KindInternal, "connector recovery point reference is corrupt")
-		}
-		return errs.New(errs.KindResourceInUse, "connector is referenced by a recovery point")
-	case 2:
-		recoveryPointID := string(value.Value)
-		expectedKey, err := backupruntime.BackupOrphanConnectorIndexKey(connectorID, recoveryPointID)
-		if err != nil ||
-			value.Key != expectedKey {
-			return errs.New(errs.KindInternal, "connector orphan reference is corrupt")
-		}
-		return errs.New(errs.KindResourceInUse, "connector is referenced by a backup orphan")
-	default:
-		return errs.New(errs.KindInternal, "connector reference kind is invalid")
-	}
-}
-
 type connectorDeletionEvidence struct {
 	conditions       []etcdstore.Condition
 	task             int
@@ -480,7 +411,12 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 		}
 		for index, value := range values[evidence.referenceStart:evidence.fenceStart] {
 			if value != nil {
-				return classifyConnectorReference(index, *value, connector.ID, connector.EnvironmentID)
+				return connectormutations.ClassifyConnectorReference(
+					index,
+					*value,
+					connector.ID,
+					connector.EnvironmentID,
+				)
 			}
 		}
 		if conflict := evidence.fence.ClassifyConflict(values[evidence.fenceStart:]); conflict != nil {

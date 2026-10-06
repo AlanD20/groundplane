@@ -42,7 +42,7 @@ func newControllerConnectorComposition(
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector creation idempotency: %w", err)
 	}
-	connectorMutations, err := connectors.NewCreationService(
+	connectorMutations, err := connectors.NewMutationService(
 		connectorCreationRepository,
 		intentProtector,
 		connectorCreationIdempotency,

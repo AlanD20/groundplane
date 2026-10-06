@@ -69,8 +69,13 @@ DNS behavior is unchanged.
 
 The MVP Connector kind is `s3-compatible`. A Connector belongs to exactly one
 Environment and never falls back across Environments, Projects, or platform.
-Its name is unique and immutable because the MVP has no Connector edit or
-rename operation.
+Its name is a unique, editable label; retained operations reference its stable id.
+Edits atomically replace metadata, credential ciphertext and name lookup with
+revision and Environment-operation fences. Destination changes additionally
+require empty Recovery Point and orphan memberships, preventing a new destination
+from breaking old Restore or cleanup authority. Idle credential rotation uses
+the same destination; historical records are not rewritten and old values are
+not retained as hidden recovery copies.
 
 Desired state makes endpoint, bucket, key prefix, region, and path-style versus
 virtual-host addressing explicit. These values are validated and normalized

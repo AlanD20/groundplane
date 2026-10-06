@@ -66,3 +66,25 @@ func connectorCredentialVariant(field string) *huma.Schema {
 		Required: []string{field},
 	}
 }
+
+func connectorEditRequestSchema(registry huma.Registry) *huma.Schema {
+	reference := registry.Schema(reflect.TypeFor[apiTypes.ConnectorEditRequest](), true, "ConnectorEditRequest")
+	schema := registry.SchemaFromRef(reference.Ref)
+	if schema == nil {
+		return reference
+	}
+	credentials := schema.Properties["credentials"]
+	if credentials == nil {
+		return reference
+	}
+	credential := registry.Schema(
+		reflect.TypeFor[apiTypes.ConnectorCredentialInput](),
+		true,
+		"ConnectorCredentialInput",
+	)
+	two := 2
+	credentials.AdditionalProperties = false
+	credentials.Properties = map[string]*huma.Schema{"access_key": credential, "secret_key": credential}
+	credentials.MaxProperties = &two
+	return reference
+}

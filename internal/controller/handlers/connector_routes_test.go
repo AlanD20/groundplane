@@ -55,6 +55,16 @@ type fakeConnectorMutator struct {
 	response        testidempotencyowner.IdempotencyResponse
 }
 
+func (*fakeConnectorMutator) EditConnector(
+	context.Context,
+	string,
+	int64,
+	apiTypes.ConnectorEditRequest,
+	string,
+) (testidempotencyowner.IdempotencyResponse, error) {
+	return testidempotencyowner.IdempotencyResponse{}, io.ErrUnexpectedEOF
+}
+
 type fakeConnectorDeleter struct {
 	wantID   string
 	wantKey  string

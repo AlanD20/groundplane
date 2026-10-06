@@ -1,5 +1,10 @@
 import type { operations } from "@/lib/api.generated";
-import type { Connector, ConnectorCredential } from "@/lib/types";
+import type {
+  Connector,
+  ConnectorCredential,
+  ConnectorCredentialInput,
+  ConnectorEditInput,
+} from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
 export type ConnectorPageResponse =
   operations["connector.list"]["responses"][200]["content"]["application/json"];
@@ -9,6 +14,15 @@ export type ConnectorCreateRequest =
   operations["connector.create"]["requestBody"]["content"]["application/json"];
 export type ConnectorTaskAccepted =
   operations["connector.remove"]["responses"][202]["content"]["application/json"];
+export type ConnectorEditRequest =
+  operations["connector.edit"]["requestBody"]["content"]["application/json"];
+type ConnectorCredentialWrite = NonNullable<
+  NonNullable<ConnectorEditRequest["credentials"]>["access_key"]
+>;
+export type ConnectorEditSnapshot = {
+  connector: Connector;
+  etag: string;
+};
 
 export function connectorFromAPI(connector: ConnectorResponse): Connector {
   const credential = (
@@ -68,6 +82,54 @@ export async function listEnvironmentConnectors(
     cursor = page.next_cursor ?? "";
   } while (cursor);
   return connectors;
+}
+
+export async function getConnectorEditSnapshot(
+  connectorId: string,
+  signal: AbortSignal,
+): Promise<ConnectorEditSnapshot> {
+  let etag: string | null = null;
+  const connector = connectorFromAPI(
+    await controllerRequest<ConnectorResponse>(
+      `/connectors/${encodeURIComponent(connectorId)}`,
+      200,
+      {
+        signal,
+        onResponseHeaders: (headers) => {
+          etag = headers.get("ETag");
+        },
+      },
+    ),
+  );
+  if (!etag || !/^"[^"]+"$/.test(etag)) {
+    throw new Error("Controller response is missing a quoted Connector ETag");
+  }
+  return { connector, etag };
+}
+
+export function connectorEditRequest(input: ConnectorEditInput) {
+  const credential = (
+    value: ConnectorCredentialInput | undefined,
+  ): ConnectorCredentialWrite | undefined => {
+    if (!value) return undefined;
+    return value.kind === "ref"
+      ? { secret_ref: value.name }
+      : { value: value.value };
+  };
+  const credentials: NonNullable<ConnectorEditRequest["credentials"]> = {};
+  const accessKey = credential(input.credentials?.accessKey);
+  const secretKey = credential(input.credentials?.secretKey);
+  if (accessKey) credentials.access_key = accessKey;
+  if (secretKey) credentials.secret_key = secretKey;
+  return {
+    name: input.name,
+    endpoint: input.endpoint,
+    bucket: input.bucket,
+    prefix: input.prefix,
+    region: input.region,
+    path_style: input.pathStyle,
+    credentials: accessKey || secretKey ? credentials : undefined,
+  } satisfies ConnectorEditRequest;
 }
 
 export async function listAllConnectors(

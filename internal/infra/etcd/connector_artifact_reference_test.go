@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"errors"
+	connectormutations "github.com/AlanD20/groundplane/internal/infra/etcd/connectormutations"
 	"testing"
 	"time"
 
@@ -55,9 +56,9 @@ func TestConnectorArtifactReferenceClassificationRejectsMalformedIndexes(t *test
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := classifyConnectorReference(test.index, test.value, connectorID, environmentID)
+			err := connectormutations.ClassifyConnectorReference(test.index, test.value, connectorID, environmentID)
 			if !errors.Is(err, errs.New(errs.KindInternal, "")) {
-				t.Fatalf("classifyConnectorReference() error = %v, want internal", err)
+				t.Fatalf("connectormutations.ClassifyConnectorReference() error = %v, want internal", err)
 			}
 		})
 	}
