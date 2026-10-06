@@ -4,11 +4,10 @@ import { Select } from "@/components/ui/select";
 import { TaskLink } from "@/components/common/task-link";
 
 import { useEffect, useMemo, useState } from "react";
-import { Cpu, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Cpu, GitBranch, Plus } from "lucide-react";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { PageHeader } from "@/components/common/page-header";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Runner } from "@/lib/types";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { RunnerInventory } from "./runner-inventory";
 
 export default function TenantRunnersPage() {
   const params = useRequiredParams("tenant");
@@ -95,26 +95,21 @@ export default function TenantRunnersPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow={`Tenant · ${tenant.name}`}
-        title="Runners"
-        description={`GitHub Actions · ${runners.length} of 5 Runner slots used`}
-        icon={<Cpu />}
+        title="GitHub Runners"
+        description="Trusted CI/CD · Tenant, Project or Environment ownership."
+        icon={<GitBranch />}
+        actions={
+          <Button
+            disabled={store.runnersLoading || runners.length >= 5}
+            onClick={() => {
+              setCreating(true);
+              setCreateError(null);
+            }}
+          >
+            <Plus className="size-4" /> Create Runner
+          </Button>
+        }
       />
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
-        <div className="text-sm text-muted-foreground">
-          Each Runner receives a dedicated rootless Docker daemon, host
-          identity, and isolated /29.
-        </div>
-        <Button
-          disabled={runners.length >= 5}
-          onClick={() => {
-            setCreating(true);
-            setCreateError(null);
-          }}
-        >
-          <Plus className="size-4" /> Add Runner
-        </Button>
-      </div>
 
       {acceptedTaskId && (
         <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm">
@@ -123,106 +118,37 @@ export default function TenantRunnersPage() {
         </div>
       )}
 
-      {store.runnerError ? (
-        <EmptyState
-          icon={<Cpu />}
-          title="Unable to load Runners"
-          description={store.runnerError}
-        />
-      ) : store.runnersLoading ? (
-        <div className="rounded-lg border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
-          Loading Runners from the Controller…
-        </div>
-      ) : runners.length === 0 ? (
-        <EmptyState
-          icon={<Cpu />}
-          title="No runners"
-          description="No Tenant-, Project- or Environment-scoped Runners exist for this Tenant."
-        />
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          {runners.map((runner) => (
-            <div
-              key={runner.id}
-              className="flex flex-col gap-3 rounded-lg border border-border bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className={`size-2 shrink-0 rounded-full ${runner.online ? "bg-success" : "bg-muted-foreground"}`}
-                />
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm font-medium">
-                    {runner.slug}
-                  </span>
-                  <span className="truncate font-mono text-xs text-muted-foreground">
-                    {runner.id} · {runner.name}
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {runner.environmentId
-                      ? `environment · ${environmentLabels.get(runner.environmentId) ?? runner.environmentId}`
-                      : runner.projectId
-                        ? `project · ${projectLabels.get(runner.projectId) ?? runner.projectId}`
-                        : `tenant · ${tenant.slug}`}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{runner.lifecycle}</Badge>
-                {runner.labels.map((label) => (
-                  <Badge key={label} variant="secondary">
-                    {label}
-                  </Badge>
-                ))}
-                <span
-                  className={`text-xs font-medium ${runner.online ? "text-success" : "text-muted-foreground"}`}
-                >
-                  {runner.online ? "online" : "offline"}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={runner.lifecycle !== "failed"}
-                  onClick={() => {
-                    setRetrying(runner);
-                    setRetryToken("");
-                    setRetryError(null);
-                  }}
-                >
-                  <RotateCcw className="size-3.5" /> Retry
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={
-                    runner.lifecycle === "provisioning" ||
-                    runner.lifecycle === "deleting"
-                  }
-                  onClick={() => {
-                    setEditing(runner);
-                    setSlug(runner.slug);
-                    setEditError(null);
-                  }}
-                >
-                  <Pencil className="size-3.5" /> Edit slug
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={runner.lifecycle === "provisioning"}
-                  title={
-                    runner.lifecycle === "provisioning"
-                      ? "Wait for Runner provisioning to finish"
-                      : "Remove managed Runner"
-                  }
-                  onClick={() => setRemoving(runner)}
-                >
-                  <Trash2 className="size-3.5" /> Remove
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <RunnerInventory
+        runners={runners}
+        loading={store.runnersLoading}
+        error={store.runnerError}
+        owner={(runner) =>
+          runner.environmentId
+            ? {
+                scope: "Environment",
+                name:
+                  environmentLabels.get(runner.environmentId) ??
+                  runner.environmentId,
+              }
+            : runner.projectId
+              ? {
+                  scope: "Project",
+                  name: projectLabels.get(runner.projectId) ?? runner.projectId,
+                }
+              : { scope: "Tenant", name: tenant.slug }
+        }
+        onRename={(runner) => {
+          setEditing(runner);
+          setSlug(runner.slug);
+          setEditError(null);
+        }}
+        onRetry={(runner) => {
+          setRetrying(runner);
+          setRetryToken("");
+          setRetryError(null);
+        }}
+        onRemove={setRemoving}
+      />
 
       <Dialog
         open={creating}
@@ -288,73 +214,79 @@ export default function TenantRunnersPage() {
               })();
             }}
           >
-            <div className="space-y-2">
-              <Label htmlFor="runner-create-slug">Slug</Label>
-              <Input
-                id="runner-create-slug"
-                value={createSlug}
-                onChange={(event) => setCreateSlug(event.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="runner-create-owner">Owner</Label>
-              <Select
-                id="runner-create-owner"
-                value={createOwner}
-                onValueChange={setCreateOwner}
-                options={[
-                  { value: "tenant", label: `Tenant · ${tenant.slug}` },
-                  ...projects.map((project) => ({
-                    value: project.id,
-                    label: `Project · ${project.slug}`,
-                  })),
-                  ...environments.map((environment) => ({
-                    value: environment.id,
-                    label: `Environment · ${environment.label}`,
-                  })),
-                ]}
-              />
-              <p className="text-xs text-muted-foreground">
-                Owner is permanent. Workflow GP commands are limited to this
-                scope and its descendants.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="runner-create-github">GitHub URL</Label>
-              <Input
-                id="runner-create-github"
-                value={githubUrl}
-                onChange={(event) => setGithubUrl(event.target.value)}
-                placeholder="https://github.com/example/repository"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="runner-create-labels">Labels</Label>
-              <Input
-                id="runner-create-labels"
-                value={labels}
-                onChange={(event) => setLabels(event.target.value)}
-                placeholder="build, deployment"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional, comma-separated. Groundplane adds the standard GitHub
-                labels.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="runner-create-token">Registration token</Label>
-              <Input
-                id="runner-create-token"
-                type="password"
-                autoComplete="off"
-                value={registrationToken}
-                onChange={(event) => setRegistrationToken(event.target.value)}
-              />
-              {createError && (
-                <p className="text-sm text-destructive">{createError}</p>
-              )}
-            </div>
+            <fieldset className="space-y-4 rounded-lg border border-border p-4">
+              <legend className="px-2 text-xs font-medium">Ownership</legend>
+              <div className="space-y-2">
+                <Label htmlFor="runner-create-slug">Slug</Label>
+                <Input
+                  id="runner-create-slug"
+                  value={createSlug}
+                  onChange={(event) => setCreateSlug(event.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="runner-create-owner">Owner</Label>
+                <Select
+                  id="runner-create-owner"
+                  value={createOwner}
+                  onValueChange={setCreateOwner}
+                  options={[
+                    { value: "tenant", label: `Tenant · ${tenant.slug}` },
+                    ...projects.map((project) => ({
+                      value: project.id,
+                      label: `Project · ${project.slug}`,
+                    })),
+                    ...environments.map((environment) => ({
+                      value: environment.id,
+                      label: `Environment · ${environment.label}`,
+                    })),
+                  ]}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Owner is permanent. Trusted workflows use normal GP CLI/API
+                  access.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="runner-create-github">GitHub URL</Label>
+                <Input
+                  id="runner-create-github"
+                  value={githubUrl}
+                  onChange={(event) => setGithubUrl(event.target.value)}
+                  placeholder="https://github.com/example/repository"
+                />
+              </div>
+            </fieldset>
+            <fieldset className="space-y-4 rounded-lg border border-border p-4">
+              <legend className="px-2 text-xs font-medium">Registration</legend>
+              <div className="space-y-2">
+                <Label htmlFor="runner-create-labels">Labels</Label>
+                <Input
+                  id="runner-create-labels"
+                  value={labels}
+                  onChange={(event) => setLabels(event.target.value)}
+                  placeholder="build, deployment"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional, comma-separated. Groundplane adds the standard
+                  GitHub labels.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="runner-create-token">Registration token</Label>
+                <Input
+                  id="runner-create-token"
+                  type="password"
+                  autoComplete="off"
+                  value={registrationToken}
+                  onChange={(event) => setRegistrationToken(event.target.value)}
+                />
+                {createError && (
+                  <p className="text-sm text-destructive">{createError}</p>
+                )}
+              </div>
+            </fieldset>
             <DialogFooter>
               <Button
                 type="button"

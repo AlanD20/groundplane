@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/common/status-badge";
+import { currentServiceObservation } from "@/features/service/service-observation";
 import { environmentSections } from "@/features/environment/workspace-navigation";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -15,7 +17,7 @@ import {
   Server,
   Settings,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 type Item = { label: string; href: string; icon: ReactNode };
@@ -74,6 +76,34 @@ export function Sidebar({
           decodeURIComponent(parts[3]),
         )
       : undefined;
+  const [now, setNow] = useState(() => Date.now());
+  const [expiryGeneration, setExpiryGeneration] = useState(0);
+  const expiryKey = (environment?.services ?? [])
+    .flatMap((service) =>
+      service.observation.state === "unavailable"
+        ? []
+        : [service.observation.expiresAt],
+    )
+    .sort()
+    .join(",");
+  useEffect(() => {
+    const current = Date.now();
+    setNow(current);
+    const expiry = expiryKey
+      .split(",")
+      .map(Date.parse)
+      .filter((value) => Number.isFinite(value) && value > current)
+      .sort((a, b) => a - b)[0];
+    if (expiry === undefined) return;
+    const timer = window.setTimeout(
+      () => {
+        setNow(Date.now());
+        setExpiryGeneration((generation) => generation + 1);
+      },
+      expiry - current + 1,
+    );
+    return () => window.clearTimeout(timer);
+  }, [expiryKey, expiryGeneration]);
   const base = project ? `/t/${workspace.slug}/${project.slug}` : undefined;
   const envBase =
     environment && base
@@ -277,6 +307,22 @@ export function Sidebar({
                             >
                               <Boxes className="size-3.5 shrink-0" />
                               <span className="truncate">{s.name}</span>
+                              <span
+                                className="ml-auto inline-flex shrink-0"
+                                role="img"
+                                aria-label={`${s.name}: ${currentServiceObservation(s.observation, now).state}`}
+                                title={`${s.name}: ${currentServiceObservation(s.observation, now).state}`}
+                              >
+                                <StatusDot
+                                  status={
+                                    currentServiceObservation(
+                                      s.observation,
+                                      now,
+                                    ).state
+                                  }
+                                  className="size-1.5"
+                                />
+                              </span>
                             </Link>
                           ))}
                           <div className="my-3 border-t border-border" />

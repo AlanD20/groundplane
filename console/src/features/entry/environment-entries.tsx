@@ -7,7 +7,16 @@ import {
 } from "@/components/common/table-controls";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResourcePanel } from "@/components/common/resource-panel";
+import { ResourceTable } from "@/components/common/resource-table";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { TableSortHead } from "@/components/common/table-controls";
 import {
   DialogFooter,
   DialogHeader,
@@ -191,10 +200,21 @@ export function EnvVarsCard({ env }: { env: Environment }) {
         key={entry.id}
         label={label}
         file={entry.type === "file"}
-        path={entry.path}
+        source={
+          entry.source.kind === "literal"
+            ? "Literal"
+            : entry.source.kind === "fact"
+              ? "Attach fact"
+              : "Secret reference"
+        }
+        exposure={
+          entry.exposure.includes("all")
+            ? "All Services"
+            : entry.exposure.join(", ") || "No Services"
+        }
         secret={entry.secret}
         emptySecretValue={entry.emptySecretValue}
-        value={entry.secret ? undefined : (literal ?? entry.source.kind)}
+        value={entry.secret ? undefined : (literal ?? "Resolved on apply")}
         loadValue={entry.secret ? () => store.revealEntry(entry.id) : undefined}
         onEdit={() => startEdit(entry)}
         onRemove={() => setRemoving(entry)}
@@ -204,12 +224,14 @@ export function EnvVarsCard({ env }: { env: Environment }) {
 
   return (
     <>
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
+      <ResourcePanel
+        title={
+          <span className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-muted-foreground" /> Environment
             Entries
-          </CardTitle>
+          </span>
+        }
+        actions={
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -222,50 +244,47 @@ export function EnvVarsCard({ env }: { env: Environment }) {
               <Plus className="size-3.5" /> Add entry
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1.5">
-          <ListToolbar
-            label="Entries"
-            query={query}
-            onQueryChange={setQuery}
-            sort={table}
-            fields={[
-              { value: "name", label: "Key / path" },
-              { value: "type", label: "Type" },
-            ]}
-          />
-          {table.rows.map((entry) => (
-            <div key={entry.id} className="min-w-0">
-              {renderEntry(entry)}
-              <p className="px-3 pb-3 pt-1 text-[11px] text-muted-foreground">
-                Exposed to{" "}
-                {entry.exposure.includes("all")
-                  ? "all Services"
-                  : entry.exposure.join(", ") || "no Services"}{" "}
-                ·{" "}
-                {entry.source.kind === "literal"
-                  ? "Literal value"
-                  : entry.source.kind === "fact"
-                    ? "Attach fact"
-                    : "Secret reference"}
-              </p>
-            </div>
-          ))}
-          {!table.total && (
-            <p className="p-6 text-center text-xs text-muted-foreground">
-              {entries.length
-                ? "No Entries match your search."
-                : "No Entries yet."}
-            </p>
-          )}
-          <TablePagination table={table} label="Entries" />
-          <p className="mt-2 text-xs text-muted-foreground">
-            Entries are one resource model for environment variables and files.
-            Secret values remain encrypted and load only through the explicit
-            reveal action.
+        }
+      >
+        <ListToolbar
+          label="Entries"
+          query={query}
+          onQueryChange={setQuery}
+          sort={table}
+          fields={[
+            { value: "name", label: "Key / path" },
+            { value: "type", label: "Type" },
+          ]}
+        />
+        <ResourceTable>
+          <Table aria-label="Environment Entries">
+            <TableHeader>
+              <TableRow>
+                <TableSortHead sort={table} field="name">
+                  Key / path
+                </TableSortHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Value</TableHead>
+                <TableHead>Exposure</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>{table.rows.map(renderEntry)}</TableBody>
+          </Table>
+        </ResourceTable>
+        {!table.total && (
+          <p className="p-6 text-center text-xs text-muted-foreground">
+            {entries.length
+              ? "No Entries match your search."
+              : "No Entries yet."}
           </p>
-        </CardContent>
-      </Card>
+        )}
+        <TablePagination table={table} label="Entries" />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Changes update managed files. Running processes receive them on the
+          next Deploy.
+        </p>
+      </ResourcePanel>
 
       <Drawer
         open={open}
