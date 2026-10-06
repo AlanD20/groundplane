@@ -24,7 +24,7 @@ export const environmentSections = [
     key: "overview",
     label: "Overview",
     icon: Layers,
-    panels: [{ key: "overview", label: "Services & overview", icon: Layers }],
+    panels: [{ key: "overview", label: "Services", icon: Layers }],
   },
   {
     key: "network",

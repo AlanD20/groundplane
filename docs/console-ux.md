@@ -44,7 +44,11 @@ The following examples explain placement, not an exhaustive resource inventory:
 Separate **scope selection** (which Project, Environment or Service) from
 **local navigation** (what to do with that resource). Keep ancestry visible and
 switchable. Opening a child workspace replaces the parent's local navigation;
-do not stack several levels of horizontal tabs.
+do not stack several levels of horizontal tabs. Local navigation contains only
+work within the selected scope. Use breadcrumbs and an explicit parent link to
+leave it; do not append unrelated Tenant or Project shortcuts to an Environment
+menu. Global collection pages without local destinations use the Platform rail
+alone, rather than filling a secondary panel with unrelated resources.
 
 Use consistent names and relative ordering for equivalent destinations. Different
 resource types may need different destinations. There is no fixed tab count.

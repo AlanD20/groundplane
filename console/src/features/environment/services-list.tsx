@@ -34,13 +34,12 @@ export function ServicesList({
   env: Environment;
   now?: number;
 }) {
-  const store = useStore();
   const [, setSearch] = useSearchParams();
-  const inspect = (id: string | null) =>
+  const inspect = (id: string, tab = "overview") =>
     setSearch((current) => {
       const next = new URLSearchParams(current);
-      if (id) next.set("service", id);
-      else next.delete("service");
+      next.set("service", id);
+      next.set("serviceTab", tab);
       return next;
     });
   const [query, setQuery] = useState("");
@@ -139,19 +138,16 @@ export function ServicesList({
                       )}
                     </Button>
                     {attached.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {attached.map((attach) => (
-                          <Link
-                            key={attach.id}
-                            to={`/platform/backing-services/${attach.projectId}`}
-                            className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-                          >
-                            <Plug className="size-3" />
-                            {store.getBackingProject(attach.projectId)?.name ??
-                              attach.name}
-                          </Link>
-                        ))}
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="content"
+                        className="mt-2 text-xs text-primary"
+                        onClick={() => inspect(service.id, "connections")}
+                      >
+                        <Plug className="size-3.5" />
+                        {attached.length} backing{" "}
+                        {attached.length === 1 ? "connection" : "connections"}
+                      </Button>
                     )}
                   </TableCell>
                   <TableCell className="min-w-44">

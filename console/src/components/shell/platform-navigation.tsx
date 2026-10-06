@@ -10,7 +10,13 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-export function PlatformNavigation({ pathname }: { pathname: string }) {
+export function PlatformNavigation({
+  pathname,
+  compact = true,
+}: {
+  pathname: string;
+  compact?: boolean;
+}) {
   const links = [
     {
       label: "Overview",
@@ -54,14 +60,19 @@ export function PlatformNavigation({ pathname }: { pathname: string }) {
   return (
     <nav
       aria-label="Platform navigation"
-      className="flex w-16 shrink-0 flex-col items-center gap-3 overflow-y-auto border-r border-border bg-sidebar py-4"
+      className={cn(
+        "flex shrink-0 flex-col gap-3 overflow-y-auto bg-sidebar py-4",
+        compact ? "w-16 items-center border-r border-border" : "w-full px-4",
+      )}
     >
-      <div
-        aria-hidden="true"
-        className="mb-5 flex size-10 shrink-0 items-center justify-center text-primary"
-      >
-        <Layers className="size-6" />
-      </div>
+      {compact && (
+        <div
+          aria-hidden="true"
+          className="mb-5 flex size-10 shrink-0 items-center justify-center text-primary"
+        >
+          <Layers className="size-6" />
+        </div>
+      )}
       {links.map(({ label, href, icon: Icon, active }) => (
         <Tooltip key={href} content={label} side="right">
           <Link
@@ -69,13 +80,15 @@ export function PlatformNavigation({ pathname }: { pathname: string }) {
             to={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-lg outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring",
+              "flex min-h-10 shrink-0 items-center gap-3 rounded-lg outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring",
+              compact ? "size-10 justify-center" : "px-3 text-sm",
               active
                 ? "bg-accent text-primary"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className="size-5 shrink-0" />
+            <Icon aria-hidden="true" className="size-5 shrink-0" />
+            {!compact && <span>{label}</span>}
           </Link>
         </Tooltip>
       ))}

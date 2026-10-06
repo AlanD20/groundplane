@@ -14,11 +14,14 @@ including the MVP's single Agent, do not need pagination.
 
 Navigation follows Platform or Tenant → Project → Environment. Host owns
 Controller and Agent management; Components owns integration settings.
-An Environment opens on a Service overview with Cards and Table display options,
-recent activity and backup protection. A compact vertical icon rail provides
-Platform navigation beside a labeled secondary menu for the selected resource’s
-destinations. Environment destinations
-are visible links under headings, including Variables & files, backing connections
+An Environment opens on Services, with Cards and Table display options, runtime
+state and direct access to each workload. Backing-connection links on either
+display open the Service’s connections within the Environment. Activity and backup
+management remain in Tasks and Backups & restore. A compact vertical icon rail
+provides Platform navigation beside a labeled secondary menu for the selected resource’s
+destinations. Global pages without local sections, such as the Backing Services
+list, show only the Platform rail. Environment destinations are visible links
+under headings, including Variables & files, backing connections
 and their Connection values, Deployments, Backup destinations, and Identity &
 encryption key. Headings organize links without adding intermediate pages.
 Breadcrumbs switch Tenant, Project, Environment and Service scope. On narrow
@@ -40,8 +43,10 @@ with the Service selected, and shows its connection values. Reveal, Hide and Cop
 use the shared value control and configured reveal confirmation.
 
 Project Secrets distinguish Project-owned inputs from matching-key Platform
-fallbacks. Project and Environment Runner links select that owner in the Tenant’s
-shared Runner manager; the owner filter can show other scopes. Tasks show durable
+fallbacks. The Tenant’s Runner manager filters Tenant-, Project- and
+Environment-owned Runners. Local navigation stays within its scope; use the
+parent link or breadcrumbs to reach Project Secrets and Tenant operations. Tasks
+show durable
 operations with scope and status filters. Opening a Task shows its details and
 links to the affected resource. A deployment opened from a Service returns to
 that Service’s history. Saving desired configuration does not deploy it.

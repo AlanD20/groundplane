@@ -225,10 +225,6 @@
   }
 }
 @layer components {
-  .connected-workspace {
-    background-image: radial-gradient(var(--border) 0.7px, transparent 0.7px);
-    background-size: 20px 20px;
-  }
   .console-page {
     animation: console-enter 180ms ease-out;
   }

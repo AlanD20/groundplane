@@ -30,6 +30,19 @@ import {
 } from "@/features/service/workspace-navigation";
 import { useStore } from "@/lib/store";
 
+// Global destinations with no local sections need only the Platform rail.
+export function hasWorkspaceNavigation(pathname: string) {
+  const [scope, section, resource] = pathname.split("/").filter(Boolean);
+  return (
+    scope === "t" ||
+    (scope === "platform" &&
+      (section === "overview" ||
+        section === "host" ||
+        section === "components" ||
+        (section === "backing-services" && !!resource)))
+  );
+}
+
 export function Sidebar({
   workspace,
   projectSlug,
@@ -108,13 +121,6 @@ export function Sidebar({
           active: pathname === envPath && current.panel.key === panel.key,
         })),
       }));
-      groups.push({
-        label: "Related resources",
-        items: [
-          item("Project Secrets", `${projectPath}/secrets`, KeyRound),
-          item("Runners", `${tenantPath}/runners?owner=${env.id}`, GitBranch),
-        ],
-      });
     }
   } else if (project) {
     parent = {
@@ -127,11 +133,6 @@ export function Sidebar({
         items: [
           item("Environments", projectPath, Layers),
           item("Secrets", `${projectPath}/secrets`, KeyRound),
-          item(
-            "Runners",
-            `${tenantPath}/runners?owner=${project.id}`,
-            GitBranch,
-          ),
           item("Settings", `${projectPath}/settings`, Settings),
         ],
       },
@@ -188,7 +189,7 @@ export function Sidebar({
         ],
       },
     ];
-  } else {
+  } else if (parts[1] === "overview") {
     groups = [
       {
         label: "Tenants",
@@ -197,7 +198,7 @@ export function Sidebar({
         ),
       },
     ];
-  }
+  } else return null;
   return (
     <div className="space-y-5 px-3 py-4">
       {parent && (

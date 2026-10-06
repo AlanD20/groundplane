@@ -19,7 +19,8 @@ import { useLinkedSlug } from "@/lib/use-linked-slug";
 import { Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Sidebar } from "./sidebar";
+import { cn } from "@/lib/utils";
+import { Sidebar, hasWorkspaceNavigation } from "./sidebar";
 import { Topbar } from "./topbar";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { PlatformNavigation } from "./platform-navigation";
@@ -54,6 +55,7 @@ function useProjectSlug(
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const { pathname, search } = useLocation();
   const workspace = useWorkspace(pathname);
+  const hasLocalNavigation = hasWorkspaceNavigation(pathname);
   const navigate = useNavigate();
   const { addTenant, tenantProjects } = useStore();
   const projectSlug = useProjectSlug(
@@ -109,23 +111,30 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       </a>
       <div className="flex min-h-screen w-full">
         {/* Desktop sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[304px] border-r border-border bg-sidebar lg:flex">
+        <aside
+          className={cn(
+            "fixed inset-y-0 left-0 z-30 hidden border-r border-border bg-sidebar lg:flex",
+            hasLocalNavigation ? "w-[304px]" : "w-16",
+          )}
+        >
           <PlatformNavigation pathname={pathname} />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
-              <WorkspaceSwitcher
-                workspace={workspace}
-                onNewTenant={() => setNewTenantOpen(true)}
-              />
+          {hasLocalNavigation && (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
+                <WorkspaceSwitcher
+                  workspace={workspace}
+                  onNewTenant={() => setNewTenantOpen(true)}
+                />
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <Sidebar
+                  workspace={workspace}
+                  projectSlug={projectSlug}
+                  pathname={pathname}
+                />
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <Sidebar
-                workspace={workspace}
-                projectSlug={projectSlug}
-                pathname={pathname}
-              />
-            </div>
-          </div>
+          )}
         </aside>
 
         <Drawer open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -141,31 +150,41 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               <Brand />
             </div>
             <div className="flex min-h-0 flex-1">
-              <PlatformNavigation pathname={pathname} />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div className="border-b border-border px-3 py-2">
-                  <WorkspaceSwitcher
-                    workspace={workspace}
-                    onNewTenant={() => {
-                      setMobileOpen(false);
-                      setNewTenantOpen(true);
-                    }}
-                  />
+              <PlatformNavigation
+                pathname={pathname}
+                compact={hasLocalNavigation}
+              />
+              {hasLocalNavigation && (
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  <div className="border-b border-border px-3 py-2">
+                    <WorkspaceSwitcher
+                      workspace={workspace}
+                      onNewTenant={() => {
+                        setMobileOpen(false);
+                        setNewTenantOpen(true);
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    <Sidebar
+                      workspace={workspace}
+                      projectSlug={projectSlug}
+                      pathname={pathname}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1 overflow-y-auto">
-                  <Sidebar
-                    workspace={workspace}
-                    projectSlug={projectSlug}
-                    pathname={pathname}
-                  />
-                </div>
-              </div>
+              )}
             </div>
           </DrawerContent>
         </Drawer>
 
         {/* Main column */}
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-[304px]">
+        <div
+          className={cn(
+            "flex min-w-0 flex-1 flex-col",
+            hasLocalNavigation ? "lg:pl-[304px]" : "lg:pl-16",
+          )}
+        >
           <div className="flex min-h-16 items-center gap-2 border-b border-border px-4 sm:px-6 lg:px-7">
             <Button
               variant="outline"
