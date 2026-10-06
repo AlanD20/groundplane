@@ -1,15 +1,7 @@
 "use client";
 
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
 import { useState } from "react";
-import { RefreshCw, Terminal, Trash2 } from "lucide-react";
+import { RefreshCw, Terminal } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,11 +25,7 @@ import type { RecoveryPoint } from "@/features/backup/types";
 import { TaskLink } from "@/components/common/task-link";
 import { useBackupRefresh } from "./use-backup-refresh";
 import { backupScheduleDescription } from "./backup-schedule";
-import {
-  TablePagination,
-  TableSortHead,
-  useTableView,
-} from "@/components/common/table-controls";
+import { RecoveryGroupsTable } from "./recovery-groups-table";
 
 // ---- Backups ----
 
@@ -46,20 +34,6 @@ export function BackupsCard({ env }: { env: Environment }) {
   const policyState = store.getBackupPolicyState(env.id);
   const backup = policyState.policy;
   const points = policyState.recoveryPoints;
-  const table = useTableView(
-    points.items,
-    {
-      id: (point) => point.id,
-      source: (point) => `${point.sourceKind}/${point.sourceId}`,
-      target: (point) => point.targetId,
-      created: (point) => Date.parse(point.createdAt),
-      size: (point) => point.sizeBytes,
-      status: (point) => point.status,
-    },
-    "created",
-    "desc",
-    env.id,
-  );
   const [policyOpen, setPolicyOpen] = useState(false);
   const [restorePoint, setRestorePoint] = useState<RecoveryPoint | null>(null);
   const [deletePoint, setDeletePoint] = useState<RecoveryPoint | null>(null);
@@ -175,7 +149,11 @@ export function BackupsCard({ env }: { env: Environment }) {
           />
           <PolicyCell
             label="Frequency · UTC"
-            value={backup.frequency ? backupScheduleDescription(backup.frequency) : "not configured"}
+            value={
+              backup.frequency
+                ? backupScheduleDescription(backup.frequency)
+                : "not configured"
+            }
           />
           <PolicyCell
             label="Retention"
@@ -276,117 +254,17 @@ export function BackupsCard({ env }: { env: Environment }) {
               </p>
             )}
           {points.items.length > 0 && (
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <Table className="w-full min-w-[760px] text-left text-xs">
-                <TableHeader className="bg-surface text-muted-foreground">
-                  <TableRow>
-                    <TableHead className="px-3 py-2 font-medium">
-                      Point
-                    </TableHead>
-                    <TableHead className="px-3 py-2 font-medium">
-                      Connector / storage
-                    </TableHead>
-                    <TableHead className="px-3 py-2 font-medium">
-                      Source
-                    </TableHead>
-                    <TableHead className="px-3 py-2 font-medium">
-                      Target
-                    </TableHead>
-                    <TableSortHead
-                      sort={table}
-                      field="created"
-                      className="px-3 py-2 font-medium"
-                    >
-                      Created
-                    </TableSortHead>
-                    <TableSortHead
-                      sort={table}
-                      field="size"
-                      className="px-3 py-2 font-medium"
-                    >
-                      Size
-                    </TableSortHead>
-                    <TableHead className="px-3 py-2 font-medium">
-                      Encryption
-                    </TableHead>
-                    <TableHead className="px-3 py-2 font-medium">
-                      Status
-                    </TableHead>
-                    <TableHead className="px-3 py-2">
-                      <span className="sr-only">Actions</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="divide-y divide-border">
-                  {table.rows.map((point) => (
-                    <TableRow key={point.id}>
-                      <TableCell className="px-3 py-2 font-mono text-primary">
-                        {point.id}
-                      </TableCell>
-                      <TableCell
-                        className="max-w-64 px-3 py-2"
-                        title={`${point.connectorId}\n${point.connectorEndpoint}`}
-                      >
-                        <div className="font-medium">
-                          {store.connectors.find(
-                            (connector) => connector.id === point.connectorId,
-                          )?.name ?? point.connectorId}
-                        </div>
-                        <div className="break-all text-xs text-muted-foreground">
-                          s3://{point.connectorBucket}/{point.connectorPrefix}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-3 py-2 font-mono">
-                        {point.sourceKind} · {point.sourceId}
-                      </TableCell>
-                      <TableCell className="px-3 py-2 font-mono">
-                        {point.targetId}
-                      </TableCell>
-                      <TableCell className="px-3 py-2 whitespace-nowrap">
-                        {point.createdAt}
-                      </TableCell>
-                      <TableCell className="px-3 py-2 font-mono">
-                        {point.sizeBytes.toLocaleString()} B
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        {point.encrypted ? `age · era ${point.keyEra}` : "none"}
-                      </TableCell>
-                      <TableCell className="px-3 py-2 text-success">
-                        {point.status}
-                      </TableCell>
-                      <TableCell className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setRestorePoint(point)}
-                          >
-                            Restore
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setDeletePoint(point)}
-                          >
-                            <Trash2 className="size-3.5" /> Delete
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          {points.items.length > 0 && (
-            <div className="mt-3">
-              <TablePagination table={table} label="Recovery points" />
-            </div>
+            <RecoveryGroupsTable
+              env={env}
+              points={points}
+              onRestore={setRestorePoint}
+              onDelete={setDeletePoint}
+            />
           )}
           {points.nextCursor && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Sorting and pagination cover the loaded recovery points. Load more
-              to include older records.
+              Showing loaded backups. Load more to include older backups and any
+              remaining sources in the last group.
             </p>
           )}
           {points.nextCursor && (

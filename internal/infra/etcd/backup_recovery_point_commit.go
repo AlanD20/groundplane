@@ -57,11 +57,17 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 			"direct Recovery Point commit cannot carry an orphan",
 		)
 	}
+	point.Capture = backupruntime.BackupRecoveryPointCapture{TaskID: nextRun.TaskID, CreatedAt: nextRun.CreatedAt, SourceCount: len(nextRun.Sources)}
 	pointValue, err := backupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	defer clear(pointValue)
+	captureValue, err := backupruntime.EncodeRecoveryPointCapture(point.Capture)
+	if err != nil {
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
+	}
+	defer clear(captureValue)
 	sweepValue, err := backupruntime.EncodeBackupRetentionSweepRecord(sweep)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
@@ -97,6 +103,7 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 			ModRevision: currentRun.Record.ConnectorCredentialsRevision,
 		},
 		{Key: backupruntime.BackupRecoveryPointKey(point.ID)},
+		{Key: backupruntime.BackupRecoveryPointCaptureKey(point.ID)},
 		{Key: environmentIndex},
 		{Key: sourceIndex},
 		{Key: connectorIndex},
@@ -104,6 +111,7 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: backupruntime.BackupRecoveryPointKey(point.ID), Value: pointValue},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupRecoveryPointCaptureKey(point.ID), Value: captureValue},
 		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
 		{Type: etcdstore.MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
 		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(point.ID)},

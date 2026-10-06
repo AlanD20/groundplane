@@ -54,14 +54,22 @@ func (c *Client) ListRecoveryPoints(
 	}
 	for index, point := range items {
 		converted := apiTypes.RecoveryPoint{
-			ID:         point.Id,
-			SourceID:   point.SourceId,
-			SourceKind: apiTypes.BackupSourceKind(point.SourceKind),
-			TargetID:   point.TargetId,
-			CreatedAt:  point.CreatedAt.UTC().Format(time.RFC3339),
-			SizeBytes:  point.SizeBytes,
-			Encrypted:  point.Encrypted,
-			Status:     apiTypes.RecoveryPointStatus(point.Status),
+			ConnectorID:       point.ConnectorId,
+			ConnectorEndpoint: point.ConnectorEndpoint,
+			ConnectorBucket:   point.ConnectorBucket,
+			ConnectorPrefix:   point.ConnectorPrefix,
+			ID:                point.Id,
+			SourceID:          point.SourceId,
+			SourceKind:        apiTypes.BackupSourceKind(point.SourceKind),
+			TargetID:          point.TargetId,
+			CreatedAt:         point.CreatedAt.UTC().Format(time.RFC3339),
+			SizeBytes:         point.SizeBytes,
+			Encrypted:         point.Encrypted,
+			Status:            apiTypes.RecoveryPointStatus(point.Status),
+		}
+		if point.Capture != nil {
+			converted.Capture = &apiTypes.RecoveryPointCapture{TaskID: point.Capture.TaskId,
+				CreatedAt: point.Capture.CreatedAt.UTC().Format(time.RFC3339), SourceCount: int(point.Capture.SourceCount)}
 		}
 		if point.KeyEra != nil {
 			converted.KeyEra = int(*point.KeyEra)

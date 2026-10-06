@@ -133,11 +133,12 @@ func (repository *Repository) readRecoveryPointAuthority(ctx context.Context,
 	if err != nil {
 		return localAuthority{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
+	keys = append(keys, backupruntime.BackupRecoveryPointCaptureKey(record.ID))
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: first.ReadRevision})
 	if err != nil {
 		return localAuthority{}, err
 	}
-	if read == nil || read.ReadRevision != first.ReadRevision || len(read.Values) != 5 {
+	if read == nil || read.ReadRevision != first.ReadRevision || len(read.Values) != 6 {
 		return localAuthority{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer keyvalue.ClearValues(read.Values)

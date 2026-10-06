@@ -436,6 +436,9 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 	if storedPoint.Revision != storedRun.Revision {
 		t.Fatalf("point/run revisions = %d/%d", storedPoint.Revision, storedRun.Revision)
 	}
+	// Grouping must retain the producing attempt after its execution history
+	// expires, without changing the immutable snapshot used by Restore.
+	expectedCapture := testbackupruntime.BackupRecoveryPointCapture{TaskID: run.TaskID, CreatedAt: run.CreatedAt, SourceCount: len(run.Sources)}
 	for _, list := range []func() (testbackupruntime.BackupRuntimePage[testbackupruntime.BackupRecoveryPointRecord], error){
 		func() (testbackupruntime.BackupRuntimePage[testbackupruntime.BackupRecoveryPointRecord], error) {
 			return repository.ListBackupRecoveryPointsByEnvironment(
@@ -457,6 +460,9 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 		if listErr != nil || len(page.Items) != 1 || page.Items[0].Record.ID != point.ID {
 			t.Fatalf("Recovery Point page = %#v/%v", page, listErr)
 		}
+		if page.Items[0].Record.Capture != expectedCapture || page.Items[0].Record.BackupRecoveryPointSnapshot != point.BackupRecoveryPointSnapshot {
+			t.Fatal("Point list lost capture provenance or changed Restore authority")
+		}
 	}
 	retention, found, err := repository.GetBackupRetentionSweep(
 		context.Background(), point.SourceID, point.ID,
@@ -464,6 +470,15 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 	if err != nil || !found || retention.Record != sweep ||
 		retention.Revision != storedPoint.Revision {
 		t.Fatalf("GetBackupRetentionSweep() = %#v/%v/%v", retention, found, err)
+	}
+	removedRun, err := repository.store.Transact(context.Background(), []testkeyvalue.Condition{{Key: testbackupruntime.BackupRunKey(run.TaskID), ModRevision: storedRun.Revision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: testbackupruntime.BackupRunKey(run.TaskID)}})
+	if err != nil || !removedRun.Succeeded {
+		t.Fatalf("remove run history = %#v/%v", removedRun, err)
+	}
+	retained, err := repository.GetBackupRecoveryPoint(context.Background(), point.ID)
+	if err != nil || retained.Record.Capture != expectedCapture || retained.Record.BackupRecoveryPointSnapshot != point.BackupRecoveryPointSnapshot {
+		t.Fatalf("Point after run history removal = %#v/%v", retained, err)
 	}
 }
 

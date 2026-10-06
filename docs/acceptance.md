@@ -1012,6 +1012,41 @@ Backup/Restore release qualification were not established by this run. Test
 artifacts were removed through GP; unrelated archives and private credentials
 were preserved. No push, tag or compatibility path was introduced.
 
+## H94 — Recovery Point run grouping and sequential deletion (2026-10-06)
+
+Journey Controller `0.0.1-qa-backup-groups-20261006` had digest
+`sha256:cc2e75282af5c20e78cc6ed54124df90e464b3f8044436cb60bea6c691718a26`.
+The final confirmation-copy build `0.0.1-qa-backup-groups-20261006-r2` has digest
+`sha256:8a673994e24b0684864739032ec5fe28cf1e7cdaecd8b7ff9e911c437ae3a3c0`.
+Both used the normal Controller updater and the unchanged H93 Agent.
+
+One disposable-host Backup captured five sources: two PostgreSQL databases,
+two Volumes and Environment Config. API metadata identified the exact producing
+Task; the deployed Console showed one expandable run with readable sources and
+independent Restore/Delete controls. Deleting Config changed its available count
+from five to four without a page reload. **Delete backup** then completed four
+protected Point Tasks, with links and progress in the confirmation dialog.
+The updated staged CLI also matched API capture and original Connector metadata
+on a subsequent five-source run; it did not replace the host's installed CLI.
+
+Independent authenticated R2 HEAD checks matched each new object before deletion
+and returned 404 for all five afterward. The original five objects retained their
+identities and returned 200. Original Point IDs, policy, Volume IDs and application
+container identities were unchanged. Capture metadata was absent after cleanup.
+No direct provider deletion, reset, Restore or application redeployment was used.
+
+The existing atomic Point-publication regression was extended to remove its run
+record and prove capture metadata remains available without changing Restore
+authority. Selected publication/prune checks, focused race checks, generation,
+Console build and affected vet checks passed. Architecture reports only the two
+pre-existing Runner-size/application-total findings; full CI was not run.
+
+More-than-50-Point page boundaries, interrupted queues, injected deletion failures
+and actual Task-retention expiry on the host were NOT RUN. Group deletion is a
+Console queue of existing Point actions, not a new atomic Controller operation.
+Existing Points without recorded provenance remain accessible without inferred
+run membership. All new test archives were removed and private evidence retained.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

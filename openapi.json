@@ -3981,6 +3981,9 @@
       "RecoveryPoint": {
         "additionalProperties": false,
         "properties": {
+          "capture": {
+            "$ref": "#/components/schemas/RecoveryPointCapture"
+          },
           "connector_bucket": {
             "type": "string"
           },
@@ -4045,6 +4048,31 @@
           "size_bytes",
           "encrypted",
           "status"
+        ],
+        "type": "object"
+      },
+      "RecoveryPointCapture": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "source_count": {
+            "format": "int64",
+            "maximum": 12,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "task_id": {
+            "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "created_at",
+          "source_count"
         ],
         "type": "object"
       },

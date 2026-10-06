@@ -2320,6 +2320,7 @@ type ProjectRename struct {
 
 // RecoveryPoint defines model for RecoveryPoint.
 type RecoveryPoint struct {
+	Capture           *RecoveryPointCapture   `json:"capture,omitempty"`
 	ConnectorBucket   string                  `json:"connector_bucket"`
 	ConnectorEndpoint string                  `json:"connector_endpoint"`
 	ConnectorId       string                  `json:"connector_id"`
@@ -2340,6 +2341,13 @@ type RecoveryPointSourceKind string
 
 // RecoveryPointStatus defines model for RecoveryPoint.Status.
 type RecoveryPointStatus string
+
+// RecoveryPointCapture defines model for RecoveryPointCapture.
+type RecoveryPointCapture struct {
+	CreatedAt   time.Time `json:"created_at"`
+	SourceCount int64     `json:"source_count"`
+	TaskId      string    `json:"task_id"`
+}
 
 // RecoveryPointPage defines model for RecoveryPointPage.
 type RecoveryPointPage struct {

@@ -64,6 +64,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		[]string{backupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.Record.TaskID)},
 		authorityKeys...)
 	keys = append(keys, backupruntime.BackupRetentionKey(current.Record.Point.SourceID, current.Record.Point.ID))
+	keys = append(keys, backupruntime.BackupRecoveryPointCaptureKey(current.Record.Point.ID))
 	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
@@ -130,7 +131,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	for index := 1; index < len(keys); index++ {
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: keys[index], ModRevision: anchor.Values[index].ModRevision},
+			etcdstore.Condition{Key: keys[index], ModRevision: etcdstore.RevisionOf(anchor.Values[index])},
 		)
 	}
 	conditions = append(conditions, fence.TransactionConditions()...)

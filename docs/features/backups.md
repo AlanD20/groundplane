@@ -167,6 +167,25 @@ it refreshes automatically to reflect completed runs and retention cleanup.
 With `keep: 2`, another successful run creates a new Point but the retained count
 returns to two per source after the oldest is pruned.
 
+The Console groups Points by their recorded Backup Task. Expand a Backup to see
+its databases, Volumes and configuration, with **Restore** and **Delete** on each
+source. The available-source count is not a claim that the whole run succeeded:
+failed captures, retention and manual deletion can leave only some sources.
+Run identity is retained with the Points, independently of Task history. Points
+without recorded provenance appear under **Earlier recovery points**; GP never
+guesses a run from timestamps.
+
+**Delete backup** confirms the remaining loaded sources, then deletes their
+archives one at a time through the same protected Point action. Each deletion
+has a linked Task. A failure stops the queue; closing stops further submissions,
+but an already accepted Task continues. This is not an atomic multi-source
+deletion. Load the rest of a group before deleting it. Grouping does not change
+per-source retention or introduce a combined Restore.
+
+API and CLI Point listings include optional `capture` metadata: the producing
+`task_id`, run `created_at` and original `source_count`. Its absence means that
+provenance was not recorded, not that the Point is unusable.
+
 ## Restore and downtime
 
 Restore overwrites the point's original surviving target. Omission selects the

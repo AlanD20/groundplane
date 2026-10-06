@@ -57,6 +57,7 @@ func (repository *Reader) GetBackupRecoveryPoint(
 			environmentIndex,
 			sourceIndex,
 			connectorIndex,
+			BackupRecoveryPointCaptureKey(recoveryPointID),
 		},
 		Revision: record.ReadRevision,
 	})
@@ -64,7 +65,7 @@ func (repository *Reader) GetBackupRecoveryPoint(
 		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
 	}
 	if authority == nil || authority.ReadRevision != record.ReadRevision ||
-		len(authority.Values) != 5 ||
+		len(authority.Values) != 6 ||
 		authority.Values[0] == nil ||
 		authority.Values[0].Version != 1 ||
 		authority.Values[0].ModRevision != record.Revision ||
@@ -89,6 +90,10 @@ func (repository *Reader) GetBackupRecoveryPoint(
 			errs.KindRecoveryPointNotFound,
 			"recovery point was not found",
 		)
+	}
+	record.Record.Capture, err = readRecoveryPointCapture(authority.Values[5], record.Revision)
+	if err != nil {
+		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
 	}
 	return record, nil
 }
@@ -286,7 +291,7 @@ func (repository *Reader) listBackupRecoveryPoints(
 	defer etcdstore.ClearValues(points.Values)
 	records := make([]BackupRecoveryPointRecord, len(pointIDs))
 	visible := make([]bool, len(pointIDs))
-	companionKeys := make([]string, 0, len(pointIDs)*3)
+	companionKeys := make([]string, 0, len(pointIDs)*4)
 	for position, pointID := range pointIDs {
 		item := points.Values[position*2]
 		if item == nil {
@@ -315,7 +320,7 @@ func (repository *Reader) listBackupRecoveryPoints(
 			return BackupRuntimePage[BackupRecoveryPointRecord]{}, CorruptBackupRuntimeRecord()
 		}
 		records[position] = point
-		companionKeys = append(companionKeys, environmentIndex, sourceIndex, connectorIndex)
+		companionKeys = append(companionKeys, environmentIndex, sourceIndex, connectorIndex, BackupRecoveryPointCaptureKey(point.ID))
 		if pruneValue := points.Values[position*2+1]; pruneValue != nil {
 			prune, pruneErr := DecodeBackupRecoveryPointPruneRecord(pruneValue.Value)
 			if pruneErr != nil || prune.Point != point.BackupRecoveryPointSnapshot ||
@@ -346,14 +351,18 @@ func (repository *Reader) listBackupRecoveryPoints(
 	for position, point := range records {
 		primary := points.Values[position*2]
 		for offset := range 3 {
-			companion := companions.Values[position*3+offset]
-			expectedKey := companionKeys[position*3+offset]
+			companion := companions.Values[position*4+offset]
+			expectedKey := companionKeys[position*4+offset]
 			if companion == nil || companion.Key != expectedKey || companion.Version != 1 ||
 				companion.ModRevision != primary.ModRevision || string(companion.Value) != point.ID {
 				return BackupRuntimePage[BackupRecoveryPointRecord]{}, CorruptBackupRuntimeRecord()
 			}
 		}
 		if visible[position] {
+			point.Capture, err = readRecoveryPointCapture(companions.Values[position*4+3], primary.ModRevision)
+			if err != nil {
+				return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
+			}
 			page.Items = append(page.Items, etcdstore.Versioned[BackupRecoveryPointRecord]{
 				Record: point, Revision: primary.ModRevision, ReadRevision: index.ReadRevision,
 			})

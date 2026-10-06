@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
 
@@ -52,7 +53,16 @@ type BackupPostgresPointIdentity struct {
 
 type BackupRecoveryPointRecord struct {
 	BackupRecoveryPointSnapshot
-	VerifiedAt time.Time `json:"verified_at"`
+	VerifiedAt time.Time                  `json:"verified_at"`
+	Capture    BackupRecoveryPointCapture `json:"-"`
+}
+
+// Capture identifies the producing attempt independently of Task retention.
+// Zero means provenance was not recorded; it must never be inferred from time.
+type BackupRecoveryPointCapture struct {
+	TaskID      string    `json:"task_id"`
+	CreatedAt   time.Time `json:"created_at"`
+	SourceCount int       `json:"source_count"`
 }
 
 func (record BackupRecoveryPointTargetSnapshot) ObjectTarget() BackupObjectTarget {
@@ -131,6 +141,15 @@ func validateBackupRecoveryPointRecord(record BackupRecoveryPointRecord) error {
 	}
 	if !ValidBackupRuntimeInstant(record.VerifiedAt) || record.VerifiedAt.Before(record.CreatedAt) {
 		return invalidBackupRuntimeRecord("recovery point verification time is invalid")
+	}
+	return nil
+}
+
+func validateRecoveryPointCapture(capture BackupRecoveryPointCapture) error {
+	if recordcodec.ValidateID(ids.KindTask, capture.TaskID) != nil ||
+		!ValidBackupRuntimeInstant(capture.CreatedAt) || capture.SourceCount < 1 ||
+		capture.SourceCount > backuppolicy.MaximumBackupPolicySources {
+		return invalidBackupRuntimeRecord("recovery point capture identity is invalid")
 	}
 	return nil
 }

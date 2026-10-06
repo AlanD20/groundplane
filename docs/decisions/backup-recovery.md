@@ -40,6 +40,15 @@ requires another explicit operator request.
 
 ## Artifacts are validated before target mutation
 
+Recovery Point grouping uses a capture-metadata companion published atomically
+with each Point. It survives producing-Task retention and is removed with the
+Point. Presentation metadata is not part of the immutable Restore/prune snapshot:
+adding grouping must not change an existing assignment's authority or require
+rewriting Point history. [The capture owner](../../internal/infra/etcd/backupruntime/recovery_point_capture.go)
+and [publication](../../internal/infra/etcd/backup_recovery_point_commit.go) enforce
+the same-revision binding. A missing companion means unrecorded provenance;
+timestamps are never used as a substitute identity.
+
 The accepted source formats are the canonical Environment Config archive, the
 canonical managed-Volume archive, and PostgreSQL 16 `pg_dump` custom format.
 Optional age encryption wraps the source stream without adding another

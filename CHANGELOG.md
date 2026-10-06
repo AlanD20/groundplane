@@ -52,6 +52,9 @@ Initial single-host release.
 - Delete an individual Recovery Point through the Console, CLI or API. Protected
   cleanup verifies archive absence before releasing its references and leaves
   source data unchanged.
+- Group Recovery Points by their recorded Backup run in the Console, with
+  readable sources, per-source Restore/Delete and a protected sequential
+  deletion queue for the remaining archives. Retention remains per source.
 
 ### Runner CI/CD
 

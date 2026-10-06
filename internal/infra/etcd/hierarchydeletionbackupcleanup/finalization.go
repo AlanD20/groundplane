@@ -78,8 +78,8 @@ func (repository *Repository) PrepareFinalization(ctx context.Context,
 	mutations := make([]keyvalue.Mutation, 0, 4)
 	switch action.ActionKind {
 	case hierarchydeletion.HierarchyDeletionRecoveryPointRemove:
-		// Local authority is prune, primary, Environment, Source, Connector.
-		for _, position := range []int{1, 2, 3, 4} {
+		// Local authority is prune, primary, Environment, Source, Connector, Capture.
+		for _, position := range []int{1, 2, 3, 4, 5} {
 			mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
 				Key: local.conditions[position].Key})
 		}

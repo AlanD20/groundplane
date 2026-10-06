@@ -2803,6 +2803,7 @@ export interface components {
             slug: string;
         };
         RecoveryPoint: {
+            capture?: components["schemas"]["RecoveryPointCapture"];
             connector_bucket: string;
             connector_endpoint: string;
             connector_id: string;
@@ -2821,6 +2822,13 @@ export interface components {
             /** @enum {string} */
             status: "verified";
             target_id: string;
+        };
+        RecoveryPointCapture: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            source_count: number;
+            task_id: string;
         };
         RecoveryPointPage: {
             items: components["schemas"]["RecoveryPoint"][] | null;

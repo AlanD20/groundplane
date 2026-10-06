@@ -146,6 +146,13 @@ function recoveryPointFromAPI(point: RecoveryPointPageItem): RecoveryPoint {
     throw new Error("Controller returned an invalid Recovery Point size");
   }
   const base = {
+    capture: point.capture
+      ? {
+          taskId: point.capture.task_id,
+          createdAt: point.capture.created_at,
+          sourceCount: point.capture.source_count,
+        }
+      : undefined,
     id: point.id,
     connectorId: point.connector_id,
     connectorEndpoint: point.connector_endpoint,
@@ -362,13 +369,18 @@ export function useBackupStore({
           const loadedCount = loadedPointCounts.current.get(environmentId) ?? 0;
           while (!cursor && nextCursor && items.length < loadedCount) {
             const page = await request<RecoveryPointPageResponse>(
-              `/environments/${encodeURIComponent(environmentId)}/recovery-points?${new URLSearchParams({ cursor: nextCursor })}`, 200,
+              `/environments/${encodeURIComponent(environmentId)}/recovery-points?${new URLSearchParams({ cursor: nextCursor })}`,
+              200,
             );
-            if (pointGenerations.current.get(environmentId) !== generation) return;
+            if (pointGenerations.current.get(environmentId) !== generation)
+              return;
             items.push(...(page.items ?? []).map(recoveryPointFromAPI));
             nextCursor = page.next_cursor;
           }
-          loadedPointCounts.current.set(environmentId, cursor ? loadedCount + items.length : items.length);
+          loadedPointCounts.current.set(
+            environmentId,
+            cursor ? loadedCount + items.length : items.length,
+          );
           updatePolicy(environmentId, (policy) => {
             const points = policy.recoveryPoints;
             points.items = cursor ? [...points.items, ...items] : items;
@@ -490,7 +502,11 @@ export function useBackupStore({
   );
 
   const restoreBackup = useCallback(
-    async (environmentId: string, body: BackupRestoreRequest, idempotencyKey: string): Promise<string> => {
+    async (
+      environmentId: string,
+      body: BackupRestoreRequest,
+      idempotencyKey: string,
+    ): Promise<string> => {
       assertEnvironmentMutable(environmentId, "Restore");
       const response = await request<BackupRestoreTaskAccepted>(
         `/environments/${encodeURIComponent(environmentId)}/restore`,

@@ -77,7 +77,7 @@ func (s *Server) listRecoveryPoints(
 }
 
 func recoveryPointResponse(record backupruntime.BackupRecoveryPointRecord) apiTypes.RecoveryPoint {
-	return apiTypes.RecoveryPoint{
+	response := apiTypes.RecoveryPoint{
 		ID:                record.ID,
 		ConnectorID:       record.ConnectorID,
 		ConnectorEndpoint: record.ConnectorEndpoint,
@@ -92,4 +92,9 @@ func recoveryPointResponse(record backupruntime.BackupRecoveryPointRecord) apiTy
 		KeyEra:            record.KeyEra,
 		Status:            apiTypes.RecoveryPointVerified,
 	}
+	if record.Capture != (backupruntime.BackupRecoveryPointCapture{}) {
+		response.Capture = &apiTypes.RecoveryPointCapture{TaskID: record.Capture.TaskID,
+			CreatedAt: record.Capture.CreatedAt.UTC().Format(time.RFC3339), SourceCount: record.Capture.SourceCount}
+	}
+	return response
 }
