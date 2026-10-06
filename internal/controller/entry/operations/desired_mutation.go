@@ -30,6 +30,7 @@ import (
 )
 
 type entryDesiredMutationRepository interface {
+	InitializeEnvironmentDesiredState(context.Context, string, idempotencyrecord.IdempotencyLocator, idempotencyrecord.ProtectedIntentRecord, time.Time) error
 	controllerrevision.Repository
 	GetEnvironmentDesiredInput(
 		context.Context,
@@ -162,6 +163,9 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		if err := service.validateExposure(ctx, request.environmentID, request.desired.Exposure); err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
+	}
+	if err := service.repository.InitializeEnvironmentDesiredState(ctx, request.environmentID, request.locator, request.evidence.durable, service.now().UTC()); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, request.environmentID)
 	if err != nil {

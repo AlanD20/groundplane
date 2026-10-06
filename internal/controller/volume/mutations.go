@@ -438,7 +438,9 @@ func (service *MutationService) mutateOnce(
 	}
 	desiredInput, err := desiredrevision.DeriveCurrentMutationDesiredInput(
 		ctx, service.repository, request.environmentID, previousRevisionID, candidate,
-		environment.Record.NetworkPool, func(*core.BlueprintDesiredInput) error { return nil },
+		environment.Record.NetworkPool, func(input *core.BlueprintDesiredInput) error {
+			return updateAuthoredBackupVolumeReferences(input, current.Record, request)
+		},
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

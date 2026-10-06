@@ -59,6 +59,17 @@ func TestBackupPolicyProtectedReplacementCommitsAgeStateAndReplays(t *testing.T)
 			t.Fatalf("stored source order = %#v", stored.Record.SourceIDs)
 		}
 	}
+	desired, found, err := testblueprints.ReadCurrentDesiredInput(context.Background(), fixture.store, fixture.environment.Record.ID, 0)
+	if err != nil || !found || desired.Record.Input.Backup == nil {
+		t.Fatalf("read authored Backup = %#v, %t, %v", desired, found, err)
+	}
+	authored := desired.Record.Input.Backup
+	if !authored.Enabled || authored.Connector != "primary-backups" || authored.Frequency != projection.Frequency ||
+		authored.Keep != projection.Keep || authored.Encryption != "age" || len(authored.Sources) != 2 ||
+		authored.Sources[0].Kind != core.BackupSourceVolume || authored.Sources[0].Ref != "backup-data" ||
+		authored.Sources[1].Kind != core.BackupSourceConfig {
+		t.Fatalf("authored Backup lost accepted policy decisions: %#v", authored)
+	}
 	key := mustBackupKey(t, fixture.store, fixture.environment.Record.ID)
 	defer clear(key.Encrypted.Ciphertext)
 	if key.Record.KeyEra != 1 || key.Record.Recipient != projection.AgeRecipient ||
@@ -201,6 +212,10 @@ func TestBackupPolicyProtectedReplacementPreservesUnknownOutcomeAndConflicts(t *
 		t.Fatal(err)
 	}
 	marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-unknown-0001")
+	store.failKey, err = testidempotency.IdempotencyMarkerKey(marker.Locator)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := repository.ReplaceBackupPolicyProtected(
 		context.Background(), prepared, marker,
 	); !errors.Is(err, unknown) {
@@ -638,6 +653,7 @@ func assertBackupPolicyReference(
 type backupPolicyReplacementUnknownStore struct {
 	*memoryHierarchyStore
 	failNext error
+	failKey  string
 }
 
 func (store *backupPolicyReplacementUnknownStore) Transact(
@@ -647,9 +663,13 @@ func (store *backupPolicyReplacementUnknownStore) Transact(
 ) (testkeyvalue.TransactionResult, error) {
 	result, err := store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 	if err == nil && result.Succeeded && store.failNext != nil {
-		failure := store.failNext
-		store.failNext = nil
-		return testkeyvalue.TransactionResult{}, failure
+		for _, mutation := range mutations {
+			if mutation.Key == store.failKey {
+				failure := store.failNext
+				store.failNext = nil
+				return testkeyvalue.TransactionResult{}, failure
+			}
+		}
 	}
 	return result, err
 }

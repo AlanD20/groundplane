@@ -17,7 +17,10 @@ func encodeEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit
 	body.uint16(environmentBlueprintRecordSchema)
 	family := uint8(1)
 	var action uint8
-	if value.ConfigRestore != nil {
+	if value.Configuration != nil {
+		family = 8
+		body.string(value.Configuration.BaseRevisionID)
+	} else if value.ConfigRestore != nil {
 		family = 7
 		body.string(value.ConfigRestore.BaseRevisionID)
 		body.string(value.ConfigRestore.PointID)
@@ -107,7 +110,7 @@ func encodeEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit
 func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMutationAudit, error) {
 	if len(value) < 12 || string(value[:4]) != "GPMU" ||
 		binary.BigEndian.Uint16(value[4:6]) != environmentBlueprintRecordSchema ||
-		value[6] < 1 || value[6] > 7 ||
+		value[6] < 1 || value[6] > 8 ||
 		int(binary.BigEndian.Uint32(value[8:12])) != len(value)-12 {
 		return EnvironmentDesiredMutationAudit{}, CorruptEnvironmentBlueprintStage()
 	}
@@ -192,6 +195,11 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 			return EnvironmentDesiredMutationAudit{}, err
 		}
 		result.Route = route
+	} else if value[6] == 8 {
+		if value[7] != 0 {
+			return EnvironmentDesiredMutationAudit{}, CorruptEnvironmentBlueprintStage()
+		}
+		result.Configuration = &EnvironmentConfigurationMutationAudit{BaseRevisionID: reader.string(128)}
 	} else {
 		if value[7] != 0 {
 			return EnvironmentDesiredMutationAudit{}, CorruptEnvironmentBlueprintStage()

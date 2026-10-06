@@ -17,6 +17,7 @@ import (
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
@@ -94,6 +95,12 @@ func (repository *Repository) PublishEnvironmentZoneDesiredRevisionDirect(
 	input etcd.EnvironmentZoneDesiredPublication,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.hierarchy.PublishEnvironmentZoneDesiredRevisionDirect(ctx, input)
+}
+
+func (repository *Repository) InitializeEnvironmentDesiredState(ctx context.Context, environmentID string,
+	locator idempotencyrecord.IdempotencyLocator, intent idempotencyrecord.ProtectedIntentRecord, now time.Time,
+) error {
+	return repository.hierarchy.InitializeEnvironmentDesiredState(ctx, environmentID, locator, intent, now)
 }
 
 // NewRepository constructs the complete Network persistence adapter.

@@ -123,6 +123,9 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err := service.desired.validateExposure(ctx, input.environmentID, input.exposure); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	if err := service.desired.repository.InitializeEnvironmentDesiredState(ctx, input.environmentID, locator, evidence.durable, service.desired.now().UTC()); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	head, hasHead, err := service.desired.repository.GetEnvironmentBlueprintHead(ctx, input.environmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

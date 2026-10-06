@@ -142,6 +142,12 @@ type fakeZoneCreationRepository struct {
 	calls       int
 }
 
+func (repository *fakeZoneCreationRepository) InitializeEnvironmentDesiredState(
+	context.Context, string, testidempotency.IdempotencyLocator, testidempotency.ProtectedIntentRecord, time.Time,
+) error {
+	return nil
+}
+
 func (repository *fakeZoneCreationRepository) GetEnvironmentDesiredInput(
 	context.Context, string,
 ) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput], bool, error) {

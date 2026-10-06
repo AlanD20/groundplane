@@ -298,7 +298,7 @@ func validateDesiredBackup(value *core.BackupSpec) error {
 		return nil
 	}
 	if value.Frequency == "" || value.Keep < 1 || value.Keep > 9_007_199_254_740_991 ||
-		value.Encryption == "" || len(value.Sources) == 0 || value.Enabled && value.Connector == "" {
+		value.Encryption == "" || value.Enabled && (len(value.Sources) == 0 || value.Connector == "") {
 		return errs.New(errs.KindValidationFailed, "Environment desired Backup policy is invalid")
 	}
 	seen := make(map[string]struct{}, len(value.Sources))

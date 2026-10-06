@@ -6,6 +6,7 @@ import (
 
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptauthoring"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -26,18 +27,11 @@ func Authoring(
 		if _, duplicate := result[key]; duplicate {
 			return nil, errs.New(errs.KindInternal, "Environment Blueprint Script key is duplicated")
 		}
-		execution, err := authoringExecution(record, volumes, entries)
+		_, spec, err := scriptauthoring.Script(record, volumes, entries)
 		if err != nil {
 			return nil, err
 		}
-		result[key] = core.ScriptSpec{
-			Slug:      record.Desired.Slug,
-			Service:   record.Desired.ServiceName,
-			When:      record.Desired.When,
-			Order:     record.Desired.Order,
-			Script:    record.Desired.Body,
-			Execution: execution,
-		}
+		result[key] = spec
 	}
 	return result, nil
 }

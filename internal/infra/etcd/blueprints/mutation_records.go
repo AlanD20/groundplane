@@ -29,6 +29,13 @@ type EnvironmentDesiredMutationAudit struct {
 	Zone          *EnvironmentZoneMutationAudit
 	Route         *EnvironmentRouteMutationAudit
 	ConfigRestore *EnvironmentConfigRestoreAudit
+	Configuration *EnvironmentConfigurationMutationAudit
+}
+
+// Configuration publications change authored metadata, not the rendered host
+// generation. The protected request identifies the exact direct action.
+type EnvironmentConfigurationMutationAudit struct {
+	BaseRevisionID string
 }
 
 // EnvironmentConfigRestoreAudit identifies a complete Entry-set replacement.

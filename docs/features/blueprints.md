@@ -42,6 +42,13 @@ blocks. It is one YAML document, not a full archive: any referenced companion
 files must still be supplied in the import bundle. Drafts stay local until
 explicitly submitted.
 
+Direct resource actions update the same desired document: Backup policies,
+Scripts, Release Groups, Attaches and the Network Pool remain represented in
+later exports. Attach renames update their authored references; Volume renames
+and removals update Backup source references. These metadata changes do not
+redeploy running workloads. A first Zone or Entry can be created before any
+Blueprint Apply. Secret values remain excluded from exports.
+
 The API requires the exact last-read quoted revision in `If-Match`; see
 [Blueprint requests](../api-cli.md#blueprint-requests). Revision zero means no
 desired head. A stale revision fails without writes. The Console retains its

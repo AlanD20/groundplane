@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptauthoring"
 	scriptmutations "github.com/AlanD20/groundplane/internal/infra/etcd/scriptmutations"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -113,6 +114,14 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	publication, err := prepareDirectDesiredProjectionPublication(
+		ctx, repository.store, current.Record.EnvironmentID, marker,
+		scriptauthoring.Remove(current.Record),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearRouteHeadPublication(publication)
 	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -196,6 +205,11 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			Value: activeValue,
 		},
 	}
+	classify := classifyScriptDeletionStartConflict(environment, project, target, current, task.OperationID)
+	conditions, mutations, classify, err = publication.bindDirectDesired(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -205,8 +219,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
-		task, initiation, conditions, mutations,
-		classifyScriptDeletionStartConflict(environment, project, target, current, task.OperationID),
+		task, initiation, conditions, mutations, classify,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

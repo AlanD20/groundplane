@@ -65,7 +65,7 @@ func validateEnvironmentBlueprintStageDescriptor(value EnvironmentBlueprintStage
 	}
 	switch value.State {
 	case EnvironmentBlueprintStageOpen:
-	case EnvironmentBlueprintStageSealed, EnvironmentBlueprintStagePublished:
+	case EnvironmentBlueprintStageSealed, EnvironmentBlueprintStagePublished, EnvironmentBlueprintStageMetadata:
 		if value.NextAuditChunk != value.AuditChunks || value.NextProjectionChunk != value.ProjectionChunks {
 			return errs.New(errs.KindValidationFailed, "sealed Blueprint staging descriptor is incomplete")
 		}

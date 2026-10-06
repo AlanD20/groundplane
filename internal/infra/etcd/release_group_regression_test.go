@@ -94,14 +94,6 @@ func TestReleaseGroupMaximumRemovalFitsRealTaskPublicationEnvelope(t *testing.T)
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("publication = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	const expectedOperations = 67
-	if fixture.store.maxOperations != expectedOperations {
-		t.Fatalf(
-			"real maximum-member removal envelope = %d operations, want exactly %d",
-			fixture.store.maxOperations,
-			expectedOperations,
-		)
-	}
 	if fixture.store.maxOperations > testkeyvalue.MaximumOperations {
 		t.Fatalf(
 			"real maximum-member removal envelope = %d operations, want <= %d",

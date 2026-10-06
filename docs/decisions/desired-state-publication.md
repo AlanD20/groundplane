@@ -49,6 +49,15 @@ Direct desired mutations load one fixed base revision, derive a complete new
 normalized revision and publish it through the same head seam. They do not
 rewrite an authored file, add an overlay or write a flat record as authority.
 
+Metadata-only actions publish a new immutable input while retaining the exact
+Compose artifact and render generation. They stage immutable content privately,
+then atomically publish the resource change, desired head and replay result.
+Advancing desired metadata is not a Deploy and creates no extra execution Task.
+The storage owner is `internal/infra/etcd/desiredauthoring`; each resource owner
+supplies its typed mutation and concurrency guards. First-use Zone and Entry
+actions initialize a durable empty projection under the Environment fence,
+rather than inventing an in-memory fallback.
+
 Service desired input and Controller-owned runtime intent remain separate typed
 subrecords even when stored atomically together. Desired reconciliation
 preserves runtime intent. Start, Stop and Destroy change runtime intent without

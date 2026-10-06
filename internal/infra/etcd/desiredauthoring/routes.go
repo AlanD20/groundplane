@@ -1,4 +1,4 @@
-package etcd
+package desiredauthoring
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 // fields. Every other authored decision comes from the exact prior desired
 // input; the effective runtime projection cannot recreate Attach or Script
 // decisions that are not represented there.
-func routeHeadDesiredInput(
+func RouteInput(
 	ctx context.Context,
-	store hierarchyStore,
+	store Store,
 	current *projectionrecord.EnvironmentComposeProjection,
 	candidate projectionrecord.EnvironmentComposeProjection,
 	revision int64,

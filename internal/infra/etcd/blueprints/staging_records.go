@@ -46,6 +46,7 @@ const (
 	EnvironmentBlueprintStageSealed
 	EnvironmentBlueprintStagePublished
 	EnvironmentBlueprintStageAbandoned
+	EnvironmentBlueprintStageMetadata
 )
 
 // EnvironmentBlueprintSeal is the immutable integrity root selected by an

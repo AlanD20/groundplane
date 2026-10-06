@@ -3,6 +3,7 @@ package desiredrevision
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -134,6 +135,15 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 			return processed, blueprints.CorruptEnvironmentBlueprintStage()
 		}
 		switch descriptor.State {
+		case blueprints.EnvironmentBlueprintStageMetadata:
+			deleted, cleanupErr := desiredauthoring.Cleanup(ctx, repository.store, descriptor, entry.ModRevision, now)
+			if cleanupErr != nil {
+				return processed, cleanupErr
+			}
+			if deleted {
+				processed++
+			}
+			continue
 		case blueprints.EnvironmentBlueprintStageOpen, blueprints.EnvironmentBlueprintStageSealed:
 			if descriptor.UpdatedAt.After(now.Add(-blueprints.EnvironmentBlueprintStageExpiry)) {
 				continue

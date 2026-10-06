@@ -13,10 +13,10 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	serviceremovalreferences "github.com/AlanD20/groundplane/internal/infra/etcd/serviceremovalreferences"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
-	"slices"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -29,80 +29,16 @@ func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) error {
-	if err := servicerecord.ValidateServiceVersion(current); err != nil {
-		return err
-	}
-	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
-		projection.Record.EnvironmentID != current.Record.EnvironmentID ||
-		projectionrecord.ValidateEnvironmentComposeProjection(projection.Record) != nil {
-		return errs.New(errs.KindValidationFailed, "Service removal projection is invalid")
-	}
-	if current.Record.BackingNetworkID != "" || current.Record.Desired.Adapter != "" {
-		return errs.New(errs.KindResourceInUse, "Backing Services are removed through their backing lifecycle")
-	}
-	for _, service := range projection.Record.DesiredServices {
-		if service.Desired.ID == current.Record.Desired.ID {
-			continue
-		}
-		if _, referenced := service.Desired.DependsOn[current.Record.Desired.Name]; referenced {
-			return errs.New(errs.KindResourceInUse, "Service is referenced by another desired resource")
-		}
-	}
-	for _, component := range projection.Record.Components {
-		if slices.Contains(component.Runtime.GeneratedServices, current.Record.Desired.ID) {
-			return errs.New(errs.KindResourceInUse, "Component-generated Services are removed through their Component")
-		}
-	}
-	for _, prefix := range []string{
-		"/v1/indexes/attaches/by-service/service/" + current.Record.Desired.ID + "/",
-		"/v1/indexes/attaches/by-backing-service/service/" + current.Record.Desired.ID + "/",
-	} {
-		page, err := repository.store.Range(
-			ctx,
-			etcdstore.RangeRequest{Prefix: prefix, Limit: 1, Revision: projection.ReadRevision},
-		)
-		if err != nil {
-			return err
-		}
-		if page == nil {
-			return errs.New(errs.KindInternal, "Service removal reference read is empty")
-		}
-		if len(page.Values) != 0 {
-			return errs.New(errs.KindResourceInUse, "Service is referenced by an Attach")
-		}
-	}
-	if err := repository.scanServiceRemovalRecords(ctx, projection.ReadRevision, current.Record); err != nil {
-		return err
-	}
-	_, err := scriptsourceevidence.PrepareServiceScriptAbsence(
-		ctx,
-		repository.store,
-		current.Record.Desired.ID,
-		projection.ReadRevision,
-	)
+	_, err := repository.validateServiceRemovalReferences(ctx, current, projection)
 	return err
 }
 
-func (repository *ServiceRepository) scanServiceRemovalRecords(
+func (repository *ServiceRepository) validateServiceRemovalReferences(
 	ctx context.Context,
-	revision int64,
-	current servicerecord.ServiceRecord,
-) error {
-	projection, found, err := blueprints.ReadCurrentProjection(
-		ctx, repository.store, current.EnvironmentID, revision,
-	)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return nil
-	}
-	for _, route := range projection.Record.DesiredRoutes {
-		if route.Desired.TargetServiceID == current.Desired.ID {
-			return errs.New(errs.KindResourceInUse, "Service is referenced by another desired resource")
-		}
-	}
-	return nil
+	current etcdstore.Versioned[servicerecord.ServiceRecord],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+) (serviceremovalreferences.Guards, error) {
+	return serviceremovalreferences.Validate(ctx, repository.store, current, projection)
 }
 
 // BeginServiceRemovalWithTask seals ownership of an already-staged candidate
@@ -182,7 +118,8 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := repository.ValidateServiceRemovalReferences(ctx, current, projection); err != nil {
+	referenceGuards, err := repository.validateServiceRemovalReferences(ctx, current, projection)
+	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
@@ -274,6 +211,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: serviceruntimerecord.Key(intent.ServiceID), ModRevision: intent.AcknowledgedRuntimeRevision},
 	}
+	conditions = append(conditions, referenceGuards.Conditions()...)
 	conditions = append(conditions, dnsConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},

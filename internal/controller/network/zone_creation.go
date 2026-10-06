@@ -30,6 +30,7 @@ const (
 )
 
 type zoneCreationRepository interface {
+	InitializeEnvironmentDesiredState(context.Context, string, idempotencyrecord.IdempotencyLocator, idempotencyrecord.ProtectedIntentRecord, time.Time) error
 	GetEnvironmentDesiredInput(
 		context.Context,
 		string,
@@ -237,15 +238,15 @@ func (service *zoneCreationService) createZoneOnce(
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
+	if err := service.repository.InitializeEnvironmentDesiredState(ctx, input.EnvironmentID, locator, evidence.durable, service.now().UTC()); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, input.EnvironmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !found {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Environment has no current desired revision",
-		)
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Environment desired initialization is incomplete")
 	}
 	environment, err := service.repository.GetEnvironment(ctx, input.EnvironmentID)
 	if err != nil {
@@ -263,7 +264,8 @@ func (service *zoneCreationService) createZoneOnce(
 		)
 	}
 	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
-		environment.Record.ID != input.EnvironmentID || projection.Record.EnvironmentID != input.EnvironmentID ||
+		environment.Record.ID != input.EnvironmentID ||
+		projection.Record.EnvironmentID != input.EnvironmentID ||
 		project.Record.ID != environment.Record.ProjectID {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
@@ -284,7 +286,10 @@ func (service *zoneCreationService) createZoneOnce(
 			"Zone subnet must be inside the Environment network pool",
 		)
 	}
-	if projection.Record.RenderGeneration == ^uint64(0) {
+	expectedHeadRevision := projection.Revision
+	renderGeneration := projection.Record.RenderGeneration + 1
+	previousRevisionID := projection.Record.RevisionID
+	if renderGeneration == 0 {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
 			"Environment render generation is exhausted",
@@ -297,9 +302,9 @@ func (service *zoneCreationService) createZoneOnce(
 		MatchExistingIntent: func(matchContext context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 			return service.idempotency.MatchesStaged(matchContext, evidence, existing)
 		},
-		BaselineHeadRevision: projection.Revision,
+		BaselineHeadRevision: expectedHeadRevision,
 		SourceKind:           blueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration:     projection.Record.RenderGeneration + 1,
+		RenderGeneration:     renderGeneration,
 		CreatedAt:            createdAt,
 	})
 	if err != nil {
@@ -333,7 +338,7 @@ func (service *zoneCreationService) createZoneOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	desiredInput, err := desiredrevision.DeriveCurrentMutationDesiredInput(
-		ctx, service.repository, environment.Record.ID, projection.Record.RevisionID,
+		ctx, service.repository, environment.Record.ID, previousRevisionID,
 		candidate, environment.Record.NetworkPool,
 		func(*core.BlueprintDesiredInput) error { return nil },
 	)
@@ -343,7 +348,7 @@ func (service *zoneCreationService) createZoneOnce(
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
 		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Zone: &blueprints.EnvironmentZoneMutationAudit{
-			Action: blueprints.EnvironmentZoneMutationCreate, BaseRevisionID: projection.Record.RevisionID,
+			Action: blueprints.EnvironmentZoneMutationCreate, BaseRevisionID: previousRevisionID,
 			ZoneID: record.Desired.ID,
 			Request: &blueprints.EnvironmentZoneMutationRequest{
 				EnvironmentID: input.EnvironmentID, Name: input.Name, Subnet: input.Subnet, Internal: input.Internal,
@@ -380,7 +385,7 @@ func (service *zoneCreationService) createZoneOnce(
 	result, createErr := service.repository.PublishEnvironmentZoneDesiredRevisionDirect(
 		ctx,
 		etcd.EnvironmentZoneDesiredPublication{
-			Project: project, Environment: environment, ExpectedHeadRevision: projection.Revision,
+			Project: project, Environment: environment, ExpectedHeadRevision: expectedHeadRevision,
 			Claim: claim,
 			Revision: blueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: environment.Record.ID, RevisionID: claim.RevisionID,

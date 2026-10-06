@@ -32,8 +32,17 @@ func ValidateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAud
 	if value.ConfigRestore != nil {
 		kinds++
 	}
+	if value.Configuration != nil {
+		kinds++
+	}
 	if kinds != 1 {
 		return errs.New(errs.KindValidationFailed, "desired mutation audit kind is invalid")
+	}
+	if value.Configuration != nil {
+		if value.Configuration.BaseRevisionID != "" && ids.Validate(ids.KindTask, value.Configuration.BaseRevisionID) != nil {
+			return errs.New(errs.KindValidationFailed, "Configuration mutation predecessor is invalid")
+		}
+		return nil
 	}
 	if value.ConfigRestore != nil {
 		restore := value.ConfigRestore

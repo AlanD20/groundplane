@@ -321,6 +321,15 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	desired, err := prepareAttachDesiredAuthoring(ctx, repository.store, record, "", false, marker)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearRouteHeadPublication(desired)
+	conditions, mutations, classify, err = desired.bindDirectDesired(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	return repository.publishAttachRuntimeTask(ctx, task, renderInput, initiation, marker,
 		mutationContext, conditions, mutations, classify)
 }

@@ -7,6 +7,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -73,7 +74,7 @@ func prepareRouteHeadPublication(
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
-	desiredInput, err := routeHeadDesiredInput(ctx, store, current, candidate, expectedHeadRevision)
+	desiredInput, err := desiredauthoring.RouteInput(ctx, store, current, candidate, expectedHeadRevision)
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
@@ -323,7 +324,7 @@ func prepareRouteHeadCandidate(
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
-	desiredInput, err := routeHeadDesiredInput(
+	desiredInput, err := desiredauthoring.RouteInput(
 		ctx, store, intent.CurrentProjection, candidate, intent.CurrentProjectionRevision,
 	)
 	if err != nil {
@@ -573,15 +574,5 @@ func clearRouteHeadPublication(publication routeHeadPublication) {
 }
 
 func classifyRouteHeadConflict(conditions []etcdstore.Condition) idempotencyPlanClassifier {
-	return func(_ int64, values []*etcdstore.KeyValue) error {
-		if len(values) != len(conditions) {
-			return errs.New(errs.KindInternal, "Route desired head compare evidence is incomplete")
-		}
-		for index, condition := range conditions {
-			if !etcdstore.ConditionMatchesRead(condition, values[index]) {
-				return errs.New(errs.KindStateConflict, "Route desired head changed")
-			}
-		}
-		return errs.New(errs.KindStateConflict, "Route desired head changed")
-	}
+	return idempotencyPlanClassifier(desiredauthoring.ClassifyRouteConditions(conditions))
 }

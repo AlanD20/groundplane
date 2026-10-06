@@ -9,7 +9,6 @@ import (
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,37 +18,37 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if prepared.TaskType() != taskjournal.TaskCreate && prepared.TaskType() != taskjournal.TaskUpdate {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"release group direct mutation type is invalid",
-		)
-	}
-	if ids.Validate(ids.KindEnvironment, prepared.EnvironmentID()) != nil ||
-		ids.Validate(ids.KindReleaseGroup, prepared.GroupID()) != nil {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"release group direct mutation identity is invalid",
-		)
-	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
-		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != prepared.EnvironmentID() {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"release group direct marker is invalid",
-		)
-	}
-	if err := groupstore.ValidateReleaseGroupPreparedFragment(prepared); err != nil {
+	if err := groupstore.ValidatePreparedDirect(prepared, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := NewIdempotencyMutationPlan(
-		prepared.Conditions(),
-		prepared.Mutations(),
+	authoring, err := groupstore.PrepareDesiredAuthoring(ctx, repository.store, prepared)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	desired, err := prepareDirectDesiredProjectionPublication(
+		ctx, repository.store, prepared.EnvironmentID(), marker,
+		authoring.Apply,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearRouteHeadPublication(desired)
+	conditions := prepared.Conditions()
+	mutations := prepared.Mutations()
+	conditions, mutations, classify, err := desired.bindDirectDesired(
+		conditions,
+		mutations,
 		func(_ int64, _ []*etcdstore.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "release group mutation evidence changed")
 		},
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := NewIdempotencyMutationPlan(
+		conditions,
+		mutations,
+		classify,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -104,6 +103,18 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	authoring, err := groupstore.PrepareDesiredAuthoring(ctx, repository.store, prepared)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	desired, err := prepareDirectDesiredProjectionPublication(
+		ctx, repository.store, prepared.EnvironmentID(), marker,
+		authoring.Apply,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearRouteHeadPublication(desired)
 	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -166,11 +177,19 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(
-		task, initiation, conditions, mutations,
+	conditions, mutations, classify, err := desired.bindDirectDesired(
+		conditions,
+		mutations,
 		func(_ int64, _ []*etcdstore.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "release group mutation evidence changed")
 		},
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(
+		task, initiation, conditions, mutations,
+		classify,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -183,19 +202,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 }
 
 func validateReleaseGroupPreparedMutation(prepared groupstore.ReleaseGroupPreparedMutation, task TaskRecord) error {
-	if ids.Validate(ids.KindEnvironment, prepared.EnvironmentID()) != nil ||
-		ids.Validate(ids.KindReleaseGroup, prepared.GroupID()) != nil || prepared.TaskType() != task.Type ||
-		task.Executor != taskjournal.TaskExecutorController || task.Target != prepared.GroupID() ||
-		task.Status != taskjournal.TaskStatusPending || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceReleaseGroup ||
-		len(task.Params) != 1 ||
-		(prepared.TaskType() != taskjournal.TaskCreate && prepared.TaskType() != taskjournal.TaskUpdate && prepared.TaskType() != taskjournal.TaskRemove) {
-		return errs.New(errs.KindValidationFailed, "release group prepared mutation is invalid")
-	}
-	if prepared.TaskType() == taskjournal.TaskRemove && prepared.GroupRevision() <= 0 {
-		return errs.New(errs.KindValidationFailed, "release group removal revision is invalid")
-	}
-	if err := groupstore.ValidateReleaseGroupPreparedFragment(prepared); err != nil {
-		return err
-	}
-	return prepared.ValidateRemovalPrimaryMutations()
+	return groupstore.ValidatePreparedTask(prepared, groupstore.MutationTaskIdentity{
+		Type: task.Type, Executor: task.Executor, Target: task.Target, Status: task.Status, Params: task.Params,
+	})
 }

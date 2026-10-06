@@ -205,6 +205,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | BP-13 | Submit valid A, B, C while A runs; separately submit invalid B. | Only current relevant units execute after safe handoff; queued obsolete work is cancelled; invalid input does not cancel valid work; unrelated resources continue. | BLOCKED D1 |
 | BP-14 | Supersede after a shared configuration write; separately leave its effect unknown or its executor unconfirmed stopped. | Accounted divergence repairs forward only after proven stop; unknown effects retain conflicting claims; original partial outcome and actual Service health stay visible. | BLOCKED D1 |
 | BP-15 | Revert desired values to an earlier value after partial effects or mixed member success. | Fingerprints compare verified per-resource inputs/effects, not an aggregate desired document; required repair is not skipped and successful unrelated work is not repeated. | BLOCKED D1 |
+| BP-16 | Create resources before first Apply; directly edit Backup, Scripts, Release Groups, Attaches and the Network Pool; rename/remove a Backup Volume; export again. Race two metadata edits and stage a large Script input. | One durable desired head reflects accepted actions; stale candidates cannot publish; earlier immutable input and runtime artifact remain unchanged; each transaction respects its bound. Renames/removals leave no obsolete authored references. | PARTIAL local behavior checks (2026-10-06): durable initialization, immutable publication, stale-candidate refusal, 1.44 MiB staged input, Attach export, Script/Group removal and Volume Backup-reference changes pass. Full installed API/export journey for all direct actions NOT RUN. |
 
 ## Services and Releases
 
@@ -894,6 +895,15 @@ retains the full dated review narrative and local run locators.
 | `TestAgentTaskProgressFencesExactAssignmentAndGeneration` in that file | Stale assignment/generation and missing authority cannot consume a sequence; valid progress has exact identity, state and payload, with independently expected event count and next sequence. | TASK-07/10: local journal admission, not protobuf transport, actual reconnect or all event bounds. |
 | `TestGetTaskAssignmentResolvesTheTaskIndexedExecutionClaim` in [task_assignment_lookup_test.go](../internal/infra/etcd/task_assignment_lookup_test.go) | Lookup selects the exact Task's claim even while the Agent owns another Task; returned Task/assignment revisions agree at one read. Pending work is not mistaken for an assigned executor. | TASK-03/10: in-memory indexed lookup, not public Abort, real fixed-revision races or executor cancellation. |
 | `TestTaskResultRecordRoundTripsAsBoundedSummary` in [task_result_test.go](../internal/infra/etcd/task_result_test.go) | Preserve distinct summary counts, execution epoch and recovery digest; accept 64 project summaries and reject 65; reject missing/zero DNS image evidence; cloning must detach project entries and canonical DNS evidence bytes. | TASK-07: codec/validation and copy ownership, not Agent report transport, durable publication, secret/log inspection or recovery execution. |
+
+### Direct desired-state repair checks (2026-10-06)
+
+| Check | Failure prevented | Qualification boundary |
+| --- | --- | --- |
+| [Direct publication](../internal/infra/etcd/direct_desired_publication_test.go) | First-use authority is durable; metadata edits preserve exact runtime bytes, reject stale candidates and retain immutable history. Large input stays private until bounded promotion; expired candidate cleanup preserves the selected revision. | BP-03/11/16: in-memory storage, not installed API races or interrupted real-etcd staging. |
+| [Backup replacement](../internal/infra/etcd/backup_policy_replacement_test.go) | Accepted policy choices reach canonical input; committed-but-unacknowledged publication resolves through exact replay instead of another write. Fault injection targets final resource publication, not private staging. | BP-16, BAK-01/14: repository proof, not an R2 Backup/Restore run. |
+| [Volume Backup references](../internal/controller/volume/backup_reference_mutation_test.go) | Rename preserves source identity; removal drops only that source and disables an empty policy without losing its settings. | BP-16, VOL-02/03: candidate transformation, not physical removal or scheduled Backup execution. |
+| [Service removal references](../internal/infra/etcd/serviceremovalreferences/guards_test.go) | Explicit Entry exposure and Release Group membership block removal; unrelated and all-Service exposure do not. Collection revision guards close concurrent Group insertion. | SVC-04: local admission and prepared guards, not a live removal race. |
 
 ## Running and maintaining the matrix
 

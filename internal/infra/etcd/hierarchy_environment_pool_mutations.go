@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/core"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -232,6 +233,16 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 			return recordcodec.StateConflict("Zone pool registry", current.Record.ID)
 		}
 		return recordcodec.StateConflict("environment", current.Record.ID)
+	}
+	publication, err := prepareDirectDesiredPublication(ctx, repository.store, current.Record.ID, marker,
+		func(input *core.BlueprintDesiredInput) error { input.NetworkPool = replacement.NetworkPool; return nil })
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearRouteHeadPublication(publication)
+	conditions, mutations, classify, err = publication.bindDirectDesired(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := NewIdempotencyMutationPlan(conditions, mutations, classify)
 	if err != nil {
