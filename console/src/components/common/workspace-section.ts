@@ -5,10 +5,11 @@ export function workspaceSectionClassName(editing = false, className?: string) {
   return cn(
     "min-w-0 border p-4 transition-colors motion-reduce:transition-none",
     editing
-      ? "rounded-lg border-primary/40 bg-primary/5"
-      : "rounded-none border-transparent border-b-border last:border-b-transparent",
+      ? "workspace-editing rounded-lg border-primary/40"
+      : "rounded-lg border-border bg-background/30",
     className,
   );
 }
 
-export const editorFooterClassName = "mt-4 border-t border-border pt-4";
+export const editorFooterClassName =
+  "workspace-editor-footer mt-4 border-t border-primary/25 pt-4";

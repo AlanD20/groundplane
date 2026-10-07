@@ -155,7 +155,7 @@ export function ServiceSettings({
                   <Badge variant="success">Saved</Badge>
                 ) : null}
               </div>
-              <div className="min-w-0 space-y-4">
+              <div className="min-w-0 space-y-4 border-t border-border pt-4 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
                 <InlineEditorRegion editing={editing === row.section}>
                   {editing === row.section ? (
                     <ServiceFormBody

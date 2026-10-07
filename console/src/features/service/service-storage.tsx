@@ -320,14 +320,16 @@ export function ServiceStorage({
               <div className="flex min-w-0 flex-1 items-start gap-3">
                 <HardDrive
                   aria-hidden
-                  className="mt-1 size-4 shrink-0 text-muted-foreground"
+                  className="size-9 shrink-0 rounded-lg border border-border bg-muted p-2 text-primary"
                 />
                 <div className="min-w-0 space-y-1">
                   <p className="text-sm font-medium [overflow-wrap:anywhere]">
                     {env.volumes.find((volume) => volume.id === mount.volume)
                       ?.slug ?? mount.volume}
                   </p>
-                  <p className="break-all font-mono text-sm">{mount.mount}</p>
+                  <p className="w-fit max-w-full break-all rounded-md bg-muted px-2 py-1 font-mono text-sm">
+                    {mount.mount}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {mount.ro ? "Read only" : "Read & write"}
                     {saved?.path === mount.mount && (

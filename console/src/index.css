@@ -89,6 +89,8 @@
   --info-foreground: #ffffff;
   --border: #e0d5ea;
   --input: #e0d5ea;
+  --workspace-field: #ffffff;
+  --workspace-field-border: #9074aa;
   --ring: #7441b6;
   --chart-1: #7441b6;
   --chart-2: #207953;
@@ -134,6 +136,8 @@
   --info-foreground: #100d17;
   --border: #352a43;
   --input: #352a43;
+  --workspace-field: #15101d;
+  --workspace-field-border: #8b759f;
   --ring: #c4a3ff;
   --chart-1: #c4a3ff;
   --chart-2: #82d9b0;
@@ -149,6 +153,30 @@
   --sidebar-accent-foreground: #c4a3ff;
   --sidebar-border: #372b42;
   --sidebar-ring: #c4a3ff;
+}
+
+@layer utilities {
+  .workspace-editing {
+    --workspace-editor-bg: color-mix(in oklab, var(--primary) 8%, var(--card));
+    background-color: var(--workspace-editor-bg);
+  }
+
+  .workspace-editing
+    :is([data-slot="input"], textarea, button[role="combobox"]) {
+    background-color: var(--workspace-field);
+    color: var(--foreground);
+  }
+
+  .workspace-editing
+    :is([data-slot="input"], textarea, button[role="combobox"]):not(
+      :focus-visible
+    ):not([aria-invalid="true"]):not([data-popup-open]) {
+    border-color: var(--workspace-field-border);
+  }
+
+  .workspace-editing .workspace-editor-footer {
+    background-color: var(--workspace-editor-bg);
+  }
 }
 
 @layer base {

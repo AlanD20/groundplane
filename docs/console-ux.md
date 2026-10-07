@@ -113,11 +113,14 @@ Adding a mount creates one named new draft; editing it leaves other mounts reada
 Confirm destructive operations separately. Put
 connection values and their variable/file usage beside the owning connection.
 
-Use flat rows with consistent 16px padding and subtle dividers inside workspace
-panels. Mark the active edit or new draft with a soft primary tint and outlined
-border, preserving its padding. Avoid nesting another editor card inside that
-highlight. Editor footers leave 16px above their divider and 16px before the
-Save/Cancel controls. Links name their destination; reserve editor wording for
+Use consistently outlined rows with 16px padding inside workspace panels. Separate
+section labels from their values with a divider, vertical in wide layouts and
+horizontal in stacked layouts. Mark the active edit or new draft with a soft
+primary tint and outlined border, preserving its padding. Give fields an opaque
+surface and a stronger border in that tint, retaining focus and invalid states.
+The highlight continues through the action footer. Avoid nesting another editor
+card inside that highlight. Editor footers leave 16px above their divider and
+16px before the Save/Cancel controls. Links name their destination; reserve editor wording for
 actions that actually open an editor.
 
 Use the shared searchable selector for resource references; use the regular

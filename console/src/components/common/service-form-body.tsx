@@ -559,7 +559,7 @@ export function ServiceFormBody({
           <DialogFooter
             className={
               inline
-                ? `${editorFooterClassName} sticky bottom-0 bg-card pb-1`
+                ? `${editorFooterClassName} sticky bottom-0 pb-1`
                 : undefined
             }
           >
