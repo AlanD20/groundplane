@@ -33,7 +33,18 @@ func validateReleaseProxyTopology(
 		if name == "" {
 			return nil, errs.New(errs.KindStateConflict, "serving Service proxy topology is unavailable")
 		}
-		var project composetypes.Project
+		// Only the stable proxy's network/socket shape participates in this
+		// comparison. Workload fields use Compose's loader-specific decoding
+		// (including durations), not yaml.v3 unmarshalling into Project.
+		type proxyShape struct {
+			Networks map[string]*composetypes.ServiceNetworkConfig `yaml:"networks"`
+			Ports    []composetypes.ServicePortConfig              `yaml:"ports"`
+			Expose   composetypes.StringOrNumberList               `yaml:"expose"`
+			Restart  string                                        `yaml:"restart"`
+		}
+		var project struct {
+			Services map[string]proxyShape `yaml:"services"`
+		}
 		if err := yaml.Unmarshal(artifact.GetCanonicalYaml(), &project); err != nil {
 			return nil, errs.Wrap(errs.KindInternal, err)
 		}
@@ -41,12 +52,7 @@ func validateReleaseProxyTopology(
 		if !found {
 			return nil, errs.New(errs.KindStateConflict, "Service proxy is absent from its captured configuration")
 		}
-		return json.Marshal(struct {
-			Networks map[string]*composetypes.ServiceNetworkConfig
-			Ports    []composetypes.ServicePortConfig
-			Expose   composetypes.StringOrNumberList
-			Restart  string
-		}{proxy.Networks, proxy.Ports, proxy.Expose, proxy.Restart})
+		return json.Marshal(proxy)
 	}
 	before, err := shape(prior)
 	if err != nil {

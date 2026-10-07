@@ -17,7 +17,7 @@ func TestBlueGreenRejectsDisruptiveProxyTopologyChanges(t *testing.T) {
 				Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY}},
 			CanonicalYaml: []byte(
 				fmt.Sprintf(
-					"services:\n  proxy:\n    networks:\n      app:\n        aliases: [%s]\n    ports:\n      - target: %d\n        published: '8080'\n        protocol: tcp\n    restart: %s\n",
+					"services:\n  workload:\n    healthcheck:\n      test: [CMD, /app/healthcheck]\n      interval: 2s\n      timeout: 1s\n  proxy:\n    networks:\n      app:\n        aliases: [%s]\n    ports:\n      - target: %d\n        published: '8080'\n        protocol: tcp\n    restart: %s\n",
 					alias,
 					port,
 					restart,
