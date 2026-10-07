@@ -158,6 +158,8 @@ export type StoreContext = State &
   ComponentRefreshActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
+    resourceRefreshErrors: string[];
+    retryResourceRefresh: () => void;
     adapters: typeof seedAdapters;
     platform: typeof seedPlatform;
     watchLogs: (

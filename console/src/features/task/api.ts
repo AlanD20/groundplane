@@ -1,5 +1,6 @@
 import type { operations } from "@/lib/api.generated";
 import { controllerRequest } from "@/lib/controller-json-request";
+import { observeTerminalTask } from "./terminal-observation";
 
 export type TaskResponse =
   operations["task.show"]["responses"][200]["content"]["application/json"];
@@ -9,15 +10,17 @@ type TaskRetryResponse =
 type TaskAbortResponse =
   operations["task.abort"]["responses"][202]["content"]["application/json"];
 
-export function requestTask(
+export async function requestTask(
   taskId: string,
   signal?: AbortSignal,
 ): Promise<TaskResponse> {
-  return controllerRequest<TaskResponse>(
+  const task = await controllerRequest<TaskResponse>(
     `/tasks/${encodeURIComponent(taskId)}`,
     200,
     { signal },
   );
+  if (!signal?.aborted) observeTerminalTask(task);
+  return task;
 }
 
 export async function retryTask(

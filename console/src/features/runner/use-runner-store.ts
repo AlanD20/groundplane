@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { operations } from "@/lib/api.generated";
 import type { Runner } from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
@@ -41,11 +41,14 @@ export type RunnerActions = {
 };
 type UpdateRunners = (change: (draft: RunnerState) => void) => void;
 export function useRunnerStore(update: UpdateRunners): RunnerActions {
+  const loadedTenants = useRef(new Set<string>());
+  const requests = useRef(new Map<string, number>());
   const refreshRunners = useCallback(
     async (tenantId: string) => {
+      const generation = (requests.current.get(tenantId) ?? 0) + 1;
+      requests.current.set(tenantId, generation);
       update((draft) => {
-        draft.runnersLoading = true;
-        draft.runnerError = null;
+        draft.runnersLoading = !loadedTenants.current.has(tenantId);
       });
       try {
         // The Tenant list contains all ownership levels, bounded by its quota.
@@ -72,13 +75,18 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
             createdAt: runner.created_at,
           });
         }
+        if (requests.current.get(tenantId) !== generation) return;
+        loadedTenants.current.add(tenantId);
         update((draft) => {
-          draft.runners = [...runners.values()].sort((left, right) =>
-            left.id.localeCompare(right.id),
-          );
+          draft.runners = [
+            ...draft.runners.filter((runner) => runner.tenantId !== tenantId),
+            ...runners.values(),
+          ].sort((left, right) => left.id.localeCompare(right.id));
           draft.runnersLoading = false;
+          draft.runnerError = null;
         });
       } catch (error) {
+        if (requests.current.get(tenantId) !== generation) return;
         update((draft) => {
           draft.runnersLoading = false;
           draft.runnerError =

@@ -21,6 +21,7 @@ export function mergeEnvironmentProjectLoads(
   currentProjects: Project[],
   loadedProjects: Project[],
   snapshotGenerations: Map<string, number>,
+  currentGenerations: Map<string, number>,
   shouldPreserve: (
     environmentId: string,
     snapshotGeneration: number,
@@ -45,6 +46,8 @@ export function mergeEnvironmentProjectLoads(
     );
     const preservedEnvironments = (currentProject?.environments ?? []).filter(
       (environment) =>
+        (currentGenerations.get(environment.id) ?? 0) !==
+          (snapshotGenerations.get(environment.id) ?? 0) &&
         shouldPreserve(
           environment.id,
           snapshotGenerations.get(environment.id) ?? 0,

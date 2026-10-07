@@ -79,6 +79,7 @@ export function useBackingProjectLoading({
             draft.backingProjects,
             projects,
             loadGenerations,
+            environmentGenerations.current,
             shouldPreserveEnvironmentOnLoad,
           );
           draft.backingProjectsLoading = false;
@@ -88,7 +89,6 @@ export function useBackingProjectLoading({
       (error: unknown) => {
         if (controller.signal.aborted) return;
         update((draft) => {
-          draft.backingProjects = [];
           draft.backingProjectsLoading = false;
           draft.backingProjectError =
             error instanceof Error

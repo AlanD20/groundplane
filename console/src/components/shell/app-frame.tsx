@@ -58,7 +58,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const workspace = useWorkspace(pathname);
   const hasLocalNavigation = hasWorkspaceNavigation(pathname);
   const navigate = useNavigate();
-  const { addTenant, tenantProjects } = useStore();
+  const {
+    addTenant,
+    tenantProjects,
+    resourceRefreshErrors,
+    retryResourceRefresh,
+  } = useStore();
   const projectSlug = useProjectSlug(
     pathname,
     tenantProjects.map((p) => p.slug),
@@ -211,6 +216,29 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           >
             <div className="console-page" key={pathname}>
               <ContextReturnLink />
+              {resourceRefreshErrors.length > 0 && (
+                <div
+                  role="alert"
+                  className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm"
+                >
+                  <div>
+                    <p className="font-medium">
+                      Some resource details could not be refreshed after an
+                      operation.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {resourceRefreshErrors.join(" · ")}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={retryResourceRefresh}
+                  >
+                    Retry refresh
+                  </Button>
+                </div>
+              )}
               {children}
             </div>
           </main>

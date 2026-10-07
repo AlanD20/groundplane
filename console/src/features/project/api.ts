@@ -2,6 +2,7 @@ import type { operations } from "@/lib/api.generated";
 import type { Project } from "@/lib/types";
 import { listAllEnvironments } from "@/features/environment/workspace-read";
 import { controllerRequest } from "@/lib/controller-json-request";
+import { ControllerRequestError } from "@/lib/controller-request-errors";
 export type ProjectPageResponse =
   operations["project.list"]["responses"][200]["content"]["application/json"];
 export type ProjectCreateRequest =
@@ -57,4 +58,24 @@ export async function listAllTenantProjects(
       environments: await listAllEnvironments(project.id, signal),
     })),
   );
+}
+
+export async function readProject(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<Project | null> {
+  const response = await controllerRequest<ProjectShowResponse>(
+    `/projects/${encodeURIComponent(projectId)}`,
+    200,
+    { signal },
+  ).catch((cause: unknown) => {
+    if (cause instanceof ControllerRequestError && cause.status === 404)
+      return null;
+    throw cause;
+  });
+  if (!response) return null;
+  return {
+    ...projectFromAPI(response),
+    environments: await listAllEnvironments(projectId, signal),
+  };
 }

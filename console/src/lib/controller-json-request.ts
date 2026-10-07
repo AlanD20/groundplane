@@ -5,6 +5,9 @@ import {
 import { newULID } from "./utils";
 import { reportAcceptedTasks } from "@/features/task/accepted-tasks";
 
+let mutationVersion = 0;
+export const controllerMutationVersion = () => mutationVersion;
+
 export async function controllerRequest<Response>(
   path: string,
   expectedStatus: number,
@@ -45,7 +48,10 @@ export async function controllerRequest<Response>(
   }
   init.onResponseHeaders?.(response.headers);
   const body: unknown = await response.json();
-  if (method !== "GET") reportAcceptedTasks(body);
+  if (method !== "GET") {
+    mutationVersion++;
+    reportAcceptedTasks(body);
+  }
   return body as Response;
 }
 

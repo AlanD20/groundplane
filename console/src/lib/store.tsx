@@ -1,3 +1,4 @@
+import { useWorkspaceResourceRefresh } from "@/features/environment/use-workspace-resource-refresh";
 import {
   useTenantLoading,
   useBackingProjectLoading,
@@ -275,6 +276,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { actions: connectorActions, reconcileConnectorRemoval } =
     useConnectorStore(state, update, connectorEnvironmentIds);
 
+  const resourceRefresh = useWorkspaceResourceRefresh({
+    environmentGenerations,
+    shouldPreserveEnvironmentOnLoad,
+    update,
+    refreshAgents,
+    refreshPlatformComponents,
+    refreshRunners,
+    refreshReusableSecrets,
+    controllerPlatform,
+    backupStore,
+  });
+
   const taskJournalActions = useTaskJournal(state, update);
   const taskActions = useMemo(
     () =>
@@ -301,6 +314,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<StoreContext>(() => {
     return {
       ...state,
+      ...resourceRefresh,
       ...controllerPlatform,
       ...backupStore,
       adapters: seedAdapters,
@@ -424,6 +438,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, [
     state,
+    resourceRefresh,
     controllerPlatform,
     backupStore,
     update,

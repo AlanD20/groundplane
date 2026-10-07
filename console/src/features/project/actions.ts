@@ -56,7 +56,7 @@ export function createProjectActions(
         const index = draft.tenantProjects.findIndex(
           (project) => project.id === updated.id,
         );
-        if (index >= 0) draft.tenantProjects[index] = updated;
+        if (index >= 0) Object.assign(draft.tenantProjects[index], updated);
       });
       return updated;
     },
@@ -73,7 +73,7 @@ export function createProjectActions(
         const index = draft.tenantProjects.findIndex(
           (project) => project.id === renamed.id,
         );
-        if (index >= 0) draft.tenantProjects[index] = renamed;
+        if (index >= 0) Object.assign(draft.tenantProjects[index], renamed);
       });
       return renamed;
     },
