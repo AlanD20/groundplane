@@ -4,6 +4,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RevealValue } from "@/components/common/reveal-value";
+import { EmptySecretValueBadge } from "@/components/common/empty-secret-value-badge";
 import { ResourceRow } from "@/components/common/resource-table";
 import { TableCell } from "@/components/ui/table";
 
@@ -45,9 +46,7 @@ export function EntryRow({
           </Button>
           {file && <Badge variant="muted">file</Badge>}
           {secret && <Badge variant="warning">secret</Badge>}
-          {secret && emptySecretValue && (
-            <Badge variant="warning">empty value</Badge>
-          )}
+          {secret && <EmptySecretValueBadge empty={emptySecretValue} />}
         </div>
       </TableCell>
       <TableCell className="text-muted-foreground">{source}</TableCell>

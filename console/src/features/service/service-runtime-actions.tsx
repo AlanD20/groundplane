@@ -62,8 +62,9 @@ export function ServiceRuntimeActions({
         <span className="flex items-center gap-2">
           Runtime{" "}
           <HelpHint label="About runtime controls">
-            Start, Stop and Destroy runtime preserve configuration and durable
-            data. Remove deletes the Service definition.
+            Remove containers keeps the Service definition and persistent
+            Volumes. Delete Service removes its containers and definition. Files
+            stored only inside removed containers are lost.
           </HelpHint>
         </span>
       }
@@ -90,7 +91,7 @@ export function ServiceRuntimeActions({
             onClick={() => onAction("destroy")}
             disabled={service.runtimeIntent === "absent"}
           >
-            <Ban className="size-3.5" /> Destroy runtime
+            <Ban className="size-3.5" /> Remove containers
           </Button>
         </div>
       }
@@ -124,12 +125,14 @@ export function ServiceOperationDialog({
         : "absent";
   const removing = operation === "remove";
   const title = removing
-    ? `Remove Service · ${service.name}`
-    : `${operation[0].toUpperCase()}${operation.slice(1)} ${service.name}`;
-  const description = removing
-    ? "Delete the desired service and its Controller-owned runtime intent. This is not the same as destroying its runtime."
+    ? `Delete Service · ${service.name}`
     : operation === "destroy"
-      ? "Remove the service runtime while retaining its desired service record. A later Start recreates it."
+      ? `Remove containers · ${service.name}`
+      : `${operation[0].toUpperCase()}${operation.slice(1)} ${service.name}`;
+  const description = removing
+    ? "Remove the containers, then delete this Service from the Environment and Blueprint. Persistent Volumes and Release history are kept. Files stored only inside the containers are lost."
+    : operation === "destroy"
+      ? "Remove the containers but keep this Service, its configuration and persistent Volumes. You can recreate the containers later. Files stored only inside the containers are lost."
       : `${operation === "start" ? "Run" : "Stop"} the service through durable Controller-owned runtime intent.`;
   const steps = removing
     ? [
@@ -138,11 +141,11 @@ export function ServiceOperationDialog({
           state: "pending" as const,
         },
         {
-          label: "Remove desired service and runtime-intent record",
+          label: "Remove Service containers",
           state: "pending" as const,
         },
         {
-          label: "Reconcile the environment without the service",
+          label: "Delete the Service definition after cleanup",
           state: "pending" as const,
         },
       ]
@@ -183,9 +186,9 @@ export function ServiceOperationDialog({
         }
         startLabel={
           removing
-            ? "Remove Service"
+            ? "Delete Service"
             : operation === "destroy"
-              ? "Destroy runtime"
+              ? "Remove containers"
               : `${operation[0].toUpperCase()}${operation.slice(1)} service`
         }
         steps={steps}
@@ -210,7 +213,7 @@ export function RemoveDesiredServiceButton({
 }) {
   return (
     <Button variant="destructive" onClick={onClick}>
-      <Trash2 className="size-4" /> Remove Service
+      <Trash2 className="size-4" /> Delete Service
     </Button>
   );
 }

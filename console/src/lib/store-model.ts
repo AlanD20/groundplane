@@ -43,6 +43,10 @@ import {
 } from "@/features/secrets/secret-store";
 import { type LogTarget, type TransientLogEvent } from "./transient-logs";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
+import {
+  readDefaultTablePageSize,
+  type TablePageSize,
+} from "./console-preferences";
 import type { Environment, Project, Tenant, PlatformInfra } from "./types";
 import { type BlueprintActions } from "@/features/blueprint/api";
 import {
@@ -59,6 +63,8 @@ export type State = ReusableSecretState &
   AgentState & {
     // UI preference: typed confirmation before revealing a secret value
     requireRevealConfirm: boolean;
+    showEmptySecretBadges: boolean;
+    defaultTablePageSize: TablePageSize;
     tenants: Tenant[];
     tenantsLoading: boolean;
     tenantError: string | null;
@@ -73,16 +79,23 @@ export type State = ReusableSecretState &
   };
 
 export function seed(): State {
+  const defaultTablePageSize = readDefaultTablePageSize();
   let requireRevealConfirm = false;
+  let showEmptySecretBadges = true;
   try {
     requireRevealConfirm =
       typeof window !== "undefined" &&
       localStorage.getItem("groundplane-reveal-confirm") === "1";
+    showEmptySecretBadges =
+      typeof window === "undefined" ||
+      localStorage.getItem("groundplane-show-empty-secret-badges") !== "0";
   } catch {
     /* private mode */
   }
   return structuredClone({
     requireRevealConfirm,
+    showEmptySecretBadges,
+    defaultTablePageSize,
     tenants: [],
     tenantsLoading: true,
     tenantError: null,
@@ -103,7 +116,7 @@ export function seed(): State {
     reusableSecretsLoading: true,
     secretError: null,
     activity: [],
-    taskJournals: { all: emptyTaskJournal() },
+    taskJournals: { all: emptyTaskJournal(defaultTablePageSize) },
     platform: { ...seedPlatform, components: [], agents: [] },
     platformComponentsLoading: true,
     platformComponentError: null,
@@ -153,6 +166,8 @@ export type StoreContext = State &
       onEvent: (event: TransientLogEvent) => void,
     ) => Promise<void>;
     setRequireRevealConfirm: (v: boolean) => void;
+    setShowEmptySecretBadges: (v: boolean) => void;
+    setDefaultTablePageSize: (v: TablePageSize) => void;
     refreshEnvironmentReleases: (
       environmentId: string,
       signal?: AbortSignal,

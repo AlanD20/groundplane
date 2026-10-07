@@ -6,8 +6,9 @@ missing Controller capability.
 
 ## Using the Console
 
-Growing Console tables use five rows per page by default, with 5/10/25/50
-choices and visible sort direction on sortable columns. Filters and sorting
+Growing Console tables initially use five rows per page. Set a browser-wide
+default of 5/10/25/50 under Console preferences → Visualization; individual
+tables can override it. Sortable columns show the active direction. Filters and sorting
 apply before pagination. Recovery-point sorting covers loaded records only;
 the page indicates when older records remain to be loaded. Small fixed summaries,
 including the MVP's single Agent, do not need pagination.
@@ -62,11 +63,14 @@ Backing Services open with internal connection information, connected
 applications, containers and persistent storage. Their sidebar separates Logs,
 Backing connections, consumer Backups & restore, Runtime & image, Networking and
 Configuration report. Consumer backup rows link to the owning Environment’s
-recovery workflow. Runtime editors identify the shared impact, and Destroy runtime
+recovery workflow. Runtime editors identify the shared impact, and Remove containers
 retains its explicit confirmation and data-retention explanation. Destinations
 are retained in the URL, including CoreDNS’s Overview, DNS records and Resolver
-settings views. Console preferences contains browser appearance and reveal
-confirmation; resource management remains in its named destination.
+settings views. Console preferences groups appearance, default page size and the empty-value secret
+badge toggle under Visualization, with reveal confirmation in a separate section.
+Empty-value badges are shown by default in Entries and Blueprint reviews.
+Preferences apply immediately and are saved in this browser; they do not change
+Secret values. Resource management remains in its named destination.
 
 Loading, errors, missing data and expired observations are explicit. The Console
 must not substitute sample data for unavailable health or claim an operation

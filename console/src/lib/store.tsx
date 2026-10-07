@@ -316,6 +316,32 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           /* private mode */
         }
       },
+      setShowEmptySecretBadges: (v) => {
+        update((d) => {
+          d.showEmptySecretBadges = v;
+        });
+        try {
+          localStorage.setItem(
+            "groundplane-show-empty-secret-badges",
+            v ? "1" : "0",
+          );
+        } catch {
+          /* private mode */
+        }
+      },
+      setDefaultTablePageSize: (v) => {
+        update((d) => {
+          d.defaultTablePageSize = v;
+        });
+        try {
+          localStorage.setItem(
+            "groundplane-default-table-page-size",
+            String(v),
+          );
+        } catch {
+          /* private mode */
+        }
+      },
       refreshPlatformComponents,
       refreshComponentConfig,
       refreshEnvironmentComponents,

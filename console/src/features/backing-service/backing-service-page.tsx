@@ -272,10 +272,11 @@ export default function BackingServiceDetailPage() {
                 ) : undefined
               }
             />
-            <ResourcePanel title="Destroy runtime">
+            <ResourcePanel title="Remove containers">
               <p className="text-sm text-muted-foreground">
-                Remove the containers and retain configuration, connections and
-                durable data. Start recreates the runtime.
+                Keep this Backing Service, its configuration, connections and
+                persistent Volumes. Start recreates the containers. Files stored
+                only inside the containers are lost.
               </p>
               <Button
                 variant="destructive"
@@ -284,7 +285,7 @@ export default function BackingServiceDetailPage() {
                 }
                 onClick={() => setDestroyOpen(true)}
               >
-                <Trash2 /> Destroy runtime
+                <Trash2 /> Remove containers
               </Button>
             </ResourcePanel>
           </div>
@@ -318,12 +319,12 @@ export default function BackingServiceDetailPage() {
         <TaskRunnerDialog
           open
           onOpenChange={setDestroyOpen}
-          title={`Destroy runtime · ${g.name}`}
-          description="Remove this Backing Service's containers. Configuration, connections and durable data are retained; Start recreates the runtime."
+          title={`Remove containers · ${g.name}`}
+          description="Remove this Backing Service's containers. Configuration, connections and persistent Volumes are kept; Start recreates the containers. Files stored only inside the containers are lost."
           type="destroy"
           target={svc.name}
           workspace="platform"
-          startLabel="Destroy runtime"
+          startLabel="Remove containers"
           steps={[]}
           onDispatch={() => store.runBackingRuntimeAction(g.id, "destroy")}
         />

@@ -39,10 +39,10 @@ const taskStatuses = new Set<TaskStatus>([
   "timed_out",
   "aborted",
 ]);
-export function emptyTaskJournal(): TaskJournalState {
+export function emptyTaskJournal(pageSize: TaskPageSize): TaskJournalState {
   return {
     entries: [],
-    pageSize: 5,
+    pageSize,
     pageIndex: 0,
     pageCursors: [undefined],
     nextCursor: null,
@@ -103,7 +103,11 @@ function taskStepState(status: string): TaskStep["state"] {
       throw new Error(`Controller returned unknown Task step status ${status}`);
   }
 }
-function taskTitle(type: TaskType, target: string): string {
+function taskTitle(
+  type: TaskType,
+  target: string,
+  resourceKind?: string,
+): string {
   const labels: Record<TaskType, string> = {
     deploy: "Deploy",
     rollback: "Rollback",
@@ -118,8 +122,8 @@ function taskTitle(type: TaskType, target: string): string {
     create: "Create",
     start: "Start",
     stop: "Stop",
-    destroy: "Destroy",
-    remove: "Remove",
+    destroy: "Remove containers",
+    remove: resourceKind === "service" ? "Delete Service" : "Remove",
     update: "Update",
     rotate: "Rotate",
     fetch: "Fetch image",
@@ -182,6 +186,7 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     title: taskTitle(
       type,
       task.image_fetch?.requested ?? task.target_name ?? task.target,
+      task.resource_kind,
     ),
     imageFetch: task.image_fetch,
     target: task.target,

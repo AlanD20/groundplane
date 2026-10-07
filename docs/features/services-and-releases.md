@@ -12,8 +12,9 @@ is reported separately from both.
   whose Compose profile was not enabled; it does not start other profile members.
 - **Start** and **Stop** operate on the whole logical workload set.
   Stopped intent must survive unrelated configuration changes.
-- **Destroy** removes runtime, not the Service's configuration or persistent data.
-- **Remove** checks dependencies and performs its own cleanup Task. It leaves the
+- **Destroy** (**Remove containers** in the Console) removes runtime, not the
+  Service's configuration or persistent Volumes. Container-local files are lost.
+- **Remove** (**Delete Service** in the Console) checks dependencies and performs its own cleanup Task. It leaves the
   Service visible until cleanup succeeds and does not delete Volumes or Release
   history. Resolve Route, Attach, group and other reported references first.
 

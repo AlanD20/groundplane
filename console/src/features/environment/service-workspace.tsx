@@ -179,13 +179,13 @@ export function ServiceWorkspace({
                     disabled={service.runtimeIntent === "absent"}
                     onClick={() => setOperation("destroy")}
                   >
-                    <Ban /> Destroy runtime
+                    <Ban /> Remove containers
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     variant="destructive"
                     onClick={() => setOperation("remove")}
                   >
-                    <Trash2 /> Remove Service
+                    <Trash2 /> Delete Service
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

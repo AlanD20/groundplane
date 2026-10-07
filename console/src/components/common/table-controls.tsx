@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { TableHead } from "@/components/ui/table";
+import { tablePageSizes, type TablePageSize } from "@/lib/console-preferences";
+import { useStore } from "@/lib/store";
 import {
   ArrowDown,
   ArrowUp,
@@ -16,8 +18,6 @@ import {
   type ReactNode,
 } from "react";
 
-export const tablePageSizes = [5, 10, 25, 50] as const;
-export type TablePageSize = (typeof tablePageSizes)[number];
 type Direction = "asc" | "desc";
 type SortState = {
   field: string;
@@ -104,11 +104,13 @@ export function useTableView<T>(
     field: initialField,
     direction: initialDirection,
   });
-  const [pageSize, setPageSize] = useState<TablePageSize>(5);
+  const { defaultTablePageSize } = useStore();
+  const [selectedPageSize, setPageSize] = useState<TablePageSize>();
+  const pageSize = selectedPageSize ?? defaultTablePageSize;
   const [position, setPosition] = useState({ key: resetKey, page: 0 });
   useEffect(() => {
     setPosition({ key: resetKey, page: 0 });
-  }, [resetKey]);
+  }, [resetKey, pageSize]);
   const sorted = [...items].sort((a, b) => {
     const left = values[sort.field](a),
       right = values[sort.field](b);

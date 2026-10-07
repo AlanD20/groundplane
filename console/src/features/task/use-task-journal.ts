@@ -6,6 +6,7 @@ import type {
   TaskJournalSurface,
   TaskPageSize,
 } from "@/lib/types";
+import type { TablePageSize } from "@/lib/console-preferences";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { requestTask } from "./api";
 import {
@@ -18,6 +19,7 @@ import {
 export type TaskJournalStoreState = {
   activity: ActivityEntry[];
   taskJournals: Record<string, TaskJournalState>;
+  defaultTablePageSize: TablePageSize;
 };
 export type TaskJournalActions = {
   getTaskJournal: (scope: TaskJournalScope) => TaskJournalState;
@@ -38,16 +40,24 @@ export function useTaskJournal(
 ): TaskJournalActions {
   const taskJournalEpochs = useRef(new Map<string, number>());
   const pageSizes = useRef(new Map<string, TaskPageSize>());
+  const selectedPageSizes = useRef(new Map<string, TaskPageSize>());
+  const defaultPageSize = state.defaultTablePageSize;
   const loadTaskJournal = useCallback<TaskJournalActions["loadTaskJournal"]>(
     async (surface, scope, cursor, requestedPageSize) => {
       const key = taskJournalKey(scope);
-      const pageSize = requestedPageSize ?? pageSizes.current.get(key) ?? 5;
-      if (pageSize !== (pageSizes.current.get(key) ?? 5)) cursor = undefined;
+      const pageSize =
+        requestedPageSize ??
+        selectedPageSizes.current.get(key) ??
+        defaultPageSize;
+      if (pageSize !== (pageSizes.current.get(key) ?? defaultPageSize))
+        cursor = undefined;
+      if (requestedPageSize !== undefined)
+        selectedPageSizes.current.set(key, requestedPageSize);
       pageSizes.current.set(key, pageSize);
       const epoch = (taskJournalEpochs.current.get(key) ?? 0) + 1;
       taskJournalEpochs.current.set(key, epoch);
       update((draft) => {
-        const journal = draft.taskJournals[key] ?? emptyTaskJournal();
+        const journal = draft.taskJournals[key] ?? emptyTaskJournal(pageSize);
         if (journal.pageSize !== pageSize) {
           journal.entries = [];
           journal.nextCursor = null;
@@ -69,7 +79,7 @@ export function useTaskJournal(
         const entries = (page.items ?? []).map(taskFromAPI);
         if (taskJournalEpochs.current.get(key) !== epoch) return;
         update((draft) => {
-          const journal = draft.taskJournals[key] ?? emptyTaskJournal();
+          const journal = draft.taskJournals[key] ?? emptyTaskJournal(pageSize);
           const knownPage = cursor ? journal.pageCursors.indexOf(cursor) : 0;
           const pageIndex = knownPage < 0 ? journal.pageIndex + 1 : knownPage;
           journal.entries = entries;
@@ -89,7 +99,7 @@ export function useTaskJournal(
       } catch (error) {
         if (taskJournalEpochs.current.get(key) !== epoch) return;
         update((draft) => {
-          const journal = draft.taskJournals[key] ?? emptyTaskJournal();
+          const journal = draft.taskJournals[key] ?? emptyTaskJournal(pageSize);
           journal.loaded = true;
           journal.loading = false;
           journal.loadingMore = false;
@@ -101,7 +111,7 @@ export function useTaskJournal(
         throw error;
       }
     },
-    [update],
+    [update, defaultPageSize],
   );
 
   useEffect(() => {
@@ -110,7 +120,8 @@ export function useTaskJournal(
 
   return {
     getTaskJournal: (scope) =>
-      state.taskJournals[taskJournalKey(scope)] ?? emptyTaskJournal(),
+      state.taskJournals[taskJournalKey(scope)] ??
+      emptyTaskJournal(defaultPageSize),
     loadTaskJournal,
     getTaskJournalDetail: async (taskId, signal) =>
       taskFromAPI(await requestTask(taskId, signal)),

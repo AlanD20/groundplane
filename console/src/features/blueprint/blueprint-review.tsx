@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { EmptySecretValueBadge } from "@/components/common/empty-secret-value-badge";
 import type { BlueprintValidationResponse } from "./api";
 
 export function BlueprintReview({
@@ -20,7 +21,10 @@ export function BlueprintReview({
         </p>
       )}
       {removedEntries.length > 0 && (
-        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive">
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive"
+        >
           Removing an Entry from the Blueprint removes its managed configuration
           from the Environment. Running processes may retain their loaded values
           until their next deployment.
@@ -36,9 +40,7 @@ export function BlueprintReview({
             <code>
               {change.resource}/{change.key}
             </code>
-            {change.empty_secret_value && (
-              <Badge variant="warning">empty value</Badge>
-            )}
+            <EmptySecretValueBadge empty={change.empty_secret_value} />
           </div>
         ))}
         {changes.length === 0 && <p>No resource changes.</p>}

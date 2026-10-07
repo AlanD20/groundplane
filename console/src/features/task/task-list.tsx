@@ -145,9 +145,12 @@ export function TaskList({
                 "fetch",
               ].map((value) => ({
                 value,
-                label: value
-                  .replaceAll("_", " ")
-                  .replace(/^./, (letter) => letter.toUpperCase()),
+                label:
+                  value === "destroy"
+                    ? "Remove containers"
+                    : value
+                        .replaceAll("_", " ")
+                        .replace(/^./, (letter) => letter.toUpperCase()),
               })),
             ]}
           />
