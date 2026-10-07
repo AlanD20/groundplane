@@ -12,7 +12,7 @@ export function HelpHint({
   label?: string;
 }) {
   return (
-    <Tooltip content={children}>
+    <Tooltip content={children} showOnClick>
       <Button
         type="button"
         variant="ghost"
