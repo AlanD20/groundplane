@@ -20,6 +20,9 @@ func configureBlueprintProxy(render *releaserender.ReleaseRenderInput, exposures
 		)
 	}
 	if len(exposures) == 0 {
+		if render.Strategy == domain.StrategyBlueGreen {
+			return errs.New(errs.KindValidationFailed, "blue-green release requires an addressable TCP Service")
+		}
 		return nil
 	}
 	ports, err := domain.ProxyPorts(exposures)

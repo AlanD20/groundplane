@@ -107,6 +107,7 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	releaseMemberships = releaseMemberships.WithSelectedService(bundle.Service)
 	normalizedCompose, err := composerender.MarshalNormalizedEnvironmentProject(parsed.Project)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -378,6 +379,23 @@ func (service *Service) applyBlueprintOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	steps := append([]*agentpb.ExecutionStep(nil), materializationSteps...)
+	selectedServiceID := ""
+	if bundle.Service != "" {
+		for _, identity := range changes.Current.Services {
+			if identity.Name == bundle.Service {
+				selectedServiceID = identity.ID
+			}
+		}
+		if selectedServiceID == "" {
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"selected Blueprint Service identity is missing",
+			)
+		}
+		materializations, steps = selectedServiceMaterializations(materializations, steps, selectedServiceID)
+		materializationSteps = steps
+		componentSteps = nil
+	}
 	stepRecords := make([]taskjournal.TaskStepRecord, 0, len(materializationSteps)+4)
 	for _, step := range materializationSteps {
 		stepRecords = append(
@@ -386,6 +404,9 @@ func (service *Service) applyBlueprintOnce(
 		)
 	}
 	managedVolumeIDs := managedEnvironmentVolumeIDs(changes.Current.Volumes)
+	if selectedServiceID != "" {
+		managedVolumeIDs = nil
+	}
 	var volumeIntentDigest []byte
 	if len(managedVolumeIDs) != 0 {
 		intentDigest, decodeErr := hex.DecodeString(evidence.Durable.CiphertextDigest)
@@ -415,6 +436,12 @@ func (service *Service) applyBlueprintOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clearBlueprintAttachProcedureSteps(attachSteps)
+	if selectedServiceID != "" && len(attachSteps) != 0 {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"selected-Service Apply requires unfinished Attach work; complete the Attach or use full Blueprint Apply",
+		)
+	}
 	steps = append(steps, attachSteps...)
 	stepRecords = append(stepRecords, attachStepRecords...)
 	dependencyPlans, err := buildEnvironmentDependencyPlans(renderIdentities.Services, serviceExtensions)
@@ -477,6 +504,9 @@ func (service *Service) applyBlueprintOnce(
 			taskcontract.BlueprintComposeProcedureNone,
 		),
 	}
+	if selectedServiceID != "" {
+		params[taskcontract.EnvironmentBlueprintSelectedServiceParam] = selectedServiceID
+	}
 	if len(managedVolumeIDs) != 0 {
 		params[taskcontract.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
 		params[taskplanning.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
@@ -491,6 +521,9 @@ func (service *Service) applyBlueprintOnce(
 		Status:           taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	task.ManagedComponentTeardownSources = componentPreparation.ManagedComponentTeardownSources()
+	if selectedServiceID != "" {
+		task.ManagedComponentTeardownSources = nil
+	}
 	preparedRelease, err := service.blueprintReleases.Prepare(ctx, blueprintrelease.PrepareInput{
 		DesiredRevisionID: taskID,
 		IntendedAttaches:  preparedAttaches.effective,

@@ -311,6 +311,11 @@ The manifest identifies the root path, ordered `compose_sources` beginning with
 the root, explicit non-secret `interpolation`, and each file's path, part name,
 byte size and lowercase SHA-256. The `files` array must be sorted by path with
 no duplicates; this order is independent of Compose layer precedence.
+An optional `service` names the one Compose Service to apply. Omit it for full
+Apply. Validate accepts the same selector and returns it with the reviewed
+changes and Service release strategies. Selection is part of request identity;
+an uncertain Apply must be replayed with the same selector. See
+[scope restrictions](features/blueprints.md#apply-one-service).
 File parts are named `file-000001`,
 `file-000002`, and so on. Bytes must match their size and digest; undeclared,
 missing or trailing parts are rejected. The entire body is bounded to 2 MiB;

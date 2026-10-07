@@ -7,18 +7,19 @@ import (
 )
 
 // BlueprintRuntimeInput selects a member from the one exact executed artifact.
-// Only a distinct retained slot needs separate bytes; duplicating the current
-// artifact per member would exhaust the bounded publication marker.
+// Recreate reuses that artifact; blue-green retains a compact post-switch member
+// projection and its prior slot, never a complete Environment copy per member.
 type BlueprintRuntimeInput struct {
 	ServiceID             string `json:"service_id"`
 	ReleaseID             string `json:"release_id"`
 	Target                string `json:"target"`
 	RetainedPriorArtifact []byte `json:"retained_prior_artifact,omitempty"`
+	ActivatedArtifact     []byte `json:"activated_artifact,omitempty"`
 }
 
 // PrepareBlueprintRuntimeInputs binds every member to the sealed executed
-// artifact. Blueprint applies the complete candidate, including its proxy;
-// ordinary Release proxy-switch preparation remains separate.
+// artifact and the same activation steps used by ordinary Releases. A switched
+// proxy needs a compact member projection, not another complete Environment artifact.
 func PrepareBlueprintRuntimeInputs(plan *agentpb.ExecutionPlan, artifactID string) ([]BlueprintRuntimeInput, error) {
 	sealed, err := Validate(plan)
 	if err != nil {
@@ -28,28 +29,20 @@ func PrepareBlueprintRuntimeInputs(plan *agentpb.ExecutionPlan, artifactID strin
 		sealed.GetCandidateReleaseProcedure() == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Blueprint runtime requires a sealed candidate procedure")
 	}
-	artifacts := make(map[string]*agentpb.ComposeArtifact, len(sealed.Artifacts))
-	for _, artifact := range sealed.Artifacts {
-		artifacts[artifact.ArtifactId] = artifact
+	runtimes, err := PrepareCandidateRuntimes(sealed)
+	if err != nil {
+		return nil, err
 	}
 	var result []BlueprintRuntimeInput
-	for _, member := range sealed.CandidateReleaseProcedure.Members {
+	for index, member := range sealed.CandidateReleaseProcedure.Members {
 		if member.CandidateArtifactId != artifactID {
 			return nil, errs.New(errs.KindValidationFailed, "Blueprint runtime differs from the executed artifact")
 		}
-		artifact := artifacts[member.CandidateArtifactId]
-		target, err := blueprintRuntimeTarget(artifact, member)
-		if err != nil {
-			return nil, err
-		}
-		retained, err := prepareCandidateRetainedPrior(member, target, artifacts)
-		if err != nil {
-			return nil, err
-		}
+		runtime := runtimes[index]
 		input := BlueprintRuntimeInput{ServiceID: member.ServiceId, ReleaseID: member.CandidateReleaseId,
-			Target: target, RetainedPriorArtifact: retained}
-		if _, err := projectBlueprintRuntime(artifact, input); err != nil {
-			return nil, err
+			Target: runtime.Target, RetainedPriorArtifact: runtime.RetainedPriorArtifact}
+		if runtime.Target != "singleton" {
+			input.ActivatedArtifact = runtime.CurrentArtifact
 		}
 		result = append(result, input)
 	}
@@ -67,6 +60,20 @@ func OpenBlueprintRuntime(encoded []byte, input BlueprintRuntimeInput) (Candidat
 }
 
 func projectBlueprintRuntime(artifact *agentpb.ComposeArtifact, input BlueprintRuntimeInput) (CandidateRuntime, error) {
+	if input.Target == "blue" || input.Target == "green" {
+		activated := &agentpb.ComposeArtifact{}
+		if len(input.ActivatedArtifact) == 0 || proto.Unmarshal(input.ActivatedArtifact, activated) != nil ||
+			RejectUnknown(activated) != nil || activated.GetArtifactId() != artifact.GetArtifactId() ||
+			activated.GetOwnerId() != artifact.GetOwnerId() || activated.GetProjectName() != artifact.GetProjectName() {
+			return CandidateRuntime{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint switched runtime artifact is invalid",
+			)
+		}
+		artifact = activated
+	} else if input.Target != "singleton" || len(input.ActivatedArtifact) != 0 {
+		return CandidateRuntime{}, errs.New(errs.KindValidationFailed, "Blueprint runtime activation target is invalid")
+	}
 	current, generation, digest, err := projectCandidateRuntimeArtifact(
 		artifact, input.ServiceID, input.ReleaseID, input.Target, true, nil,
 	)
@@ -83,23 +90,4 @@ func projectBlueprintRuntime(artifact *agentpb.ComposeArtifact, input BlueprintR
 	return CandidateRuntime{ServiceID: input.ServiceID, ReleaseID: input.ReleaseID, Target: input.Target,
 		ProxyGeneration: generation, ProxyConfigSHA256: digest, CurrentArtifact: encoded,
 		RetainedPriorArtifact: append([]byte(nil), input.RetainedPriorArtifact...)}, nil
-}
-
-func blueprintRuntimeTarget(artifact *agentpb.ComposeArtifact, member *agentpb.CandidateReleaseMember) (string, error) {
-	target := ""
-	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() != member.GetServiceId() ||
-			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY ||
-			expectedReleaseLabel(service) != member.GetCandidateReleaseId() {
-			continue
-		}
-		if target != "" || validateNativePredecessorWorkload(service) != nil {
-			return "", errs.New(errs.KindValidationFailed, "Blueprint runtime candidate workload is ambiguous")
-		}
-		target = attachRuntimeTarget(service)
-	}
-	if target == "" {
-		return "", errs.New(errs.KindValidationFailed, "Blueprint runtime candidate workload is absent")
-	}
-	return target, nil
 }

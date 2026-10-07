@@ -101,10 +101,13 @@ func newServiceCmd() *cobra.Command {
 	cmd.AddCommand(add)
 
 	var editImage, editStrategy, editOnFailure, editMemory, editRestart, editHooksFile string
-	var editZones, editExpose []string
+	var editWorkingDir, editUser, editAliasesFile, editDependenciesFile string
+	var editLogMaxSize string
+	var editZones, editExpose, editCommand, editEntrypoint []string
 	var editMountsFile string
 	var editCPUs float64
-	var editReplicas int
+	var editReplicas, editLogMaxFile int
+	var resetCommand, resetEntrypoint, resetLogging bool
 	edit := &cobra.Command{
 		Use:   "edit <name>",
 		Short: "Edit a service (applies on the next deploy)",
@@ -159,6 +162,52 @@ func newServiceCmd() *cobra.Command {
 			if cmd.Flags().Changed("replicas") {
 				input.Replicas = editReplicas
 			}
+			if resetCommand {
+				value := []string{}
+				input.Command = &value
+			} else if cmd.Flags().Changed("command") {
+				value := append([]string(nil), editCommand...)
+				input.Command = &value
+			}
+			if resetEntrypoint {
+				value := []string{}
+				input.Entrypoint = &value
+			} else if cmd.Flags().Changed("entrypoint") {
+				value := append([]string(nil), editEntrypoint...)
+				input.Entrypoint = &value
+			}
+			if cmd.Flags().Changed("working-dir") {
+				value := editWorkingDir
+				input.WorkingDir = &value
+			}
+			if cmd.Flags().Changed("user") {
+				value := editUser
+				input.User = &value
+			}
+			if cmd.Flags().Changed("aliases-file") {
+				input.Aliases, err = loadServiceAliases(cmd, editAliasesFile)
+				if err != nil {
+					return err
+				}
+			}
+			if cmd.Flags().Changed("dependencies-file") {
+				input.DependsOn, err = loadServiceDependencies(cmd, editDependenciesFile)
+				if err != nil {
+					return err
+				}
+			}
+			if resetLogging {
+				input.Logging = &apiTypes.ServiceLogging{}
+			} else if cmd.Flags().Changed("log-max-size") || cmd.Flags().Changed("log-max-file") {
+				logging := current.Logging
+				if cmd.Flags().Changed("log-max-size") {
+					logging.MaxSize = editLogMaxSize
+				}
+				if cmd.Flags().Changed("log-max-file") {
+					logging.MaxFile = editLogMaxFile
+				}
+				input.Logging = &logging
+			}
 			if cmd.Flags().Changed("hooks-file") {
 				input.Hooks, err = loadBackingHooks(cmd, editHooksFile)
 				if err != nil {
@@ -199,6 +248,46 @@ func newServiceCmd() *cobra.Command {
 	edit.Flags().StringSliceVar(&editExpose, "expose", nil, "replacement internal exposed ports")
 	edit.Flags().StringVar(&editRestart, "restart", "", "unless-stopped | always | no")
 	edit.Flags().IntVar(&editReplicas, "replicas", 0, "desired replica count")
+	edit.Flags().StringArrayVar(
+		&editCommand,
+		"command",
+		nil,
+		"replacement command argument (repeatable; use --command=--flag for leading dashes)",
+	)
+	edit.Flags().BoolVar(&resetCommand, "reset-command", false, "remove the command override and use the image default")
+	edit.MarkFlagsMutuallyExclusive("command", "reset-command")
+	edit.Flags().StringArrayVar(
+		&editEntrypoint,
+		"entrypoint",
+		nil,
+		"replacement entrypoint argument (repeatable; use --entrypoint=--flag for leading dashes)",
+	)
+	edit.Flags().BoolVar(
+		&resetEntrypoint,
+		"reset-entrypoint",
+		false,
+		"remove the entrypoint override and use the image default",
+	)
+	edit.MarkFlagsMutuallyExclusive("entrypoint", "reset-entrypoint")
+	edit.Flags().StringVar(&editWorkingDir, "working-dir", "", "replacement container working directory; empty resets")
+	edit.Flags().StringVar(&editUser, "user", "", "replacement container user; empty resets")
+	edit.Flags().StringVar(
+		&editAliasesFile,
+		"aliases-file",
+		"",
+		"replacement Zone-to-aliases JSON object; {} clears; - reads stdin",
+	)
+	edit.Flags().StringVar(
+		&editDependenciesFile,
+		"dependencies-file",
+		"",
+		"replacement Service dependency JSON object; {} clears; - reads stdin",
+	)
+	edit.Flags().StringVar(&editLogMaxSize, "log-max-size", "", "replacement Docker log max-size; empty clears")
+	edit.Flags().IntVar(&editLogMaxFile, "log-max-file", 0, "replacement Docker log max-file; zero clears")
+	edit.Flags().BoolVar(&resetLogging, "reset-logging", false, "clear supported Docker log rotation options")
+	edit.MarkFlagsMutuallyExclusive("log-max-size", "reset-logging")
+	edit.MarkFlagsMutuallyExclusive("log-max-file", "reset-logging")
 	cmd.AddCommand(edit)
 
 	cmd.AddCommand(&cobra.Command{
@@ -461,6 +550,9 @@ func serviceFields(service apiTypes.Service) map[string]any {
 		"runtime_intent": service.RuntimeIntent, "zones": service.Zones,
 		"strategy": service.Strategy, "on_failure": service.OnFailure, "replicas": service.Replicas,
 		"healthcheck": service.Healthcheck, "resources": service.Resources,
+		"command": service.Command, "entrypoint": service.Entrypoint,
+		"working_dir": service.WorkingDir, "user": service.User,
+		"aliases": service.Aliases, "depends_on": service.DependsOn, "logging": service.Logging,
 		"expose": service.Expose, "restart": service.Restart,
 		"adapter": service.Adapter, "facts_prefix": service.FactsPrefix,
 		"backing_network_id": service.BackingNetworkID,

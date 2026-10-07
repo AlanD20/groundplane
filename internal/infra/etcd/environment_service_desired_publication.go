@@ -317,9 +317,11 @@ func equalDirectServiceDesired(left core.Service, right core.Service) bool {
 	if left.ID != right.ID || left.Name != right.Name || left.Image != right.Image ||
 		left.Strategy != right.Strategy || left.OnFailure != right.OnFailure ||
 		left.Healthcheck != right.Healthcheck || left.Resources != right.Resources ||
+		left.WorkingDir != right.WorkingDir || left.User != right.User ||
 		left.Restart != right.Restart || left.Logging != right.Logging || left.Replicas != right.Replicas ||
 		left.Adapter != right.Adapter || left.FactsPrefix != right.FactsPrefix || left.Label != right.Label ||
 		!slices.Equal(left.Zones, right.Zones) || !slices.Equal(left.Command, right.Command) ||
+		!slices.Equal(left.Entrypoint, right.Entrypoint) ||
 		!slices.Equal(left.Mounts, right.Mounts) || !slices.Equal(left.Expose, right.Expose) ||
 		!slices.EqualFunc(left.Environment, right.Environment, equalDirectServiceEnvironmentEntry) {
 		return false

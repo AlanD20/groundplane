@@ -33,7 +33,7 @@ func componentFixtureDigest(t *testing.T, value string) []byte {
 
 // Rationale: a first Blueprint candidate has no predecessor to render. Its
 // immutable plan must seal both lawful restoration alternatives and remain
-// identical when applied predecessor state advances before claim.
+// identical when later desired state changes after preparation.
 func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndependent(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
 	task.Materializations = nil // This case has no file-writing prefix.
@@ -64,6 +64,7 @@ func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndepend
 		Members:                   []testreleaserender.ReleaseTaskRenderMember{member},
 		ApplyStepIDs:              []string{task.Steps[0].ID},
 		HealthStepIDs:             []string{task.Steps[1].ID},
+		SwitchStepIDs:             []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
 		RecoveryProbeStepIDs:      []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAY"},
 		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAZ"},
 		PostStepIDs:               [][]string{nil},
@@ -80,10 +81,7 @@ func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndepend
 		t.Fatalf("Blueprint restoration alternatives = %#v, want both", procedureMember)
 	}
 	assertRestorationStartupScope(t, task, plan)
-	input.Members[0].Intent.PriorServingReleaseID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FB0"
-	input.Members[0].Render.PriorArtifactID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FB1"
-	prior := releaseTestWorkload("example/api:advanced")
-	input.Members[0].Render.PriorWorkload = &prior
+	reader.projection.RevisionID = "task_01ARZ3NDEKTSV4RRFFQ69G5FB0"
 	_, advanced, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
 	if err != nil {
 		t.Fatalf("PrepareBlueprintReleaseTask(advanced predecessor) error = %v", err)
@@ -148,6 +146,7 @@ func TestPrepareBlueprintReleaseTaskBindsAddressableRecreateWorkload(t *testing.
 		Members:                   []testreleaserender.ReleaseTaskRenderMember{member},
 		ApplyStepIDs:              []string{task.Steps[0].ID},
 		HealthStepIDs:             []string{task.Steps[1].ID},
+		SwitchStepIDs:             []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
 		RecoveryProbeStepIDs:      []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB2"},
 		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB3"},
 		PostStepIDs:               [][]string{nil},
@@ -300,6 +299,7 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 		ComponentSteps:            []*agentpb.ExecutionStep{component},
 		ApplyStepIDs:              []string{applyStepID},
 		HealthStepIDs:             []string{healthStepID},
+		SwitchStepIDs:             []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
 		RecoveryProbeStepIDs:      []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB2"},
 		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB3"},
 		PostStepIDs:               [][]string{nil},
@@ -373,8 +373,9 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 		t.Fatalf("prepared plan omitted forward steps: %v", wantForward)
 	}
 	forwardStepIDs := plan.GetCandidateReleaseProcedure().GetMembers()[0].GetForwardStepIds()
-	if len(forwardStepIDs) != 2 || forwardStepIDs[0] != applyStepID || forwardStepIDs[1] != healthStepID {
-		t.Fatalf("candidate forward anchors = %q, want apply and health", forwardStepIDs)
+	if len(forwardStepIDs) != 3 || forwardStepIDs[0] != applyStepID || forwardStepIDs[1] != healthStepID ||
+		forwardStepIDs[2] != input.SwitchStepIDs[0] {
+		t.Fatalf("candidate forward anchors = %q, want apply, health and acknowledgement", forwardStepIDs)
 	}
 	originalDestination := prefix.GetMaterializeFile().GetDestination()
 	plan.GetSteps()[0].GetMaterializeFile().Destination = "changed"

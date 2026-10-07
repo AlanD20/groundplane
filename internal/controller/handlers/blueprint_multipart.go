@@ -18,6 +18,7 @@ import (
 const blueprintManifestMaxBytes = 256 * 1024
 
 type blueprintMultipartManifest struct {
+	Service        string                   `json:"service,omitempty"`
 	Root           string                   `json:"root"`
 	ComposeSources []string                 `json:"compose_sources"`
 	Interpolation  map[string]string        `json:"interpolation"`
@@ -66,6 +67,7 @@ func decodeBlueprintMultipart(request *http.Request) (core.BlueprintBundle, erro
 	}
 
 	bundle := core.BlueprintBundle{
+		Service:        manifest.Service,
 		RootPath:       manifest.Root,
 		ComposeSources: append([]string(nil), manifest.ComposeSources...),
 		Interpolation:  maps.Clone(manifest.Interpolation),

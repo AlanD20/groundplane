@@ -26,6 +26,27 @@ Start without creating containers. Deploy or Blueprint Apply creates its first
 runtime. There is no standalone Restart action; the `restart` configuration
 field controls Docker's automatic restart policy.
 
+## Editing configuration
+
+The Console, CLI and API edit the same authored desired state. Command and
+entrypoint are literal argument arrays, not shell snippets. Reset clears the
+override and uses the image default; an empty argument within an array remains
+an argument. Working directory and container user also have explicit resets.
+Network aliases, dependency conditions/phases and log rotation are editable
+alongside the existing runtime, networking and storage settings.
+
+Save does not restart containers. Use Deploy, or
+[apply the selected Service from its Blueprint](blueprints.md#apply-one-service),
+to run the saved settings. Both honor the declared release strategy; a Deploy
+may explicitly override it for that Release. Entries, file configuration and
+Secrets keep their dedicated actions rather than a second raw environment editor.
+
+In API PATCH requests, omitting a new setting preserves its authored value.
+An empty `command` or `entrypoint` array resets to the image default; empty
+`working_dir` or `user` clears that override. Empty `aliases`, `depends_on` or
+`logging` objects clear those settings. Use CLI `service edit --help` for its
+argument, reset and structured-file flags.
+
 ## Selecting an image
 
 The image must already exist on the host. GP does not pull or build an application
@@ -61,6 +82,11 @@ GP removes the obsolete singleton instead of retaining a third workload.
 Switching between blue-green and recreate is accepted only when both the previous
 and candidate counts are one. Replicated blue-green is outside the MVP. Start,
 Stop, Destroy and recovery must address the complete captured set.
+
+An existing blue-green proxy cannot change its Zones, network aliases, ports or
+restart policy during a traffic switch. Save may record those settings, but Deploy
+and Blueprint Apply reject that rollout rather than recreating the proxy silently.
+Keep its topology unchanged or explicitly choose recreate with its expected downtime.
 
 ## Rollback
 

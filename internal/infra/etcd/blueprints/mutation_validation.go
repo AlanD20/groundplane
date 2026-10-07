@@ -39,7 +39,8 @@ func ValidateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAud
 		return errs.New(errs.KindValidationFailed, "desired mutation audit kind is invalid")
 	}
 	if value.Configuration != nil {
-		if value.Configuration.BaseRevisionID != "" && ids.Validate(ids.KindTask, value.Configuration.BaseRevisionID) != nil {
+		if value.Configuration.BaseRevisionID != "" &&
+			ids.Validate(ids.KindTask, value.Configuration.BaseRevisionID) != nil {
 			return errs.New(errs.KindValidationFailed, "Configuration mutation predecessor is invalid")
 		}
 		return nil
@@ -159,6 +160,27 @@ func validateEnvironmentServiceMutationAudit(value EnvironmentServiceMutationAud
 		Zones: append([]string(nil), request.Zones...), Strategy: request.Strategy,
 		OnFailure: request.OnFailure, Healthcheck: request.Healthcheck, Resources: request.Resources,
 		Expose: append([]string(nil), request.Expose...), Restart: request.Restart, Replicas: request.Replicas,
+	}
+	if request.Command != nil {
+		desired.Command = append([]string(nil), (*request.Command)...)
+	}
+	if request.Entrypoint != nil {
+		desired.Entrypoint = append([]string(nil), (*request.Entrypoint)...)
+	}
+	if request.WorkingDir != nil {
+		desired.WorkingDir = *request.WorkingDir
+	}
+	if request.User != nil {
+		desired.User = *request.User
+	}
+	if request.Aliases != nil {
+		desired.Aliases = *request.Aliases
+	}
+	if request.DependsOn != nil {
+		desired.DependsOn = *request.DependsOn
+	}
+	if request.Logging != nil {
+		desired.Logging = *request.Logging
 	}
 	if err := desired.Validate(); err != nil {
 		return errs.New(errs.KindValidationFailed, "Service desired mutation audit request is invalid")

@@ -518,12 +518,16 @@ func prepareEnvironmentBlueprintReleaseShape(
 	absenceServices := make([]executionplan.CandidateServiceIdentity, len(manifest.Members))
 	procedureMembers := make([]executionplan.CandidateReleaseMemberInput, len(manifest.Members))
 	for index, member := range manifest.Members {
-		forwardStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17651+index*3))
-		probeStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17652+index*3))
-		compensateStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17653+index*3))
+		forwardStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17651+index*5))
+		healthStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17652+index*5))
+		ackStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17653+index*5))
+		probeStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17654+index*5))
+		compensateStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17655+index*5))
 		task.Steps = append(
 			task.Steps,
 			testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: forwardStepID},
+			testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: healthStepID},
+			testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: ackStepID},
 			testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: probeStepID},
 			testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: compensateStepID},
 		)
@@ -533,7 +537,7 @@ func prepareEnvironmentBlueprintReleaseShape(
 		}
 		procedureMembers[index] = executionplan.CandidateReleaseMemberInput{
 			ServiceID: member.ServiceID, CandidateReleaseID: member.ReleaseID, CandidateArtifactID: artifactID,
-			ForwardStepIDs: []string{forwardStepID},
+			ForwardStepIDs: []string{forwardStepID, healthStepID, ackStepID},
 			ServingPredecessor: &executionplan.ServingPredecessorInput{
 				ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
 			},

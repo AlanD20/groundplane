@@ -6,6 +6,7 @@ import { useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { ArrowDown, ArrowUp, FileArchive, FolderOpen, Plus, Trash2, Upload } from 'lucide-react'
 import { TaskRunnerDialog } from '@/components/common/task-runner-dialog'
 import { BlueprintReview } from '@/features/blueprint/blueprint-review'
+import { BlueprintApplyScope } from './blueprint-apply-scope'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
@@ -51,6 +52,7 @@ export function BlueprintApplyAction({ environment, workspace, disabled = false,
   const [reviewError, setReviewError] = useState('')
   const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null)
   const [reviewing, setReviewing] = useState(false)
+  const [selectedService, setSelectedService] = useState('')
   const [completed, setCompleted] = useState(false)
 
   const sortedFiles = files
@@ -113,6 +115,7 @@ export function BlueprintApplyAction({ environment, workspace, disabled = false,
     setReviewError('')
     try {
       const request = createBlueprintApplyRequest(files, rootPath, composeSources, entries)
+      if (selectedService) request.manifest.service = selectedService
       const current = await store.getBlueprint(environment.id)
       const validation = await store.validateBlueprint(environment.id, request, current.revision)
       setPrepared({ request, validation, key: newULID() })
@@ -124,6 +127,7 @@ export function BlueprintApplyAction({ environment, workspace, disabled = false,
   }
 
   function reset() {
+    setSelectedService('')
     setFiles([])
     setRootPath('')
     setComposeSources([])
@@ -258,6 +262,7 @@ export function BlueprintApplyAction({ environment, workspace, disabled = false,
           {errors.length > 0 && files.length > 0 && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"><p className="mb-1 text-xs font-medium text-destructive">Resolve before applying</p><ul className="space-y-1 text-xs text-destructive">{errors.map((error) => <li key={error}>· {error}</li>)}</ul></div>}
           {reviewError && <p role="alert" className="text-xs text-destructive">{reviewError}</p>}
 
+          <BlueprintApplyScope environment={environment} value={selectedService} onChange={setSelectedService} disabled={reading || reviewing} />
           <div className="flex justify-end gap-2 border-t border-border pt-4">
             <Button variant="outline" onClick={closeEditor}>Cancel</Button>
             <Button disabled={reading || reviewing || errors.length > 0} onClick={() => void prepareApply()}><Upload /> {reviewing ? 'Validating…' : 'Review Apply task'}</Button>

@@ -6,13 +6,14 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: restart recovery must accept the maximum documented post-deploy
-// Script selection and reproduce its exact apply, hook, then health ordering.
+// Script selection and reproduce its exact apply, health, hook and acknowledge ordering.
 func TestBlueprintReleaseProcedureStepIDsAcceptMaximumHooks(t *testing.T) {
 	task, members := blueprintReleaseStepIDFixture(taskcontract.MaximumBlueprintPostDeployHooks)
 	input, next, err := blueprintReleaseProcedureStepIDs(task, etcd.ReleaseTaskRenderInput{Members: members}, 0)
@@ -24,6 +25,7 @@ func TestBlueprintReleaseProcedureStepIDsAcceptMaximumHooks(t *testing.T) {
 		len(
 			probe,
 		) != 1 || probe[0] != "recovery-probe" || len(compensate) != 1 || compensate[0] != "recovery-compensate" ||
+		len(input.SwitchStepIDs) != 1 || input.SwitchStepIDs[0] != "switch" ||
 		len(post) != 1 || len(post[0]) != taskcontract.MaximumBlueprintPostDeployHooks ||
 		post[0][0] != "hook-00" || post[0][len(post[0])-1] != "hook-15" || next != len(task.Steps) {
 		t.Fatalf(
@@ -68,6 +70,7 @@ func blueprintReleaseStepIDFixture(hookCount int) (etcd.TaskRecord, []testreleas
 	task.Steps = append(
 		task.Steps,
 		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "apply"},
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "health"},
 	)
 	hooks := make([]testreleaserender.ReleaseHookRenderInput, hookCount)
 	for index := range hooks {
@@ -85,7 +88,7 @@ func blueprintReleaseStepIDFixture(hookCount int) (etcd.TaskRecord, []testreleas
 	}
 	task.Steps = append(
 		task.Steps,
-		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "health"},
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "switch"},
 	)
 	task.Steps = append(
 		task.Steps,
@@ -93,6 +96,6 @@ func blueprintReleaseStepIDFixture(hookCount int) (etcd.TaskRecord, []testreleas
 		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "recovery-compensate"},
 	)
 	return task, []testreleaserender.ReleaseTaskRenderMember{
-		{Render: testreleaserender.ReleaseRenderInput{Hooks: hooks}},
+		{Render: testreleaserender.ReleaseRenderInput{Hooks: hooks, Strategy: domain.StrategyRecreate}},
 	}
 }

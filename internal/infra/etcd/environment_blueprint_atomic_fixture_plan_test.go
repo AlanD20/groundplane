@@ -88,6 +88,24 @@ func environmentBlueprintAtomicFixturePlan(
 				}},
 			},
 			&agentpb.ExecutionStep{
+				StepId: member.GetForwardStepIds()[1], TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+				PrerequisiteStepId: forwardStepID,
+				Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
+					ArtifactId: artifact.ArtifactId, ServiceIds: []string{member.GetServiceId()},
+				}},
+			},
+			&agentpb.ExecutionStep{
+				StepId: member.GetForwardStepIds()[2], TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+				PrerequisiteStepId: member.GetForwardStepIds()[1],
+				Payload: &agentpb.ExecutionStep_ServiceRecreateAcknowledge{
+					ServiceRecreateAcknowledge: &agentpb.ServiceRecreateAcknowledge{
+						ArtifactId: artifact.ArtifactId, ServiceId: member.GetServiceId(), ReleaseId: member.GetCandidateReleaseId(),
+					},
+				},
+			},
+			&agentpb.ExecutionStep{
 				StepId: member.GetServingPredecessor().GetProbeStepId(), TimeoutSeconds: uint32(task.TimeoutSeconds),
 				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
 				Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{

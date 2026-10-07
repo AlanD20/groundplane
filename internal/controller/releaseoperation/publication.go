@@ -469,23 +469,6 @@ func releaseImageWithTag(value string, requested string, current string) (string
 	return reference.FamiliarString(tagged), tag, digest, nil
 }
 
-func releaseStrategy(requested string, declared core.Strategy) (domain.Strategy, error) {
-	selected := requested
-	if selected == "" {
-		selected = string(declared)
-	}
-	switch selected {
-	case string(core.StrategyBlueGreen):
-		return domain.StrategyBlueGreen, nil
-	case string(core.StrategyRecreate):
-		return domain.StrategyRecreate, nil
-	case string(core.StrategyRolling):
-		return "", errs.New(errs.KindStrategyNotImplemented, "rolling release strategy is not implemented in the MVP")
-	default:
-		return "", errs.New(errs.KindValidationFailed, "release strategy must be selected or declared by the Service")
-	}
-}
-
 func releaseFailurePolicy(requested domain.OnFailure, declared core.OnFailure) (domain.OnFailure, error) {
 	selected := string(requested)
 	if selected == "" {
@@ -499,16 +482,6 @@ func releaseFailurePolicy(requested domain.OnFailure, declared core.OnFailure) (
 	default:
 		return "", errs.New(errs.KindValidationFailed, "release failure policy is invalid")
 	}
-}
-
-func inactiveReleaseSlot(strategy domain.Strategy, serving domain.Slot) domain.Slot {
-	if strategy != domain.StrategyBlueGreen {
-		return ""
-	}
-	if serving == domain.SlotBlue {
-		return domain.SlotGreen
-	}
-	return domain.SlotBlue
 }
 
 func cloneIdempotencyResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {

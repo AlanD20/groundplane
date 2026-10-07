@@ -231,6 +231,10 @@ func (service *Service) prepareSelected(
 	}
 	members := make([]releaserender.ReleaseTaskRenderMember, len(candidates))
 	for index, candidate := range candidates {
+		strategy, strategyErr := domain.DeploymentStrategy("", string(candidate.Record.Desired.Strategy))
+		if strategyErr != nil {
+			return Prepared{}, strategyErr
+		}
 		releaseID := input.AllocateNamed(ids.KindDeployment, "blueprint-release/"+candidate.Record.Desired.ID)
 		_, tag, _, imageErr := releaseImage(candidate.Record.Desired.Image)
 		if imageErr != nil {
@@ -244,7 +248,7 @@ func (service *Service) prepareSelected(
 			ProxyAddresses: addresses.ForService(candidate.Record.Desired.ID),
 			ReleaseID:      releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
 			ServiceID: candidate.Record.Desired.ID, ServiceName: candidate.Record.Desired.Name,
-			CandidateWorkload: workload, Strategy: domain.StrategyRecreate,
+			CandidateWorkload: workload, Strategy: strategy,
 			PriorStrategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
 			ServiceDependencyPlans: input.Projection.ServiceDependencyPlans.Clone(),
 			TenantID:               input.Tenant.Record.ID, TenantSlug: input.Tenant.Record.Slug,
@@ -255,7 +259,7 @@ func (service *Service) prepareSelected(
 		intent := domain.Intent{
 			ID: releaseID, EnvironmentID: input.Environment.Record.ID, ServiceID: render.ServiceID,
 			OperationID: task.OperationID, OperationKind: domain.OperationBlueprintApply,
-			CandidateWorkload: workload, Tag: tag, Strategy: domain.StrategyRecreate,
+			CandidateWorkload: workload, Tag: tag, Strategy: strategy,
 			OnFailure:     domain.OnFailure(candidate.Record.Desired.OnFailure.WithDefault()),
 			RenderInputID: artifactID, CreatedAt: input.CreatedAt,
 			Actor: "operator", OriginatingTaskID: input.DesiredRevisionID,
@@ -268,6 +272,12 @@ func (service *Service) prepareSelected(
 		if err := service.preparePredecessor(ctx, input, candidate, &render, &intent); err != nil {
 			return Prepared{}, err
 		}
+		render.Slot = domain.InactiveSlot(strategy, render.PriorSlot)
+		render.CandidateTarget, err = domain.TargetFor(strategy, render.Slot)
+		if err != nil {
+			return Prepared{}, err
+		}
+		intent.Slot = render.Slot
 		if candidate.Record.Runtime.PostgresToolsImage != "" && intent.PriorServingReleaseID == "" &&
 			intent.OnFailure != domain.OnFailureLeaveActive {
 			return Prepared{}, errs.New(errs.KindValidationFailed,
@@ -302,10 +312,12 @@ func (service *Service) prepareSelected(
 	}
 	task, members = hooks.task, hooks.members
 	applyStepIDs, healthStepIDs := make([]string, len(members)), make([]string, len(members))
+	switchStepIDs := make([]string, len(members))
 	recoveryProbeStepIDs, recoveryCompensateStepIDs := make([]string, len(members)), make([]string, len(members))
 	for index, member := range members {
 		applyStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-apply/"+member.Render.ServiceID)
 		healthStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-health/"+member.Render.ServiceID)
+		switchStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-switch/"+member.Render.ServiceID)
 		recoveryProbeStepIDs[index] = input.AllocateNamed(
 			ids.KindStep,
 			"blueprint-candidate-recovery-probe/"+member.Render.ServiceID,
@@ -318,7 +330,7 @@ func (service *Service) prepareSelected(
 	task, plan, err := service.plans.PrepareBlueprintReleaseTask(ctx, task, taskplanning.BlueprintReleasePlanInput{
 		NativePredecessors: nativePredecessors(input, members),
 		Members:            members, PrefixSteps: input.PrefixSteps, ComponentSteps: input.ComponentSteps,
-		ApplyStepIDs: applyStepIDs, HealthStepIDs: healthStepIDs,
+		ApplyStepIDs: applyStepIDs, HealthStepIDs: healthStepIDs, SwitchStepIDs: switchStepIDs,
 		RecoveryProbeStepIDs: recoveryProbeStepIDs, RecoveryCompensateStepIDs: recoveryCompensateStepIDs,
 		PreStepIDs: hooks.preStepIDs, PostStepIDs: hooks.postStepIDs,
 	})

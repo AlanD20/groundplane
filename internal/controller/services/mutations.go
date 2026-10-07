@@ -144,6 +144,9 @@ func (service *serviceMutationService) EditService(
 		)
 	}
 	input = normalizeServiceEdit(input)
+	if err := validateServiceEditSettings(input); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	for attempt := 0; attempt < maximumServiceMutationAttempts; attempt++ {
 		response, err := service.editServiceOnce(ctx, serviceID, input, idempotencyKey)
 		if err == nil {
@@ -295,7 +298,48 @@ func (service *serviceMutationService) resolveServiceReferences(
 		}
 		references.Dependencies = append(references.Dependencies, dependency)
 	}
+	serviceByName[record.Desired.Name] = etcdstore.Versioned[servicerecord.ServiceRecord]{Record: record}
+	if directServiceDependencyGraphHasCycle(serviceByName) {
+		return servicerecord.ServiceMutationReferences{}, errs.New(
+			errs.KindValidationFailed,
+			"Service native dependency graph contains a cycle",
+		)
+	}
 	return references, nil
+}
+
+func directServiceDependencyGraphHasCycle(
+	services map[string]etcdstore.Versioned[servicerecord.ServiceRecord],
+) bool {
+	const (
+		unvisited = iota
+		visiting
+		visited
+	)
+	states := make(map[string]int, len(services))
+	var visit func(string) bool
+	visit = func(name string) bool {
+		switch states[name] {
+		case visiting:
+			return true
+		case visited:
+			return false
+		}
+		states[name] = visiting
+		for dependency, decision := range services[name].Record.Desired.DependsOn {
+			if len(decision.Phases) == 0 && visit(dependency) {
+				return true
+			}
+		}
+		states[name] = visited
+		return false
+	}
+	for name := range services {
+		if states[name] == unvisited && visit(name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (service *serviceMutationService) listAllZones(

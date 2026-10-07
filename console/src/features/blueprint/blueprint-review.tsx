@@ -14,6 +14,10 @@ export function BlueprintReview({
 
   return (
     <div className="space-y-3 text-sm">
+      <p className="text-xs text-muted-foreground">
+        {validation.service ? `Apply only ${validation.service}. Other Services and shared resources remain unchanged.` : 'Apply the complete Environment.'}
+        {' '}Running Services use the strategy shown below; recreate causes downtime.
+      </p>
       {validation.revision !== "0" && (
         <p className="rounded-lg border border-warning/30 bg-warning/5 p-3">
           This Blueprint changes the Environment’s intended configuration.
@@ -37,6 +41,7 @@ export function BlueprintReview({
             className="flex gap-2"
           >
             <Badge variant="outline">{change.action}</Badge>
+            {change.release_strategy && <Badge variant="outline">{change.release_strategy}</Badge>}
             <code>
               {change.resource}/{change.key}
             </code>

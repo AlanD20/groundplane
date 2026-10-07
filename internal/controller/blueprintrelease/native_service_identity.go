@@ -39,11 +39,17 @@ const (
 )
 
 type NormalizedServiceMemberships struct {
+	selectedService string
 	previous        map[string]blueprintServiceMembership
 	candidate       map[string]blueprintServiceMembership
 	previousNative  map[string][sha256.Size]byte
 	candidateNative map[string][sha256.Size]byte
 	initialized     bool
+}
+
+func (memberships NormalizedServiceMemberships) WithSelectedService(name string) NormalizedServiceMemberships {
+	memberships.selectedService = name
+	return memberships
 }
 
 func BuildNormalizedServiceMemberships(

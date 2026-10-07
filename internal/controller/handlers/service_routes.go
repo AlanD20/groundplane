@@ -314,7 +314,10 @@ func serviceResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 		Command: append(
 			[]string(nil),
 			record.Desired.Command...),
-		Mounts: serviceMountResponses(record.Desired.Mounts),
+		Entrypoint: append([]string(nil), record.Desired.Entrypoint...),
+		WorkingDir: record.Desired.WorkingDir,
+		User:       record.Desired.User,
+		Mounts:     serviceMountResponses(record.Desired.Mounts),
 		Aliases: serviceAliasResponse(
 			record.Desired.Aliases,
 		),

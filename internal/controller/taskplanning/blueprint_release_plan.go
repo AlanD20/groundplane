@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -23,6 +25,7 @@ type BlueprintReleasePlanInput struct {
 	ComponentSteps            []*agentpb.ExecutionStep
 	ApplyStepIDs              []string
 	HealthStepIDs             []string
+	SwitchStepIDs             []string
 	RecoveryProbeStepIDs      []string
 	RecoveryCompensateStepIDs []string
 	PostStepIDs               [][]string
@@ -41,10 +44,12 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	task etcd.TaskRecord,
 	input BlueprintReleasePlanInput,
 ) (etcd.TaskRecord, *agentpb.ExecutionPlan, error) {
-	serviceUnit := taskjournal.IsBlueprintChild(task.Params)
+	serviceUnit := taskjournal.IsBlueprintChild(task.Params) ||
+		task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam] != ""
 	if resolver == nil || ctx == nil || len(input.Members) == 0 || task.Type != taskjournal.TaskUpdate ||
 		task.Params[releaserender.TaskReleasePublicationParam] == "" || len(input.ApplyStepIDs) != len(input.Members) ||
 		len(input.HealthStepIDs) != len(input.Members) || len(input.RecoveryProbeStepIDs) != len(input.Members) ||
+		len(input.SwitchStepIDs) != len(input.Members) ||
 		len(input.RecoveryCompensateStepIDs) != len(input.Members) || len(input.PostStepIDs) != len(input.Members) ||
 		len(input.PreStepIDs) != 0 && len(input.PreStepIDs) != len(input.Members) ||
 		serviceUnit && (len(input.Members) != 1 || len(input.ComponentSteps) != 0 ||
@@ -68,14 +73,20 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 			)
 		}
 		images[member.Render.ServiceName] = member.Render.CandidateWorkload
-		labels[member.Render.ServiceID] = composerender.ComposeReleaseIdentity{
+		identity := composerender.ComposeReleaseIdentity{
 			ProxyAddresses: member.Render.ProxyAddresses,
 			ProxyImage:     member.Render.ProxyImage,
 			ReleaseID:      member.Intent.ID, Target: member.Render.CandidateTarget,
-			Image: member.Render.CandidateWorkload.LocalImageID, ServingReleaseID: member.Intent.ID,
-			ServingTarget: member.Render.CandidateTarget, ServingProxyGeneration: member.Render.ProxyGeneration,
+			Image: member.Render.CandidateWorkload.LocalImageID, ServingReleaseID: member.Intent.PriorServingReleaseID,
+			ServingTarget: member.Render.PriorTarget, ServingProxyGeneration: member.Render.PriorProxyGeneration,
 			Strategy: member.Render.Strategy,
 		}
+		if member.Render.Strategy == domain.StrategyRecreate {
+			identity.ServingReleaseID = member.Intent.ID
+			identity.ServingTarget = member.Render.CandidateTarget
+			identity.ServingProxyGeneration = member.Render.ProxyGeneration
+		}
+		labels[member.Render.ServiceID] = identity
 		serviceIDs[index] = member.Render.ServiceID
 	}
 	artifact, err := renderBlueprintCandidateArtifact(ctx, task, first, images, labels)
@@ -135,83 +146,104 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	snapshots := []*agentpb.ResolvedRunnerSnapshot{}
 	projections := []*agentpb.ScriptRunnerProjection{}
 	bodies := []*agentpb.ScriptBodyArtifactMetadata{}
-	var preSteps, applySteps, postSteps, healthSteps, recoverySteps []*agentpb.ExecutionStep
+	var preSteps, forwardSteps, recoverySteps []*agentpb.ExecutionStep
 	for index, member := range input.Members {
-		apply := &agentpb.ExecutionStep{
-			StepId: input.ApplyStepIDs[index], TimeoutSeconds: uint32(task.TimeoutSeconds),
-			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
-			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-				ArtifactId: first.ArtifactID, ServiceIds: []string{member.Render.ServiceID},
-				ForceRecreate: true, NoDependencies: true,
-			}},
+		memberTask := task
+		memberTask.Steps = []taskjournal.TaskStepRecord{
+			{ID: input.ApplyStepIDs[index]}, {ID: input.HealthStepIDs[index]},
+			{ID: input.SwitchStepIDs[index]}, {ID: input.RecoveryProbeStepIDs[index]},
+			{ID: input.RecoveryCompensateStepIDs[index]},
 		}
-		applySteps = append(applySteps, apply)
+		priorArtifacts := make(map[string]*agentpb.ComposeArtifact)
+		if member.Render.PriorArtifactID != "" {
+			if member.Render.PriorRuntime == nil {
+				return etcd.TaskRecord{}, nil, errs.New(
+					errs.KindStateConflict,
+					"Blueprint Release predecessor runtime is missing",
+				)
+			}
+			prior := &agentpb.ComposeArtifact{}
+			if err := proto.Unmarshal(member.Render.PriorRuntime.CurrentArtifact, prior); err != nil {
+				return etcd.TaskRecord{}, nil, errs.Wrap(errs.KindInternal, err)
+			}
+			priorArtifacts[member.Render.ServiceID] = prior
+		}
+		if err := validateReleaseProxyTopology(member.Render.Strategy, artifact, priorArtifacts[member.Render.ServiceID], member.Render.ServiceID); err != nil {
+			return etcd.TaskRecord{}, nil, err
+		}
+		memberInput := etcd.ReleaseTaskRenderInput{
+			Members:   []releaserender.ReleaseTaskRenderMember{member},
+			Operation: releases.ReleaseOperationHead{FailurePolicy: member.Intent.OnFailure},
+		}
+		memberSteps, err := buildReleaseMemberSteps(memberTask, memberInput, priorArtifacts)
+		if err != nil {
+			return etcd.TaskRecord{}, nil, err
+		}
 		var preIDs []string
 		if len(input.PreStepIDs) != 0 {
 			preIDs = input.PreStepIDs[index]
 		}
+		anchor := releasePostHookAnchorStepID(memberTask, 0, member.Render.Strategy)
 		hooks, err := BuildReleaseHookPlan(ReleaseHookPlanInput{
 			Operation: domain.OperationDeploy, CandidateReleaseID: member.Intent.ID,
-			PostHookAnchorStepID: apply.StepId, PreStepIDs: preIDs, PostStepIDs: input.PostStepIDs[index], Hooks: member.Render.Hooks,
+			PostHookAnchorStepID: anchor, PreStepIDs: preIDs,
+			PostStepIDs: input.PostStepIDs[index], Hooks: member.Render.Hooks,
 		})
 		if err != nil {
 			return etcd.TaskRecord{}, nil, err
 		}
-
 		preSteps = append(preSteps, hooks.PreSteps...)
-		postSteps = append(postSteps, hooks.PostSteps...)
 		snapshots = append(snapshots, hooks.Snapshots...)
 		projections = append(projections, hooks.Projections...)
 		bodies = append(bodies, hooks.Bodies...)
-		prerequisite := apply.StepId
-		if len(hooks.PostSteps) != 0 {
-			prerequisite = hooks.PostSteps[len(hooks.PostSteps)-1].StepId
+		for _, step := range memberSteps[:3] {
+			forwardSteps = append(forwardSteps, step)
+			if step.StepId == anchor {
+				forwardSteps = append(forwardSteps, hooks.PostSteps...)
+			}
 		}
-		health := &agentpb.ExecutionStep{
-			StepId: input.HealthStepIDs[index], PrerequisiteStepId: prerequisite,
-			TimeoutSeconds: uint32(task.TimeoutSeconds),
-			Policy:         agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
-			Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
-				ArtifactId: first.ArtifactID, ServiceIds: []string{member.Render.ServiceID},
-			}},
-		}
-		probe := &agentpb.ExecutionStep{
-			StepId: input.RecoveryProbeStepIDs[index], TimeoutSeconds: uint32(task.TimeoutSeconds),
-			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-			Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{
-				CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
-					CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID,
+		// Blueprint ownership is fenced at assignment time. Keep its generic
+		// restoration pair; the forward rollout is shared with ordinary Deploy.
+		recoverySteps = append(recoverySteps,
+			&agentpb.ExecutionStep{
+				StepId: input.RecoveryProbeStepIDs[index], TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+				Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{
+					CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
+						CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID,
+					},
 				},
 			},
-		}
-		compensate := &agentpb.ExecutionStep{
-			StepId: input.RecoveryCompensateStepIDs[index], TimeoutSeconds: uint32(task.TimeoutSeconds),
-			Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-			PrerequisiteStepId: apply.StepId,
-			Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
-				CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
-					CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID,
+			&agentpb.ExecutionStep{
+				StepId: input.RecoveryCompensateStepIDs[index], TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+				PrerequisiteStepId: input.ApplyStepIDs[index],
+				Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
+					CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+						CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID,
+					},
 				},
 			},
+		)
+		procedureMember := executionplan.CandidateReleaseMemberInput{
+			ServiceID: member.Render.ServiceID, CandidateReleaseID: member.Intent.ID,
+			CandidateArtifactID: first.ArtifactID,
+			ForwardStepIDs: []string{
+				input.ApplyStepIDs[index],
+				input.HealthStepIDs[index],
+				input.SwitchStepIDs[index],
+			},
 		}
-		healthSteps = append(healthSteps, health)
-		recoverySteps = append(recoverySteps, probe, compensate)
-		forwardStepIDs := []string{apply.GetStepId(), health.GetStepId()}
-		procedureMembers = append(procedureMembers, executionplan.CandidateReleaseMemberInput{
-			ServiceID: member.Render.ServiceID, CandidateReleaseID: member.Intent.ID, CandidateArtifactID: first.ArtifactID,
-			ForwardStepIDs: forwardStepIDs,
-			ServingPredecessor: &executionplan.ServingPredecessorInput{
-				ProbeStepID: probe.GetStepId(), CompensateStepID: compensate.GetStepId(),
-			},
-			CandidateAbsence: &executionplan.CandidateAbsenceInput{
-				ComposeProjectName: artifact.GetProjectName(), Services: candidateServices,
-				ProbeStepID: probe.GetStepId(), CompensateStepID: compensate.GetStepId(),
-			},
-		})
+		procedureMember.CandidateAbsence = &executionplan.CandidateAbsenceInput{
+			ComposeProjectName: artifact.GetProjectName(), Services: candidateServices,
+			ProbeStepID: input.RecoveryProbeStepIDs[index], CompensateStepID: input.RecoveryCompensateStepIDs[index],
+		}
+		procedureMember.ServingPredecessor = &executionplan.ServingPredecessorInput{
+			ProbeStepID: input.RecoveryProbeStepIDs[index], CompensateStepID: input.RecoveryCompensateStepIDs[index],
+		}
+		procedureMembers = append(procedureMembers, procedureMember)
 	}
-	// The executor traverses forward steps in order. Explicit predecessor links
-	// also seal the cleanup barrier across Services and between all phases.
-	for _, phase := range [][]*agentpb.ExecutionStep{preSteps, applySteps, postSteps, healthSteps} {
+	for _, phase := range [][]*agentpb.ExecutionStep{preSteps, forwardSteps} {
 		for _, step := range phase {
 			if len(steps) != 0 {
 				step.PrerequisiteStepId = steps[len(steps)-1].StepId

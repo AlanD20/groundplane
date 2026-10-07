@@ -214,6 +214,11 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			artifacts = append(artifacts, prior)
 		}
 	}
+	for _, member := range input.Members {
+		if err := validateReleaseProxyTopology(member.Render.Strategy, artifact, priorArtifacts[member.Render.ServiceID], member.Render.ServiceID); err != nil {
+			return nil, err
+		}
+	}
 	operation := agentpb.PlanOperation_PLAN_OPERATION_DEPLOY
 	if task.Type == taskjournal.TaskRollback {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK

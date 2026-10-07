@@ -28,26 +28,6 @@ func serviceCreateBody(input apiTypes.ServiceCreate) (generated.ServiceCreateJSO
 	}, nil
 }
 
-func serviceEditBody(input apiTypes.ServiceEdit) (generated.ServiceEditJSONRequestBody, error) {
-	resources, err := serviceResourcesBody(input.Resources)
-	if err != nil {
-		return generated.ServiceEditJSONRequestBody{}, err
-	}
-	return generated.ServiceEditJSONRequestBody{
-		Image:        input.Image,
-		Zones:        optionalServiceStrings(input.Zones),
-		Strategy:     input.Strategy,
-		OnFailure:    string(input.OnFailure),
-		Healthcheck:  serviceHealthcheckBody(input.Healthcheck),
-		Resources:    resources,
-		Expose:       optionalServiceStrings(input.Expose),
-		Restart:      input.Restart,
-		Replicas:     int64(input.Replicas),
-		Hooks:        backingHooksToGenerated(input.Hooks),
-		VolumeMounts: serviceVolumeMountsBody(input.VolumeMounts),
-	}, nil
-}
-
 func serviceDeployBody(input apiTypes.DeployRequest) generated.ServiceDeployJSONRequestBody {
 	return generated.ServiceDeployJSONRequestBody{
 		Image: optionalServiceString(input.Image),
@@ -96,16 +76,4 @@ func optionalServiceStrings(value []string) *[]string {
 		return nil
 	}
 	return &value
-}
-
-func serviceVolumeMountsBody(input *[]apiTypes.ServiceVolumeMount) *[]generated.ServiceVolumeMount {
-	if input == nil {
-		return nil
-	}
-	result := make([]generated.ServiceVolumeMount, len(*input))
-	for index, mount := range *input {
-		readOnly := mount.RO
-		result[index] = generated.ServiceVolumeMount{Volume: mount.Volume, Mount: mount.Mount, Ro: &readOnly}
-	}
-	return &result
 }

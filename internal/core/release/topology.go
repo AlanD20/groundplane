@@ -83,6 +83,36 @@ func TargetFor(strategy Strategy, slot Slot) (WorkloadTarget, error) {
 	}
 }
 
+// DeploymentStrategy resolves an explicit selection or the authored default.
+// Callers must not replace an unsupported choice with recreate.
+func DeploymentStrategy(requested, declared string) (Strategy, error) {
+	selected := requested
+	if selected == "" {
+		selected = declared
+	}
+	if selected == "" {
+		selected = string(StrategyRecreate)
+	}
+	switch Strategy(selected) {
+	case StrategyBlueGreen, StrategyRecreate:
+		return Strategy(selected), nil
+	case "rolling":
+		return "", errs.New(errs.KindStrategyNotImplemented, "rolling release strategy is not implemented in the MVP")
+	default:
+		return "", errs.New(errs.KindValidationFailed, "release strategy must be selected or declared by the Service")
+	}
+}
+
+func InactiveSlot(strategy Strategy, serving Slot) Slot {
+	if strategy != StrategyBlueGreen {
+		return ""
+	}
+	if serving == SlotBlue {
+		return SlotGreen
+	}
+	return SlotBlue
+}
+
 func (target WorkloadTarget) Validate() error {
 	switch target {
 	case WorkloadSingleton, WorkloadBlue, WorkloadGreen:

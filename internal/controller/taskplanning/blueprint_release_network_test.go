@@ -68,7 +68,7 @@ func TestBlueprintNetworkStepJournalRejectsMissingOrReorderedPreparation(t *test
 	stepID := ids.NewAt(ids.KindStep, task.CreatedAt, 410)
 	task.Params[blueprintNetworkPrepareStepsParam] = stepID
 	task.Steps = []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}}
-	for offset := int64(411); offset < 415; offset++ {
+	for offset := int64(411); offset < 416; offset++ {
 		task.Steps = append(
 			task.Steps,
 			testtaskjournal.TaskStepRecord{

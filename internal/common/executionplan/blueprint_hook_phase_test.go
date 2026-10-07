@@ -79,9 +79,9 @@ func TestSealBlueprintPreHookRejectsForgedCandidateAndPhase(t *testing.T) {
 	}
 }
 
-// Rationale: a posthook's preceding apply may belong to another Service, but
-// every candidate must be applied before any posthook and before health.
-func TestSealBlueprintGlobalHookBarrierAcrossServices(t *testing.T) {
+// Rationale: each candidate follows its own rollout phases while the shared
+// prehook barrier remains global. Posthooks cannot precede their own apply.
+func TestSealBlueprintMemberHookPhasesAcrossServices(t *testing.T) {
 	plan := blueprintTwoServicePostHookPlan(t)
 	if _, err := Seal(plan); err != nil {
 		t.Fatal(err)
@@ -89,10 +89,12 @@ func TestSealBlueprintGlobalHookBarrierAcrossServices(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		order []int
+		valid bool
 	}{
-		{"post before other apply", []int{0, 2, 1, 3, 4}},
-		{"health before post", []int{0, 1, 3, 2, 4}},
-		{"health before other apply", []int{0, 3, 1, 2, 4}},
+		{"post before other apply", []int{0, 2, 1, 3, 4}, true},
+		{"health before post", []int{0, 1, 3, 2, 4}, true},
+		{"health before other apply", []int{0, 3, 1, 2, 4}, true},
+		{"post before own apply", []int{2, 0, 1, 3, 4}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			forged := proto.CloneOf(plan)
@@ -100,8 +102,9 @@ func TestSealBlueprintGlobalHookBarrierAcrossServices(t *testing.T) {
 				forged.Steps[index] = proto.CloneOf(plan.Steps[source])
 			}
 			chainBlueprintForwardForTest(forged)
-			if _, err := Seal(forged); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-				t.Fatalf("global barrier bypass accepted: %v", err)
+			_, err := Seal(forged)
+			if test.valid && err != nil || !test.valid && !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+				t.Fatalf("member phase validity = %v: %v", test.valid, err)
 			}
 		})
 	}

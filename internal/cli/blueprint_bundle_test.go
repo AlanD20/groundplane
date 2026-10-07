@@ -35,7 +35,7 @@ func TestBuildBlueprintMultipartProducesCanonicalManifestAndParts(t *testing.T) 
 	}
 
 	body, contentType, err := buildBlueprintMultipart(
-		directory, "blueprint.yaml", []string{"compose/base.yaml"}, []string{"TAG=v1"},
+		directory, "blueprint.yaml", []string{"compose/base.yaml"}, []string{"TAG=v1"}, "",
 	)
 	if err != nil {
 		t.Fatalf("buildBlueprintMultipart() error = %v", err)
@@ -91,7 +91,7 @@ func TestBuildBlueprintMultipartRejectsSymlinks(t *testing.T) {
 	if err := os.Symlink("blueprint.yaml", filepath.Join(directory, "linked.yaml")); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
-	_, _, err := buildBlueprintMultipart(directory, "blueprint.yaml", nil, nil)
+	_, _, err := buildBlueprintMultipart(directory, "blueprint.yaml", nil, nil, "")
 	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("buildBlueprintMultipart() error = %v, want validation failure", err)
 	}

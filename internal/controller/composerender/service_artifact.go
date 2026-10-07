@@ -25,6 +25,7 @@ const (
 
 type ServiceArtifactMutation struct {
 	VolumeMounts     *[]ServiceArtifactVolumeMount
+	Settings         *ServiceArtifactSettingsMutation
 	Action           ServiceArtifactAction
 	Desired          core.Service
 	Zones            []ServiceArtifactZone
@@ -33,6 +34,19 @@ type ServiceArtifactMutation struct {
 	TenantID         string
 	ProjectID        string
 	RenderGeneration uint64
+}
+
+// ServiceArtifactSettingsMutation carries only explicitly supplied direct-edit
+// fields. Nil members preserve the exact authored Compose value; present empty
+// values remove the corresponding override and restore the image/default value.
+type ServiceArtifactSettingsMutation struct {
+	Command    *[]string
+	Entrypoint *[]string
+	WorkingDir *string
+	User       *string
+	Aliases    *map[string][]string
+	DependsOn  *map[string]core.ServiceDependency
+	Logging    *core.ServiceLogging
 }
 
 type ServiceArtifactZone struct {
@@ -104,6 +118,9 @@ func MutateEnvironmentServiceArtifact(
 		if err := applyDirectServiceDesired(node, mutation.Desired); err != nil {
 			return nil, err
 		}
+		if err := applyServiceArtifactSettings(node, mutation.Settings); err != nil {
+			return nil, err
+		}
 		AppendMappingValue(services, mutation.Desired.Name, node)
 		sortMapping(services)
 		owned.Services = append(owned.Services, &agentpb.ComposeService{
@@ -116,6 +133,9 @@ func MutateEnvironmentServiceArtifact(
 			return nil, errs.New(errs.KindStateConflict, "Service artifact identity is absent")
 		}
 		if err := applyDirectServiceDesired(services.Content[found+1], mutation.Desired); err != nil {
+			return nil, err
+		}
+		if err := applyServiceArtifactSettings(services.Content[found+1], mutation.Settings); err != nil {
 			return nil, err
 		}
 		if mutation.VolumeMounts != nil {

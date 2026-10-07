@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -19,6 +20,9 @@ func BlueprintManagedServiceSteps(
 	prerequisite string,
 	releaseForward bool,
 ) ([]*agentpb.ExecutionStep, error) {
+	if task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam] != "" {
+		return nil, nil
+	}
 	serviceIDs := []string{}
 	for _, service := range artifact.GetServices() {
 		if service.GetOwnerComponentId() == "" {

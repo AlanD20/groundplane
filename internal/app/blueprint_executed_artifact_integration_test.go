@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -23,6 +24,7 @@ import (
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -283,6 +285,7 @@ func testBlueprintExecutedArtifactConfigured(
 				ids.New(ids.KindStep),
 			},
 			HealthStepIDs:             []string{ids.New(ids.KindStep)},
+			SwitchStepIDs:             []string{ids.New(ids.KindStep)},
 			RecoveryProbeStepIDs:      []string{ids.New(ids.KindStep)},
 			RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)},
 			PostStepIDs:               [][]string{nil},
@@ -457,6 +460,38 @@ func proveSecondAddressableBlueprint(
 	), task.PlanID, task.Params[testtaskjournal.TaskComposeArtifactParam]
 	render.Projection.RevisionID, render.Projection.RenderGeneration = task.ID, 3
 	render.PriorArtifactID, render.PriorWorkload = first.ArtifactId, &prior.CandidateWorkload
+	scope, err := fixture.Ledger.LoadPlanningScope(ctx, render.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planning, err := fixture.Ledger.LoadPlanningServices(ctx, scope, []string{render.ServiceID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appliedPrior, found, err := fixture.Ledger.GetPlanningAppliedProjection(ctx, scope)
+	if err != nil || !found {
+		t.Fatalf("capture successor applied predecessor: %v", err)
+	}
+	native, err := servicelifecycle.CaptureAcknowledgedRuntime(ctx, fixture.Ledger, appliedPrior,
+		render.EnvironmentID, render.ServiceID, ids.New(ids.KindConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer native.Clear()
+	priorArtifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(native.CurrentArtifact, priorArtifact); err != nil {
+		t.Fatal(err)
+	}
+	render.PriorArtifactID = priorArtifact.ArtifactId
+	render.PriorRuntime = &taskassignments.ReleaseNativePredecessorAuthority{
+		ServiceID: render.ServiceID, CurrentArtifact: native.CurrentArtifact, RetainedPriorArtifact: native.RetainedPriorArtifact,
+	}
+	capture := etcd.BlueprintNativePredecessorCapture{
+		ServiceID: render.ServiceID, FixedReadRevision: scope.ReadRevision,
+		ProjectionRevision: planning[0].ProjectionRevision, RuntimeRevision: native.RuntimeRevision,
+		Serving: &native.Release, CurrentArtifact: native.CurrentArtifact, RetainedPriorArtifact: native.RetainedPriorArtifact,
+	}
+	predecessors := []etcd.BlueprintNativePredecessor{capture.Runtime()}
 	render.PriorProxyGeneration, render.PriorProxyDigest = prior.ProxyGeneration, prior.ProxyConfigDigest
 	render.ProxyGeneration = prior.ProxyGeneration + 1
 	config, err := domain.RenderProxyConfig(
@@ -517,11 +552,13 @@ func proveSecondAddressableBlueprint(
 		ctx,
 		task,
 		testtaskplanning.BlueprintReleasePlanInput{
-			Members: []testreleaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
+			Members:            []testreleaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
+			NativePredecessors: predecessors,
 			ApplyStepIDs: []string{
 				ids.New(ids.KindStep),
 			},
 			HealthStepIDs:             []string{ids.New(ids.KindStep)},
+			SwitchStepIDs:             []string{ids.New(ids.KindStep)},
 			RecoveryProbeStepIDs:      []string{ids.New(ids.KindStep)},
 			RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)},
 			PostStepIDs:               [][]string{nil},
@@ -539,6 +576,7 @@ func proveSecondAddressableBlueprint(
 		nil,
 		etcd.BlueprintReleasePublicationEvidence{
 			Manifest:                   manifest,
+			NativePredecessors:         []etcd.BlueprintNativePredecessorCapture{capture},
 			EnvironmentID:              render.EnvironmentID,
 			Task:                       task,
 			Plan:                       plan,

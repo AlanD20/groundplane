@@ -11,6 +11,7 @@ import (
 )
 
 type environmentBlueprintBundleFlags struct {
+	service       string
 	directory     string
 	root          string
 	compose       []string
@@ -142,6 +143,8 @@ func newEnvironmentBlueprintCmd() *cobra.Command {
 }
 
 func (flags *environmentBlueprintBundleFlags) bind(command *cobra.Command) {
+	command.Flags().
+		StringVar(&flags.service, "service", "", "apply or validate only this Compose Service; shared changes require full Apply")
 	command.Flags().StringVar(
 		&flags.directory,
 		"bundle-dir",
@@ -156,5 +159,5 @@ func (flags *environmentBlueprintBundleFlags) bind(command *cobra.Command) {
 }
 
 func (flags environmentBlueprintBundleFlags) build() ([]byte, string, error) {
-	return buildBlueprintMultipart(flags.directory, flags.root, flags.compose, flags.interpolation)
+	return buildBlueprintMultipart(flags.directory, flags.root, flags.compose, flags.interpolation, flags.service)
 }

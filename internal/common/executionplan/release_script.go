@@ -118,26 +118,27 @@ func blueprintScriptCandidateArtifact(
 ) (*agentpb.ExecutionStep, *agentpb.ComposeArtifact, error) {
 	runIndex, applyIndex := -1, -1
 	var selected *agentpb.ExecutionStep
+	artifactID := ""
 	for index, step := range plan.Steps {
 		if step == run {
 			runIndex = index
 		}
-		apply := step.GetComposeApply()
-		if apply == nil || step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD ||
-			!composeApplySelectsService(apply, run.GetRunScript().GetServiceId()) {
+		candidateID := blueprintCandidateApplyArtifact(step, run.GetRunScript().GetServiceId())
+		if candidateID == "" || step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD {
 			continue
 		}
 		if selected != nil {
 			return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script candidate apply is ambiguous")
 		}
 		selected, applyIndex = step, index
+		artifactID = candidateID
 	}
 	if selected == nil || runIndex < 0 ||
 		run.Policy == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK && runIndex >= applyIndex ||
 		run.Policy == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK && runIndex <= applyIndex {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script candidate apply is outside its phase")
 	}
-	artifact := artifacts[selected.GetComposeApply().GetArtifactId()]
+	artifact := artifacts[artifactID]
 	if artifact == nil || artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 		artifact.GetOwnerId() != plan.GetTargetId() {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script candidate artifact is invalid")
@@ -165,7 +166,7 @@ func validateBlueprintHookPhases(plan *agentpb.ExecutionPlan) error {
 			case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK:
 				next = 1
 			case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK:
-				next = 3
+				next = 2
 			default:
 				return errs.New(errs.KindValidationFailed, "Blueprint Script phase is invalid")
 			}
@@ -180,10 +181,8 @@ func validateBlueprintHookPhases(plan *agentpb.ExecutionPlan) error {
 					)
 				}
 			}
-		case step.GetComposeApply() != nil && candidateForward[step.GetStepId()]:
+		case candidateForward[step.GetStepId()]:
 			next = 2
-		case step.GetWaitHealthy() != nil && candidateForward[step.GetStepId()]:
-			next = 4
 		}
 		if next != 0 {
 			if next < phase || preceding != nil && step.GetPrerequisiteStepId() != preceding.GetStepId() {
@@ -202,9 +201,8 @@ func blueprintCandidateReleaseBound(
 	applyStep *agentpb.ExecutionStep,
 	artifact *agentpb.ComposeArtifact,
 ) bool {
-	apply := applyStep.GetComposeApply()
-	if apply == nil || snapshot.GetLocalImageId() == "" || snapshot.GetServiceId() != run.GetServiceId() ||
-		snapshot.GetReleaseId() != run.GetReleaseId() || !composeApplySelectsService(apply, run.GetServiceId()) {
+	if blueprintCandidateApplyArtifact(applyStep, run.GetServiceId()) == "" || snapshot.GetLocalImageId() == "" ||
+		snapshot.GetServiceId() != run.GetServiceId() || snapshot.GetReleaseId() != run.GetReleaseId() {
 		return false
 	}
 	matches := 0
@@ -216,6 +214,16 @@ func blueprintCandidateReleaseBound(
 		}
 	}
 	return matches == 1
+}
+
+func blueprintCandidateApplyArtifact(step *agentpb.ExecutionStep, serviceID string) string {
+	if apply := step.GetComposeApply(); apply != nil && composeApplySelectsService(apply, serviceID) {
+		return apply.GetArtifactId()
+	}
+	if apply := step.GetComposeWorkloadApply(); apply != nil && apply.GetServiceId() == serviceID {
+		return apply.GetArtifactId()
+	}
+	return ""
 }
 
 func composeApplySelectsService(apply *agentpb.ComposeApply, serviceID string) bool {

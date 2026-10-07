@@ -308,5 +308,6 @@ func releaseTargetService(artifact *agentpb.ComposeArtifact, serviceID, target s
 
 func releaseOperation(operation agentpb.PlanOperation) bool {
 	return operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
-		operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
+		operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK ||
+		operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
 }

@@ -132,6 +132,9 @@ func (service *Service) prepareApplyPreflightFromSource(
 	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return applyPreflight{}, err
 	}
+	if err := service.validateServiceSelection(ctx, environmentID, bundle, parsed); err != nil {
+		return applyPreflight{}, err
+	}
 	if source.hasPrevious && !preserveRoutes {
 		if err := requireExplicitBlueprintVolumes(parsed.Project, source.previousVolumes); err != nil {
 			return applyPreflight{}, err
@@ -221,7 +224,8 @@ func (service *Service) prepareApplyPreflightFromSource(
 	var workloads blueprintrelease.WorkloadPreparation
 	if source.mode == legacyTaskPreflight {
 		workloads, err = service.blueprintReleases.PreflightBlueprint(ctx, blueprintrelease.BlueprintPreflightInput{
-			EnvironmentID: environmentID, Project: parsed.Project, PriorProject: priorProject,
+			SelectedService: bundle.Service,
+			EnvironmentID:   environmentID, Project: parsed.Project, PriorProject: priorProject,
 			PreviousIdentities: source.previous, ServiceExtensions: preflightExtensions,
 			CurrentServices: preflightServices, AuthoredGroups: parsed.Extensions.ReleaseGroups,
 		})

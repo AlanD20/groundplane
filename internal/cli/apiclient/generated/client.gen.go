@@ -346,6 +346,24 @@ func (e EnvironmentBlueprintChangeAction) Valid() bool {
 	}
 }
 
+// Defines values for EnvironmentBlueprintChangeReleaseStrategy.
+const (
+	BlueGreen EnvironmentBlueprintChangeReleaseStrategy = "blue-green"
+	Recreate  EnvironmentBlueprintChangeReleaseStrategy = "recreate"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentBlueprintChangeReleaseStrategy enum.
+func (e EnvironmentBlueprintChangeReleaseStrategy) Valid() bool {
+	switch e {
+	case BlueGreen:
+		return true
+	case Recreate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ImageFetchRecordStatus.
 const (
 	ImageFetchRecordStatusAborted   ImageFetchRecordStatus = "aborted"
@@ -670,6 +688,51 @@ func (e ServiceContainerObservationState) Valid() bool {
 	case ServiceContainerObservationStateRestarting:
 		return true
 	case ServiceContainerObservationStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServiceDependencyCondition.
+const (
+	ServiceCompletedSuccessfully ServiceDependencyCondition = "service_completed_successfully"
+	ServiceHealthy               ServiceDependencyCondition = "service_healthy"
+	ServiceStarted               ServiceDependencyCondition = "service_started"
+)
+
+// Valid indicates whether the value is a known member of the ServiceDependencyCondition enum.
+func (e ServiceDependencyCondition) Valid() bool {
+	switch e {
+	case ServiceCompletedSuccessfully:
+		return true
+	case ServiceHealthy:
+		return true
+	case ServiceStarted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServiceDependencyPhases.
+const (
+	ServiceDependencyPhasesAlways   ServiceDependencyPhases = "always"
+	ServiceDependencyPhasesDeploy   ServiceDependencyPhases = "deploy"
+	ServiceDependencyPhasesRollback ServiceDependencyPhases = "rollback"
+	ServiceDependencyPhasesStart    ServiceDependencyPhases = "start"
+)
+
+// Valid indicates whether the value is a known member of the ServiceDependencyPhases enum.
+func (e ServiceDependencyPhases) Valid() bool {
+	switch e {
+	case ServiceDependencyPhasesAlways:
+		return true
+	case ServiceDependencyPhasesDeploy:
+		return true
+	case ServiceDependencyPhasesRollback:
+		return true
+	case ServiceDependencyPhasesStart:
 		return true
 	default:
 		return false
@@ -1789,14 +1852,18 @@ type Environment struct {
 
 // EnvironmentBlueprintChange defines model for EnvironmentBlueprintChange.
 type EnvironmentBlueprintChange struct {
-	Action           EnvironmentBlueprintChangeAction `json:"action"`
-	EmptySecretValue *bool                            `json:"empty_secret_value,omitempty"`
-	Key              string                           `json:"key"`
-	Resource         string                           `json:"resource"`
+	Action           EnvironmentBlueprintChangeAction           `json:"action"`
+	EmptySecretValue *bool                                      `json:"empty_secret_value,omitempty"`
+	Key              string                                     `json:"key"`
+	ReleaseStrategy  *EnvironmentBlueprintChangeReleaseStrategy `json:"release_strategy,omitempty"`
+	Resource         string                                     `json:"resource"`
 }
 
 // EnvironmentBlueprintChangeAction defines model for EnvironmentBlueprintChange.Action.
 type EnvironmentBlueprintChangeAction string
+
+// EnvironmentBlueprintChangeReleaseStrategy defines model for EnvironmentBlueprintChange.ReleaseStrategy.
+type EnvironmentBlueprintChangeReleaseStrategy string
 
 // EnvironmentBlueprintDocument defines model for EnvironmentBlueprintDocument.
 type EnvironmentBlueprintDocument struct {
@@ -1817,6 +1884,7 @@ type EnvironmentBlueprintValidation struct {
 	Schema   *string                       `json:"$schema,omitempty"`
 	Changes  *[]EnvironmentBlueprintChange `json:"changes"`
 	Revision string                        `json:"revision"`
+	Service  *string                       `json:"service,omitempty"`
 }
 
 // EnvironmentCreate defines model for EnvironmentCreate.
@@ -2853,6 +2921,7 @@ type Service struct {
 	Command                    *[]string                     `json:"command,omitempty"`
 	CurrentSuccessfulReleaseId *string                       `json:"current_successful_release_id,omitempty"`
 	DependsOn                  *map[string]ServiceDependency `json:"depends_on,omitempty"`
+	Entrypoint                 *[]string                     `json:"entrypoint,omitempty"`
 	EnvironmentId              string                        `json:"environment_id"`
 	Expose                     *[]string                     `json:"expose,omitempty"`
 	FactsPrefix                *string                       `json:"facts_prefix,omitempty"`
@@ -2872,6 +2941,8 @@ type Service struct {
 	RuntimeIntent              string                        `json:"runtime_intent"`
 	ServingReleaseId           *string                       `json:"serving_release_id,omitempty"`
 	Strategy                   *string                       `json:"strategy,omitempty"`
+	User                       *string                       `json:"user,omitempty"`
+	WorkingDir                 *string                       `json:"working_dir,omitempty"`
 	Zones                      *[]string                     `json:"zones,omitempty"`
 }
 
@@ -2912,9 +2983,15 @@ type ServiceCreate struct {
 
 // ServiceDependency defines model for ServiceDependency.
 type ServiceDependency struct {
-	Condition string    `json:"condition"`
-	Phases    *[]string `json:"phases,omitempty"`
+	Condition ServiceDependencyCondition `json:"condition"`
+	Phases    *[]ServiceDependencyPhases `json:"phases,omitempty"`
 }
+
+// ServiceDependencyCondition defines model for ServiceDependency.Condition.
+type ServiceDependencyCondition string
+
+// ServiceDependencyPhases defines model for ServiceDependency.Phases.
+type ServiceDependencyPhases string
 
 // ServiceDetail defines model for ServiceDetail.
 type ServiceDetail struct {
@@ -2928,6 +3005,7 @@ type ServiceDetail struct {
 	Command                    *[]string                     `json:"command,omitempty"`
 	CurrentSuccessfulReleaseId *string                       `json:"current_successful_release_id,omitempty"`
 	DependsOn                  *map[string]ServiceDependency `json:"depends_on,omitempty"`
+	Entrypoint                 *[]string                     `json:"entrypoint,omitempty"`
 	EnvironmentId              string                        `json:"environment_id"`
 	Expose                     *[]string                     `json:"expose,omitempty"`
 	FactsPrefix                *string                       `json:"facts_prefix,omitempty"`
@@ -2949,6 +3027,8 @@ type ServiceDetail struct {
 	RuntimeIntent              string                        `json:"runtime_intent"`
 	ServingReleaseId           *string                       `json:"serving_release_id,omitempty"`
 	Strategy                   *string                       `json:"strategy,omitempty"`
+	User                       *string                       `json:"user,omitempty"`
+	WorkingDir                 *string                       `json:"working_dir,omitempty"`
 	Zones                      *[]string                     `json:"zones,omitempty"`
 }
 
@@ -2957,20 +3037,41 @@ type ServiceEdit struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ServiceEdit.json
-	Schema      *string                   `json:"$schema,omitempty"`
+	Schema *string `json:"$schema,omitempty"`
+
+	// Aliases Replacement network aliases keyed by joined Zone name; omission preserves, an empty object removes all aliases.
+	Aliases *map[string]*[]string `json:"aliases,omitempty"`
+
+	// Command Replacement argument vector; omission preserves, an empty list removes the Compose override and restores the image command.
+	Command *[]string `json:"command,omitempty"`
+
+	// DependsOn Replacement Service dependencies keyed by Service name; omission preserves, an empty object removes all dependencies.
+	DependsOn *map[string]ServiceDependency `json:"depends_on,omitempty"`
+
+	// Entrypoint Replacement entrypoint vector; omission preserves, an empty list removes the Compose override and restores the image entrypoint.
+	Entrypoint  *[]string                 `json:"entrypoint,omitempty"`
 	Expose      *[]string                 `json:"expose"`
 	Healthcheck ServiceHealthcheck        `json:"healthcheck"`
 	Hooks       *BackingHookConfiguration `json:"hooks,omitempty"`
 	Image       string                    `json:"image"`
-	OnFailure   string                    `json:"on_failure"`
-	Replicas    int64                     `json:"replicas"`
-	Resources   ServiceResources          `json:"resources"`
-	Restart     string                    `json:"restart"`
-	Strategy    string                    `json:"strategy"`
+
+	// Logging Replacement supported log rotation options; omission preserves, an empty object removes both overrides.
+	Logging   *ServiceLogging  `json:"logging,omitempty"`
+	OnFailure string           `json:"on_failure"`
+	Replicas  int64            `json:"replicas"`
+	Resources ServiceResources `json:"resources"`
+	Restart   string           `json:"restart"`
+	Strategy  string           `json:"strategy"`
+
+	// User Replacement container user; omission preserves, an empty string restores the image default.
+	User *string `json:"user,omitempty"`
 
 	// VolumeMounts Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy.
 	VolumeMounts *[]ServiceVolumeMount `json:"volume_mounts,omitempty"`
-	Zones        *[]string             `json:"zones"`
+
+	// WorkingDir Replacement container working directory; omission preserves, an empty string restores the image default.
+	WorkingDir *string   `json:"working_dir,omitempty"`
+	Zones      *[]string `json:"zones"`
 }
 
 // ServiceHealthcheck defines model for ServiceHealthcheck.
@@ -2986,7 +3087,10 @@ type ServiceHealthcheck struct {
 
 // ServiceLogging defines model for ServiceLogging.
 type ServiceLogging struct {
-	MaxFile *int64  `json:"max_file,omitempty"`
+	// MaxFile Rotated log files to retain; zero disables the count override
+	MaxFile *int64 `json:"max_file,omitempty"`
+
+	// MaxSize Docker log rotation size such as 10m; empty disables the size override
 	MaxSize *string `json:"max_size,omitempty"`
 }
 

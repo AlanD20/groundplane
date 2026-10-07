@@ -166,6 +166,9 @@ cases must preserve data and unrelated resources.
 
 Recreate must reach the declared replica count but does not promise zero downtime.
 Blue-green supports one replica; replicated blue-green and rolling are rejected.
+Saving desired Service settings does not change running processes. Deploy and
+Blueprint Apply must honor each affected Service's declared release strategy;
+an incompatible disruptive change is rejected, never silently recreated.
 Release Groups must preserve declared order, hook selection and failure behavior.
 
 Gate B adds source-specific Backup, verified Restore to original surviving targets,

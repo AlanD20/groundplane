@@ -109,6 +109,7 @@ const (
 )
 
 type EnvironmentBlueprintChange struct {
+	ReleaseStrategy  string                `json:"release_strategy,omitempty" enum:"blue-green,recreate"`
 	Resource         string                `json:"resource"`
 	Key              string                `json:"key"`
 	Action           BlueprintChangeAction `json:"action" enum:"create,update,retain,remove"`
@@ -116,6 +117,7 @@ type EnvironmentBlueprintChange struct {
 }
 
 type EnvironmentBlueprintValidation struct {
+	Service  string                       `json:"service,omitempty"`
 	Revision string                       `json:"revision"`
 	Changes  []EnvironmentBlueprintChange `json:"changes"`
 }

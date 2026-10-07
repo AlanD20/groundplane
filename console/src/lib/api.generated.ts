@@ -2272,6 +2272,8 @@ export interface components {
             action: "create" | "update" | "retain" | "remove";
             empty_secret_value?: boolean;
             key: string;
+            /** @enum {string} */
+            release_strategy?: "blue-green" | "recreate";
             resource: string;
         };
         EnvironmentBlueprintDocument: {
@@ -2294,6 +2296,7 @@ export interface components {
             readonly $schema?: string;
             changes: components["schemas"]["EnvironmentBlueprintChange"][] | null;
             revision: string;
+            service?: string;
         };
         EnvironmentCreate: {
             /**
@@ -3286,6 +3289,7 @@ export interface components {
             depends_on?: {
                 [key: string]: components["schemas"]["ServiceDependency"];
             };
+            entrypoint?: string[] | null;
             environment_id: string;
             expose?: string[] | null;
             facts_prefix?: string;
@@ -3306,6 +3310,8 @@ export interface components {
             runtime_intent: string;
             serving_release_id?: string;
             strategy?: string;
+            user?: string;
+            working_dir?: string;
             zones?: string[] | null;
         };
         ServiceContainerObservation: {
@@ -3340,8 +3346,9 @@ export interface components {
             zones: string[] | null;
         };
         ServiceDependency: {
-            condition: string;
-            phases?: string[] | null;
+            /** @enum {string} */
+            condition: "service_started" | "service_healthy" | "service_completed_successfully";
+            phases?: ("start" | "deploy" | "rollback" | "always")[] | null;
         };
         ServiceDetail: {
             /**
@@ -3360,6 +3367,7 @@ export interface components {
             depends_on?: {
                 [key: string]: components["schemas"]["ServiceDependency"];
             };
+            entrypoint?: string[] | null;
             environment_id: string;
             expose?: string[] | null;
             facts_prefix?: string;
@@ -3382,6 +3390,8 @@ export interface components {
             runtime_intent: string;
             serving_release_id?: string;
             strategy?: string;
+            user?: string;
+            working_dir?: string;
             zones?: string[] | null;
         };
         ServiceEdit: {
@@ -3391,18 +3401,36 @@ export interface components {
              * @example /api/v1/ServiceEdit.json
              */
             readonly $schema?: string;
+            /** @description Replacement network aliases keyed by joined Zone name; omission preserves, an empty object removes all aliases. */
+            aliases?: {
+                [key: string]: string[] | null;
+            };
+            /** @description Replacement argument vector; omission preserves, an empty list removes the Compose override and restores the image command. */
+            command?: string[];
+            /** @description Replacement Service dependencies keyed by Service name; omission preserves, an empty object removes all dependencies. */
+            depends_on?: {
+                [key: string]: components["schemas"]["ServiceDependency"];
+            };
+            /** @description Replacement entrypoint vector; omission preserves, an empty list removes the Compose override and restores the image entrypoint. */
+            entrypoint?: string[];
             expose: string[] | null;
             healthcheck: components["schemas"]["ServiceHealthcheck"];
             hooks?: components["schemas"]["BackingHookConfiguration"];
             image: string;
+            /** @description Replacement supported log rotation options; omission preserves, an empty object removes both overrides. */
+            logging?: components["schemas"]["ServiceLogging"];
             on_failure: string;
             /** Format: int64 */
             replicas: number;
             resources: components["schemas"]["ServiceResources"];
             restart: string;
             strategy: string;
+            /** @description Replacement container user; omission preserves, an empty string restores the image default. */
+            user?: string;
             /** @description Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy. */
             volume_mounts?: components["schemas"]["ServiceVolumeMount"][];
+            /** @description Replacement container working directory; omission preserves, an empty string restores the image default. */
+            working_dir?: string;
             zones: string[] | null;
         };
         ServiceHealthcheck: {
@@ -3416,8 +3444,12 @@ export interface components {
             timeout?: string;
         };
         ServiceLogging: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Rotated log files to retain; zero disables the count override
+             */
             max_file?: number;
+            /** @description Docker log rotation size such as 10m; empty disables the size override */
             max_size?: string;
         };
         ServiceMount: {

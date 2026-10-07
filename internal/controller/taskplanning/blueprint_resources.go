@@ -1,15 +1,15 @@
 package taskplanning
 
 import (
-	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"sort"
-
-	"github.com/compose-spec/compose-go/v2/types"
+	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/compose-spec/compose-go/v2/types"
 )
 
 // ProjectServiceProjection builds the complete core.Service projection for
@@ -72,9 +72,20 @@ func ProjectServiceProjection(
 		}
 		service := core.Service{
 			ID: serviceIDs[name], Name: name, Image: config.Image,
-			Zones: zones, Command: append([]string(nil), config.Command...), Aliases: aliases,
+			Zones: zones, Command: append([]string(nil), config.Command...),
+			Entrypoint: append([]string(nil), config.Entrypoint...),
+			WorkingDir: config.WorkingDir, User: config.User, Aliases: aliases,
 			DependsOn: dependsOn, Expose: append([]string(nil), config.Expose...),
 			Restart: config.Restart, Replicas: config.GetScale(),
+		}
+		if config.Logging != nil {
+			service.Logging.MaxSize = config.Logging.Options["max-size"]
+			if value := config.Logging.Options["max-file"]; value != "" {
+				maximum, parseErr := strconv.Atoi(value)
+				if parseErr == nil && maximum >= 0 {
+					service.Logging.MaxFile = maximum
+				}
+			}
 		}
 		if extension.Release != nil {
 			service.Strategy = extension.Release.DefaultStrategy

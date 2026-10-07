@@ -3,12 +3,13 @@
 package taskcontract
 
 const (
-	EnvironmentCreateVolumeDirectoryParam   = "expected_volume_dir"
-	EnvironmentBlueprintArtifactParam       = "compose_artifact_id"
-	EnvironmentBlueprintManagedVolumesParam = "managed_volume_ids"
-	EnvironmentBlueprintProcedureParam      = "blueprint_compose_procedure"
-	EnvironmentRemoveVolumeDirectoryParam   = "remove_volume_dir"
-	MaximumBlueprintPostDeployHooks         = 16
+	EnvironmentCreateVolumeDirectoryParam    = "expected_volume_dir"
+	EnvironmentBlueprintArtifactParam        = "compose_artifact_id"
+	EnvironmentBlueprintManagedVolumesParam  = "managed_volume_ids"
+	EnvironmentBlueprintProcedureParam       = "blueprint_compose_procedure"
+	EnvironmentBlueprintSelectedServiceParam = "blueprint_selected_service"
+	EnvironmentRemoveVolumeDirectoryParam    = "remove_volume_dir"
+	MaximumBlueprintPostDeployHooks          = 16
 )
 
 type BlueprintComposeProcedure string
@@ -36,8 +37,8 @@ func BlueprintReleaseProcedureStepCount(memberCount, hookCount int) (int, bool) 
 		return 0, false
 	}
 	maxInt := int(^uint(0) >> 1)
-	if memberCount > (maxInt-hookCount)/4 {
+	if memberCount > (maxInt-hookCount)/5 {
 		return 0, false
 	}
-	return memberCount*4 + hookCount, true
+	return memberCount*5 + hookCount, true
 }

@@ -22,6 +22,8 @@ var interpolationKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // parser after multipart integrity has been verified. Files are strictly
 // path-sorted; ComposeSources is layer-ordered and begins with RootPath.
 type BlueprintBundle struct {
+	// Service selects one authored Compose Service; empty means full Apply.
+	Service        string
 	RootPath       string
 	ComposeSources []string
 	Files          []BlueprintFile
@@ -37,6 +39,9 @@ type BlueprintFile struct {
 }
 
 func (b BlueprintBundle) Validate() error {
+	if b.Service != "" && !ValidEnvironmentComposeName(b.Service) {
+		return fmt.Errorf("blueprint bundle: selected Service name is invalid")
+	}
 	if len(b.Files) == 0 {
 		return fmt.Errorf("blueprint bundle: at least one file is required")
 	}

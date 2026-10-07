@@ -485,7 +485,7 @@ func (service *Service) deployCandidate(
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
-	strategy, err := releaseStrategy(requestedStrategy, planning.Service.Record.Desired.Strategy)
+	strategy, err := domain.DeploymentStrategy(requestedStrategy, string(planning.Service.Record.Desired.Strategy))
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
@@ -516,7 +516,7 @@ func (service *Service) deployCandidate(
 		planning: planning, selection: workloadseal.Selection{Requested: &workloadseal.Requested{Reference: image, Replicas: uint32(replicas)}}, tag: tag,
 		priorWorkload: releasePriorWorkload(serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
 		strategy: strategy, priorStrategy: releasePriorStrategy(serving, hasServing),
-		slot: inactiveReleaseSlot(strategy, planning.Projection.ServingSlot), onFailure: onFailure,
+		slot: domain.InactiveSlot(strategy, planning.Projection.ServingSlot), onFailure: onFailure,
 	}, nil
 }
 
@@ -546,7 +546,7 @@ func (service *Service) rollbackCandidate(
 		strategy:      selection.Source.Strategy,
 		priorWorkload: releasePriorWorkload(serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
 		priorStrategy: releasePriorStrategy(serving, hasServing),
-		slot:          inactiveReleaseSlot(selection.Source.Strategy, planning.Projection.ServingSlot),
+		slot:          domain.InactiveSlot(selection.Source.Strategy, planning.Projection.ServingSlot),
 		onFailure:     onFailure, rollbackSource: selection.Source.ID,
 	}, nil
 }

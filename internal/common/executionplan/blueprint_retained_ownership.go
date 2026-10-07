@@ -77,6 +77,7 @@ func validBlueprintRetainedOwnership(
 		}
 	}
 	candidates := make(map[string]bool)
+	nativePriorRemoves := make(map[string]map[string]string)
 	nativePriorArtifacts := make(map[string]map[string]bool)
 	candidateArtifactID := ""
 	if procedure := plan.GetCandidateReleaseProcedure(); procedure != nil {
@@ -88,6 +89,12 @@ func validBlueprintRetainedOwnership(
 				return retainedOwnershipReject(retainedOwnershipCandidate)
 			}
 			if serving := member.GetServingPredecessor(); serving != nil {
+				if serving.GetPriorArtifactId() != "" && len(member.GetForwardStepIds()) == 3 {
+					if nativePriorRemoves[serving.GetPriorArtifactId()] == nil {
+						nativePriorRemoves[serving.GetPriorArtifactId()] = make(map[string]string)
+					}
+					nativePriorRemoves[serving.GetPriorArtifactId()][member.GetServiceId()] = member.GetForwardStepIds()[0]
+				}
 				for _, artifactID := range []string{serving.GetPriorArtifactId(), serving.GetRetainedPriorArtifactId()} {
 					if artifactID == "" {
 						continue
@@ -205,6 +212,10 @@ func validBlueprintRetainedOwnership(
 			}
 		case *agentpb.ExecutionStep_ComposeRemove:
 			remove := payload.ComposeRemove
+			if remove != nil && !remove.WholeProject && len(remove.ServiceIds) == 1 &&
+				nativePriorRemoves[remove.ArtifactId][remove.ServiceIds[0]] == step.GetStepId() {
+				continue
+			}
 			if remove == nil || remove.WholeProject || !selected(remove.ArtifactId, remove.ServiceIds) {
 				return retainedOwnershipReject(retainedOwnershipStepSelection)
 			}
@@ -218,6 +229,22 @@ func validBlueprintRetainedOwnership(
 		case *agentpb.ExecutionStep_WaitHealthy:
 			if payload.WaitHealthy == nil || payload.WaitHealthy.ArtifactId != candidateArtifactID && len(managedSources[payload.WaitHealthy.ArtifactId]) != 0 ||
 				!selected(payload.WaitHealthy.ArtifactId, payload.WaitHealthy.ServiceIds) {
+				return retainedOwnershipReject(retainedOwnershipStepSelection)
+			}
+		case *agentpb.ExecutionStep_ComposeWorkloadApply:
+			if payload.ComposeWorkloadApply.GetArtifactId() != candidateArtifactID || !candidates[payload.ComposeWorkloadApply.GetServiceId()] {
+				return retainedOwnershipReject(retainedOwnershipStepSelection)
+			}
+		case *agentpb.ExecutionStep_WaitWorkloadHealthy:
+			if payload.WaitWorkloadHealthy.GetArtifactId() != candidateArtifactID || !candidates[payload.WaitWorkloadHealthy.GetServiceId()] {
+				return retainedOwnershipReject(retainedOwnershipStepSelection)
+			}
+		case *agentpb.ExecutionStep_ServiceProxySwitch:
+			if payload.ServiceProxySwitch.GetCandidateArtifactId() != candidateArtifactID || !candidates[payload.ServiceProxySwitch.GetServiceId()] {
+				return retainedOwnershipReject(retainedOwnershipStepSelection)
+			}
+		case *agentpb.ExecutionStep_ServiceRecreateAcknowledge:
+			if payload.ServiceRecreateAcknowledge.GetArtifactId() != candidateArtifactID || !candidates[payload.ServiceRecreateAcknowledge.GetServiceId()] {
 				return retainedOwnershipReject(retainedOwnershipStepSelection)
 			}
 		case *agentpb.ExecutionStep_CandidateRestorationProbe:

@@ -70,6 +70,24 @@ func (service *Service) prepareSelectedWorkloads(
 				"Blueprint workload replica count is invalid",
 			)
 		}
+		strategy, strategyErr := domain.DeploymentStrategy("", string(desired.Strategy))
+		if strategyErr != nil {
+			return WorkloadPreparation{}, strategyErr
+		}
+		if strategy == domain.StrategyBlueGreen {
+			if desired.Replicas != 1 {
+				return WorkloadPreparation{}, errs.New(
+					errs.KindValidationFailed,
+					"blue-green Blueprint Apply requires one replica",
+				)
+			}
+			if _, err := domain.ProxyPorts(desired.Expose); err != nil {
+				return WorkloadPreparation{}, errs.New(
+					errs.KindValidationFailed,
+					"blue-green Blueprint Apply requires an addressable TCP Service",
+				)
+			}
+		}
 		selections[index] = workloadseal.Selection{
 			Requested: &workloadseal.Requested{Reference: desired.Image, Replicas: uint32(desired.Replicas)},
 		}

@@ -119,6 +119,7 @@ func IntentManifest(bundle core.BlueprintBundle) (requestidempotency.BlueprintMa
 	}
 	sort.Strings(keys)
 	manifest := requestidempotency.BlueprintManifestV1{
+		Service:        bundle.Service,
 		FormatVersion:  1,
 		RootPath:       bundle.RootPath,
 		ComposeSources: append([]string(nil), bundle.ComposeSources...),

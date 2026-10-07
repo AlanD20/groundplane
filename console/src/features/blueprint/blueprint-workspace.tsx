@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { BlueprintApplyAction } from "@/features/blueprint/blueprint-apply-action";
 import { BlueprintReview } from "@/features/blueprint/blueprint-review";
+import { BlueprintApplyScope } from './blueprint-apply-scope';
 import {
   createBlueprintTextApplyRequest,
   type BlueprintApplyRequest,
@@ -73,6 +74,7 @@ export function BlueprintWorkspace({
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [selectedService, setSelectedService] = useState('');
   const [error, setError] = useState("");
   const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null);
   const [dispatched, setDispatched] = useState(false);
@@ -181,6 +183,7 @@ export function BlueprintWorkspace({
     setError("");
     try {
       const request = await createBlueprintTextApplyRequest(draft);
+      if (selectedService) request.manifest.service = selectedService;
       const validation = await store.validateBlueprint(
         environment.id,
         request,
@@ -305,6 +308,7 @@ export function BlueprintWorkspace({
               )}
             </div>
           </div>
+          {editing && <BlueprintApplyScope environment={environment} value={selectedService} onChange={setSelectedService} disabled={working} />}
           <CodeEditor
             id="environment-blueprint"
             label="Environment Blueprint YAML"

@@ -7,7 +7,7 @@ import "testing"
 // omitting them can admit a plan whose actual procedure exceeds its bound.
 func TestBlueprintReleaseProcedureStepCountIncludesRecoveryPair(t *testing.T) {
 	t.Parallel()
-	if got, valid := BlueprintReleaseProcedureStepCount(3, 2); !valid || got != 14 {
-		t.Fatalf("BlueprintReleaseProcedureStepCount(3, 2) = %d, %t, want 14, true", got, valid)
+	if got, valid := BlueprintReleaseProcedureStepCount(3, 2); !valid || got != 17 {
+		t.Fatalf("BlueprintReleaseProcedureStepCount(3, 2) = %d, %t, want 17, true", got, valid)
 	}
 }

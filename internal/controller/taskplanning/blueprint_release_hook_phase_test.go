@@ -20,9 +20,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Rationale: per-Service apply/post/health sequencing starts later Services
-// after earlier hooks. Blueprint requires global barriers across every member.
-// A separate setup image must keep this barrier and the consumer image binding.
+// Rationale: all pre-hooks finish before rollout; each member's post-hooks and
+// acknowledgement then finish before the next member starts. Separate setup
+// images must retain their own identity and the consumer's pinned image.
 func TestPrepareBlueprintReleaseTaskGlobalHookPhases(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
 	task.Materializations = nil // This hook-order case has no file-writing prefix.
@@ -70,6 +70,7 @@ func TestPrepareBlueprintReleaseTaskGlobalHookPhases(t *testing.T) {
 		}
 		input.ApplyStepIDs = append(input.ApplyStepIDs, stepID(0))
 		input.HealthStepIDs = append(input.HealthStepIDs, stepID(1))
+		input.SwitchStepIDs = append(input.SwitchStepIDs, stepID(6))
 		input.RecoveryProbeStepIDs = append(input.RecoveryProbeStepIDs, stepID(2))
 		input.RecoveryCompensateStepIDs = append(input.RecoveryCompensateStepIDs, stepID(3))
 		input.PostStepIDs = append(input.PostStepIDs, []string{stepID(4)})
@@ -155,11 +156,13 @@ func TestPrepareBlueprintReleaseTaskGlobalHookPhases(t *testing.T) {
 		input.PreStepIDs[0][0],
 		input.PreStepIDs[1][0],
 		input.ApplyStepIDs[0],
-		input.ApplyStepIDs[1],
-		input.PostStepIDs[0][0],
-		input.PostStepIDs[1][0],
 		input.HealthStepIDs[0],
+		input.PostStepIDs[0][0],
+		input.SwitchStepIDs[0],
+		input.ApplyStepIDs[1],
 		input.HealthStepIDs[1],
+		input.PostStepIDs[1][0],
+		input.SwitchStepIDs[1],
 	}...)
 	for index, want := range expected {
 		step := plan.Steps[index]
@@ -174,7 +177,7 @@ func TestPrepareBlueprintReleaseTaskGlobalHookPhases(t *testing.T) {
 			t.Fatalf("step %d prerequisite=%s, want %s", index, step.PrerequisiteStepId, predecessor)
 		}
 	}
-	if len(plan.ScriptRunnerSnapshots) != 4 || len(plan.Steps) != 12+len(networkIDs)+len(volumeSteps) ||
+	if len(plan.ScriptRunnerSnapshots) != 4 || len(plan.Steps) != 14+len(networkIDs)+len(volumeSteps) ||
 		updated.PlanHash != hex.EncodeToString(plan.PlanHash) {
 		t.Fatalf(
 			"incomplete hook publication: snapshots=%d steps=%d taskHash=%s",

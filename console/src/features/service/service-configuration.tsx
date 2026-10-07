@@ -55,7 +55,30 @@ export function ServiceConfiguration({
           />
           <DetailRow
             label="Command"
-            value={service.command || "Image default"}
+            value={
+              service.command.length > 0
+                ? JSON.stringify(service.command)
+                : "Image default"
+            }
+            mono
+          />
+          <DetailRow
+            label="Entrypoint"
+            value={
+              service.entrypoint.length > 0
+                ? JSON.stringify(service.entrypoint)
+                : "Image default"
+            }
+            mono
+          />
+          <DetailRow
+            label="Working directory"
+            value={service.workingDir || "Image default"}
+            mono
+          />
+          <DetailRow
+            label="Container user"
+            value={service.user || "Image default"}
             mono
           />
           <DetailRow label="Replicas" value={String(service.replicas)} />
@@ -73,6 +96,14 @@ export function ServiceConfiguration({
             value={`${service.strategy}${service.strategy === "rolling" ? " (deferred)" : ""}`}
           />
           <DetailRow label="Runtime intent" value={service.runtimeIntent} />
+          <DetailRow
+            label="Log rotation"
+            value={
+              service.logging.maxSize || service.logging.maxFile > 0
+                ? `${service.logging.maxSize || "default size"} · ${service.logging.maxFile > 0 ? `${service.logging.maxFile} files` : "default files"}`
+                : "Runtime default"
+            }
+          />
           {service.role && <DetailRow label="Note" value={service.role} />}
         </ResourcePanel>
         <ResourcePanel title="Networking" actions={edit("network")}>
@@ -84,13 +115,21 @@ export function ServiceConfiguration({
           />
           <DetailRow
             label="Aliases"
-            value={service.aliases.join(", ") || "None"}
+            value={
+              Object.entries(service.aliasesByZone)
+                .map(([zone, aliases]) => `${zone}: ${aliases.join(", ")}`)
+                .join(" · ") || "None"
+            }
           />
           <DetailRow
             label="Dependencies"
             value={
-              service.dependsOn.map((name) => `${name} (healthy)`).join(", ") ||
-              "None"
+              Object.entries(service.dependencies)
+                .map(
+                  ([name, dependency]) =>
+                    `${name} (${dependency.condition.replaceAll("_", " ")})`,
+                )
+                .join(", ") || "None"
             }
           />
         </ResourcePanel>

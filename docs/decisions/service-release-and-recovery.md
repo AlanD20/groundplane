@@ -54,6 +54,19 @@ child Deploy Tasks.
 
 ## Ambiguous effects retain recovery authority
 
+Blueprint Apply uses the same per-Service forward rollout planner as Deploy.
+There is no recreate-only Blueprint rollout or separate selected-Service
+deployment engine. Its selector belongs to protected request identity, not
+authored desired state. Admission validates the complete document and rejects
+unselected or shared changes; execution narrows mutations to that Service.
+Saving direct Service edits only changes this same authored input.
+
+Blueprint recovery keeps its claim-time restoration alternatives, including the
+captured acknowledged runtime and pinned files. Sharing forward rollout steps
+does not replace that authority with a later desired projection. The owning seams
+are [selection admission](../../internal/controller/blueprint/service_selection.go)
+and [release planning](../../internal/controller/taskplanning/blueprint_release_plan.go).
+
 The sealed candidate procedure contains the lawful restoration alternatives
 for each Service: restore the exact proved serving predecessor, or prove exact
 candidate absence when no predecessor existed. Host observation proves a

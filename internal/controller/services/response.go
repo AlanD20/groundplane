@@ -32,6 +32,9 @@ func serviceAPIResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 		}
 	}
 	response.Command = append([]string(nil), record.Desired.Command...)
+	response.Entrypoint = append([]string(nil), record.Desired.Entrypoint...)
+	response.WorkingDir = record.Desired.WorkingDir
+	response.User = record.Desired.User
 	response.Mounts = make([]apiTypes.ServiceMount, len(record.Desired.Mounts))
 	for index, mount := range record.Desired.Mounts {
 		response.Mounts[index] = apiTypes.ServiceMount{

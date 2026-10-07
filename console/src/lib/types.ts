@@ -33,6 +33,21 @@ export type Mount =
   | { type: "volume"; volume: string; mount: string; ro?: boolean }
   | { type: "file"; file: string; mount: string; ro: boolean };
 
+export type ServiceDependencyCondition =
+  "service_started" | "service_healthy" | "service_completed_successfully";
+
+export type ServiceDependencyPhase = "start" | "deploy" | "rollback" | "always";
+
+export type ServiceDependency = {
+  condition: ServiceDependencyCondition;
+  phases: ServiceDependencyPhase[];
+};
+
+export type ServiceLogging = {
+  maxSize: string;
+  maxFile: number;
+};
+
 // An environment-level env var entry: a stable id, a key (the name the
 // container reads — a mutable label) and a value. Secret entries live in the
 // secret store instead and reference their env entry.
@@ -57,12 +72,18 @@ export type Service = {
   onFailure?: "switch_back" | "leave_active";
   healthcheck: Healthcheck | null;
   resources: { mem: string; cpus: string };
-  command?: string;
+  command: string[];
+  entrypoint: string[];
+  workingDir: string;
+  user: string;
   mounts: Mount[];
   envFiles: string[];
   environment: EnvVar[]; // service-scoped env vars (exposure: this service)
   aliases: string[];
+  aliasesByZone: Record<string, string[]>;
   dependsOn: string[];
+  dependencies: Record<string, ServiceDependency>;
+  logging: ServiceLogging;
   expose: string[]; // e.g. "cms:3000"
   restart: "unless-stopped" | "always" | "no";
   replicas: number;

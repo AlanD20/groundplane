@@ -15,6 +15,7 @@ require (
 	github.com/coredns/caddy v1.1.1
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/distribution/reference v0.6.0
+	github.com/docker/go-units v0.5.0
 	github.com/gowebpki/jcs v1.0.1
 	github.com/jedib0t/go-pretty/v6 v6.5.9
 	github.com/moby/moby/api v1.55.0
@@ -56,7 +57,6 @@ require (
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/dave/dst v0.27.3 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
-	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect

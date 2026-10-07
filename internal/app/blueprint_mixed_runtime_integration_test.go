@@ -105,6 +105,7 @@ func testBlueprintMixedCandidate(t *testing.T, servingRace bool) {
 			task, testtaskplanning.BlueprintReleasePlanInput{
 				Members:      []testreleaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
 				ApplyStepIDs: []string{ids.New(ids.KindStep)}, HealthStepIDs: []string{ids.New(ids.KindStep)},
+				SwitchStepIDs: []string{ids.New(ids.KindStep)},
 				RecoveryProbeStepIDs: []string{
 					ids.New(ids.KindStep),
 				}, RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)},

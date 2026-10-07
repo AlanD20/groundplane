@@ -17,6 +17,7 @@ import (
 // BlueprintPreflightInput carries the candidate and existing desired-state
 // snapshots. It carries no durable claim or publication authority.
 type BlueprintPreflightInput struct {
+	SelectedService    string
 	EnvironmentID      string
 	Project            *composetypes.Project
 	PriorProject       *composetypes.Project
@@ -53,5 +54,11 @@ func (service *Service) PreflightBlueprint(
 	if err != nil {
 		return WorkloadPreparation{}, err
 	}
-	return service.Preflight(ctx, input.EnvironmentID, changes, memberships, input.AuthoredGroups)
+	return service.Preflight(
+		ctx,
+		input.EnvironmentID,
+		changes,
+		memberships.WithSelectedService(input.SelectedService),
+		input.AuthoredGroups,
+	)
 }

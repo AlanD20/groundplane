@@ -135,6 +135,26 @@ func TestNativeComposeChangesSelectRunningBlueprintCandidates(t *testing.T) {
 							want,
 						)
 					}
+					// BP-17: explicit selection activates pending settings even when
+					// desired input is unchanged, but never overrides stopped intent
+					// or selects a different Service implicitly.
+					for _, name := range []string{"worker", "other"} {
+						targeted, err := selectCandidates(testenvironmentprojection.EnvironmentComposeProjection{},
+							changes, groups, memberships.WithSelectedService(name))
+						if err != nil {
+							t.Fatal(err)
+						}
+						wantTargeted := name == "worker" && intent == core.ServiceRuntimeIntentRunning && !grouped
+						if (len(targeted) == 1) != wantTargeted {
+							t.Fatalf(
+								"selection=%s intent=%s grouped=%t: candidates=%d",
+								name,
+								intent,
+								grouped,
+								len(targeted),
+							)
+						}
+					}
 				}
 			}
 		})

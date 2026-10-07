@@ -3,6 +3,7 @@ package apiclient
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
@@ -104,16 +105,17 @@ func (c *Client) EditService(ctx context.Context, id string, input apiTypes.Serv
 	if err != nil {
 		return apiTypes.Service{}, err
 	}
-	body, err := serviceEditBody(input)
+	body, err := json.Marshal(input)
 	if err != nil {
 		return apiTypes.Service{}, err
 	}
 	path := "/api/v1/services/" + id
-	response, err := client.ServiceEditWithResponse(
+	response, err := client.ServiceEditWithBodyWithResponse(
 		ctx,
 		id,
 		&generated.ServiceEditParams{IdempotencyKey: ids.NewULID()},
-		body,
+		"application/json",
+		bytes.NewReader(body),
 	)
 	if err != nil {
 		return apiTypes.Service{}, generatedCallError(ctx, http.MethodPatch, path, err)

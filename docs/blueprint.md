@@ -353,10 +353,11 @@ serving state, and retry checkpoints are Controller-owned; see
 [Services and releases](features/services-and-releases.md) and
 [Release packaging](decisions/release-packaging.md).
 
-Current Blueprint Apply prepares native workload candidates with `recreate`.
-Setting `blue-green` here supplies a default for explicit Service Deploy;
-it does not make Apply perform a blue-green rollout. Use the explicit Deploy
-workflow when that strategy is required.
+Blueprint Apply and an explicit Deploy without a strategy override both use this
+declaration. Disruptive changes follow the selected release strategy; GP never
+silently substitutes recreate for blue-green. See
+[single-Service Apply](features/blueprints.md#apply-one-service) for operation
+scope; selection is request metadata, not a YAML desired-state field.
 
 ### `x-gp-release-groups`
 

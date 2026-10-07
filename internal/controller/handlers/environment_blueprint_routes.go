@@ -125,7 +125,7 @@ func blueprintMultipartSchema() *huma.Schema {
 	return &huma.Schema{
 		Type:        "string",
 		Format:      "binary",
-		Description: "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order.",
+		Description: "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order. Optional manifest.service selects one Compose Service; unrelated desired changes are rejected. Workloads use their declared release strategy.",
 	}
 }
 

@@ -78,10 +78,26 @@ successful application. Required workload images must already exist in the host
 Docker daemon. While the Apply Task is pending or running, a second Apply to
 that Environment is refused; wait for settlement.
 
-Current Apply rolls out native Service candidates with recreate. A declared
-blue-green default belongs to the explicit Service Deploy workflow; Apply
-does not promise its traffic-switch behavior. See the
+Apply uses each affected Service's declared release strategy and failure policy.
+Blue-green keeps the serving workload until candidate health passes and traffic
+switches; recreate has downtime. Unsupported topology or replica changes fail
+before host mutation rather than silently falling back to recreate. See the
 [release fields](../blueprint.md#x-gp-release).
+
+### Apply one Service
+
+Choose a Service in the Console's **Apply scope**, or add `--service api` to
+Validate and Apply. The API uses the optional manifest `service` field.
+Use an exported Blueprint for an already-authored Environment and change only
+the selected Service. The complete bundle is still validated, but GP does not
+deploy dependencies, other Services or generated Components.
+
+Changes to shared resources, other Services or companion file bytes are rejected
+with a full-Apply instruction. Release Group members use group Deploy instead.
+A stopped or destroyed Service keeps its runtime intent; selected Apply saves
+its configuration without starting it. An unchanged running selection may still
+deploy pending saved configuration. Review identifies the target and strategy,
+and the accepted Task is linked directly.
 
 ## Multi-file bundles
 
@@ -143,7 +159,7 @@ groundplane environment blueprint apply env_01J00000000000000000000000 --id \
 Replace all three recovery values with the reported values. Both retry flags
 are required together; the key is the original Apply ULID and the revision is
 `0` or its original `task_…` revision. Preserve additional layer and interpolation
-options too. Request replay resolves the original acceptance; Task Retry is a
+options and `--service` selection too. Request replay resolves the original acceptance; Task Retry is a
 separate action after an eligible execution failure.
 
 ## Removal and identity

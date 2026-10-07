@@ -107,6 +107,9 @@ func (service *Service) ValidateBlueprint(
 	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
+	if err := service.validateServiceSelection(ctx, environmentID, bundle, parsed); err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
 	if snapshot.hasHead {
 		if err := requireExplicitBlueprintVolumes(parsed.Project, snapshot.volumes); err != nil {
 			return apiTypes.EnvironmentBlueprintValidation{}, err
@@ -153,15 +156,30 @@ func (service *Service) ValidateBlueprint(
 			return apiTypes.EnvironmentBlueprintValidation{}, err
 		}
 	}
+	changes := environmentBlueprintChanges(
+		current,
+		parsed,
+		snapshot.hasHead,
+		currentProject,
+		attaches,
+	)
+	selectedChanges := make([]apiTypes.EnvironmentBlueprintChange, 0, len(changes))
+	for _, change := range changes {
+		if bundle.Service != "" && (change.Resource != "service" || change.Key != bundle.Service) {
+			continue
+		}
+		if change.Resource == "service" && change.Action != apiTypes.BlueprintChangeRemove {
+			change.ReleaseStrategy = string(core.StrategyRecreate)
+			if release := parsed.ServiceExtensions[change.Key].Release; release != nil {
+				change.ReleaseStrategy = string(release.DefaultStrategy)
+			}
+		}
+		selectedChanges = append(selectedChanges, change)
+	}
 	return apiTypes.EnvironmentBlueprintValidation{
 		Revision: revision,
-		Changes: environmentBlueprintChanges(
-			current,
-			parsed,
-			snapshot.hasHead,
-			currentProject,
-			attaches,
-		),
+		Service:  bundle.Service,
+		Changes:  selectedChanges,
 	}, nil
 }
 

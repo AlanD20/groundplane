@@ -31,6 +31,7 @@ const (
 var blueprintCLIInterpolationKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type blueprintCLIManifest struct {
+	Service        string                     `json:"service,omitempty"`
 	Root           string                     `json:"root"`
 	ComposeSources []string                   `json:"compose_sources"`
 	Interpolation  map[string]string          `json:"interpolation"`
@@ -54,6 +55,7 @@ func buildBlueprintMultipart(
 	rootPath string,
 	additionalComposeSources []string,
 	variables []string,
+	selectedService string,
 ) ([]byte, string, error) {
 	rootPath, err := normalizeBlueprintCLIPath(rootPath)
 	if err != nil {
@@ -99,6 +101,7 @@ func buildBlueprintMultipart(
 		Root: rootPath, ComposeSources: composeSources, Interpolation: interpolation,
 		Files: make([]blueprintCLIManifestFile, len(files)),
 	}
+	manifest.Service = selectedService
 	for index, file := range files {
 		digest := sha256.Sum256(file.content)
 		manifest.Files[index] = blueprintCLIManifestFile{

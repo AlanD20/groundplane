@@ -61,7 +61,14 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		return nil, err
 	}
 	expectedParams := 4
+	if selected, present := task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam]; present {
+		expectedParams++
+		if ids.Validate(ids.KindService, selected) != nil {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Service selection is invalid")
+		}
+	}
 	parentID, blueprintChild := task.Params[taskjournal.TaskBlueprintParentParam]
+	serviceOnly := blueprintChild || task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam] != ""
 	if blueprintChild {
 		expectedParams++
 		if ids.Validate(ids.KindTask, parentID) != nil || parentID == task.ID ||
@@ -99,6 +106,14 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 || backingCreation.enabled || hasRequirementGate) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Service child shape is invalid")
 	}
+	if selected := task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam]; selected != "" {
+		if len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 || backingCreation.enabled ||
+			len(task.ManagedComponentTeardownSources) != 0 ||
+			hasBlueprintReleases &&
+				(len(blueprintReleases.Members) != 1 || blueprintReleases.Members[0].Render.ServiceID != selected) {
+			return nil, errs.New(errs.KindInternal, "durable selected-Service Blueprint effects are invalid")
+		}
+	}
 	revisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Target ||
@@ -109,9 +124,9 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
-	if hasBlueprintReleases && !blueprintChild &&
+	if hasBlueprintReleases && !serviceOnly &&
 		len(resourceStepIDs) != len(pinned.artifact.Networks)+len(pinned.artifact.Volumes) ||
-		hasBlueprintReleases && blueprintChild && len(resourceStepIDs) != 0 ||
+		hasBlueprintReleases && serviceOnly && len(resourceStepIDs) != 0 ||
 		!hasBlueprintReleases && len(resourceStepIDs) != 0 {
 		return nil, errs.New(
 			errs.KindInternal,
@@ -123,7 +138,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	var managedConfigApply EnvironmentManagedConfigApply
 	hasManagedConfigApply := false
-	if !blueprintChild {
+	if !serviceOnly {
 		managedConfigApply, hasManagedConfigApply, err = ResolveEnvironmentManagedConfigApply(
 			EnvironmentManagedConfigApplyInput{
 				RevisionID: revisionID, RenderGeneration: uint64(task.RenderGeneration), Components: pinned.components,
@@ -137,7 +152,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	var attachCandidates []blueprintAttachPlanCandidate
 	attachStepCount := 0
-	if !blueprintChild {
+	if !serviceOnly {
 		attachCandidates, attachStepCount, err = resolver.blueprintAttachPlanCandidates(ctx, task)
 		if err != nil {
 			return nil, err
@@ -145,7 +160,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	var managedServiceSteps []*agentpb.ExecutionStep
 	managedTeardown := BlueprintManagedComponentTeardown{Artifacts: []*agentpb.ComposeArtifact{pinned.artifact}}
-	if procedure != taskcontract.BlueprintComposeProcedureFullReconcile && !blueprintChild {
+	if procedure != taskcontract.BlueprintComposeProcedureFullReconcile && !serviceOnly {
 		managedTeardown, err = resolver.BlueprintManagedComponentTeardown(
 			ctx,
 			task,

@@ -27,6 +27,9 @@ func selectCandidates(
 	groupMembers := releaseGroupMembers(groups, changes)
 	for _, change := range changes {
 		service := change.Record.Desired
+		if memberships.selectedService != "" && service.Name != memberships.selectedService {
+			continue
+		}
 		candidateMembership, candidateExists := memberships.candidate[service.Name]
 		if !candidateExists ||
 			(candidateMembership != blueprintServiceActive && candidateMembership != blueprintServiceProfileDisabled) {
@@ -62,7 +65,7 @@ func selectCandidates(
 			material = previousMembership != candidateMembership || !bytes.Equal(before, after) ||
 				memberships.previousNative[service.Name] != memberships.candidateNative[service.Name]
 		}
-		if material {
+		if material || memberships.selectedService != "" {
 			selected[service.Name] = change
 		}
 	}

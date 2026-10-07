@@ -41,13 +41,13 @@ type ServiceVolumeMount struct {
 }
 
 type ServiceDependency struct {
-	Condition string   `json:"condition"`
-	Phases    []string `json:"phases,omitempty"`
+	Condition string   `json:"condition" enum:"service_started,service_healthy,service_completed_successfully"`
+	Phases    []string `json:"phases,omitempty" enum:"start,deploy,rollback,always"`
 }
 
 type ServiceLogging struct {
-	MaxSize string `json:"max_size,omitempty"`
-	MaxFile int    `json:"max_file,omitempty"`
+	MaxSize string `json:"max_size,omitempty" doc:"Docker log rotation size such as 10m; empty disables the size override"`
+	MaxFile int    `json:"max_file,omitempty" minimum:"0" doc:"Rotated log files to retain; zero disables the count override"`
 }
 
 type Service struct {
@@ -63,6 +63,9 @@ type Service struct {
 	Healthcheck                *ServiceHealthcheck          `json:"healthcheck,omitempty"`
 	Resources                  ServiceResources             `json:"resources,omitempty"`
 	Command                    []string                     `json:"command,omitempty"`
+	Entrypoint                 []string                     `json:"entrypoint,omitempty"`
+	WorkingDir                 string                       `json:"working_dir,omitempty"`
+	User                       string                       `json:"user,omitempty"`
 	Mounts                     []ServiceMount               `json:"mounts,omitempty"`
 	Aliases                    map[string][]string          `json:"aliases,omitempty"`
 	DependsOn                  map[string]ServiceDependency `json:"depends_on,omitempty"`
@@ -103,17 +106,24 @@ type ServiceCreate struct {
 }
 
 type ServiceEdit struct {
-	VolumeMounts *[]ServiceVolumeMount     `json:"volume_mounts,omitempty" doc:"Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy."`
-	Image        string                    `json:"image"`
-	Zones        []string                  `json:"zones"`
-	Strategy     string                    `json:"strategy"`
-	OnFailure    OnFailure                 `json:"on_failure"`
-	Healthcheck  ServiceHealthcheck        `json:"healthcheck"`
-	Resources    ServiceResources          `json:"resources"`
-	Expose       []string                  `json:"expose"`
-	Restart      string                    `json:"restart"`
-	Replicas     int                       `json:"replicas"`
-	Hooks        *BackingHookConfiguration `json:"hooks,omitempty"`
+	VolumeMounts *[]ServiceVolumeMount         `json:"volume_mounts,omitempty" doc:"Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy."`
+	Command      *[]string                     `json:"command,omitempty" doc:"Replacement argument vector; omission preserves, an empty list removes the Compose override and restores the image command."`
+	Entrypoint   *[]string                     `json:"entrypoint,omitempty" doc:"Replacement entrypoint vector; omission preserves, an empty list removes the Compose override and restores the image entrypoint."`
+	WorkingDir   *string                       `json:"working_dir,omitempty" doc:"Replacement container working directory; omission preserves, an empty string restores the image default."`
+	User         *string                       `json:"user,omitempty" doc:"Replacement container user; omission preserves, an empty string restores the image default."`
+	Aliases      *map[string][]string          `json:"aliases,omitempty" doc:"Replacement network aliases keyed by joined Zone name; omission preserves, an empty object removes all aliases."`
+	DependsOn    *map[string]ServiceDependency `json:"depends_on,omitempty" doc:"Replacement Service dependencies keyed by Service name; omission preserves, an empty object removes all dependencies."`
+	Logging      *ServiceLogging               `json:"logging,omitempty" doc:"Replacement supported log rotation options; omission preserves, an empty object removes both overrides."`
+	Image        string                        `json:"image"`
+	Zones        []string                      `json:"zones"`
+	Strategy     string                        `json:"strategy"`
+	OnFailure    OnFailure                     `json:"on_failure"`
+	Healthcheck  ServiceHealthcheck            `json:"healthcheck"`
+	Resources    ServiceResources              `json:"resources"`
+	Expose       []string                      `json:"expose"`
+	Restart      string                        `json:"restart"`
+	Replicas     int                           `json:"replicas"`
+	Hooks        *BackingHookConfiguration     `json:"hooks,omitempty"`
 }
 
 type ServiceObservationState string

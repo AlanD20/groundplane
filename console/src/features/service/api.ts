@@ -5,6 +5,11 @@ import { serviceObservationFromAPI } from "./service-observation";
 
 type ServiceDocument =
   components["schemas"]["Service"] | components["schemas"]["ServiceDetail"];
+type ServiceWorkloadDocument = ServiceDocument & {
+  entrypoint?: string[] | null;
+  working_dir?: string;
+  user?: string;
+};
 type ReleasePageResponse =
   operations["release.list"]["responses"][200]["content"]["application/json"];
 type ReleasePageItem = NonNullable<ReleasePageResponse["items"]>[number];
@@ -22,9 +27,22 @@ export type ServiceMutationInput = Pick<
   | "restart"
   | "replicas"
   | "hooks"
-> & { volumeMounts?: { volume: string; mount: string; ro: boolean }[] };
+> &
+  Partial<
+    Pick<
+      Service,
+      | "command"
+      | "entrypoint"
+      | "workingDir"
+      | "user"
+      | "aliasesByZone"
+      | "dependencies"
+      | "logging"
+    >
+  > & { volumeMounts?: { volume: string; mount: string; ro: boolean }[] };
 
 export function serviceFromAPI(service: ServiceDocument): Service {
+  const workload = service as ServiceWorkloadDocument;
   if (
     service.runtime_intent !== "running" &&
     service.runtime_intent !== "stopped" &&
@@ -95,7 +113,10 @@ export function serviceFromAPI(service: ServiceDocument): Service {
       mem: service.resources?.mem ?? "",
       cpus: String(service.resources?.cpus ?? 0),
     },
-    command: service.command?.join(" "),
+    command: [...(service.command ?? [])],
+    entrypoint: [...(workload.entrypoint ?? [])],
+    workingDir: workload.working_dir ?? "",
+    user: workload.user ?? "",
     mounts: (service.mounts ?? []).map((mount) =>
       mount.volume
         ? {
@@ -116,7 +137,18 @@ export function serviceFromAPI(service: ServiceDocument): Service {
     aliases: Object.values(service.aliases ?? {}).flatMap(
       (values) => values ?? [],
     ),
+    aliasesByZone: Object.fromEntries(
+      Object.entries(service.aliases ?? {}).map(([zone, values]) => [
+        zone,
+        [...(values ?? [])],
+      ]),
+    ),
     dependsOn: Object.keys(service.depends_on ?? {}),
+    dependencies: serviceDependenciesFromAPI(service.depends_on),
+    logging: {
+      maxSize: service.logging?.max_size ?? "",
+      maxFile: service.logging?.max_file ?? 0,
+    },
     expose: [...(service.expose ?? [])],
     restart,
     replicas: service.replicas ?? 1,
@@ -135,6 +167,39 @@ export function serviceFromAPI(service: ServiceDocument): Service {
           )
         : undefined,
   };
+}
+
+function serviceDependenciesFromAPI(
+  dependencies: ServiceDocument["depends_on"],
+): Service["dependencies"] {
+  const result: Service["dependencies"] = {};
+  for (const [name, dependency] of Object.entries(dependencies ?? {})) {
+    const condition = dependency.condition;
+    if (
+      condition !== "service_started" &&
+      condition !== "service_healthy" &&
+      condition !== "service_completed_successfully"
+    ) {
+      throw new Error(
+        `Controller returned unknown dependency condition ${condition}`,
+      );
+    }
+    const phases = (dependency.phases ?? []).map((phase) => {
+      if (
+        phase !== "start" &&
+        phase !== "deploy" &&
+        phase !== "rollback" &&
+        phase !== "always"
+      ) {
+        throw new Error(
+          `Controller returned unknown dependency phase ${phase}`,
+        );
+      }
+      return phase;
+    });
+    result[name] = { condition, phases };
+  }
+  return result;
 }
 
 export function serviceMutationBody(input: ServiceMutationInput) {
@@ -170,6 +235,42 @@ export function serviceMutationBody(input: ServiceMutationInput) {
     replicas: input.replicas,
     hooks: input.hooks,
     volume_mounts: input.volumeMounts,
+    ...(input.command !== undefined ? { command: input.command } : {}),
+    ...(input.entrypoint !== undefined ? { entrypoint: input.entrypoint } : {}),
+    ...(input.workingDir !== undefined
+      ? { working_dir: input.workingDir }
+      : {}),
+    ...(input.user !== undefined ? { user: input.user } : {}),
+    ...(input.aliasesByZone !== undefined
+      ? { aliases: input.aliasesByZone }
+      : {}),
+    ...(input.dependencies !== undefined
+      ? {
+          depends_on: Object.fromEntries(
+            Object.entries(input.dependencies).map(([name, dependency]) => [
+              name,
+              {
+                condition: dependency.condition,
+                ...(dependency.phases.length > 0
+                  ? { phases: dependency.phases }
+                  : {}),
+              },
+            ]),
+          ),
+        }
+      : {}),
+    ...(input.logging !== undefined
+      ? {
+          logging: {
+            ...(input.logging.maxSize
+              ? { max_size: input.logging.maxSize }
+              : {}),
+            ...(input.logging.maxFile > 0
+              ? { max_file: input.logging.maxFile }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 

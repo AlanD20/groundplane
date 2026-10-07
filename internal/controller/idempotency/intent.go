@@ -148,6 +148,7 @@ func BlueprintBody(manifest BlueprintManifestV1) Body {
 // BlueprintManifestV1 contains only the verified, boundary-independent
 // closed-bundle manifest. It contains no raw multipart framing or file bytes.
 type BlueprintManifestV1 struct {
+	Service        string
 	FormatVersion  uint8
 	RootPath       string
 	ComposeSources []string
@@ -451,13 +452,17 @@ func blueprintValue(manifest BlueprintManifestV1) Value {
 			Field{Name: "sha256", Value: SHA256Value(file.SHA256)},
 		))
 	}
-	return Object(
+	fields := []Field{
 		Field{Name: "format_version", Value: UnsignedInteger(uint64(manifest.FormatVersion))},
 		Field{Name: "root_path", Value: String(manifest.RootPath)},
 		Field{Name: "compose_sources", Value: List(sources...)},
 		Field{Name: "interpolation", Value: Object(variableFields...)},
 		Field{Name: "files", Value: List(files...)},
-	)
+	}
+	if manifest.Service != "" {
+		fields = append(fields, Field{Name: "service", Value: String(manifest.Service)})
+	}
+	return Object(fields...)
 }
 
 func routeBindings(value string) ([]string, bool) {

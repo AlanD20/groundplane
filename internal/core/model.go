@@ -168,6 +168,9 @@ type Service struct {
 	Healthcheck Healthcheck `yaml:"healthcheck,omitempty" json:"healthcheck,omitempty"`
 	Resources   Resources   `yaml:"resources,omitempty"   json:"resources,omitempty"`
 	Command     []string    `yaml:"command,omitempty"     json:"command,omitempty"`
+	Entrypoint  []string    `yaml:"entrypoint,omitempty"  json:"entrypoint,omitempty"`
+	WorkingDir  string      `yaml:"working_dir,omitempty" json:"working_dir,omitempty"`
+	User        string      `yaml:"user,omitempty"        json:"user,omitempty"`
 
 	Mounts      []Mount    `yaml:"mounts,omitempty"      json:"mounts,omitempty"`
 	Environment []EnvEntry `yaml:"environment,omitempty" json:"environment,omitempty"` // service-scoped entries, wins on key conflict with the environment's all-services file
@@ -178,10 +181,7 @@ type Service struct {
 	Expose  []string `yaml:"expose,omitempty"  json:"expose,omitempty"` // internal-only, no host publishing (ports is rejected for tenant services — see blueprint.md's MVP Compose surface table)
 	Restart string   `yaml:"restart,omitempty" json:"restart,omitempty"`
 
-	Logging struct {
-		MaxSize string `yaml:"max_size,omitempty" json:"max_size,omitempty"`
-		MaxFile int    `yaml:"max_file,omitempty" json:"max_file,omitempty"`
-	} `yaml:"logging,omitempty" json:"logging,omitempty"`
+	Logging ServiceLogging `yaml:"logging,omitempty" json:"logging,omitempty"`
 
 	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"` // native Compose deploy.replicas
 
@@ -191,6 +191,11 @@ type Service struct {
 	FactsPrefix    string                     `yaml:"facts_prefix,omitempty"   json:"facts_prefix,omitempty"` // optional override; adapter supplies a default
 	Label          string                     `yaml:"label,omitempty"          json:"label,omitempty"`        // display only
 	Hooks          *backinghook.Configuration `yaml:"hooks,omitempty"          json:"hooks,omitempty"`
+}
+
+type ServiceLogging struct {
+	MaxSize string `yaml:"max_size,omitempty" json:"max_size,omitempty"`
+	MaxFile int    `yaml:"max_file,omitempty" json:"max_file,omitempty"`
 }
 
 // EntryKind and EntrySourceKind implement the unified environment-entry

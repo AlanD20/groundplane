@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -71,7 +72,7 @@ func blueprintReleaseProcedureStepIDs(
 	if err != nil {
 		return BlueprintReleasePlanInput{}, 0, err
 	}
-	count := len(members)*4 + hookCount
+	count := len(members)*5 + hookCount
 	if len(members) == 0 || start < 0 || start > len(task.Steps) || count > len(task.Steps)-start {
 		return BlueprintReleasePlanInput{}, 0, errs.New(
 			errs.KindInternal,
@@ -83,38 +84,47 @@ func blueprintReleaseProcedureStepIDs(
 		Members:            members,
 		PreStepIDs:         make([][]string, len(members)), PostStepIDs: make([][]string, len(members)),
 		ApplyStepIDs: make([]string, len(members)), HealthStepIDs: make([]string, len(members)),
+		SwitchStepIDs:        make([]string, len(members)),
 		RecoveryProbeStepIDs: make([]string, len(members)), RecoveryCompensateStepIDs: make([]string, len(members)),
 	}
 	cursor := start
-	readHooks := func(when core.ScriptHook, target [][]string) error {
-		for memberIndex, member := range members {
-			for _, hook := range member.Render.Hooks {
-				if hook.When != when {
-					continue
-				}
-				stepID := task.Steps[cursor].ID
-				if task.Params[releaserender.ReleaseHookStepMemberParam(stepID)] != strconv.Itoa(memberIndex+1) ||
-					task.Params[releaserender.ReleaseHookStepExecutionParam(stepID)] != hook.ScriptExecutionID {
-					return errs.New(errs.KindInternal, "durable Blueprint Release hook step authority is invalid")
-				}
-				target[memberIndex] = append(target[memberIndex], stepID)
-				cursor++
+	readHooks := func(when core.ScriptHook, memberIndex int, target [][]string) error {
+		member := members[memberIndex]
+		for _, hook := range member.Render.Hooks {
+			if hook.When != when {
+				continue
 			}
+			stepID := task.Steps[cursor].ID
+			if task.Params[releaserender.ReleaseHookStepMemberParam(stepID)] != strconv.Itoa(memberIndex+1) ||
+				task.Params[releaserender.ReleaseHookStepExecutionParam(stepID)] != hook.ScriptExecutionID {
+				return errs.New(errs.KindInternal, "durable Blueprint Release hook step authority is invalid")
+			}
+			target[memberIndex] = append(target[memberIndex], stepID)
+			cursor++
 		}
 		return nil
 	}
-	if err := readHooks(core.ScriptPreDeploy, result.PreStepIDs); err != nil {
-		return BlueprintReleasePlanInput{}, 0, err
-	}
 	for index := range members {
+		if err := readHooks(core.ScriptPreDeploy, index, result.PreStepIDs); err != nil {
+			return BlueprintReleasePlanInput{}, 0, err
+		}
+	}
+	for index, member := range members {
 		result.ApplyStepIDs[index] = task.Steps[cursor].ID
 		cursor++
-	}
-	if err := readHooks(core.ScriptPostDeploy, result.PostStepIDs); err != nil {
-		return BlueprintReleasePlanInput{}, 0, err
-	}
-	for index := range members {
+		if member.Render.Strategy == domain.StrategyBlueGreen {
+			if err := readHooks(core.ScriptPostDeploy, index, result.PostStepIDs); err != nil {
+				return BlueprintReleasePlanInput{}, 0, err
+			}
+		}
 		result.HealthStepIDs[index] = task.Steps[cursor].ID
+		cursor++
+		if member.Render.Strategy == domain.StrategyRecreate {
+			if err := readHooks(core.ScriptPostDeploy, index, result.PostStepIDs); err != nil {
+				return BlueprintReleasePlanInput{}, 0, err
+			}
+		}
+		result.SwitchStepIDs[index] = task.Steps[cursor].ID
 		cursor++
 	}
 	for index := range members {

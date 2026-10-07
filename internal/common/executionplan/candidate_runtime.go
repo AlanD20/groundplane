@@ -31,7 +31,7 @@ type candidateRuntimeActivation struct {
 }
 
 // PrepareCandidateRuntimes derives post-activation native runtime bytes only
-// from a fully validated ordinary Deploy or Rollback plan. It never mutates
+// from a fully validated Deploy, Rollback or Blueprint plan. It never mutates
 // the caller's plan or consults desired, historical, or observed state.
 func PrepareCandidateRuntimes(plan *agentpb.ExecutionPlan) ([]CandidateRuntime, error) {
 	sealed, err := Validate(plan)
@@ -39,7 +39,7 @@ func PrepareCandidateRuntimes(plan *agentpb.ExecutionPlan) ([]CandidateRuntime, 
 		return nil, err
 	}
 	if !releaseOperation(sealed.GetOperation()) {
-		return nil, errs.New(errs.KindValidationFailed, "candidate runtime requires an ordinary Release plan")
+		return nil, errs.New(errs.KindValidationFailed, "candidate runtime requires a Release activation plan")
 	}
 	procedure := sealed.GetCandidateReleaseProcedure()
 	if procedure == nil || len(procedure.GetMembers()) == 0 {
@@ -227,7 +227,7 @@ func openRecreateCandidateRuntimeActivation(
 		return candidateRuntimeActivation{}, invalidCandidateRuntimeForwardSteps()
 	}
 	prior := member.GetServingPredecessor()
-	if prior == nil {
+	if prior.GetPriorArtifactId() == "" {
 		if remove != nil || wait == nil || wait.GetArtifactId() != member.GetCandidateArtifactId() ||
 			!candidateRuntimeSingleService(wait.GetServiceIds(), member.GetServiceId()) {
 			return candidateRuntimeActivation{}, invalidCandidateRuntimeForwardSteps()

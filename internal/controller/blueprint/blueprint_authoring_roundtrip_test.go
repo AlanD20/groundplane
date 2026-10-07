@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -169,6 +170,31 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 	reparsed, err := blueprintparser.Parse(t.Context(), scope, bundle)
 	if err != nil {
 		t.Fatalf("GetBlueprint document failed real parser: %v", err)
+	}
+	// BP-04: a selected Apply accepts the real exported bundle and its selected
+	// command edit, but rejects any unselected Service or shared-pool change.
+	bundle.Service = "web"
+	if err := service.validateServiceSelection(t.Context(), environmentID, bundle, reparsed); err != nil {
+		t.Fatalf("selected exported Blueprint: %v", err)
+	}
+	selectedProject := *reparsed.Project
+	selectedProject.Services = maps.Clone(reparsed.Project.Services)
+	web := selectedProject.Services["web"]
+	web.Command = []string{"sleep", "infinity"}
+	selectedProject.Services["web"] = web
+	selected := reparsed
+	selected.Project = &selectedProject
+	if err := service.validateServiceSelection(t.Context(), environmentID, bundle, selected); err != nil {
+		t.Fatalf("selected command edit: %v", err)
+	}
+	selectedProject.Services["other"] = web
+	if err := service.validateServiceSelection(t.Context(), environmentID, bundle, selected); err == nil {
+		t.Fatal("selected Apply accepted another Service")
+	}
+	delete(selectedProject.Services, "other")
+	selected.Extensions.NetworkPool = "10.41.0.0/16"
+	if err := service.validateServiceSelection(t.Context(), environmentID, bundle, selected); err == nil {
+		t.Fatal("selected Apply accepted a shared pool change")
 	}
 	if document.Revision != revisionID || len(reparsed.Project.Services) != 1 ||
 		len(reparsed.Project.Volumes) != 1 || reparsed.Project.Services["web"].Image != "example/web:1" ||

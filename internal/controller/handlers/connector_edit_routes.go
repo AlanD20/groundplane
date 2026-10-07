@@ -29,7 +29,7 @@ func (s *Server) registerConnectorEditing() {
 		Summary: "Edit an Environment connector", Tags: []string{"Connector"}, SkipValidateBody: true,
 		RequestBody: &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{
 			"application/json": {
-					Schema: connectorEditRequestSchema(schemas),
+				Schema: connectorEditRequestSchema(schemas),
 			},
 		}},
 		Responses: map[string]*huma.Response{

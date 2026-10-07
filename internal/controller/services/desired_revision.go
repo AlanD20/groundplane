@@ -2,22 +2,21 @@ package services
 
 import (
 	"context"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"sort"
-	"strings"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-
-	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -78,9 +77,10 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	candidate, err := buildServiceDesiredProjection(
+	settings := serviceArtifactSettingsFromMutation(request)
+	candidate, err := buildServiceDesiredProjectionWithSettings(
 		tenant.Record.ID, project.Record.ID, environment.Record, projection.Record, hasProjection,
-		record, references, current == nil, request.VolumeMounts,
+		record, references, current == nil, request.VolumeMounts, settings,
 		candidateRevisionID, generation,
 	)
 	if err != nil {
@@ -104,9 +104,9 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	candidate, err = buildServiceDesiredProjection(
+	candidate, err = buildServiceDesiredProjectionWithSettings(
 		tenant.Record.ID, project.Record.ID, environment.Record, projection.Record, hasProjection,
-		record, references, current == nil, request.VolumeMounts,
+		record, references, current == nil, request.VolumeMounts, settings,
 		claim.RevisionID, generation,
 	)
 	if err != nil {
@@ -225,6 +225,26 @@ func buildServiceDesiredProjection(
 	revisionID string,
 	generation uint64,
 ) (projectionrecord.EnvironmentComposeProjection, error) {
+	return buildServiceDesiredProjectionWithSettings(
+		tenantID, projectID, environment, current, hasCurrent, record, references, create,
+		volumeMounts, nil, revisionID, generation,
+	)
+}
+
+func buildServiceDesiredProjectionWithSettings(
+	tenantID string,
+	projectID string,
+	environment hierarchyrecord.EnvironmentRecord,
+	current projectionrecord.EnvironmentComposeProjection,
+	hasCurrent bool,
+	record servicerecord.ServiceRecord,
+	references servicerecord.ServiceMutationReferences,
+	create bool,
+	volumeMounts *[]core.Mount,
+	settings *composerender.ServiceArtifactSettingsMutation,
+	revisionID string,
+	generation uint64,
+) (projectionrecord.EnvironmentComposeProjection, error) {
 	if hasCurrent {
 		if err := rejectComponentGeneratedServiceTarget(current, record.Desired.ID); err != nil {
 			return projectionrecord.EnvironmentComposeProjection{}, err
@@ -280,7 +300,7 @@ func buildServiceDesiredProjection(
 		action = composerender.ServiceArtifactCreate
 	}
 	mutated, err := composerender.MutateEnvironmentServiceArtifact(artifact, composerender.ServiceArtifactMutation{
-		Action: action, Desired: record.Desired, VolumeMounts: mounts,
+		Action: action, Desired: record.Desired, VolumeMounts: mounts, Settings: settings,
 		Zones:      serviceArtifactZones(references),
 		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
@@ -299,7 +319,7 @@ func buildServiceDesiredProjection(
 	normalizedArtifact, err = composerender.MutateEnvironmentServiceArtifact(
 		normalizedArtifact,
 		composerender.ServiceArtifactMutation{
-			Action: action, Desired: record.Desired, VolumeMounts: mounts,
+			Action: action, Desired: record.Desired, VolumeMounts: mounts, Settings: settings,
 			Zones:      serviceArtifactZones(references),
 			ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 			PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
@@ -312,11 +332,58 @@ func buildServiceDesiredProjection(
 	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
 	candidate.ServiceExtensions = controllerrevision.CloneServiceExtensions(current.ServiceExtensions)
 	setDirectServiceExtension(candidate.ServiceExtensions, record.Desired)
+	candidate.ServiceDependencyPlans, err = serviceDependencyPlans(candidate)
+	if err != nil {
+		return projectionrecord.EnvironmentComposeProjection{}, err
+	}
 	candidate.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return candidate, nil
+}
+
+func serviceDependencyPlans(
+	projection projectionrecord.EnvironmentComposeProjection,
+) (core.ServiceDependencyPlans, error) {
+	names := make([]string, len(projection.DesiredServices))
+	for index, service := range projection.DesiredServices {
+		names[index] = service.Desired.Name
+	}
+	if _, err := core.BuildServiceDependencyPhasePlan(
+		names, projection.ServiceExtensions, core.ServiceLifecycleStart,
+	); err != nil {
+		return core.ServiceDependencyPlans{}, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	deploy, err := core.BuildServiceDependencyPhasePlan(
+		names, projection.ServiceExtensions, core.ServiceLifecycleDeploy,
+	)
+	if err != nil {
+		return core.ServiceDependencyPlans{}, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	rollback, err := core.BuildServiceDependencyPhasePlan(
+		names, projection.ServiceExtensions, core.ServiceLifecycleRollback,
+	)
+	if err != nil {
+		return core.ServiceDependencyPlans{}, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	return core.ServiceDependencyPlans{
+		DeployDependencyPlan: deploy, RollbackDependencyPlan: rollback,
+	}, nil
+}
+
+func serviceArtifactSettingsFromMutation(
+	request blueprints.EnvironmentServiceMutationRequest,
+) *composerender.ServiceArtifactSettingsMutation {
+	if request.Command == nil && request.Entrypoint == nil && request.WorkingDir == nil && request.User == nil &&
+		request.Aliases == nil && request.DependsOn == nil && request.Logging == nil {
+		return nil
+	}
+	return &composerender.ServiceArtifactSettingsMutation{
+		Command: request.Command, Entrypoint: request.Entrypoint,
+		WorkingDir: request.WorkingDir, User: request.User,
+		Aliases: request.Aliases, DependsOn: request.DependsOn, Logging: request.Logging,
+	}
 }
 
 func serviceArtifactZones(references servicerecord.ServiceMutationReferences) []composerender.ServiceArtifactZone {
@@ -470,8 +537,55 @@ func serviceMutationAuditFromEdit(input apiTypes.ServiceEdit) blueprints.Environ
 		}
 		mounts = &values
 	}
+	var command, entrypoint *[]string
+	if input.Command != nil {
+		value := cloneServiceStringsPreservingEmpty(*input.Command)
+		command = &value
+	}
+	if input.Entrypoint != nil {
+		value := cloneServiceStringsPreservingEmpty(*input.Entrypoint)
+		entrypoint = &value
+	}
+	var workingDir, user *string
+	if input.WorkingDir != nil {
+		value := *input.WorkingDir
+		workingDir = &value
+	}
+	if input.User != nil {
+		value := *input.User
+		user = &value
+	}
+	var aliases *map[string][]string
+	if input.Aliases != nil {
+		value := cloneServiceStringSliceMap(*input.Aliases)
+		if value == nil {
+			value = map[string][]string{}
+		}
+		aliases = &value
+	}
+	var dependencies *map[string]core.ServiceDependency
+	if input.DependsOn != nil {
+		value := make(map[string]core.ServiceDependency, len(*input.DependsOn))
+		for name, dependency := range *input.DependsOn {
+			phases := make([]core.ServiceDependencyPhase, len(dependency.Phases))
+			for index, phase := range dependency.Phases {
+				phases[index] = core.ServiceDependencyPhase(phase)
+			}
+			value[name] = core.ServiceDependency{
+				Condition: core.ServiceDependencyCondition(dependency.Condition), Phases: phases,
+			}
+		}
+		dependencies = &value
+	}
+	var logging *core.ServiceLogging
+	if input.Logging != nil {
+		value := core.ServiceLogging{MaxSize: input.Logging.MaxSize, MaxFile: input.Logging.MaxFile}
+		logging = &value
+	}
 	return blueprints.EnvironmentServiceMutationRequest{
-		VolumeMounts: mounts, Image: input.Image, Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
+		VolumeMounts: mounts, Command: command, Entrypoint: entrypoint,
+		WorkingDir: workingDir, User: user, Aliases: aliases, DependsOn: dependencies, Logging: logging,
+		Image: input.Image, Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
 		OnFailure: core.OnFailure(input.OnFailure), Healthcheck: serviceHealthcheckToCore(input.Healthcheck),
 		Resources: core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs},
 		Expose:    append([]string(nil), input.Expose...), Restart: input.Restart, Replicas: input.Replicas,
