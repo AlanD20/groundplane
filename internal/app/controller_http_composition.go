@@ -152,7 +152,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 			dependencies.platform.upgrades,
 			dependencies.bootstrap.tick,
 			dependencies.authority.tasks,
-			dependencies.authority.idempotency,
+			dependencies.authority.idempotency.Retention,
 			dependencies.staleTasks,
 			dependencies.backup.schedules,
 			dependencies.backup.retention,

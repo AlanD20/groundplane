@@ -23,7 +23,7 @@ func (repository *TaskRepository) pruneTaskConfigTransferBatch(
 	if page == nil || page.ReadRevision <= 0 {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
 	}
-	defer clearKeyValueSlice(page.Values)
+	defer etcdstore.ClearRangeValues(page.Values)
 	next := current.Record
 	if len(page.Values) == 0 {
 		next.BackupConfigTransfersComplete = true

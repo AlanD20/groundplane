@@ -5,8 +5,6 @@ import (
 	context "context"
 	sha256 "crypto/sha256"
 	hex "encoding/hex"
-	json "encoding/json"
-	errors "errors"
 	fmt "fmt"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -15,8 +13,6 @@ import (
 	etcdserverpb "go.etcd.io/etcd/api/v3/etcdserverpb"
 	mvccpb "go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 	http "net/http"
 	strings "strings"
 	sync "sync"
@@ -406,7 +402,7 @@ func TestIdempotencyMutationPlanRejectsDuplicateAndReservedKeys(t *testing.T) {
 func TestIdempotencyRepositoryRejectsTaskMarkerBeforeConsumingPlan(t *testing.T) {
 	t.Parallel()
 
-	repository, err := NewIdempotencyRepository(&collectorTestStore{})
+	repository, err := NewIdempotencyRepository(&markerOnlyRecoveryStore{})
 	if err != nil {
 		t.Fatalf("NewIdempotencyRepository() error = %v", err)
 	}
@@ -424,224 +420,6 @@ func TestIdempotencyRepositoryRejectsTaskMarkerBeforeConsumingPlan(t *testing.T)
 	}
 	if _, _, _, err := plan.consume(); err != nil {
 		t.Fatalf("Task rejection consumed plan: %v", err)
-	}
-}
-
-// Rationale: pruning a deletion marker must validate marker, retention, and replay-target counterparts while
-// fitting exactly 16 triples into 48 compares plus 48 deletes.
-func TestIdempotencyRepositoryPrunesAtMost16ValidatedTriples(t *testing.T) {
-	t.Parallel()
-
-	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
-		Header: &etcdserverpb.ResponseHeader{Revision: 80}, Succeeded: true,
-	}}
-	store, err := newStore(backend, "/groundplane/")
-	if err != nil {
-		t.Fatalf("newStore() error = %v", err)
-	}
-	repository, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatalf("NewIdempotencyRepository() error = %v", err)
-	}
-	candidates := make([]idempotencyPruneCandidate, maximumPruneMarkers)
-	for index := range candidates {
-		marker := testDirectMarker()
-		marker.Locator.Key = "01ARZ3NDEKTSV4RRFFQ69G5" + string(rune('A'+index))
-		marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
-			Kind: testidempotency.IdempotencyReplayTargetAttach,
-			ID:   ids.NewAt(ids.KindAttach, marker.CreatedAt, int64(index+30)),
-		}
-		markerKey, keyErr := testidempotency.IdempotencyMarkerKey(marker.Locator)
-		if keyErr != nil {
-			t.Fatalf("idempotencyMarkerKey(%d) error = %v", index, keyErr)
-		}
-		retentionKey, keyErr := testidempotency.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
-		if keyErr != nil {
-			t.Fatalf("idempotencyRetentionKey(%d) error = %v", index, keyErr)
-		}
-		retentionValue, marshalErr := json.Marshal(
-			testidempotency.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey},
-		)
-		if marshalErr != nil {
-			t.Fatalf("json.Marshal(retention %d) error = %v", index, marshalErr)
-		}
-		targetKey, keyErr := testidempotency.IdempotencyReplayTargetKey(
-			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
-		)
-		if keyErr != nil {
-			t.Fatalf("idempotencyReplayTargetKey(%d) error = %v", index, keyErr)
-		}
-		targetValue, marshalErr := testidempotency.EncodeReplayTargetReference(markerKey)
-		if marshalErr != nil {
-			t.Fatalf("encodeReplayTargetReference(%d) error = %v", index, marshalErr)
-		}
-		candidates[index] = idempotencyPruneCandidate{
-			Marker:       IdempotencyEvidence{marker: marker, modRevision: int64(index + 1)},
-			RetentionKey: retentionKey, RetentionValue: retentionValue,
-			RetentionModRevision: int64(index + 101),
-			ReplayTargetKey:      targetKey, ReplayTargetValue: targetValue,
-			ReplayTargetModRevision: int64(index + 201),
-		}
-	}
-	revision, err := repository.pruneExpired(
-		context.Background(),
-		testDirectMarker().RetainUntil.Add(time.Nanosecond),
-		candidates,
-	)
-	if err != nil || revision != 80 {
-		t.Fatalf("pruneExpired(16) = %d, %v", revision, err)
-	}
-	if len(backend.transaction.conditions) != 48 || len(backend.transaction.operations) != 48 {
-		t.Fatalf(
-			"prune transaction conditions/operations = %d/%d",
-			len(backend.transaction.conditions),
-			len(backend.transaction.operations),
-		)
-	}
-	for _, operation := range backend.transaction.operations {
-		if !operation.IsDelete() {
-			t.Fatal("prune transaction contains a non-delete operation")
-		}
-	}
-
-	backend.transaction = nil
-	tooMany := append(append([]idempotencyPruneCandidate(nil), candidates...), candidates[0])
-	if _, err := repository.pruneExpired(
-		context.Background(),
-		testMarkerTime(),
-		tooMany,
-	); !isKind(
-		err,
-		errs.KindValidationFailed,
-	) {
-		t.Fatalf("pruneExpired(25) error = %v, want validation", err)
-	}
-	if backend.transaction != nil {
-		t.Fatal("pruneExpired(17) reached etcd")
-	}
-
-	backend.transaction = nil
-	malformed := append([]idempotencyPruneCandidate(nil), candidates...)
-	malformed[0].RetentionValue = nil
-	if _, err := repository.pruneExpired(
-		context.Background(),
-		testDirectMarker().RetainUntil.Add(time.Nanosecond),
-		malformed,
-	); !isKind(err, errs.KindInternal) {
-		t.Fatalf("pruneExpired(missing counterpart) error = %v, want internal", err)
-	}
-	if backend.transaction != nil {
-		t.Fatal("pruneExpired(missing counterpart) reached etcd")
-	}
-}
-
-// Rationale: a pruning transaction error has unknown commit status and must
-// propagate unchanged rather than being followed by a speculative read.
-func TestIdempotencyPrunePropagatesUnknownOutcome(t *testing.T) {
-	t.Parallel()
-
-	backendError := status.Error(codes.Unavailable, "private backend detail")
-	backend := &fakeClient{transactionError: backendError}
-	store, err := newStore(backend, "/groundplane/")
-	if err != nil {
-		t.Fatalf("newStore() error = %v", err)
-	}
-	repository, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatalf("NewIdempotencyRepository() error = %v", err)
-	}
-	marker := testDirectMarker()
-	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
-	if err != nil {
-		t.Fatalf("idempotencyMarkerKey() error = %v", err)
-	}
-	retentionKey, err := testidempotency.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
-	if err != nil {
-		t.Fatalf("idempotencyRetentionKey() error = %v", err)
-	}
-	retentionValue, err := json.Marshal(testidempotency.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
-	if err != nil {
-		t.Fatalf("json.Marshal() error = %v", err)
-	}
-	_, err = repository.pruneExpired(context.Background(), marker.RetainUntil, []idempotencyPruneCandidate{{
-		Marker:       IdempotencyEvidence{marker: marker, modRevision: 7},
-		RetentionKey: retentionKey, RetentionValue: retentionValue, RetentionModRevision: 8,
-	}})
-	if !isKind(err, errs.KindStorageUnavailable) || !errors.Is(err, backendError) || backend.getKey != "" {
-		t.Fatalf("pruneExpired() error/get = %v/%q", err, backend.getKey)
-	}
-}
-
-// Rationale: daily collection must hydrate both counterparts at one fixed
-// revision and retry a known CAS miss only after taking a fresh snapshot.
-func TestIdempotencyPruneExpiredUsesFreshFixedRevisionAfterCASConflict(t *testing.T) {
-	t.Parallel()
-
-	marker := testDirectMarker()
-	first := testCollectorSnapshot(t, marker, 51, 41, 42)
-	second := testCollectorSnapshot(t, marker, 52, 43, 44)
-	store := &collectorTestStore{
-		snapshots: []collectorSnapshot{first, second},
-		transactionResults: []testkeyvalue.TransactionResult{
-			{Revision: 60},
-			{Succeeded: true, Revision: 61},
-		},
-	}
-	repository, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatalf("NewIdempotencyRepository() error = %v", err)
-	}
-	count, err := repository.PruneExpired(context.Background(), marker.RetainUntil.Add(time.Nanosecond))
-	if err != nil || count != 1 {
-		t.Fatalf("PruneExpired() = %d, %v", count, err)
-	}
-	if store.rangeCalls != 2 || store.getManyCalls != 2 || store.transactionCalls != 2 ||
-		store.getManyRevisions[0] != 51 || store.getManyRevisions[1] != 52 {
-		t.Fatalf(
-			"collector calls/revisions = %d/%d/%d %#v",
-			store.rangeCalls, store.getManyCalls, store.transactionCalls, store.getManyRevisions,
-		)
-	}
-}
-
-// Rationale: a missing marker counterpart is corruption before any prune
-// write, while an unknown transaction outcome is returned without a retry.
-func TestIdempotencyPruneExpiredAbortsMissingAndUnknownEvidence(t *testing.T) {
-	t.Parallel()
-
-	marker := testDirectMarker()
-	snapshot := testCollectorSnapshot(t, marker, 51, 41, 42)
-	snapshot.markers.Values[0] = nil
-	missingStore := &collectorTestStore{snapshots: []collectorSnapshot{snapshot}}
-	repository, err := NewIdempotencyRepository(missingStore)
-	if err != nil {
-		t.Fatalf("NewIdempotencyRepository(missing) error = %v", err)
-	}
-	if _, err := repository.PruneExpired(
-		context.Background(), marker.RetainUntil,
-	); !isKind(err, errs.KindInternal) {
-		t.Fatalf("PruneExpired(missing) error = %v, want internal", err)
-	}
-	if missingStore.transactionCalls != 0 {
-		t.Fatal("PruneExpired(missing) reached transaction")
-	}
-
-	backendError := errs.New(errs.KindStorageUnavailable, "unknown transaction outcome")
-	unknownStore := &collectorTestStore{
-		snapshots:         []collectorSnapshot{testCollectorSnapshot(t, marker, 53, 45, 46)},
-		transactionErrors: []error{backendError},
-	}
-	repository, err = NewIdempotencyRepository(unknownStore)
-	if err != nil {
-		t.Fatalf("NewIdempotencyRepository(unknown) error = %v", err)
-	}
-	if _, err := repository.PruneExpired(
-		context.Background(), marker.RetainUntil,
-	); !errors.Is(err, backendError) {
-		t.Fatalf("PruneExpired(unknown) error = %v, want original", err)
-	}
-	if unknownStore.rangeCalls != 1 || unknownStore.transactionCalls != 1 {
-		t.Fatalf("PruneExpired(unknown) calls = %d/%d", unknownStore.rangeCalls, unknownStore.transactionCalls)
 	}
 }
 
@@ -911,18 +689,6 @@ func (store *atomicClaimStore) Transact(
 		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "claim transaction omitted marker")
 	}
 	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
-}
-
-func cloneKeyValueSlice(values []testkeyvalue.KeyValue) []testkeyvalue.KeyValue {
-	result := make([]testkeyvalue.KeyValue, len(values))
-	for index, value := range values {
-		result[index] = testkeyvalue.KeyValue{
-			Key:         value.Key,
-			Value:       append([]byte(nil), value.Value...),
-			ModRevision: value.ModRevision,
-		}
-	}
-	return result
 }
 
 func cloneKeyValuePointers(values []*testkeyvalue.KeyValue) []*testkeyvalue.KeyValue {

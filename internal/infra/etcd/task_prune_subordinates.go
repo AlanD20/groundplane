@@ -29,7 +29,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	if page == nil || page.ReadRevision <= 0 || len(page.Values) == 0 {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
 	}
-	defer clearKeyValueSlice(page.Values)
+	defer etcdstore.ClearRangeValues(page.Values)
 	if uint32(len(page.Values)) > remaining && remaining <= maximumTaskPruneBatchRecords {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
 	}
@@ -131,7 +131,7 @@ func (repository *TaskRepository) verifyTaskPrunePrefixEmpty(
 	}
 	if page == nil || page.ReadRevision <= 0 || len(page.Values) != 0 {
 		if page != nil {
-			clearKeyValueSlice(page.Values)
+			etcdstore.ClearRangeValues(page.Values)
 		}
 		return taskjournal.CorruptPruneIntent()
 	}

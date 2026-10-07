@@ -10,11 +10,6 @@ import (
 	"sync"
 )
 
-const (
-	maximumPruneMarkers     = 16
-	maximumPruneCASAttempts = 3
-)
-
 type idempotencyPlanClassifier func(int64, []*etcdstore.KeyValue) error
 
 type idempotencyMutationPlan struct {
@@ -319,23 +314,21 @@ type idempotencyRepositoryStore interface {
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
-type IdempotencyRepository struct{ store idempotencyRepositoryStore }
-
-type idempotencyPruneCandidate struct {
-	Marker                  IdempotencyEvidence
-	RetentionKey            string
-	RetentionValue          []byte
-	RetentionModRevision    int64
-	ReplayTargetKey         string
-	ReplayTargetValue       []byte
-	ReplayTargetModRevision int64
+type IdempotencyRepository struct {
+	store idempotencyRepositoryStore
+	// Retention is the capability-owned collector composed with Volume fences.
+	Retention *idempotencyrecord.RetentionRepository
 }
 
 func NewIdempotencyRepository(store idempotencyRepositoryStore) (*IdempotencyRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "idempotency store is required")
 	}
-	return &IdempotencyRepository{store: store}, nil
+	retention, err := NewVolumeRemovalAwareIdempotencyRetention(store)
+	if err != nil {
+		return nil, err
+	}
+	return &IdempotencyRepository{store: store, Retention: retention}, nil
 }
 
 func (repository *IdempotencyRepository) Apply(

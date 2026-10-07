@@ -107,7 +107,7 @@ func TestTaskPruningReplaysCommittedBackupCheckpointBatch(t *testing.T) {
 	if err != nil || remaining == nil || len(remaining.Values) != 3 {
 		t.Fatalf("remaining checkpoint cursors = %#v, %v", remaining, err)
 	}
-	clearKeyValueSlice(remaining.Values)
+	testkeyvalue.ClearRangeValues(remaining.Values)
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(replay) = %d, %v", count, err)
 	}
@@ -299,10 +299,7 @@ func seedTaskPruneBackupCheckpoints(
 
 func pruneTaskCheckpointMarker(t *testing.T, store *memoryTaskStore, pruneAt time.Time) {
 	t.Helper()
-	repository, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatalf("newIdempotencyRepository() error = %v", err)
-	}
+	repository := NewTestIdempotencyRetention(t, store)
 	if count, err := repository.PruneExpired(
 		context.Background(),
 		pruneAt,
@@ -334,7 +331,7 @@ func assertTaskPruneCheckpointPrefixCount(
 	if err != nil || page == nil {
 		t.Fatalf("Range(%s) = %#v, %v", prefix, page, err)
 	}
-	defer clearKeyValueSlice(page.Values)
+	defer testkeyvalue.ClearRangeValues(page.Values)
 	if len(page.Values) != want || page.More {
 		t.Fatalf(
 			"Range(%s) count/more = %d/%t, want %d/false",

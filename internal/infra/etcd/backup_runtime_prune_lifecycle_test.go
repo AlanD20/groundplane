@@ -763,8 +763,9 @@ func TestBackupRuntimeRepositoryComposesMaximumPointPruneTaskBoundaries(t *testi
 	}
 	pruneAt := sourceTask.Record.RetainUntil.Add(time.Nanosecond)
 	retireBackupTestTerminalDelivery(t, tasks, sourceTask)
+	retention := NewTestIdempotencyRetention(t, store)
 	for {
-		count, pruneErr := idempotency.PruneExpired(context.Background(), pruneAt)
+		count, pruneErr := retention.PruneExpired(context.Background(), pruneAt)
 		if pruneErr != nil {
 			t.Fatalf("PruneExpired(prune Task marker) error = %v", pruneErr)
 		}

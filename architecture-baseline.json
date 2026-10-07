@@ -9,10 +9,6 @@
     {
       "path": "internal/app",
       "lines": 3673
-    },
-    {
-      "path": "internal/infra/etcd",
-      "lines": 75000
     }
   ],
   "legacy_findings": []

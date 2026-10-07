@@ -107,10 +107,7 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 					!marker.TerminalAt.IsZero() {
 					t.Fatalf("root response became expirable: %v", err)
 				}
-				idempotency, err := etcd.NewIdempotencyRepository(fixture.Store)
-				if err != nil {
-					t.Fatal(err)
-				}
+				idempotency := etcd.NewTestIdempotencyRetention(t, fixture.Store)
 				pruneAt := current.Record.RetainUntil.Add(time.Hour)
 				// The fixture's initial policy PUT has its own expired marker.
 				seedKey, err := testidempotency.IdempotencyMarkerKey(testidempotency.IdempotencyLocator{

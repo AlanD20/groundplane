@@ -77,8 +77,9 @@ CI runs the architecture checker directly. The temporary 0.0.1 deferral mechanis
 has been removed: cross-layer integration tests live with application composition,
 while storage-only tests remain with their repositories.
 
-The [baseline](../architecture-baseline.json) freezes the application wiring total
-and caps direct root-etcd production code at 75,000 lines. Legacy code-pattern/import findings
+The [baseline](../architecture-baseline.json) freezes the application wiring total.
+Persistence modules are governed by ownership, import boundaries and per-file
+limits, not an aggregate root-etcd line cap. Legacy code-pattern/import findings
 and oversized-file allowances have been removed. A passing checker proves only
 these architecture rules; it does not replace behavioral tests or
 [live qualification](issues/runtime-qualification.md).

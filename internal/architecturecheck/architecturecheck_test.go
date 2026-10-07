@@ -57,11 +57,10 @@ func TestCheckRatchetsAndPackageTotals(t *testing.T) {
 		t.Fatalf("findings = %+v", findings)
 	}
 	writeFixtureAt(t, root, "internal/app/base.go", "package app\n")
-	baseline.PackageTotals[1].Lines = 3
 	for _, lines := range []int{2, 3, 4} {
 		writeFixtureAt(t, root, "internal/infra/etcd/base.go", "package etcd\n"+strings.Repeat("\n", lines-1))
 		findings, err = Check(context.Background(), root, baseline)
-		if err != nil || hasRule(findings, "package-total-drift") != (lines > 3) {
+		if err != nil || hasRule(findings, "package-total-drift") {
 			t.Fatalf("root-etcd lines=%d findings=%+v error=%v", lines, findings, err)
 		}
 	}
@@ -256,13 +255,13 @@ func validBaseline() Baseline {
 		Version:        1,
 		Limits:         Limits{Production: 600, Test: 1000},
 		OversizedFiles: []OversizedFile{},
-		PackageTotals:  []PackageTotal{{Path: "internal/app", Lines: 1}, {Path: "internal/infra/etcd", Lines: 1}},
+		PackageTotals:  []PackageTotal{{Path: "internal/app", Lines: 1}},
 		LegacyFindings: []LegacyFinding{},
 	}
 }
 
 func baselineJSON(suffix string) string {
-	return `{"version":1,"limits":{"production":600,"test":1000},"oversized_files":[],"package_totals":[{"path":"internal/app","lines":1},{"path":"internal/infra/etcd","lines":1}],"legacy_findings":[]` + suffix + `}`
+	return `{"version":1,"limits":{"production":600,"test":1000},"oversized_files":[],"package_totals":[{"path":"internal/app","lines":1}],"legacy_findings":[]` + suffix + `}`
 }
 
 func checkRoot(t *testing.T) string {

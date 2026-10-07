@@ -35,10 +35,7 @@ func TestManualScriptRetentionPruneReleasesRetrySources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	idempotency := NewTestIdempotencyRetention(t, store)
 	if count, err := idempotency.PruneExpired(ctx, *terminal.Record.RetainUntil); err != nil || count != 1 {
 		t.Fatalf("expire Task marker = %d, %v", count, err)
 	}
@@ -82,10 +79,7 @@ func TestManualScriptExpiryInterruptionPreservesTerminalAuthority(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			idempotency, err := NewIdempotencyRepository(store)
-			if err != nil {
-				t.Fatal(err)
-			}
+			idempotency := NewTestIdempotencyRetention(t, store)
 			if _, err := idempotency.PruneExpired(ctx, *terminal.Record.RetainUntil); err != nil {
 				t.Fatal(err)
 			}
@@ -180,10 +174,7 @@ func TestManualScriptRetentionSkipsLiveRetryWithoutDroppingIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	idempotency := NewTestIdempotencyRetention(t, store)
 	for {
 		count, err := idempotency.PruneExpired(ctx, *unrelatedTerminal.Record.RetainUntil)
 		if err != nil {

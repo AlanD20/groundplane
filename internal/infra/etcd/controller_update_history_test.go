@@ -65,10 +65,7 @@ func TestNativeControllerUpdateHistoryPrunesWithTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	pruneAt := terminal.Record.RetainUntil.Add(time.Nanosecond)
-	idempotency, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	idempotency := NewTestIdempotencyRetention(t, store)
 	if _, err := idempotency.PruneExpired(ctx, pruneAt); err != nil {
 		t.Fatal(err)
 	}

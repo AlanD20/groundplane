@@ -69,7 +69,7 @@ func New(
 	admission mutationAdmission,
 	interval time.Duration,
 	tasks *etcd.TaskRepository,
-	idempotency *etcd.IdempotencyRepository,
+	idempotency idempotencyPruning,
 	agents staleAgentExpiration,
 	backupSchedules BackupScheduleRunner,
 	backupRetention backupRetentionDispatcher,

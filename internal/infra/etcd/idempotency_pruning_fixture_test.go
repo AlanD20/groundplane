@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -13,141 +12,18 @@ import (
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type collectorSnapshot struct {
-	rangeResult testkeyvalue.RangeResult
-	markers     testkeyvalue.GetManyResult
-}
-
-type collectorTestStore struct {
-	testkeyvalue.Store
-
-	mu                 sync.Mutex
-	snapshots          []collectorSnapshot
-	transactionResults []testkeyvalue.TransactionResult
-	transactionErrors  []error
-	rangeCalls         int
-	getManyCalls       int
-	transactionCalls   int
-	getManyRevisions   []int64
-}
-
-func (store *collectorTestStore) Range(
-	ctx context.Context,
-	request testkeyvalue.RangeRequest,
-) (*testkeyvalue.RangeResult, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if request.Prefix != testidempotency.IdempotencyRetentionPrefix || request.Limit != maximumPruneMarkers ||
-		request.Revision != 0 ||
-		store.rangeCalls >= len(store.snapshots) {
-		return nil, errs.New(errs.KindInternal, "unexpected collector range")
-	}
-	snapshot := store.snapshots[store.rangeCalls]
-	store.rangeCalls++
-	result := snapshot.rangeResult
-	result.Values = cloneKeyValueSlice(result.Values)
-	return &result, nil
-}
-
-func (store *collectorTestStore) GetMany(
-	ctx context.Context,
-	request testkeyvalue.GetManyRequest,
-) (*testkeyvalue.GetManyResult, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if store.getManyCalls >= len(store.snapshots) ||
-		request.Revision != store.snapshots[store.getManyCalls].rangeResult.ReadRevision {
-		return nil, errs.New(errs.KindInternal, "unexpected collector multi-get")
-	}
-	snapshot := store.snapshots[store.getManyCalls]
-	store.getManyCalls++
-	store.getManyRevisions = append(store.getManyRevisions, request.Revision)
-	result := snapshot.markers
-	result.Values = cloneKeyValuePointers(result.Values)
-	return &result, nil
-}
-
-func (store *collectorTestStore) Transact(
-	ctx context.Context,
-	conditions []testkeyvalue.Condition,
-	mutations []testkeyvalue.Mutation,
-) (testkeyvalue.TransactionResult, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return testkeyvalue.TransactionResult{}, err
-	}
-	index := store.transactionCalls
-	store.transactionCalls++
-	if len(conditions) != 2 || len(mutations) != 2 {
-		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "unexpected collector transaction")
-	}
-	if index < len(store.transactionErrors) && store.transactionErrors[index] != nil {
-		return testkeyvalue.TransactionResult{}, store.transactionErrors[index]
-	}
-	if index >= len(store.transactionResults) {
-		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "missing collector transaction result")
-	}
-	return store.transactionResults[index], nil
-}
-
-func testCollectorSnapshot(
-	t *testing.T,
-	marker testidempotency.IdempotencyMarker,
-	revision int64,
-	retentionRevision int64,
-	markerRevision int64,
-) collectorSnapshot {
+func NewTestIdempotencyRetention(
+	t testing.TB,
+	backend idempotencyRepositoryStore,
+) *testidempotency.RetentionRepository {
 	t.Helper()
-	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
+	repository, err := NewVolumeRemovalAwareIdempotencyRetention(backend)
 	if err != nil {
-		t.Fatalf("idempotencyMarkerKey() error = %v", err)
+		t.Fatalf("initialize idempotency retention: %v", err)
 	}
-	retentionKey, err := testidempotency.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
-	if err != nil {
-		t.Fatalf("idempotencyRetentionKey() error = %v", err)
-	}
-	retentionValue, err := json.Marshal(testidempotency.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
-	if err != nil {
-		t.Fatalf("json.Marshal(retention) error = %v", err)
-	}
-	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
-	if err != nil {
-		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
-	}
-	return collectorSnapshot{
-		rangeResult: testkeyvalue.RangeResult{
-			Values: []testkeyvalue.KeyValue{
-				{Key: retentionKey, Value: retentionValue, ModRevision: retentionRevision},
-			},
-			ReadRevision: revision, ResponseRevision: revision,
-		},
-		markers: testkeyvalue.GetManyResult{
-			Values:       []*testkeyvalue.KeyValue{{Key: markerKey, Value: markerValue, ModRevision: markerRevision}},
-			ReadRevision: revision, ResponseRevision: revision,
-		},
-	}
-}
-
-func (store *collectorTestStore) Get(ctx context.Context, key string) (*testkeyvalue.GetResult, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if key != idempotencyPruneCursorKey || store.rangeCalls >= len(store.snapshots) {
-		return nil, errs.New(errs.KindInternal, "unexpected collector cursor read")
-	}
-	return &testkeyvalue.GetResult{ReadRevision: store.snapshots[store.rangeCalls].rangeResult.ReadRevision}, nil
+	return repository
 }
 
 func SeedIndependentPruneMarker(t *testing.T, backend testkeyvalue.Store, at time.Time) string {
@@ -189,7 +65,7 @@ func SeedIndependentPruneMarker(t *testing.T, backend testkeyvalue.Store, at tim
 func SeedCompletedVolumePruneBatch(t *testing.T, fixture *VolumePolicyDesiredFixture, completed TaskRecord) []string {
 	t.Helper()
 	keys := []string{}
-	for index := range maximumPruneMarkers {
+	for index := range 16 {
 		task := cloneTaskRecord(completed)
 		task.ID = ids.NewAt(ids.KindTask, task.CreatedAt, int64(index+400))
 		task.OperationID = ids.NewAt(ids.KindOperation, task.CreatedAt, int64(index+400))

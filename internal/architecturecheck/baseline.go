@@ -152,13 +152,13 @@ func validateBaseline(baseline Baseline) error {
 	if err := validateFileLines("package_totals", baseline.PackageTotals, false); err != nil {
 		return err
 	}
-	requiredPackageTotals := []string{"internal/app", "internal/infra/etcd"}
+	requiredPackageTotals := []string{"internal/app"}
 	if len(baseline.PackageTotals) != len(requiredPackageTotals) {
-		return fmt.Errorf("package_totals must contain internal/app and internal/infra/etcd")
+		return fmt.Errorf("package_totals must contain only internal/app")
 	}
 	for index, required := range requiredPackageTotals {
 		if baseline.PackageTotals[index].Path != required {
-			return fmt.Errorf("package_totals must contain internal/app and internal/infra/etcd")
+			return fmt.Errorf("package_totals must contain only internal/app")
 		}
 	}
 	previous := ""

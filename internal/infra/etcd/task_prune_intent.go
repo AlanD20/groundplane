@@ -73,7 +73,7 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 		if references == nil || references.ReadRevision <= 0 || len(references.Values) > 1 {
 			return taskjournal.CorruptPruneIntent()
 		}
-		defer clearKeyValueSlice(references.Values)
+		defer etcdstore.ClearRangeValues(references.Values)
 		if len(references.Values) != 0 {
 			if _, err := attachrender.DecodeAttachTaskPlanReference(
 				references.Values[0].Key,

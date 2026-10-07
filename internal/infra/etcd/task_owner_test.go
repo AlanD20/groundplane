@@ -73,10 +73,7 @@ func TestTaskPruningRejectsMissingOwnerIndex(t *testing.T) {
 	if _, err := repository.AbortPendingTask(ctx, task.ID, finishedAt); err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
-	idempotency, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatalf("newIdempotencyRepository() error = %v", err)
-	}
+	idempotency := NewTestIdempotencyRetention(t, store)
 	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
 	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
@@ -126,10 +123,7 @@ func TestTaskPruningStartRetainsVisibleOwnerMemberships(t *testing.T) {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
 	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
-	idempotency, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatalf("newIdempotencyRepository() error = %v", err)
-	}
+	idempotency := NewTestIdempotencyRetention(t, store)
 	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
@@ -218,10 +212,7 @@ func TestTaskPruningDeletesTenantAndEnvironmentMemberships(t *testing.T) {
 	if _, err := repository.AbortPendingTask(ctx, task.ID, finishedAt); err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
-	idempotency, err := NewIdempotencyRepository(store)
-	if err != nil {
-		t.Fatalf("newIdempotencyRepository() error = %v", err)
-	}
+	idempotency := NewTestIdempotencyRetention(t, store)
 	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
 	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
