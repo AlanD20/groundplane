@@ -21,6 +21,7 @@ remain discoverable. A cleaner appearance alone is not evidence of better UX.
 | Preserve context while working. | Simple edits happen beside the relevant information; deeper work retains scope and a clear return path. |
 | Make consequences and state truthful. | Distinguish saving, applying, running and observing. Show failures and incomplete work where the operator acts. |
 | Use one interaction language. | Equivalent controls, terms, states and layouts behave consistently across scopes. |
+| Make structure and editability visible. | Boundaries group related content; fields stand out from their editor; the editor includes its actions. Use explicit labels alongside visual state. |
 
 ## Scope and navigation
 
@@ -113,14 +114,8 @@ Adding a mount creates one named new draft; editing it leaves other mounts reada
 Confirm destructive operations separately. Put
 connection values and their variable/file usage beside the owning connection.
 
-Use consistently outlined rows with 16px padding inside workspace panels. Separate
-section labels from their values with a divider, vertical in wide layouts and
-horizontal in stacked layouts. Mark the active edit or new draft with a soft
-primary tint and outlined border, preserving its padding. Give fields an opaque
-surface and a stronger border in that tint, retaining focus and invalid states.
-The highlight continues through the action footer. Avoid nesting another editor
-card inside that highlight. Editor footers leave 16px above their divider and
-16px before the Save/Cancel controls. Links name their destination; reserve editor wording for
+Follow the [workspace presentation standard](#workspace-presentation) for summaries
+and inline editors. Links name their destination; reserve editor wording for
 actions that actually open an editor.
 
 Use the shared searchable selector for resource references; use the regular
@@ -149,6 +144,48 @@ health. Surface relevant pending changes and Task progress next to the affected
 resource, with a link to detailed work and a return path. Show unavailable or
 stale observations honestly. Destructive actions must identify the target and
 data consequences using the owning feature's actual contract.
+
+## Workspace presentation
+
+Use the same visual structure for equivalent work across Tenant, Project,
+Environment, Service and Backing Service pages. The resource determines the
+content; it does not need its own visual treatment for ordinary fields and edits.
+
+- **Resting sections:** use subtly outlined, rounded rows with a neutral surface
+  and 16px padding inside workspace panels. Keep related information together
+  and separate neighboring rows with consistent spacing. Avoid both unbounded
+  content and repeated nested cards that obscure the grouping.
+- **Labels and values:** separate a section's heading and description from its
+  details with a vertical divider in wide layouts and a horizontal divider when
+  stacked. Preserve readable spacing on both sides; a two-column layout alone
+  does not establish the boundary. Simple value rows need no extra label column.
+- **Active editors:** highlight the complete editing section with a soft primary
+  tint and outlined border, retaining its padding and heading. Include an explicit
+  editing or new-draft label. Keep neighboring summaries visible and neutral.
+  Do not nest another editor card inside the highlighted section.
+- **Fields:** give text inputs, textareas and selector triggers an opaque surface
+  and a stronger border so they remain identifiable against the tint in both
+  themes. Preserve visible focus, validation, disabled and open-selector states.
+  A highlighted editor must not camouflage its controls.
+- **Actions:** carry the same highlight through the Save/Cancel footer, including
+  when it is sticky. Leave 16px above its divider and 16px between the divider and
+  controls. Keep the actions inside their editing boundary; avoid a detached
+  plain-background strip.
+- **Resource rows:** establish a clear hierarchy of identity, primary value and
+  secondary details. For a mount, show the Volume with an icon, the container
+  path on a subtle code surface, then access mode and any saved-state feedback.
+  Use the same row boundary as other workspaces; keep Edit/Remove clearly attached
+  to their row and long paths contained.
+
+Use the shared [workspace section and footer styles](../console/src/components/common/workspace-section.ts)
+and [theme tokens](../console/src/index.css) for these states. Use the shared
+[inline editor region](../console/src/components/common/inline-editor-region.tsx)
+when replacing a summary with a form, keeping the heading anchored, moving focus
+into the form without a scroll jump and respecting reduced-motion preferences.
+Refine shared primitives when a common pattern needs improvement instead of
+copying their classes into page-specific variants. Specialized surfaces such as
+logs retain the structure needed for their task while sharing typography, tokens
+and controls.
 
 ## Language and shared presentation
 
@@ -220,6 +257,14 @@ catchall category, understand its owner and effect, finish the task, and return
 without rebuilding context? Include empty, unavailable, pending and failed states;
 check narrow layouts and keyboard access for changed interactions. Verify that
 the reorganization has not dropped unrelated capabilities.
+
+For new or changed workspace UI, compare the read-only and editing states side
+by side in light and dark themes and at wide and narrow widths. Check that rows
+remain distinct, label/value dividers adapt, fields stand out, and the highlight
+includes the action footer. Review a new draft, a long value and an empty value
+where applicable. Confirm focus and validation remain visible and that Save/Cancel
+affect the section the operator expects. Reuse the shared primitives above;
+document a concrete workflow reason for any different treatment.
 
 Observe wrong turns, unexplained labels and unnecessary context switches in
 representative operator walkthroughs. Fewer tabs or clicks alone do not establish
