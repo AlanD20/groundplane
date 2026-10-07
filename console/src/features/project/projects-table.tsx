@@ -93,7 +93,7 @@ export function ProjectsTable({
                       {project.description}
                     </p>
                     {project.createdAt && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Created {project.createdAt}
                       </p>
                     )}
@@ -104,7 +104,7 @@ export function ProjectsTable({
                         <Link
                           key={env.id}
                           to={`${path}/${encodeURIComponent(env.name)}`}
-                          className="rounded border border-border px-2 py-1 text-[11px] hover:border-primary hover:text-primary"
+                          className="rounded border border-border px-2 py-1 text-xs hover:border-primary hover:text-primary"
                         >
                           {env.name}
                         </Link>

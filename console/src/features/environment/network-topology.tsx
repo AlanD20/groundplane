@@ -73,7 +73,7 @@ export function UnzonedColumn({
         <span className="text-sm font-semibold text-muted-foreground">
           no zone
         </span>
-        <span className="font-mono text-[11px] text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           no network
         </span>
       </div>
@@ -126,7 +126,7 @@ export function ZoneColumn({
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-semibold text-primary">{zone.name}</span>
         <span className="flex items-center gap-1">
-          <span className="font-mono text-[11px] text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground">
             {zone.subnet}
           </span>
           <Button
@@ -205,7 +205,7 @@ export function ZoneColumn({
                 <span className="font-mono text-xs font-medium">
                   {a.projectId}
                 </span>
-                <span className="truncate font-mono text-[11px] text-muted-foreground">
+                <span className="truncate font-mono text-xs text-muted-foreground">
                   {a.database !== "—"
                     ? `db ${a.database} · role ${a.role}`
                     : "attached"}

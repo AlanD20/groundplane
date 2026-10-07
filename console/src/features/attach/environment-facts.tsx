@@ -1,4 +1,5 @@
-"use client";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+("use client");
 
 import { RevealValue } from "@/components/common/reveal-value";
 import { EmptyState } from "@/components/common/empty-state";
@@ -64,13 +65,16 @@ export function FactsCard({
         </p>
         {factGroups.map((grp) => (
           <div key={grp.id} className="flex flex-col gap-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
+            <span className="font-mono text-xs text-muted-foreground">
               {grp.title}
             </span>
             {grp.sets.map((set) => (
               <div
                 key={set.label}
-                className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2"
+                className={workspaceSectionClassName(
+                  false,
+                  "flex flex-col gap-3",
+                )}
               >
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-xs font-medium">

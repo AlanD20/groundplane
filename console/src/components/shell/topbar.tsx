@@ -288,7 +288,7 @@ export function Topbar({ pathname }: { pathname: string }) {
         {host ? (
           <Link
             to="/platform/host"
-            className="hidden items-center gap-3 rounded-md px-2 py-1.5 text-[11px] hover:bg-muted xl:flex"
+            className="hidden items-center gap-3 rounded-md px-2 py-1.5 text-xs hover:bg-muted xl:flex"
             aria-label={`Host ${host.hostname}: Controller ${host.controller.status}, Agent ${host.agent.status}`}
           >
             <span className="flex items-center gap-1.5">

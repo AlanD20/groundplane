@@ -102,7 +102,7 @@ export function EnvironmentsTable({
                     >
                       {env.name}
                     </Link>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       Provisioning {env.provisioningState}
                     </p>
                   </TableCell>
@@ -116,14 +116,14 @@ export function EnvironmentsTable({
                   </TableCell>
                   <TableCell>
                     <p>{env.services.length} Services</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {env.routes.length} Routes, {env.zones.length} Zones,{" "}
                       {env.attaches.length} connections
                     </p>
                   </TableCell>
                   <TableCell className="max-w-60">
                     <ImageReference value={env.release} />
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {formatTimestamp(env.lastDeployAt, "Never deployed")}
                     </p>
                   </TableCell>

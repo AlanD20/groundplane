@@ -30,7 +30,7 @@ export function Inspector({
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent initialFocus={heading}>
         <DialogHeader>
-          <div className="break-words text-[11px] text-muted-foreground">
+          <div className="break-words text-xs text-muted-foreground">
             {context}
           </div>
           <DialogTitle

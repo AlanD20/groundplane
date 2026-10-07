@@ -28,7 +28,7 @@ export function ConnectorViewDialog({
     <Dialog open={connector !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Connector : {connector?.name}</DialogTitle>
+          <DialogTitle>Backup destination · {connector?.name}</DialogTitle>
           <DialogDescription>
             Environment-owned destination and redacted desired state.
           </DialogDescription>

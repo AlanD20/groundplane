@@ -1,5 +1,7 @@
 "use client";
 
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+
 import {
   ListToolbar,
   TablePagination,
@@ -93,7 +95,7 @@ export function AttachesCard({
         {table.rows.map((a) => (
           <div
             key={a.id}
-            className="space-y-3 rounded-xl border border-border bg-card p-4"
+            className={workspaceSectionClassName(false, "space-y-3")}
           >
             <div className="flex flex-wrap items-center gap-3">
               <ContextLink

@@ -26,7 +26,7 @@ export function ServiceStateBadges({
     <span className="flex flex-wrap items-center gap-2">
       <StatusBadge
         status={observation.state}
-        className={compact ? "text-[10px]" : ""}
+        className={compact ? "text-xs" : ""}
         label={
           observation.state === "running"
             ? "Running · no healthcheck"
@@ -35,13 +35,13 @@ export function ServiceStateBadges({
         }
       />
       {observation.state !== "unavailable" && (
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {replicaTotal(observation.replicas)}/{observation.expectedReplicas}{" "}
           observed
         </span>
       )}
       {service.runtimeIntent !== "running" && (
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           Desired: {service.runtimeIntent}
         </span>
       )}

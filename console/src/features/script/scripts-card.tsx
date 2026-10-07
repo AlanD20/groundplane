@@ -1,3 +1,4 @@
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
   ListToolbar,
   TablePagination,
@@ -67,7 +68,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
             <Plus className="size-3.5" /> Add Script
           </Button>
         </CardHeader>
-        <CardContent className="flex flex-col gap-1.5">
+        <CardContent className="flex flex-col gap-3">
           <ListToolbar
             label="Scripts"
             query={query}
@@ -87,7 +88,10 @@ export function ScriptsCard({ env }: { env: Environment }) {
           {table.rows.map((script) => (
             <div
               key={script.id}
-              className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+              className={workspaceSectionClassName(
+                false,
+                "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+              )}
             >
               <div className="flex min-w-0 flex-col">
                 <div className="flex flex-wrap items-center gap-2">

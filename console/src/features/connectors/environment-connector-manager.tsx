@@ -1,4 +1,5 @@
-"use client";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+("use client");
 
 import { useEffect, useRef, useState } from "react";
 import { Database, Eye, Pencil, Plug, Plus, Trash2 } from "lucide-react";
@@ -148,11 +149,11 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
   return (
     <>
       <Card>
-        <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
           <div className="flex flex-col gap-1">
             <CardTitle className="flex items-center gap-2">
               <Plug className="size-4 text-muted-foreground" /> Backup
-              connectors
+              destinations
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               Destinations owned only by this environment. Connectors never
@@ -160,7 +161,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
             </p>
           </div>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="size-3.5" /> New connector
+            <Plus className="size-3.5" /> Add destination
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
@@ -169,7 +170,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
               className="rounded-lg border border-border bg-surface px-3 py-4 text-sm text-muted-foreground"
               role="status"
             >
-              Loading connectors...
+              Loading destinations…
             </p>
           ) : store.connectorError ? (
             <p
@@ -183,7 +184,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
               <Plug className="size-5 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">
-                  No connector for this environment
+                  No backup destinations yet
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Create one before enabling backups.
@@ -199,7 +200,10 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
               return (
                 <div
                   key={connector.id}
-                  className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  className={workspaceSectionClassName(
+                    false,
+                    "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+                  )}
                 >
                   <div className="flex min-w-0 items-start gap-3">
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -240,8 +244,8 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => setViewing(connector)}
-                      aria-label={`View connector ${connector.name}`}
-                      title="View connector"
+                      aria-label={`View destination ${connector.name}`}
+                      title="View destination"
                     >
                       <Eye className="size-4" />
                     </Button>
@@ -249,8 +253,8 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => loadEdit(connector.id)}
-                      aria-label={`Edit connector ${connector.name}`}
-                      title="Edit connector"
+                      aria-label={`Edit destination ${connector.name}`}
+                      title="Edit destination"
                     >
                       <Pencil className="size-4" />
                     </Button>
@@ -262,13 +266,13 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                         policyAuthoritative && !active && beginRemove(connector)
                       }
                       disabled={!policyAuthoritative || active}
-                      aria-label={`Remove connector ${connector.name}`}
+                      aria-label={`Remove destination ${connector.name}`}
                       title={
                         !policyAuthoritative
                           ? "Load the Backup Policy before removing this connector"
                           : active
                             ? "Disable the backup policy before removing this connector"
-                            : "Remove connector"
+                            : "Remove destination"
                       }
                     >
                       <Trash2 className="size-4" />
@@ -347,7 +351,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
         onOpenChange={(open) => {
           if (!open) cancelRemove();
         }}
-        title={`Remove connector · ${removing?.name ?? ""}`}
+        title={`Remove destination · ${removing?.name ?? ""}`}
         description={
           "The Connector remains visible while the Controller finalizer runs. " +
           "Failure, timeout, or abort clears the fence and retains it."
@@ -357,7 +361,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
         workspace={tenantSlug}
         destructive
         confirmText={removing?.name ?? ""}
-        startLabel="Remove connector"
+        startLabel="Remove destination"
         executionCopy="The Controller will verify policy references and atomically finalize this Connector:"
         steps={[
           {

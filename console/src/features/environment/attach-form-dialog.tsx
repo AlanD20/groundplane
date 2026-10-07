@@ -376,7 +376,7 @@ function AttachForm({
                 {factRows.map((key) => (
                   <div
                     key={key}
-                    className="flex items-center justify-between gap-2 font-mono text-[11px]"
+                    className="flex items-center justify-between gap-2 font-mono text-xs"
                   >
                     <span className="text-muted-foreground">{key}</span>
                     <span className="text-foreground">

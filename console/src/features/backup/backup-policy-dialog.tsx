@@ -304,7 +304,7 @@ export function BackupPolicyDialog({
                               {a.name}
                             </span>
                           </span>
-                          <span className="font-mono text-[10px] text-muted-foreground">
+                          <span className="font-mono text-xs text-muted-foreground">
                             {a.id}
                           </span>
                         </label>
@@ -342,7 +342,7 @@ export function BackupPolicyDialog({
                                 key: {v.key}
                               </span>
                             </span>
-                            <span className="font-mono text-[10px] text-muted-foreground">
+                            <span className="font-mono text-xs text-muted-foreground">
                               {v.id}
                             </span>
                           </label>

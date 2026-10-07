@@ -179,6 +179,10 @@ content; it does not need its own visual treatment for ordinary fields and edits
 
 Use the shared [workspace section and footer styles](../console/src/components/common/workspace-section.ts)
 and [theme tokens](../console/src/index.css) for these states. Use the shared
+[settings draft](../console/src/components/common/settings-draft.tsx) for forms
+edited directly on a settings page: show unsaved state, restore the saved values
+on Cancel, and keep actions inside the same section. Separate immediately applied
+controls from these drafts and label their effect explicitly. Use the shared
 [inline editor region](../console/src/components/common/inline-editor-region.tsx)
 when replacing a summary with a form, keeping the heading anchored, moving focus
 into the form without a scroll jump and respecting reduced-motion preferences.

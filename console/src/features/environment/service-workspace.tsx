@@ -259,12 +259,12 @@ export function ServiceWorkspace({
                           <span className="block font-medium">
                             <ImageReference value={release.tag} />
                           </span>
-                          <span className="mt-1 block text-[11px] text-muted-foreground">
+                          <span className="mt-1 block text-xs text-muted-foreground">
                             {formatTimestamp(release.when, "Time unavailable")}{" "}
                             · {release.strategy}
                           </span>
                           <span
-                            className="mt-1 block truncate font-mono text-[10px] text-muted-foreground"
+                            className="mt-1 block truncate font-mono text-xs text-muted-foreground"
                             title={release.digest || release.id}
                           >
                             {release.digest || release.id}

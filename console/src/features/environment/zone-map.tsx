@@ -72,11 +72,11 @@ export function ZoneMap({
         <Network className="size-5 text-primary" />
         <div className="min-w-0">
           <strong className="block text-sm">{env.networkPool}</strong>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             Environment network pool
           </span>
         </div>
-        <span className="ml-auto text-[11px] text-muted-foreground">
+        <span className="ml-auto text-xs text-muted-foreground">
           {env.networkCapacity.allocatedAddresses} reserved ·{" "}
           {env.networkCapacity.availableAddresses} available
         </span>
@@ -111,10 +111,10 @@ export function ZoneMap({
                 <Network className="size-5" />
               </span>
               <strong className="text-xs">{z.name}</strong>
-              <span className="font-mono text-[10px] font-normal text-muted-foreground">
+              <span className="font-mono text-xs font-normal text-muted-foreground">
                 {z.subnet}
               </span>
-              <Badge variant="outline" className="text-[9px]">
+              <Badge variant="outline" className="text-xs">
                 {z.internal ? "Internal" : "Outbound allowed"}
               </Badge>
               <span className="mt-1 flex flex-wrap gap-1.5">
@@ -122,14 +122,14 @@ export function ZoneMap({
                   members(z).map((s) => (
                     <span
                       key={s.id}
-                      className="flex items-center gap-1 text-[9px] font-normal text-muted-foreground"
+                      className="flex items-center gap-1 text-xs font-normal text-muted-foreground"
                     >
                       <Boxes className="size-2.5" />
                       {s.name}
                     </span>
                   ))
                 ) : (
-                  <span className="text-[9px] font-normal text-muted-foreground">
+                  <span className="text-xs font-normal text-muted-foreground">
                     No Services assigned
                   </span>
                 )}
@@ -146,7 +146,7 @@ export function ZoneMap({
             >
               <Boxes className="size-5 text-muted-foreground" />
               <strong className="text-xs">No Zone</strong>
-              <span className="text-[10px] font-normal text-muted-foreground">
+              <span className="text-xs font-normal text-muted-foreground">
                 {unzoned.length} unconnected Services
               </span>
             </Button>
@@ -196,7 +196,7 @@ export function ZoneMap({
                       variant="ghost"
                       size="content"
                       onClick={() => select(z.id)}
-                      className="gap-2 p-0 text-[11px]"
+                      className="gap-2 p-0 text-xs"
                     >
                       <Network className="size-3" />
                       {z.name}

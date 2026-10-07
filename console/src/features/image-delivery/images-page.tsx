@@ -255,7 +255,7 @@ export default function ImagesPage() {
                                   ? ` +${repositories.length - 1}`
                                   : ""}
                               </span>
-                              <code className="text-[11px] font-normal text-muted-foreground/70">
+                              <code className="text-xs font-normal text-muted-foreground/70">
                                 {shortImageId(image.id)}
                               </code>
                             </Button>

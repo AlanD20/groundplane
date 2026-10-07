@@ -66,7 +66,7 @@ export function ServiceContainers({
                       <ImageReference value={item.image} />
                     </span>
                     <span
-                      className="mt-1 block truncate text-[11px] text-muted-foreground"
+                      className="mt-1 block truncate text-xs text-muted-foreground"
                       title={`${item.name} · ${item.id}`}
                     >
                       {item.name}

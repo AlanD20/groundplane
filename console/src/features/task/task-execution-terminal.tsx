@@ -229,7 +229,7 @@ function TaskStepDetails({
       onToggle={(event) => setExpanded(event.currentTarget.open)}
     >
       <summary className="flex cursor-pointer list-none items-start gap-3 px-3 py-3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-[11px] font-medium tabular-nums text-muted-foreground">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-xs font-medium tabular-nums text-muted-foreground">
           {index + 1}
         </span>
         <span className="min-w-0 flex-1 space-y-1">

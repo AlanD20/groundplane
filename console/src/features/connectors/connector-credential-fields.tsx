@@ -84,7 +84,7 @@ export function ConnectorCredentialField({
           )}
         </>
       )}
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {draft.kind === "keep"
           ? "The existing source remains unchanged. Its value is not read."
           : draft.kind === "ref"

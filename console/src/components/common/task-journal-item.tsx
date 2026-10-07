@@ -49,7 +49,7 @@ export function TaskJournalItem({
             {entry.note}
           </p>
         )}
-        <p className="truncate text-[11px] text-muted-foreground">
+        <p className="truncate text-xs text-muted-foreground">
           {view.scope} ·{" "}
           {formatTimestamp(entry.createdAt ?? entry.ts, "Time unavailable")}
         </p>
@@ -75,11 +75,11 @@ export function TaskJournalItem({
             >
               <ActivityIcon type={entry.type} status={entry.status} />
               <span className="min-w-0">
-                <strong className="block text-[11px] font-medium">
+                <strong className="block text-xs font-medium">
                   {view.title}
                 </strong>
                 {entry.note && (
-                  <span className="mt-1 line-clamp-1 block max-w-80 break-all text-[10px] font-normal text-muted-foreground">
+                  <span className="mt-1 line-clamp-1 block max-w-80 break-all text-xs font-normal text-muted-foreground">
                     {entry.note}
                   </span>
                 )}

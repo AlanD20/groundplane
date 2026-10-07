@@ -207,7 +207,7 @@ export function RunnerInventory({
                         <Button
                           variant="ghost"
                           size="content"
-                          className="max-w-64 justify-start gap-2 p-0 text-[11px]"
+                          className="max-w-64 justify-start gap-2 p-0 text-xs"
                           onClick={() => setInspectedId(runner.id)}
                         >
                           <GitBranch className="size-3.5 shrink-0 text-primary" />

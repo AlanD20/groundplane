@@ -57,7 +57,7 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-medium group-hover:text-primary">{group.name}</p>
-                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">{group.id}</p>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">{group.id}</p>
                   </div>
                   <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                 </div>

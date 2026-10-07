@@ -103,7 +103,7 @@ export function ImageUsage({
                           >
                             {owner?.environment_name}
                             <ArrowUpRight className="ml-1 inline size-3" />
-                            <span className="mt-1 block text-[11px] text-muted-foreground">
+                            <span className="mt-1 block text-xs text-muted-foreground">
                               {owner?.backing
                                 ? "Backing service"
                                 : `${owner?.tenant_slug} / ${owner?.project_slug}`}

@@ -128,19 +128,19 @@ export default function PlatformOverviewPage() {
       <SummaryStrip>
         <SummaryItem label="Tenants">
           {tenants.length}
-          <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
             {tenantProjects.length} projects
           </span>
         </SummaryItem>
         <SummaryItem label="Environments">
           {allEnvs.length}
-          <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
             across tenant projects
           </span>
         </SummaryItem>
         <SummaryItem label="Services">
           {totalServices}
-          <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
             {totalServices === 0
               ? "No observations loaded"
               : unavailableServices
@@ -152,7 +152,7 @@ export default function PlatformOverviewPage() {
         </SummaryItem>
         <SummaryItem label="Backing services">
           {backingProjects.length}
-          <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
             shared instances
           </span>
         </SummaryItem>
@@ -232,7 +232,7 @@ export default function PlatformOverviewPage() {
                         <span className="truncate text-sm font-medium">
                           {p.name}
                           {tenant && (
-                            <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-normal text-secondary-foreground">
+                            <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 font-mono text-xs font-normal text-secondary-foreground">
                               {tenant.slug}
                             </span>
                           )}
@@ -338,7 +338,7 @@ export default function PlatformOverviewPage() {
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate text-sm font-medium">
                         {tenant}/{project}
-                        <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-normal text-secondary-foreground">
+                        <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 font-mono text-xs font-normal text-secondary-foreground">
                           {env.name}
                         </span>
                         <StatusBadge

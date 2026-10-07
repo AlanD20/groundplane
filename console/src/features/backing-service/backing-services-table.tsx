@@ -114,7 +114,7 @@ export function BackingServicesTable({ now }: { now: number }) {
                       {project.description}
                     </p>
                     {env && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Provisioning {env.provisioningState}
                       </p>
                     )}
@@ -128,7 +128,7 @@ export function BackingServicesTable({ now }: { now: number }) {
                       }
                     />
                     {service?.resources.mem && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {service.resources.mem} memory limit
                       </p>
                     )}
@@ -140,7 +140,7 @@ export function BackingServicesTable({ now }: { now: number }) {
                       {port ? `:${port}` : ""}
                     </p>
                     {valkeyAuthenticationDetails(service?.authentication) && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {
                           valkeyAuthenticationDetails(service?.authentication)
                             ?.label
@@ -155,13 +155,13 @@ export function BackingServicesTable({ now }: { now: number }) {
                     <p className="font-mono text-xs">
                       {env?.zones.map((zone) => zone.name).join(", ") || "—"}
                     </p>
-                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
                       {env?.zones.map((zone) => zone.subnet).join(", ") || "—"}
                     </p>
                   </TableCell>
                   <TableCell>
                     <p>{project.consumers?.length ?? 0} consumers</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {backups} backup sources
                     </p>
                   </TableCell>

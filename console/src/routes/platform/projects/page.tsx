@@ -68,7 +68,7 @@ export default function PlatformProjectsPage() {
                     {envs.map((e) => (
                       <span
                         key={e.id}
-                        className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-muted-foreground"
+                        className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-2 py-0.5 text-xs text-muted-foreground"
                       >
                         <StatusDot status={e.status} />
                         {e.name}

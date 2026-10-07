@@ -156,7 +156,7 @@ export function ServicesList({
                   </TableCell>
                   <TableCell className="min-w-48 max-w-72">
                     <ImageReference value={service.image} />
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {service.zones.join(", ") || "No Zones"}
                     </p>
                   </TableCell>
@@ -166,7 +166,7 @@ export function ServicesList({
                       {service.replicas === 1 ? "replica" : "replicas"} ·{" "}
                       {service.strategy}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {service.resources.mem}, {service.resources.cpus} CPU
                     </p>
                   </TableCell>
@@ -229,7 +229,7 @@ export function ServiceCard({
               {service.role}
             </span>
           )}
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {service.resources.mem}, {service.resources.cpus} CPU
           </span>
         </Button>
@@ -241,7 +241,7 @@ export function ServiceCard({
                 <Link
                   key={attach.id}
                   to={`/platform/backing-services/${attach.projectId}`}
-                  className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[10px] text-primary"
+                  className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-primary"
                 >
                   <Plug className="size-3" />
                   {attach.name}, {backing?.name ?? attach.projectId}

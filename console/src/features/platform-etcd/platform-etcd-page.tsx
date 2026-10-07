@@ -1,3 +1,4 @@
+import { SettingsDraft } from "@/components/common/settings-draft";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Database, RefreshCw, Save } from "lucide-react";
 import type { operations } from "@/lib/api.generated";
@@ -139,7 +140,7 @@ export default function PlatformEtcdPage() {
         actions={
           <Button
             variant="outline"
-            disabled={busy || !!taskID}
+            disabled={dirty || busy || !!taskID}
             onClick={() =>
               void load().catch((cause) => setError(message(cause)))
             }
@@ -149,9 +150,36 @@ export default function PlatformEtcdPage() {
           </Button>
         }
       >
-        <div className="space-y-4 p-5">
+        <div className="space-y-4">
           {document ? (
-            <>
+            <SettingsDraft
+              dirty={dirty}
+              busy={busy || !!taskID}
+              onCancel={() => {
+                setContent(document.content);
+                setError(undefined);
+              }}
+              actions={
+                <>
+                  <Button
+                    disabled={!dirty || busy || !!taskID}
+                    onClick={() => void save()}
+                  >
+                    <Save />
+                    Save
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={
+                      dirty || busy || !!taskID || !document.apply_required
+                    }
+                    onClick={() => setConfirm(true)}
+                  >
+                    Apply saved configuration
+                  </Button>
+                </>
+              }
+            >
               <p className="text-xs text-muted-foreground">{document.path}</p>
               <CodeEditor
                 id="etcd-config-document"
@@ -173,25 +201,7 @@ export default function PlatformEtcdPage() {
                   Saved changes are not active yet.
                 </p>
               )}
-              <div className="flex gap-2">
-                <Button
-                  disabled={!dirty || busy || !!taskID}
-                  onClick={() => void save()}
-                >
-                  <Save />
-                  Save
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={
-                    dirty || busy || !!taskID || !document.apply_required
-                  }
-                  onClick={() => setConfirm(true)}
-                >
-                  Apply saved configuration
-                </Button>
-              </div>
-            </>
+            </SettingsDraft>
           ) : (
             <p className="text-sm text-muted-foreground">
               {error ? "Configuration unavailable." : "Loading configuration…"}

@@ -247,7 +247,7 @@ export function BlueprintApplyAction({ environment, workspace, disabled = false,
                   <code className="text-muted-foreground">{entry.part}</code>
                   <code className="min-w-0 break-all">{entry.path || '(invalid path)'}</code>
                   <span className="text-muted-foreground sm:text-right">{formatBlueprintBytes(entry.size)}</span>
-                  <code className="break-all text-[10px] text-muted-foreground sm:col-span-3">SHA-256 {entry.sha256 || 'not computed while bundle limits fail'}</code>
+                  <code className="break-all text-xs text-muted-foreground sm:col-span-3">SHA-256 {entry.sha256 || 'not computed while bundle limits fail'}</code>
                 </div>
               ))}
               {files.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">Select files to build the manifest.</p>}

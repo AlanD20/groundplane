@@ -1,3 +1,4 @@
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { Link } from "react-router-dom";
 import { FactRow } from "./environment-facts";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +53,7 @@ export function ConnectionValues({
               return (
                 <div
                   key={fact.key}
-                  className="space-y-2 rounded-lg bg-muted/20 p-3"
+                  className={workspaceSectionClassName(false, "space-y-3")}
                 >
                   <FactRow
                     attachId={attach.id}

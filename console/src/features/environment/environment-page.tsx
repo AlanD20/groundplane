@@ -221,7 +221,7 @@ export default function EnvironmentPage() {
           aria-label={panel.label}
           className="min-w-0 space-y-5"
         >
-          {panel.key !== "overview" && (
+          {["logs", "zones"].includes(panel.key) && (
             <h2 className="text-lg font-semibold">{panel.label}</h2>
           )}
           {panels[panel.key]}

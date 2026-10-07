@@ -224,7 +224,7 @@ export function CodeEditor({
         </div>
       </div>
       <div ref={host} className="max-h-[65vh] overflow-auto" />
-      <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs text-muted-foreground">
         <span role="status" className="whitespace-pre-wrap">
           {notice || (readOnly || preview ? 'Read-only preview' : 'Unsaved document editor')}
         </span>

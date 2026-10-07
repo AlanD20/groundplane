@@ -246,7 +246,7 @@ export function ConnectorEditorDrawer(props: ConnectorEditorProps) {
       <DrawerContent>
         <DialogHeader>
           <DialogTitle>
-            {mode === "create" ? "New connector" : "Edit connector"} :{" "}
+            {mode === "create" ? "Add destination" : "Edit destination"} ·{" "}
             {env.name}
           </DialogTitle>
           <DialogDescription>
@@ -317,7 +317,7 @@ export function ConnectorEditorDrawer(props: ConnectorEditorProps) {
               />
               {duplicate && (
                 <p className="text-xs text-destructive">
-                  This environment already has a connector with that name.
+                  This environment already has a destination with that name.
                 </p>
               )}
             </Field>
@@ -457,7 +457,7 @@ export function ConnectorEditorDrawer(props: ConnectorEditorProps) {
             {submitting
               ? "Saving..."
               : mode === "create"
-                ? "Save connector"
+                ? "Create destination"
                 : "Save changes"}
           </Button>
         </DialogFooter>

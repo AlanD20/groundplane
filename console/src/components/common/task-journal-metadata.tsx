@@ -10,7 +10,7 @@ function owner(entry: ActivityEntry): string {
 
 export function TaskJournalMetadata({ entry }: { entry: ActivityEntry }) {
   return (
-    <div className="flex flex-col gap-2 text-[11px] text-muted-foreground">
+    <div className="flex flex-col gap-2 text-xs text-muted-foreground">
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         <span><span className="font-medium text-foreground/70">Owner</span> <span className="font-mono">{owner(entry)}</span></span>
         <span><span className="font-medium text-foreground/70">Actor</span> <span className="font-mono">{entry.actor}</span></span>

@@ -1,4 +1,6 @@
-"use client";
+import { DetailRow } from "@/components/common/detail-row";
+import { CompactReference } from "@/components/common/compact-reference";
+("use client");
 
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -52,6 +54,7 @@ export function SettingsCard({ env }: { env: Environment }) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmTyped, setConfirmTyped] = useState("");
   const [keyAction, setKeyAction] = useState<"rotate" | "export" | null>(null);
+  const [rotateOpen, setRotateOpen] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
   const [keyTaskId, setKeyTaskId] = useState<string | null>(null);
   const backupState = store.getBackupPolicyState(env.id);
@@ -100,67 +103,120 @@ export function SettingsCard({ env }: { env: Environment }) {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              id (static — every reference keys off this)
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="truncate font-mono text-xs text-foreground">
-                {env.id}
-              </span>
-              <CopyButton value={env.id} />
-            </span>
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              name (label only)
-            </span>
-            <span className="truncate font-mono text-xs text-foreground">
-              {env.name}
-            </span>
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              network pool (globally reserved IPv4 CIDR)
-            </span>
-            <span className="truncate font-mono text-xs text-foreground">
-              {env.networkPool}
-            </span>
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              allocation (Zone CIDR addresses)
-            </span>
-            <span className="truncate font-mono text-xs text-foreground">
-              {env.networkCapacity.allocatedAddresses.toLocaleString()} /{" "}
-              {env.networkCapacity.totalAddresses.toLocaleString()}
-              {" · "}
-              {env.networkCapacity.availableAddresses.toLocaleString()}{" "}
-              available
-              {" · "}
-              {env.networkCapacity.zoneCount} Zones
-            </span>
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              volume folder (id-derived, never renamed)
-            </span>
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              {env.volumeDir}
-            </span>
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              deterministic env file
-            </span>
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              secrets/.env.{env.id}
-            </span>
-          </div>
+        <CardContent className="space-y-3">
+          <DetailRow
+            label="Environment ID"
+            value={
+              <CompactReference
+                value={env.id}
+                label="Environment ID"
+                hideLabel
+              />
+            }
+          />
+          <DetailRow label="Name" value={env.name} />
+          <DetailRow label="Network pool" value={env.networkPool} mono />
+          <DetailRow
+            label="Allocated addresses"
+            value={`${env.networkCapacity.allocatedAddresses.toLocaleString()} / ${env.networkCapacity.totalAddresses.toLocaleString()}`}
+          />
+          <DetailRow
+            label="Available addresses"
+            value={env.networkCapacity.availableAddresses.toLocaleString()}
+          />
+          <DetailRow
+            label="Zones"
+            value={String(env.networkCapacity.zoneCount)}
+          />
+          <DetailRow
+            label="Volume folder"
+            value={
+              <CompactReference
+                value={env.volumeDir}
+                label="Volume folder"
+                hideLabel
+              />
+            }
+          />
+          <DetailRow
+            label="Environment file"
+            value={
+              <CompactReference
+                value={`secrets/.env.${env.id}`}
+                label="Environment file"
+                hideLabel
+              />
+            }
+          />
         </CardContent>
       </Card>
 
+      <Dialog
+        open={rotateOpen}
+        onOpenChange={(open) => {
+          if (!keyAction) setRotateOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rotate encryption key · {env.name}</DialogTitle>
+            <DialogDescription>
+              New backups will use the new key. Previous recovery points still
+              require their previously exported identity. Export and retain the
+              current identity before rotating.
+            </DialogDescription>
+          </DialogHeader>
+          {keyError && (
+            <p role="alert" className="text-sm text-destructive">
+              {keyError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={!!keyAction}
+              onClick={() => setRotateOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                !!keyAction ||
+                !backupState.loaded ||
+                !!backupState.loadError ||
+                !backup.ageRecipient
+              }
+              onClick={async () => {
+                if (
+                  !backupState.loaded ||
+                  backupState.loadError ||
+                  !backup.ageRecipient ||
+                  keyAction
+                )
+                  return;
+                setKeyAction("rotate");
+                setKeyError(null);
+                try {
+                  const taskID = await store.rotateBackupKey(env.id);
+                  setKeyTaskId(taskID);
+                  setRotateOpen(false);
+                } catch (error) {
+                  setKeyError(
+                    error instanceof Error
+                      ? error.message
+                      : "Unable to rotate the backup age key",
+                  );
+                } finally {
+                  setKeyAction(null);
+                }
+              }}
+            >
+              {" "}
+              {keyAction === "rotate" ? "Rotating…" : "Rotate key"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Drawer
         open={networkPoolOpen}
         onOpenChange={(open) => {
@@ -236,29 +292,15 @@ export function SettingsCard({ env }: { env: Environment }) {
           <Button
             variant="outline"
             size="sm"
-            disabled={!backupState.loaded || Boolean(backupState.loadError) || !backup.ageRecipient || keyAction !== null}
-            onClick={async () => {
-              if (
-                !backup.ageRecipient ||
-                !window.confirm(
-                  "Rotate this Environment age key? Previous recovery points require the previously exported identity.",
-                )
-              )
-                return;
-              setKeyAction("rotate");
+            disabled={
+              !backupState.loaded ||
+              Boolean(backupState.loadError) ||
+              !backup.ageRecipient ||
+              keyAction !== null
+            }
+            onClick={() => {
               setKeyError(null);
-              try {
-                const taskID = await store.rotateBackupKey(env.id);
-                setKeyTaskId(taskID);
-              } catch (error) {
-                setKeyError(
-                  error instanceof Error
-                    ? error.message
-                    : "Unable to rotate the backup age key",
-                );
-              } finally {
-                setKeyAction(null);
-              }
+              setRotateOpen(true);
             }}
           >
             <RotateCw
@@ -273,19 +315,18 @@ export function SettingsCard({ env }: { env: Environment }) {
         <CardContent className="flex flex-col gap-1.5">
           {backup.ageRecipient ? (
             <>
-              <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  recipient (public — encrypts backups)
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="truncate font-mono text-xs text-foreground">
-                    {backup.ageRecipient}
-                  </span>
-                  <CopyButton value={backup.ageRecipient} />
-                </span>
-              </div>
+              <DetailRow
+                label="Public recipient"
+                value={
+                  <CompactReference
+                    value={backup.ageRecipient}
+                    label="Public recipient"
+                    hideLabel
+                  />
+                }
+              />
               <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                <span className="font-mono text-[11px] text-muted-foreground">
+                <span className="font-mono text-xs text-muted-foreground">
                   identity export (private — decrypts, wrapped at rest)
                 </span>
                 <span className="flex min-w-0 items-center gap-2">
@@ -332,7 +373,8 @@ export function SettingsCard({ env }: { env: Environment }) {
               {backup.keyEra && (
                 <p className="text-xs text-muted-foreground">
                   Era {backup.keyEra} · generated {backup.keyCreatedAt}
-                  {backup.keyRotatedAt && ` · last rotated ${backup.keyRotatedAt}`}
+                  {backup.keyRotatedAt &&
+                    ` · last rotated ${backup.keyRotatedAt}`}
                 </p>
               )}
             </>
@@ -343,9 +385,21 @@ export function SettingsCard({ env }: { env: Environment }) {
                 : "No encryption key yet. Enable age-encrypted backups on the Backups tab to generate one."}
             </p>
           )}
-          {backupState.loadError && <p role="alert" className="text-xs text-destructive">{backupState.loadError}</p>}
-          {keyError && <p role="alert" className="text-xs text-destructive">{keyError}</p>}
-          {keyTaskId && <p className="text-xs text-muted-foreground">Key rotation: <TaskLink taskId={keyTaskId}>Open Task</TaskLink></p>}
+          {backupState.loadError && (
+            <p role="alert" className="text-xs text-destructive">
+              {backupState.loadError}
+            </p>
+          )}
+          {keyError && (
+            <p role="alert" className="text-xs text-destructive">
+              {keyError}
+            </p>
+          )}
+          {keyTaskId && (
+            <p className="text-xs text-muted-foreground">
+              Key rotation: <TaskLink taskId={keyTaskId}>Open Task</TaskLink>
+            </p>
+          )}
         </CardContent>
       </Card>
 

@@ -1,4 +1,5 @@
-"use client";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+("use client");
 
 import {
   ListToolbar,
@@ -171,7 +172,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           <Plus className="size-3.5" /> Add Volume
         </Button>
       </CardHeader>
-      <CardContent className="flex flex-col gap-1.5">
+      <CardContent className="flex flex-col gap-3">
         <ListToolbar
           label="Volumes"
           query={query}
@@ -185,7 +186,10 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
         {table.rows.map((v) => (
           <div
             key={v.id}
-            className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2"
+            className={workspaceSectionClassName(
+              false,
+              "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+            )}
           >
             <div className="flex min-w-0 flex-col">
               <span className="font-mono text-sm">{v.slug}</span>
@@ -518,7 +522,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
 function VolumeDetailCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+      <span className="text-xs uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       <span className="break-all font-mono text-xs">{value}</span>

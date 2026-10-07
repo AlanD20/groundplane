@@ -164,7 +164,7 @@ export function BackupsTab({
                     <span className="font-mono text-xs">
                       {c.project}/{c.environment}
                     </span>
-                    <span className="ml-2 font-mono text-[10px] text-muted-foreground">
+                    <span className="ml-2 font-mono text-xs text-muted-foreground">
                       for {c.services}
                     </span>
                   </TableCell>
@@ -178,7 +178,7 @@ export function BackupsTab({
                     <span className="font-mono text-xs">
                       {c.enabled ? `${c.frequency} · keep ${c.keep}` : "off"}
                     </span>
-                    <span className="ml-2 font-mono text-[10px] text-muted-foreground">
+                    <span className="ml-2 font-mono text-xs text-muted-foreground">
                       {c.enabled ? c.encryption : ""}
                     </span>
                   </TableCell>

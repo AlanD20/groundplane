@@ -1,3 +1,7 @@
+import { CompactReference } from "@/components/common/compact-reference";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+import { Button } from "@/components/ui/button";
+import { useSearchParams } from "react-router-dom";
 import { DetailRow } from "@/components/common/detail-row";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import { useStore } from "@/lib/store";
@@ -21,13 +25,46 @@ export function ServiceTab({
       : adapter?.urlScheme === "pgsql"
         ? 5432
         : undefined;
-  const volume = env.volumes[0];
+  const [, setSearch] = useSearchParams();
+  const destination = (tab: string, label: string) => (
+    <Button
+      variant="link"
+      size="sm"
+      onClick={() =>
+        setSearch((current) => {
+          const next = new URLSearchParams(current);
+          next.set("tab", tab);
+          return next;
+        })
+      }
+    >
+      {label}
+    </Button>
+  );
   const authenticationDetails = valkeyAuthenticationDetails(svc.authentication);
   return (
     <>
-      <ResourcePanel title="Service configuration">
-        <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
-          <Row label="Image" value={svc.image} mono />
+      {" "}
+      <p className="text-sm text-muted-foreground">
+        Saved configuration for this shared instance. Runtime observations are
+        shown in Overview.
+      </p>
+      <div className="grid items-start gap-5 xl:grid-cols-2">
+        <ResourcePanel
+          title="Image & runtime"
+          actions={destination("service", "Go to Runtime & image")}
+        >
+          <DetailRow
+            label="Image"
+            value={
+              <CompactReference
+                value={svc.image}
+                short={svc.image.split("@")[0]}
+                label="Image reference"
+                hideLabel
+              />
+            }
+          />
           <Row
             label="Adapter"
             value={
@@ -36,6 +73,20 @@ export function ServiceTab({
                 : (svc.adapter ?? "—")
             }
             mono
+          />
+          <Row label="Service name" value={svc.serviceName ?? svc.name} mono />
+          <Row label="Runtime intent" value={svc.runtimeIntent} mono />
+          <Row label="Deployment strategy" value={svc.strategy} mono />
+          <Row label="Restart" value={svc.restart} mono />
+          <Row label="Desired replicas" value={String(svc.replicas)} mono />
+          <Row label="Memory limit" value={svc.resources.mem || "Not set"} />
+          <Row
+            label="CPU limit"
+            value={
+              Number(svc.resources.cpus) > 0
+                ? `${svc.resources.cpus} cores`
+                : "Not set"
+            }
           />
           {svc.adapter === "custom" && (
             <Row
@@ -49,21 +100,11 @@ export function ServiceTab({
               mono
             />
           )}
-          <Row label="Service name" value={svc.serviceName ?? svc.name} mono />
-          <Row
-            label="Prefix (facts keys)"
-            value={svc.prefix ?? adapter?.prefix ?? "—"}
-            mono
-          />
-          {svc.adapter === "valkey:9" && (
-            <Row
-              label="Authentication"
-              value={authenticationDetails?.label ?? "Unavailable"}
-              mono
-            />
-          )}
-          <Row label="Runtime intent" value={svc.runtimeIntent} mono />
-          <Row label="Strategy" value={svc.strategy} mono />
+        </ResourcePanel>
+        <ResourcePanel
+          title="Networking"
+          actions={destination("network", "Go to Networking")}
+        >
           <Row
             label="Network"
             value={
@@ -77,81 +118,167 @@ export function ServiceTab({
             mono
           />
           <Row
-            label="Healthcheck"
-            value={
-              svc.healthcheck
-                ? `${svc.healthcheck.kind} ${svc.healthcheck.target} · every ${svc.healthcheck.interval} · timeout ${svc.healthcheck.timeout} · start ${svc.healthcheck.startPeriod} · retries ${svc.healthcheck.retries}`
-                : "none"
-            }
-            mono
-          />
-          <Row
-            label="Resources"
-            value={`${svc.resources.mem} · ${svc.resources.cpus} cpu`}
-            mono
-          />
-          <Row
-            label="Expose"
+            label="Exposed ports"
             value={svc.expose.length > 0 ? svc.expose.join(", ") : "—"}
-            mono
-          />
-          <Row
-            label="Mounts"
-            value={
-              svc.mounts
-                .map((m) =>
-                  m.type === "volume"
-                    ? `${m.volume} → ${m.mount}`
-                    : `${m.file} → ${m.mount}${m.ro ? " (ro)" : ""}`,
-                )
-                .join(", ") || "—"
-            }
-            mono
-          />
-          <Row label="Env files" value={svc.envFiles.join(", ") || "—"} mono />
-          <Row
-            label="Env vars"
-            value={
-              svc.environment.map((e) => `${e.key}=${e.value}`).join(", ") ||
-              "—"
-            }
             mono
           />
           <Row label="Aliases" value={svc.aliases.join(", ") || "—"} mono />
           <Row
-            label="Depends on"
+            label="Dependencies"
             value={svc.dependsOn.join(", ") || "—"}
             mono
           />
-          <Row label="Restart" value={svc.restart} mono />
-          <Row label="Desired replicas" value={String(svc.replicas)} mono />
           <Row
             label="Service endpoint"
             value={`${svc.serviceName ?? svc.name}${port ? `:${port}` : ""}`}
             mono
           />
-        </div>
-      </ResourcePanel>
-
-      <ResourcePanel title="Environment configuration">
-        <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
-          <Row
-            label="Volume"
+        </ResourcePanel>
+        <ResourcePanel
+          title="Healthcheck"
+          actions={destination("service", "Go to Runtime & image")}
+        >
+          {svc.healthcheck ? (
+            <>
+              <Row
+                label="Check"
+                value={`${svc.healthcheck.kind.toUpperCase()} ${svc.healthcheck.target}`}
+                mono
+              />
+              <Row
+                label="Interval"
+                value={svc.healthcheck.interval || "Not specified"}
+              />
+              <Row
+                label="Timeout"
+                value={svc.healthcheck.timeout || "Not specified"}
+              />
+              <Row
+                label="Start period"
+                value={svc.healthcheck.startPeriod || "Not specified"}
+              />
+              <Row
+                label="Retries"
+                value={
+                  svc.healthcheck.retries > 0
+                    ? String(svc.healthcheck.retries)
+                    : "Not specified"
+                }
+              />
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No healthcheck configured.
+            </p>
+          )}
+        </ResourcePanel>
+        <ResourcePanel title="Storage">
+          {svc.mounts.map((mount, index) => (
+            <div
+              key={index}
+              className={workspaceSectionClassName(false, "space-y-2")}
+            >
+              <p className="break-all text-sm font-medium">
+                {mount.type === "volume"
+                  ? env.volumes.find((v) => v.id === mount.volume)?.slug ||
+                    mount.volume
+                  : mount.file}
+              </p>
+              <p className="w-fit max-w-full break-all rounded-md bg-muted px-2 py-1 font-mono text-sm">
+                {mount.mount}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {mount.type === "file" || mount.ro
+                  ? "Read only"
+                  : "Read & write"}
+              </p>
+            </div>
+          ))}
+          {!svc.mounts.length && (
+            <p className="text-sm text-muted-foreground">
+              No mounts configured.
+            </p>
+          )}
+          {env.volumes.map((v) => (
+            <DetailRow
+              key={v.id}
+              label={v.slug}
+              value={
+                v.path ? (
+                  <CompactReference
+                    value={v.path}
+                    label="Volume path"
+                    hideLabel
+                  />
+                ) : (
+                  "Managed path"
+                )
+              }
+            />
+          ))}
+          <DetailRow
+            label="Volume folder"
             value={
-              volume ? `${volume.slug} → ${volume.path ?? "managed path"}` : "—"
+              <CompactReference
+                value={env.volumeDir}
+                label="Volume folder"
+                hideLabel
+              />
             }
+          />
+        </ResourcePanel>
+      </div>
+      <ResourcePanel
+        title="Variables & connection fields"
+        actions={destination("connections", "Go to Backing connections")}
+      >
+        {" "}
+        <Row
+          label="Connection key prefix"
+          value={svc.prefix ?? adapter?.prefix ?? "—"}
+          mono
+        />
+        {svc.adapter === "valkey:9" && (
+          <Row
+            label="Authentication"
+            value={authenticationDetails?.label ?? "Unavailable"}
             mono
           />
-          <Row label="Volume dir" value={env.volumeDir} mono />
+        )}
+        <Row
+          label="Environment files"
+          value={svc.envFiles.join(", ") || "—"}
+          mono
+        />
+        <h3 className="text-sm font-medium">Service variables</h3>
+        {svc.environment.map((e) => (
           <Row
-            label="Env vars"
-            value={
-              env.envVars.map((e) => `${e.key}=${e.value}`).join(", ") || "—"
-            }
+            key={e.key}
+            label={e.key}
+            value={e.value || "Empty value"}
             mono
           />
-        </div>
-      </ResourcePanel>
+        ))}
+        {!svc.environment.length && (
+          <p className="text-sm text-muted-foreground">
+            No inline Service variables.
+          </p>
+        )}
+        <h3 className="text-sm font-medium">Environment variables</h3>
+        {env.envVars.map((e) => (
+          <Row
+            key={e.key}
+            label={e.key}
+            value={e.value || "Empty value"}
+            mono
+          />
+        ))}
+        {!env.envVars.length && (
+          <p className="text-sm text-muted-foreground">
+            No inline Environment variables.
+          </p>
+        )}
+      </ResourcePanel>{" "}
     </>
   );
 }

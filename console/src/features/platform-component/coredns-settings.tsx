@@ -1,4 +1,6 @@
-"use client";
+import { SettingsDraft } from "@/components/common/settings-draft";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+("use client");
 
 import {
   AdvancedDetails,
@@ -65,6 +67,8 @@ export function CoreDnsSettings({
   const [fwdUpstream, setFwdUpstream] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dirty =
+    u !== upstream || auto !== upstreamAuto || template !== corefileTemplate;
   const [copied, setCopied] = useState(false);
   const managedCorefile = managedFiles.find(
     (file) => file.path === "/etc/groundplane/coredns/Corefile",
@@ -111,7 +115,10 @@ export function CoreDnsSettings({
           <TaskLink taskId={activeTaskId}>Open Task</TaskLink>
         </div>
       )}
-      <fieldset disabled={saving || !!activeTaskId} className="contents">
+      <fieldset
+        disabled={saving || !!activeTaskId}
+        className="min-w-0 space-y-4"
+      >
         {!configured ? (
           <p
             className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
@@ -120,67 +127,99 @@ export function CoreDnsSettings({
             Save a complete resolver configuration before enabling CoreDNS.
           </p>
         ) : null}
-        <SettingsRow
-          title="Local resolver"
-          help="Enable CoreDNS on this host using the saved configuration."
-        >
-          <Switch
-            aria-label="Local resolver"
-            checked={enabled}
-            disabled={saving || !configured}
-            onCheckedChange={(value) => void mutate(() => onEnabled(value))}
-          />
-        </SettingsRow>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="dns-upstream">Catch-all upstream</Label>
-            <Input
-              id="dns-upstream"
-              value={u}
-              onChange={(e) => setU(e.target.value)}
-              className="font-mono"
-              disabled={auto}
-              placeholder="1.1.1.1 8.8.8.8"
+        <section className={workspaceSectionClassName(false, "space-y-4")}>
+          <h3 className="text-sm font-medium">Resolver operation</h3>
+          <p className="text-xs text-muted-foreground">
+            These switches apply immediately.
+          </p>{" "}
+          <SettingsRow
+            title="Local resolver"
+            help="Enable CoreDNS on this host using the saved configuration."
+          >
+            <Switch
+              aria-label="Local resolver"
+              checked={enabled}
+              disabled={saving || !configured}
+              onCheckedChange={(value) => void mutate(() => onEnabled(value))}
             />
+          </SettingsRow>{" "}
+          <SettingsRow
+            title="Tailnet delegation"
+            help="Forward ts.net queries to Tailscale MagicDNS at 100.100.100.100 when Tailscale runs on this host."
+          >
+            <Switch
+              aria-label="Tailnet delegation"
+              checked={tailnetDelegation}
+              disabled={saving}
+              onCheckedChange={(value) => void mutate(() => onTailnet(value))}
+            />
+          </SettingsRow>
+        </section>
+        <SettingsDraft
+          pristineLabel={configured ? "Saved configuration" : "Not configured"}
+          dirty={dirty}
+          busy={saving || !!activeTaskId}
+          onCancel={() => {
+            setU(upstream);
+            setAuto(upstreamAuto);
+            setTemplate(corefileTemplate);
+            setError(null);
+          }}
+          actions={
+            <Button
+              size="sm"
+              disabled={saving || (!dirty && configured)}
+              onClick={() => void mutate(() => onSave(u, auto, template))}
+            >
+              <Save className="size-4" /> Save resolver settings
+            </Button>
+          }
+        >
+          <h3 className="text-sm font-medium">Upstream &amp; template</h3>
+          <p className="text-xs text-muted-foreground">
+            Changes in this section take effect when saved.
+          </p>{" "}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="dns-upstream">Catch-all upstream</Label>
+              <Input
+                id="dns-upstream"
+                value={u}
+                onChange={(e) => setU(e.target.value)}
+                className="font-mono"
+                disabled={auto}
+                placeholder="1.1.1.1 8.8.8.8"
+              />
+            </div>
           </div>
-        </div>
-        <SettingsRow
-          title="Use host upstream resolvers"
-          help="Read resolvers from the host at render time. Turn off to use the catch-all addresses you enter."
-        >
-          <Switch
-            aria-label="Use host upstream resolvers"
-            checked={auto}
-            disabled={saving}
-            onCheckedChange={setAuto}
-          />
-        </SettingsRow>
-        <SettingsRow
-          title="Tailnet delegation"
-          help="Forward ts.net queries to Tailscale MagicDNS at 100.100.100.100 when Tailscale runs on this host."
-        >
-          <Switch
-            aria-label="Tailnet delegation"
-            checked={tailnetDelegation}
-            disabled={saving}
-            onCheckedChange={(value) => void mutate(() => onTailnet(value))}
-          />
-        </SettingsRow>
-        <AdvancedDetails title="Corefile template">
-          <CodeEditor
-            id="corefile-template"
-            label="Corefile template"
-            value={template}
-            onValueChange={setTemplate}
-          />
-          <span className="text-xs text-muted-foreground">
-            Include exactly one{" "}
-            <span className="font-mono">{"{groundplane}"}</span> marker. The
-            Controller replaces it with the listener addresses, hostname
-            records, domain forwarders, catch-all resolvers and reload directive
-            shown below.
-          </span>
-        </AdvancedDetails>
+          <SettingsRow
+            title="Use host upstream resolvers"
+            help="Read resolvers from the host at render time. Turn off to use the catch-all addresses you enter."
+          >
+            <Switch
+              aria-label="Use host upstream resolvers"
+              checked={auto}
+              disabled={saving}
+              onCheckedChange={setAuto}
+            />
+          </SettingsRow>
+          <AdvancedDetails title="Corefile template">
+            <CodeEditor
+              id="corefile-template"
+              label="Corefile template"
+              value={template}
+              onValueChange={setTemplate}
+              disabled={saving || !!activeTaskId}
+            />
+            <span className="text-xs text-muted-foreground">
+              Include exactly one{" "}
+              <span className="font-mono">{"{groundplane}"}</span> marker. The
+              Controller replaces it with the listener addresses, hostname
+              records, domain forwarders, catch-all resolvers and reload
+              directive shown below.
+            </span>
+          </AdvancedDetails>
+        </SettingsDraft>{" "}
         <AdvancedDetails title="Generated DNS directives">
           {managedCorefile?.generatedDirectives ? (
             <CodeEditor
@@ -244,7 +283,7 @@ export function CoreDnsSettings({
             </p>
           ) : null}
         </AdvancedDetails>
-        <div className="flex flex-col gap-2">
+        <div className={workspaceSectionClassName(false, "space-y-4")}>
           <h3 className="flex items-center gap-2 text-sm font-medium">
             Domain forwarders{" "}
             <HelpHint label="About Domain forwarders">
@@ -252,7 +291,10 @@ export function CoreDnsSettings({
               catch-all.
             </HelpHint>
           </h3>
-          <div className="flex flex-col gap-1.5">
+          <p className="text-xs text-muted-foreground">
+            Adding or removing a forwarder applies immediately.
+          </p>
+          <div className="flex flex-col gap-2">
             {forwarders.map((f, index) => (
               <div
                 key={f.domain}
@@ -320,13 +362,6 @@ export function CoreDnsSettings({
             {error}
           </p>
         ) : null}
-        <Button
-          size="sm"
-          disabled={saving}
-          onClick={() => void mutate(() => onSave(u, auto, template))}
-        >
-          <Save className="size-4" /> Save
-        </Button>
       </fieldset>
     </ResourcePanel>
   );

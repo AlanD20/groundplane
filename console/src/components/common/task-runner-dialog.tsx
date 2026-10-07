@@ -396,7 +396,7 @@ export function TaskRunnerDialog({
                 </span>
                 <span
                   className={cn(
-                    "ml-auto text-[10px]",
+                    "ml-auto text-xs",
                     state === "completed" && "text-success",
                     failed && "text-destructive",
                   )}
