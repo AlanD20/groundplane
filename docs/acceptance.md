@@ -1047,6 +1047,68 @@ Console queue of existing Point actions, not a new atomic Controller operation.
 Existing Points without recorded provenance remain accessible without inferred
 run membership. All new test archives were removed and private evidence retained.
 
+## H95 — Editable Services and strategy-aware Blueprint Apply (2026-10-07)
+
+BP-17, BP-18 and SVC-01 are PARTIAL. The final Controller was
+`0.0.1-qa-service-b4ff3daf9`, signed source `b4ff3daf9`, storage epoch 6,
+binary `sha256:5cc1dafc6ee0b5c660108a4dd7a39412e8c89fdebc50934465c1c7440f553050`.
+The Agent came from signed source `b3de1d301`, pinned image digest
+`sha256:e0ea5d9b18cfcc2c1195db48238e0106f91cb59eda2e9f74f3c7488e1e4613a8`.
+The final installed CLI matched the Controller version; preceding mutation checks
+used the staged `b3de1d301` CLI. The installed CLI's Host read passed.
+Target: disposable Ubuntu 24.04 amd64, two isolated Nginx Services, one Zone,
+no test Volumes, Secrets or Attaches. Receipts and failed-run evidence remain in
+ignored `.tmp/service-settings/` and the private host staging directory.
+
+Selected command Apply changed the intended HTTP marker while retaining the
+stable blue-green proxy and the independent Service's containers. Twenty-seven
+HTTP samples during that switch had zero errors. Exact replay returned the same
+Task; changing the selector under the same key returned `idempotency.mismatch`.
+Unselected Service and shared subnet changes were rejected without advancing the
+desired revision. Selected Apply after Stop kept stopped intent and no running
+containers. Full Apply used recreate for one Service and blue-green for the other,
+with independently checked content and container identities.
+
+CLI Save changed command/entrypoint, working directory/user, aliases, phased
+dependencies and log rotation without changing serving containers or content.
+Omission preserved settings; explicit resets removed overrides. Ordinary Deploy
+then served the saved command. Console Save likewise left the running workload
+unchanged. Console review displayed the selected Service and blue-green strategy;
+confirmation completed a selected reapply, and Open Task opened its execution
+drawer. No browser warnings/errors were observed in these flows.
+
+With running intent explicitly selected, a candidate executing `exit 17` timed
+out during readiness. Automatic restoration completed, prior HTTP content still
+served, and the Agent remained healthy without reconciliation-required state.
+The first 120 seconds supplied 599 HTTP samples with zero errors; continuous
+sampling beyond that window was not established. A corrected new Apply completed
+and served its new marker. An earlier attempt while stopped did not execute the
+fault and is NOT recovery evidence.
+
+Live failures led to three scoped repairs: narrow proxy-topology decoding instead
+of decoding unrelated Compose duration fields; consistent capture/validation of
+retained inactive blue-green authority after ordinary Deploy; and one shared
+desired-head comparison for dependency edits, with exact dependency-head matching
+and per-Service removal guards retained. Focused behavior/race checks, build, vet
+and architecture checks passed. Full configured CI still has recorded fixture and
+formatting failures; these passes do not establish green CI.
+
+The initial approved epoch repair loaded the Controller but its final container
+equality assertion failed because the Agent restarted. Independent follow-up
+proved nine original non-Agent containers retained IDs, images and start times,
+and the original Task response was unchanged. The Agent update and subsequent
+Controller-only fixes used GP's normal updater. All isolated test resources were
+removed through GP; no test containers remained, and the original preservation
+assertions still passed. No reset, history rewrite, compatibility bypass, push
+or tag was used.
+
+Selected recreate, recreate failure, stop-on-failure, live proxy-topology refusal,
+companion-file changes, concurrent admission and other OS/architecture variants
+were NOT RUN. Deployed alias/dependency behavior was not qualified by desired-only
+edits. A local fixture also rejected direct removal with lifecycle dependency
+edges because the remaining plan order was incomplete; that separate limitation
+was not repaired or qualified by this journey.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
