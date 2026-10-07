@@ -1,4 +1,5 @@
-"use client";
+import { LogLine, LogSource } from "./log-line";
+("use client");
 
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/common/copy-button";
@@ -250,6 +251,15 @@ export function LogStream({ target }: { target: LogTarget }) {
           {visible.length} shown · {events.length} / 1,000 loaded lines
         </span>
       </div>
+      {container !== "all" &&
+        events.find((event) => event.container_id === container) && (
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            Selected container{" "}
+            <LogSource
+              event={events.find((event) => event.container_id === container)!}
+            />
+          </div>
+        )}
       {!atEnd && (
         <Button
           size="sm"
@@ -289,32 +299,12 @@ export function LogStream({ target }: { target: LogTarget }) {
           </p>
         ) : (
           visible.map((event) => (
-            <div
+            <LogLine
               key={event.sequence}
-              className="grid grid-cols-[5rem_minmax(0,1fr)_4rem] gap-x-3 gap-y-1 rounded px-2 py-1 hover:bg-muted/50 xl:grid-cols-[5rem_10rem_4rem_minmax(0,1fr)]"
-            >
-              <span className="text-muted-foreground">
-                {new Date(event.timestamp).toLocaleTimeString()}
-              </span>
-              <span className="min-w-0 whitespace-normal break-words text-primary">
-                {event.container_name}
-              </span>
-              <span
-                className={
-                  event.stream === "stderr"
-                    ? "text-destructive"
-                    : "text-success"
-                }
-              >
-                {event.stream}
-              </span>
-              <span
-                className={`col-span-3 min-w-0 xl:col-span-1 ${wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "whitespace-pre"}`}
-              >
-                {event.line}
-                {event.truncated ? " [truncated]" : ""}
-              </span>
-            </div>
+              event={event}
+              wrap={wrap}
+              showSource={container === "all"}
+            />
           ))
         )}
       </div>

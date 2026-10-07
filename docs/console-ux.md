@@ -58,6 +58,9 @@ with visible section headings; a heading need not introduce another page.
 Give meaningful destinations stable URLs. Browser Back and return links should
 restore the relevant selection and list context. Scope switches must make the
 new scope unmistakable and handle unavailable destinations explicitly.
+Resource links out of a Service retain an explicit return to that Service and
+destination, including when following a Task to its affected resource. Keep this
+return distinct from hierarchical breadcrumbs and preserve it across local tabs.
 
 ## Grouping and discoverability
 
@@ -103,8 +106,11 @@ Avoid nested modal chains; dependent creation must retain or restore the origina
 selection and unsaved input.
 
 In Service workspaces, edit mounts, runtime, image, healthchecks and networking
-in place. Keep the section summary and neighboring sections visible, with a
-local Save/Cancel boundary. Confirm destructive operations separately. Put
+in place. Replace the selected summary with its editor while keeping the section
+heading anchored and neighboring sections visible. Use a local Save/Cancel
+boundary and distinguish unsaved drafts from saved configuration awaiting deploy.
+Adding a mount creates one named new draft; editing it leaves other mounts readable.
+Confirm destructive operations separately. Put
 connection values and their variable/file usage beside the owning connection.
 
 Use the shared searchable selector for resource references; use the regular
@@ -112,6 +118,8 @@ custom selector for short fixed choices. Native browser autocomplete is not a
 resource picker. Secret reference pickers retain explicit manual reference entry.
 Value rows provide labeled copy actions and a stable empty-value placeholder;
 copying an empty value copies the empty string, never its placeholder.
+Present variables and files as readable entries: key or path and value first,
+source and sharing information second. File contents may use a bounded preview.
 
 Display current values before asking operators to edit. Keep validation near the
 field and the primary action visible. Make Save/Cancel and unsaved changes
@@ -170,6 +178,11 @@ dialog boundaries at narrow widths. Wrap ordinary text; use bounded scrolling
 where code or logs need it. Truncation must provide access to the complete value.
 Keep Copy and reveal/hide controls usable without expanding the layout. Do not
 reveal sensitive values automatically to improve discoverability.
+Log rows give messages most of the space; source labels stay on one line with
+full container identity available through keyboard-accessible details. A selected
+container needs one identity above its output, not one on every line. Keep network
+Zones visible on Service overviews and provide compact, copyable resource IDs by
+the resource title, with access to the complete identifier.
 
 ## Applying and reviewing the standard
 
