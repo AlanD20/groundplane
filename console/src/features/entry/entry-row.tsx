@@ -1,4 +1,5 @@
-"use client";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+("use client");
 
 import { File, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function EntryRow({
   loadValue,
   copyValue,
   onEdit,
+  editing = false,
   onRemove,
 }: {
   label: string;
@@ -36,6 +38,7 @@ export function EntryRow({
   loadValue?: () => Promise<string>;
   copyValue?: string;
   onEdit?: () => void;
+  editing?: boolean;
   onRemove?: () => void;
 }) {
   const preview = (
@@ -60,7 +63,7 @@ export function EntryRow({
     </div>
   );
   return (
-    <li className="min-w-0 space-y-3 py-5 first:pt-1 last:pb-1">
+    <li className={workspaceSectionClassName(editing, "space-y-3")}>
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
         <div className="min-w-0 basis-full space-y-1.5 sm:basis-auto sm:flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -79,6 +82,7 @@ export function EntryRow({
               iconOnly
               className="shrink-0"
             />
+            {editing && <Badge variant="warning">Editing</Badge>}
             {secret && <Badge variant="muted">Encrypted</Badge>}
             {secret && <EmptySecretValueBadge empty={emptySecretValue} />}
           </div>

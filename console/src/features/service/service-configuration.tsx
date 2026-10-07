@@ -8,7 +8,10 @@ import { CopyButton } from "@/components/common/copy-button";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { Button } from "@/components/ui/button";
 import type { Environment, Service } from "@/lib/types";
-import type { ServiceDestination } from "./workspace-navigation";
+import {
+  serviceDestinations,
+  type ServiceDestination,
+} from "./workspace-navigation";
 
 export function ServiceConfiguration({
   service,
@@ -26,7 +29,9 @@ export function ServiceConfiguration({
   const edit = (destination: ServiceDestination) =>
     onNavigate && (
       <Button size="sm" variant="link" onClick={() => onNavigate(destination)}>
-        Open editor
+        {destination === "storage"
+          ? "Manage mounts"
+          : `Go to ${serviceDestinations.find((item) => item.key === destination)?.label}`}
       </Button>
     );
   const zones = service.zones.map(

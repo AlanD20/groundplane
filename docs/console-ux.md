@@ -113,6 +113,13 @@ Adding a mount creates one named new draft; editing it leaves other mounts reada
 Confirm destructive operations separately. Put
 connection values and their variable/file usage beside the owning connection.
 
+Use flat rows with consistent 16px padding and subtle dividers inside workspace
+panels. Mark the active edit or new draft with a soft primary tint and outlined
+border, preserving its padding. Avoid nesting another editor card inside that
+highlight. Editor footers leave 16px above their divider and 16px before the
+Save/Cancel controls. Links name their destination; reserve editor wording for
+actions that actually open an editor.
+
 Use the shared searchable selector for resource references; use the regular
 custom selector for short fixed choices. Native browser autocomplete is not a
 resource picker. Secret reference pickers retain explicit manual reference entry.
@@ -181,8 +188,10 @@ reveal sensitive values automatically to improve discoverability.
 Log rows give messages most of the space; source labels stay on one line with
 full container identity available through keyboard-accessible details. A selected
 container needs one identity above its output, not one on every line. Keep network
-Zones visible on Service overviews and provide compact, copyable resource IDs by
-the resource title, with access to the complete identifier.
+Zones visible on Service overviews. Beneath the resource title, group compact,
+copyable identity with the last Agent report and its validity timestamp. Show
+seconds and the timezone, retain access to the complete identifier, and explicitly
+mark unavailable or expired reports. Keep that metadata available across local tabs.
 
 ## Applying and reviewing the standard
 

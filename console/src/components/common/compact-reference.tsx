@@ -6,10 +6,12 @@ export function CompactReference({
   value,
   label = "ID",
   short,
+  hideLabel = false,
 }: {
   value: string;
   label?: string;
   short?: string;
+  hideLabel?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const abbreviated =
@@ -25,7 +27,8 @@ export function CompactReference({
           onClick={() => setExpanded(!expanded)}
           className="min-w-0 truncate rounded px-1 py-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
         >
-          {label} <span className="font-mono">{abbreviated}</span>
+          {!hideLabel && <>{label} </>}
+          <span className="font-mono">{abbreviated}</span>
         </button>
         <CopyButton
           value={value}

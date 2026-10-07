@@ -1,8 +1,4 @@
-import {
-  ResourcePanel,
-  AdvancedDetails,
-} from "@/components/common/resource-panel";
-import { DetailRow } from "@/components/common/detail-row";
+import { ResourcePanel } from "@/components/common/resource-panel";
 import { ImageReference } from "@/components/common/image-reference";
 import { CopyButton } from "@/components/common/copy-button";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -305,20 +301,6 @@ export function ServiceOverview({
           )}
         </ResourcePanel>
       </div>
-      <AdvancedDetails title="Observation timestamps">
-        {observation.state !== "unavailable" && (
-          <>
-            <DetailRow
-              label="Last reported"
-              value={formatTimestamp(observation.observedAt, "Not reported")}
-            />
-            <DetailRow
-              label="Report expires"
-              value={formatTimestamp(observation.expiresAt, "Not reported")}
-            />
-          </>
-        )}
-      </AdvancedDetails>
     </div>
   );
 }

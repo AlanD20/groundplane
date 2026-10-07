@@ -12,11 +12,14 @@ export function LogSource({ event }: { event: TransientLogEvent }) {
           variant: "ghost",
           size: "content",
           className:
-            "min-w-0 max-w-full justify-start truncate px-1 text-xs text-primary",
+            "min-w-0 max-w-full justify-start gap-1.5 truncate px-1 text-xs text-primary",
         })}
         aria-label={`Container details: ${name}`}
       >
         <span className="min-w-0 truncate">{event.service_name}</span>
+        <span aria-hidden="true" className="shrink-0 text-muted-foreground/60">
+          |
+        </span>
         <span className="shrink-0 text-muted-foreground">
           {event.container_id.slice(0, 6)}
         </span>
@@ -55,7 +58,7 @@ export function LogLine({
 }) {
   return (
     <div
-      className={`grid min-w-0 grid-cols-[6rem_minmax(0,1fr)_3.5rem] items-start gap-x-3 gap-y-1 border-l-2 px-2 py-1 hover:bg-muted/50 ${event.stream === "stderr" ? "border-destructive/50" : "border-transparent"} ${showSource ? "xl:grid-cols-[6rem_12rem_3.5rem_minmax(0,1fr)]" : "xl:grid-cols-[6rem_3.5rem_minmax(0,1fr)]"}`}
+      className={`grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)_3rem] items-start gap-x-2 xl:gap-x-3 gap-y-1 border-l-2 px-2 py-1 hover:bg-muted/50 ${event.stream === "stderr" ? "border-destructive/50" : "border-transparent"} ${showSource ? "xl:grid-cols-[6rem_12rem_3.5rem_minmax(0,1fr)]" : "xl:grid-cols-[6rem_3.5rem_minmax(0,1fr)]"}`}
     >
       <time
         dateTime={event.timestamp}

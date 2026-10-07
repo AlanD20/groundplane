@@ -1,3 +1,4 @@
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import { useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -127,7 +128,7 @@ export function ServiceSettings({
         Saved configuration is applied on the next deploy. Editing here does not
         change running containers.
       </p>
-      <div className="divide-y divide-border">
+      <div className="space-y-2">
         {rows
           .filter(
             (row) =>
@@ -138,7 +139,10 @@ export function ServiceSettings({
             <section
               key={row.section}
               aria-label={row.label}
-              className="grid min-w-0 gap-4 py-6 first:pt-2 last:pb-2 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-8"
+              className={workspaceSectionClassName(
+                editing === row.section,
+                "grid gap-4 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-8",
+              )}
             >
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold">{row.label}</h3>

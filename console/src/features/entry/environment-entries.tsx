@@ -239,6 +239,7 @@ export function EnvVarsCard({
       <EntryRow
         key={entry.id}
         label={label}
+        editing={open && editing?.id === entry.id}
         file={entry.type === "file"}
         source={
           entry.source.kind === "literal"
@@ -305,10 +306,7 @@ export function EnvVarsCard({
             { value: "type", label: "Type" },
           ]}
         />
-        <ul
-          aria-label="Variables & files"
-          className="min-w-0 divide-y divide-border"
-        >
+        <ul aria-label="Variables & files" className="min-w-0 space-y-2">
           {table.rows.map(renderEntry)}
         </ul>
         {!table.total && (

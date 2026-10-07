@@ -1,3 +1,7 @@
+import {
+  workspaceSectionClassName,
+  editorFooterClassName,
+} from "@/components/common/workspace-section";
 import { useRef, useState } from "react";
 import { HardDrive, Pencil, Plus, Trash2 } from "lucide-react";
 import { ResourcePanel } from "@/components/common/resource-panel";
@@ -142,7 +146,7 @@ export function ServiceStorage({
             ? "Edit mount"
             : "New mount"
       }
-      className="min-w-0 space-y-4 rounded-xl border border-primary/40 bg-primary/5 p-4"
+      className={workspaceSectionClassName(true, "space-y-4")}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -247,7 +251,9 @@ export function ServiceStorage({
           {error}
         </p>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+      <div
+        className={`${editorFooterClassName} flex flex-wrap items-center justify-between gap-3`}
+      >
         <p className="text-xs text-muted-foreground">
           Saved changes take effect on the next deploy.
         </p>
@@ -299,14 +305,17 @@ export function ServiceStorage({
         saved independently.
       </p>
       {draft && !draft.original && editor}
-      <div className="space-y-3">
+      <div className="space-y-2">
         {mounts.map((mount) =>
           draft?.original && sameMount(mount, draft.original) ? (
             <div key={mount.mount}>{editor}</div>
           ) : (
             <div
               key={mount.mount}
-              className={`flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border p-4 ${saved?.path === mount.mount ? "border-success/40 bg-success/5" : "border-border"}`}
+              className={workspaceSectionClassName(
+                false,
+                "flex flex-wrap items-center justify-between gap-3",
+              )}
             >
               <div className="flex min-w-0 flex-1 items-start gap-3">
                 <HardDrive

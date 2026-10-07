@@ -1,4 +1,5 @@
-"use client";
+import { editorFooterClassName } from "./workspace-section";
+("use client");
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -558,7 +559,7 @@ export function ServiceFormBody({
           <DialogFooter
             className={
               inline
-                ? "sticky bottom-0 border-t border-border bg-card py-3"
+                ? `${editorFooterClassName} sticky bottom-0 bg-card pb-1`
                 : undefined
             }
           >
@@ -585,9 +586,7 @@ export function ServiceFormBody({
     </>
   );
   return inline ? (
-    <div className="min-w-0 rounded-lg border border-primary/25 bg-muted/10 p-4">
-      {content}
-    </div>
+    <div className="min-w-0">{content}</div>
   ) : (
     <DrawerContent>{content}</DrawerContent>
   );

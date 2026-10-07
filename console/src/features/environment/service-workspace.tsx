@@ -1,5 +1,5 @@
 import { ContextLink } from "@/components/common/context-link";
-import { CompactReference } from "@/components/common/compact-reference";
+import { ServiceMetadata } from "@/features/service/service-metadata";
 import { ServiceStorage } from "@/features/service/service-storage";
 import { ImageReference } from "@/components/common/image-reference";
 import { PageHeader } from "@/components/common/page-header";
@@ -153,7 +153,6 @@ export function ServiceWorkspace({
           meta={
             <>
               <ServiceStateBadges service={service} now={now} />
-              <CompactReference value={service.id} label="Service ID" />
             </>
           }
           actions={
@@ -202,6 +201,7 @@ export function ServiceWorkspace({
             </>
           }
         />
+        <ServiceMetadata service={service} now={now} />
         {detailError && (
           <p
             role="alert"

@@ -1,4 +1,4 @@
-import { CompactReference } from "@/components/common/compact-reference";
+import { ServiceMetadata } from "@/features/service/service-metadata";
 import { EmptyState } from "@/components/common/empty-state";
 import { DetailRow } from "@/components/common/detail-row";
 import { PageHeader } from "@/components/common/page-header";
@@ -116,7 +116,6 @@ export default function BackingServiceDetailPage() {
         meta={
           <>
             <ServiceStateBadges service={svc} now={observationRefresh.now} />
-            <CompactReference value={g.id} label="Backing Service ID" />
           </>
         }
         actions={
@@ -139,6 +138,12 @@ export default function BackingServiceDetailPage() {
             )}
           </>
         }
+      />
+      <ServiceMetadata
+        service={svc}
+        now={observationRefresh.now}
+        resourceId={g.id}
+        idLabel="Backing Service ID"
       />
       {actionError && (
         <p role="alert" className="text-sm text-destructive">
