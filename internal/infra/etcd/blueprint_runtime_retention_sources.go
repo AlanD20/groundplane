@@ -99,7 +99,6 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 		)
 		needsPrior := current.Record.Strategy == domain.StrategyBlueGreen &&
 			current.Record.PriorStrategy == domain.StrategyBlueGreen &&
-			current.Record.PriorArtifactID == "" &&
 			serving.Intent.PriorServingReleaseID != ""
 		if needsPrior != (authority.RetainedPrior != nil) {
 			return nil, errs.New(errs.KindStateConflict, "Blueprint retained inactive source is absent or unexpected")
