@@ -133,7 +133,9 @@ export function ServiceOperationDialog({
     ? "Remove the containers, then delete this Service from the Environment and Blueprint. Persistent Volumes and Release history are kept. Files stored only inside the containers are lost."
     : operation === "destroy"
       ? "Remove the containers but keep this Service, its configuration and persistent Volumes. You can recreate the containers later. Files stored only inside the containers are lost."
-      : `${operation === "start" ? "Run" : "Stop"} the service through durable Controller-owned runtime intent.`;
+      : operation === "stop"
+        ? "Stop this Service’s containers. Configuration, containers and persistent Volumes are kept. The Service stays stopped until you start it again."
+        : "Start this Service’s containers using its last acknowledged configuration. Use Deploy to apply configuration changes.";
   const steps = removing
     ? [
         {

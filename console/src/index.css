@@ -68,6 +68,8 @@
   --surface: #f0eaf7;
   --surface-foreground: #261c32;
   --card: #ffffff;
+  --log-row-alternate: #eee8f5;
+  --log-row-hover: #e3d9ef;
   --card-foreground: #261c32;
   --popover: #ffffff;
   --popover-foreground: #261c32;
@@ -115,6 +117,8 @@
   --surface: #1c1626;
   --surface-foreground: #f3effa;
   --card: #1d1827;
+  --log-row-alternate: #30273e;
+  --log-row-hover: #3c304e;
   --card-foreground: #f3effa;
   --popover: #19131f;
   --popover-foreground: #f3effa;

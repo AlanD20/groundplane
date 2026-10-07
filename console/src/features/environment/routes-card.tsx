@@ -7,7 +7,7 @@ import {
 } from "@/components/common/resource-form";
 ("use client");
 
-import { DetailRow } from "@/components/common/detail-row";
+import { CompactReference } from "@/components/common/compact-reference";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +57,151 @@ export function RoutesCard({ env }: { env: Environment }) {
       setEditSubmitting(false);
     }
   };
+  const details = (
+    <ResourceForm
+      editing={false}
+      open={detailTarget !== null}
+      onOpenChange={(next) => {
+        if (!next) {
+          detailRequest.current++;
+          setDetailTarget(null);
+        }
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle>
+          Route details ·{" "}
+          {detailTarget
+            ? `${detailTarget.host || "internal"}${detailTarget.path}`
+            : ""}
+        </DialogTitle>
+      </DialogHeader>
+      {!detailRoute && !detailError ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading Route details...
+        </p>
+      ) : null}
+      {detailError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {detailError}
+        </p>
+      ) : null}
+      {detailRoute ? (
+        <div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                Incoming request
+              </p>
+              <p className="break-all font-mono text-sm">
+                {detailRoute.host || "Any internal host"}
+                {detailRoute.path}
+              </p>
+              <ExposurePill exposure={detailRoute.exposure} />
+            </div>
+            <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                Destination Service
+              </p>
+              <p className="break-all font-mono text-sm">
+                {env.services.find(
+                  (service) => service.id === detailRoute.targetServiceId,
+                )?.name ?? detailRoute.targetServiceId}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Port{" "}
+                <span className="font-mono text-foreground">
+                  {detailRoute.targetPort}
+                </span>
+              </p>
+            </div>
+          </div>
+          <p className="mt-4 text-sm">
+            <span className="text-muted-foreground">Serving status: </span>
+            {detailRoute.status}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3 border-t border-border pt-3">
+            <CompactReference label="Route ID" value={detailRoute.id} />
+            <CompactReference
+              label="Service ID"
+              value={detailRoute.targetServiceId}
+            />
+            <CompactReference
+              label="Environment ID"
+              value={detailRoute.environmentId}
+            />
+          </div>
+        </div>
+      ) : null}
+      <DialogFooter>
+        <Button
+          variant="outline"
+          onClick={() => {
+            detailRequest.current++;
+            setDetailTarget(null);
+          }}
+        >
+          Close
+        </Button>
+      </DialogFooter>
+    </ResourceForm>
+  );
+  const editor = (
+    <ResourceForm
+      open={!!editing}
+      onOpenChange={(next) => {
+        if (!next) {
+          setEditing(null);
+          setEditError(undefined);
+        }
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle>
+          Edit route ·{" "}
+          {editing ? `${editing.host || "internal"}${editing.path}` : ""}
+        </DialogTitle>
+      </DialogHeader>
+      <div className="flex max-w-lg flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="route-edit-exposure">Exposure</Label>
+          <Select
+            id="route-edit-exposure"
+            value={exposure}
+            onValueChange={(value) => setExposure(value as Route["exposure"])}
+            options={[
+              {
+                value: "public",
+                label: "public — needs ingress component",
+              },
+              { value: "internal", label: "internal — no host port" },
+            ]}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          The route host, path, target service, and target port remain
+          unchanged.
+        </p>
+        {editError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {editError}
+          </p>
+        ) : null}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={() => setEditing(null)}>
+          Cancel
+        </Button>
+        <Button
+          data-action-id="route.edit"
+          disabled={editSubmitting}
+          onClick={() => void saveExposure()}
+        >
+          {editSubmitting ? "Saving..." : "Save exposure"}
+        </Button>
+      </DialogFooter>
+    </ResourceForm>
+  );
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
@@ -64,10 +209,11 @@ export function RoutesCard({ env }: { env: Environment }) {
           <RouterIcon className="size-4 text-muted-foreground" /> Routes
         </CardTitle>
         <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-          <Plus className="size-3.5" /> Route
+          <Plus className="size-3.5" /> Add Route
         </Button>
       </CardHeader>
-      <CardContent className="flex flex-col gap-1.5">
+      <CardContent className="flex flex-col gap-3">
+        <RouteFormDialog env={env} open={open} onOpenChange={setOpen} />
         {env.routes.map((r) => (
           <div
             key={r.id}
@@ -96,9 +242,14 @@ export function RoutesCard({ env }: { env: Environment }) {
                 size="icon-xs"
                 data-action-id="route.show"
                 aria-label={`Show Route ${r.host || "internal"}${r.path}`}
-                title="Show route details"
+                title="Toggle route details"
+                aria-expanded={detailTarget?.id === r.id}
                 onClick={() => {
                   const request = ++detailRequest.current;
+                  if (detailTarget?.id === r.id) {
+                    setDetailTarget(null);
+                    return;
+                  }
                   setDetailTarget(r);
                   setDetailRoute(undefined);
                   setDetailError(undefined);
@@ -118,13 +269,17 @@ export function RoutesCard({ env }: { env: Environment }) {
                     });
                 }}
               >
-                <ChevronRight className="size-3.5" />
+                <ChevronRight
+                  className={`size-3.5 transition-transform ${detailTarget?.id === r.id ? "rotate-90" : ""}`}
+                />
               </Button>
               <Button
                 variant="ghost"
                 size="icon-xs"
                 title="Edit route exposure"
                 onClick={() => {
+                  detailRequest.current++;
+                  setDetailTarget(null);
                   setExposure(r.exposure);
                   setEditError(undefined);
                   setEditing(r);
@@ -142,6 +297,8 @@ export function RoutesCard({ env }: { env: Environment }) {
                 <Trash2 className="size-3.5" />
               </Button>
             </div>
+            {detailTarget?.id === r.id && details}
+            {editing?.id === r.id && editor}
           </div>
         ))}
         {env.routes.length === 0 && (
@@ -151,122 +308,6 @@ export function RoutesCard({ env }: { env: Environment }) {
           </div>
         )}
       </CardContent>
-      <RouteFormDialog env={env} open={open} onOpenChange={setOpen} />
-      <ResourceForm
-        editing={false}
-        open={detailTarget !== null}
-        onOpenChange={(next) => {
-          if (!next) {
-            detailRequest.current++;
-            setDetailTarget(null);
-          }
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>
-            Route details ·{" "}
-            {detailTarget
-              ? `${detailTarget.host || "internal"}${detailTarget.path}`
-              : ""}
-          </DialogTitle>
-        </DialogHeader>
-        {!detailRoute && !detailError ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading Route details...
-          </p>
-        ) : null}
-        {detailError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {detailError}
-          </p>
-        ) : null}
-        {detailRoute ? (
-          <div className="flex flex-col">
-            <DetailRow label="ID" value={detailRoute.id} mono />
-            <DetailRow
-              label="Environment"
-              value={detailRoute.environmentId}
-              mono
-            />
-            <DetailRow
-              label="Host"
-              value={detailRoute.host || "hostless internal"}
-              mono
-            />
-            <DetailRow label="Path" value={detailRoute.path} mono />
-            <DetailRow label="Exposure" value={detailRoute.exposure} />
-            <DetailRow
-              label="Target Service"
-              value={detailRoute.targetServiceId}
-              mono
-            />
-            <DetailRow
-              label="Target port"
-              value={String(detailRoute.targetPort)}
-              mono
-            />
-          </div>
-        ) : null}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setDetailTarget(null)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </ResourceForm>
-      <ResourceForm
-        open={!!editing}
-        onOpenChange={(next) => {
-          if (!next) {
-            setEditing(null);
-            setEditError(undefined);
-          }
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>
-            Edit route ·{" "}
-            {editing ? `${editing.host || "internal"}${editing.path}` : ""}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="route-edit-exposure">Exposure</Label>
-            <Select
-              id="route-edit-exposure"
-              value={exposure}
-              onValueChange={(value) => setExposure(value as Route["exposure"])}
-              options={[
-                {
-                  value: "public",
-                  label: "public — needs ingress component",
-                },
-                { value: "internal", label: "internal — no host port" },
-              ]}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            The route host, path, target service, and target port remain
-            unchanged.
-          </p>
-          {editError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {editError}
-            </p>
-          ) : null}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setEditing(null)}>
-            Cancel
-          </Button>
-          <Button
-            data-action-id="route.edit"
-            disabled={editSubmitting}
-            onClick={() => void saveExposure()}
-          >
-            {editSubmitting ? "Saving..." : "Save exposure"}
-          </Button>
-        </DialogFooter>
-      </ResourceForm>
       <TaskRunnerDialog
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}
@@ -427,8 +468,8 @@ function RouteForm({
       <DialogHeader>
         <DialogTitle>Add route · {env.name}</DialogTitle>
       </DialogHeader>
-      <div className="flex flex-col gap-4">
-        <p className="text-xs text-muted-foreground">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <p className="text-xs text-muted-foreground sm:col-span-2">
           A Route sends traffic to a Service. Public Routes require separately
           managed ingress components to be served; creating a Route never
           enables them.

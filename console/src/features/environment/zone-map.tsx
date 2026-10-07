@@ -20,11 +20,13 @@ export type ZoneSelection = {
 export function ZoneMap({
   env,
   actions,
+  creation,
   renderZone,
   renderUnzoned,
 }: {
   env: Environment;
   actions: ReactNode;
+  creation?: ReactNode;
   renderZone: (zone: Zone, selection: ZoneSelection) => ReactNode;
   renderUnzoned: (selection: ZoneSelection) => ReactNode;
 }) {
@@ -92,6 +94,7 @@ export function ZoneMap({
         }
         actions={actions}
       >
+        {creation}
         <ListToolbar
           label="Zones"
           query={query}

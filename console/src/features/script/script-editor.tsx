@@ -94,31 +94,33 @@ export function ScriptEditor({
         </DialogTitle>
       </DialogHeader>
       <fieldset disabled={submitting} className="flex min-w-0 flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="script-name">Name</Label>
-          <Input
-            id="script-name"
-            value={slug}
-            onChange={(event) => setSlug(event.target.value)}
-            placeholder="prepare-tls"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="script-service">Service</Label>
-          {script ? (
-            <Input id="script-service" value={service} disabled />
-          ) : (
-            <Select
-              searchable
-              id="script-service"
-              value={service}
-              onValueChange={setService}
-              options={env.services.map((candidate) => ({
-                value: candidate.name,
-                label: candidate.name,
-              }))}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="script-name">Name</Label>
+            <Input
+              id="script-name"
+              value={slug}
+              onChange={(event) => setSlug(event.target.value)}
+              placeholder="prepare-tls"
             />
-          )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="script-service">Service</Label>
+            {script ? (
+              <Input id="script-service" value={service} disabled />
+            ) : (
+              <Select
+                searchable
+                id="script-service"
+                value={service}
+                onValueChange={setService}
+                options={env.services.map((candidate) => ({
+                  value: candidate.name,
+                  label: candidate.name,
+                }))}
+              />
+            )}
+          </div>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="script-body">Script (one line or many)</Label>

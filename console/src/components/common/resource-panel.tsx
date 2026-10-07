@@ -41,7 +41,11 @@ export function ResourcePanel({
         <CardTitle>
           <h2>{title}</h2>
         </CardTitle>
-        {actions}
+        {actions && (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {actions}
+          </div>
+        )}
       </CardHeader>
       {children && (
         <CardContent className="space-y-4 pt-4">{children}</CardContent>

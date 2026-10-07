@@ -170,7 +170,9 @@ export function ServiceWorkspace({
                 ) : (
                   <CirclePlay />
                 )}
-                {service.runtimeIntent === "running" ? "Stop" : "Start"}
+                {service.runtimeIntent === "running"
+                  ? "Stop Service"
+                  : "Start Service"}
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger

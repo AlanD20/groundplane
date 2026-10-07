@@ -28,36 +28,43 @@ export function ResourceForm({
   inline = true,
   editing = true,
   children,
+  className,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   inline?: boolean;
   editing?: boolean;
   children: ReactNode;
+  className?: string;
 }) {
   const region = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!open || !inline) return;
+    if (!open || !inline || !editing) return;
     const frame = requestAnimationFrame(() =>
       region.current?.scrollIntoView({ block: "start" }),
     );
     return () => cancelAnimationFrame(frame);
-  }, [open, inline]);
+  }, [open, inline, editing]);
   if (inline && !open) return null;
   return (
     <Inline.Provider value={inline}>
       {inline ? (
         <div
           ref={region}
-          className="order-last w-full min-w-0 basis-full scroll-mt-24 py-2"
+          className={cn(
+            "w-full min-w-0 basis-full scroll-mt-24 py-2",
+            className,
+          )}
         >
-          <InlineEditorRegion editing={editing}>
-            <section
-              className={workspaceSectionClassName(editing, "space-y-4")}
-            >
-              {children}
-            </section>
-          </InlineEditorRegion>
+          <div className="max-w-4xl">
+            <InlineEditorRegion editing={editing}>
+              <section
+                className={workspaceSectionClassName(editing, "space-y-4")}
+              >
+                {children}
+              </section>
+            </InlineEditorRegion>
+          </div>
         </div>
       ) : (
         <Drawer open={open} onOpenChange={onOpenChange}>

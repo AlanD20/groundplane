@@ -300,6 +300,18 @@ where applicable. Confirm focus and validation remain visible and that Save/Canc
 affect the section the operator expects. Reuse the shared primitives above;
 document a concrete workflow reason for any different treatment.
 
+List details and editors belong immediately beneath their owning row. The same
+disclosure button opens and closes details, exposes its expanded state, and
+keeps focus; inspection must not scroll to a detached panel after the list.
+New-resource forms appear beneath the section header, before existing rows.
+Bound form width and pair related short fields on wide screens; stack them on
+narrow screens. Group section actions together at the header's trailing edge.
+Long paths and identifiers must not push row actions outside the visible area.
+
+Alternating log backgrounds use explicit theme tokens with a visible difference
+from the log surface in both themes. Stripe the complete logical entry, including
+wrapped lines, and retain readable timestamps, source labels and output text.
+
 Observe wrong turns, unexplained labels and unnecessary context switches in
 representative operator walkthroughs. Fewer tabs or clicks alone do not establish
 success. Follow [delivery verification](delivery.md#verification-ladder); these

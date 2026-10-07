@@ -177,7 +177,12 @@ export function RenameAttach({
       >
         <Pencil className="size-3.5" />
       </Button>
-      <ResourceForm inline={inline} open={open} onOpenChange={setOpen}>
+      <ResourceForm
+        className="order-last"
+        inline={inline}
+        open={open}
+        onOpenChange={setOpen}
+      >
         <DialogHeader>
           <DialogTitle>Rename connection</DialogTitle>
           <DialogDescription>

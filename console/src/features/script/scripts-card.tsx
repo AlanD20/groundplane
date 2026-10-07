@@ -49,7 +49,36 @@ export function ScriptsCard({ env }: { env: Environment }) {
       .filter((release) => release.status === "active")
       .map((release) => release.service),
   );
+  // Keep the keyed editor mounted when a filter or page changes around a draft.
+  const pinnedEditor =
+    editing && !table.rows.some((row) => row.id === editing.id);
+  const visibleRows = pinnedEditor ? [editing, ...table.rows] : table.rows;
 
+  const editor = (
+    <ResourceForm
+      open={addOpen || !!editing}
+      onOpenChange={(next) => {
+        if (!next) closeEditor();
+      }}
+    >
+      {(addOpen || editing) && (
+        <ScriptEditor
+          key={editing?.id ?? "new"}
+          env={env}
+          script={editing}
+          onClose={closeEditor}
+          onSave={async (input) => {
+            if (editing) {
+              const { service: _service, ...patch } = input;
+              await store.updateScript(env.id, editing.id, patch);
+            } else {
+              await store.addScript(env.id, input);
+            }
+          }}
+        />
+      )}
+    </ResourceForm>
+  );
   return (
     <>
       <Card>
@@ -69,6 +98,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {addOpen && editor}
           <ListToolbar
             label="Scripts"
             query={query}
@@ -85,12 +115,17 @@ export function ScriptsCard({ env }: { env: Environment }) {
               {runError}
             </p>
           )}
-          {table.rows.map((script) => (
+          {pinnedEditor && (
+            <p className="text-xs text-muted-foreground">
+              The Script being edited stays visible until you save or cancel.
+            </p>
+          )}
+          {visibleRows.map((script) => (
             <div
               key={script.id}
               className={workspaceSectionClassName(
                 false,
-                "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+                "flex flex-wrap items-center justify-between gap-3",
               )}
             >
               <div className="flex min-w-0 flex-col">
@@ -173,6 +208,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
                   <Trash2 className="size-3.5" />
                 </Button>
               </div>
+              {editing?.id === script.id && editor}
             </div>
           ))}
           {env.scripts.length === 0 && (
@@ -188,29 +224,6 @@ export function ScriptsCard({ env }: { env: Environment }) {
           <TablePagination table={table} label="Scripts" />
         </CardContent>
       </Card>
-      <ResourceForm
-        open={addOpen || !!editing}
-        onOpenChange={(next) => {
-          if (!next) closeEditor();
-        }}
-      >
-        {(addOpen || editing) && (
-          <ScriptEditor
-            key={editing?.id ?? "new"}
-            env={env}
-            script={editing}
-            onClose={closeEditor}
-            onSave={async (input) => {
-              if (editing) {
-                const { service: _service, ...patch } = input;
-                await store.updateScript(env.id, editing.id, patch);
-              } else {
-                await store.addScript(env.id, input);
-              }
-            }}
-          />
-        )}
-      </ResourceForm>
       <TaskRunnerDialog
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}

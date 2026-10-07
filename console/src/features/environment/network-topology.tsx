@@ -33,6 +33,13 @@ export function Topology({ env }: { env: Environment }) {
     <>
       <ZoneMap
         env={env}
+        creation={
+          <ZoneFormDialog
+            env={env}
+            open={zoneOpen}
+            onOpenChange={setZoneOpen}
+          />
+        }
         actions={
           <>
             <Button
@@ -40,19 +47,23 @@ export function Topology({ env }: { env: Environment }) {
               size="sm"
               onClick={() => setZoneOpen(true)}
             >
-              <Plus className="size-3.5" /> Zone
+              <Plus className="size-3.5" /> Add Zone
             </Button>
             <ServiceFormDialog env={env} />
           </>
         }
         renderZone={(zone, selection) => (
-          <ZoneColumn zone={zone} env={env} selection={selection} />
+          <ZoneColumn
+            key={zone.id}
+            zone={zone}
+            env={env}
+            selection={selection}
+          />
         )}
         renderUnzoned={(selection) => (
           <UnzonedColumn env={env} selection={selection} />
         )}
       />
-      <ZoneFormDialog env={env} open={zoneOpen} onOpenChange={setZoneOpen} />
     </>
   );
 }
@@ -138,8 +149,13 @@ export function ZoneColumn({
             size="icon-xs"
             data-action-id="zone.show"
             aria-label={`Show Zone ${zone.name}`}
-            title="Show zone details"
+            title="Toggle zone details"
+            aria-expanded={detailOpen}
             onClick={() => {
+              if (detailOpen) {
+                setDetailOpen(false);
+                return;
+              }
               setDetailOpen(true);
               setDetailZone(undefined);
               setDetailError(undefined);
@@ -155,7 +171,9 @@ export function ZoneColumn({
                 });
             }}
           >
-            <ChevronRight className="size-3.5" />
+            <ChevronRight
+              className={`size-3.5 transition-transform ${detailOpen ? "rotate-90" : ""}`}
+            />
           </Button>
           <Button
             variant="ghost"
