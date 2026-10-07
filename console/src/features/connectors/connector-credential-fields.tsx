@@ -1,5 +1,6 @@
 "use client";
 
+import { SecretReferencePicker } from "@/components/common/secret-reference-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -29,7 +30,6 @@ export function ConnectorCredentialField({
   onChange: (draft: CredentialDraft) => void;
   secretOptions: ReusableSecret[];
 }) {
-  const listID = `${id}-secrets`;
   const keepLabel = existing
     ? existing.kind === "ref"
       ? `Keep existing secret ref : ${existing.name}`
@@ -47,8 +47,8 @@ export function ConnectorCredentialField({
         }
         options={[
           ...(existing ? [{ value: "keep", label: keepLabel }] : []),
-          { value: "ref", label: "Secret-store reference" },
-          { value: "value", label: "Direct encrypted value" },
+          { value: "ref", label: "Reusable Secret" },
+          { value: "value", label: "Enter encrypted value" },
         ]}
       />
       {draft.kind !== "keep" && (
@@ -56,27 +56,31 @@ export function ConnectorCredentialField({
           <Label htmlFor={id}>
             {draft.kind === "ref" ? "Secret key name" : "Credential value"}
           </Label>
-          <Input
-            id={id}
-            type={draft.kind === "value" ? "password" : "text"}
-            list={draft.kind === "ref" ? listID : undefined}
-            value={draft.value}
-            onChange={(event) =>
-              onChange({ ...draft, value: event.target.value })
-            }
-            placeholder={
-              draft.kind === "ref"
-                ? "R2_ACCESS_KEY_ID"
-                : "Stored encrypted at rest"
-            }
-            autoComplete="off"
-          />
-          {draft.kind === "ref" && (
-            <datalist id={listID}>
-              {secretOptions.map((secret) => (
-                <option key={secret.id} value={secret.key} />
-              ))}
-            </datalist>
+          {draft.kind === "ref" ? (
+            <SecretReferencePicker
+              id={id}
+              value={draft.value}
+              onChange={(value) => onChange({ ...draft, value })}
+              options={[
+                ...new Map(
+                  secretOptions.map((secret) => [
+                    secret.key,
+                    { value: secret.key, label: secret.key },
+                  ]),
+                ).values(),
+              ]}
+            />
+          ) : (
+            <Input
+              id={id}
+              type="password"
+              value={draft.value}
+              autoComplete="off"
+              onChange={(event) =>
+                onChange({ ...draft, value: event.target.value })
+              }
+              placeholder="Stored encrypted at rest"
+            />
           )}
         </>
       )}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Input } from "@/components/ui/input";
+import { SecretReferencePicker } from "@/components/common/secret-reference-picker";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
@@ -60,21 +60,15 @@ export function EntryReferenceFields({
       {sourceKind === "secret_ref" && (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="entry-secret-ref">Reusable Secret reference</Label>
-          <Input
+          <SecretReferencePicker
             id="entry-secret-ref"
-            list="entry-secret-options"
             value={secretRef}
-            onChange={(event) => onSecretChange(event.target.value)}
-            placeholder="DATABASE_PASSWORD"
+            onChange={onSecretChange}
+            options={secretOptions.map((secret) => ({
+              value: secret.ref,
+              label: `${secret.key} · ${secret.scope === "platform" ? "Platform" : "Project"}`,
+            }))}
           />
-          <datalist id="entry-secret-options">
-            {secretOptions.map((secret) => (
-              <option key={secret.id} value={secret.ref}>
-                {secret.key} ·{" "}
-                {secret.scope === "platform" ? "Platform" : "Project"}
-              </option>
-            ))}
-          </datalist>
           <p className="text-xs text-muted-foreground">
             Choose a reference or enter a key. Matching Project keys take
             precedence over Platform fallbacks. This references the Secret
@@ -87,6 +81,7 @@ export function EntryReferenceFields({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="entry-fact-attach">Backing connection</Label>
             <Select
+              searchable
               id="entry-fact-attach"
               value={factAttach}
               placeholder="Choose a connection"
@@ -122,6 +117,7 @@ export function EntryReferenceFields({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="entry-fact-grant">Credential scope</Label>
             <Select
+              searchable
               id="entry-fact-grant"
               value={factGrantAttach || "own"}
               disabled={!connection}
@@ -157,6 +153,7 @@ export function EntryReferenceFields({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="entry-fact-key">Connection value</Label>
             <Select
+              searchable
               id="entry-fact-key"
               value={factKey}
               disabled={!connection}
@@ -185,9 +182,8 @@ export function EntryReferenceFields({
               }
             />
             <p className="text-xs text-muted-foreground">
-              Select published Attach facts without revealing them. The variable
-              name or file path above controls how your Service receives the
-              value.
+              Choose a connection value without revealing it. The variable name
+              or file path above controls how your Service receives the value.
             </p>
           </div>
         </div>

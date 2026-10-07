@@ -13,6 +13,7 @@ export function SearchableSelect({
   emptyText = "No matches.",
   disabled,
   className,
+  id,
   "aria-label": ariaLabel,
 }: {
   value: string | null;
@@ -23,7 +24,8 @@ export function SearchableSelect({
   emptyText?: string;
   disabled?: boolean;
   className?: string;
-  "aria-label": string;
+  id?: string;
+  "aria-label"?: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
   return (
@@ -37,9 +39,10 @@ export function SearchableSelect({
       disabled={disabled}
     >
       <Combobox.Trigger
+        id={id}
         aria-label={ariaLabel}
         className={cn(
-          "flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-xs outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/70 disabled:opacity-50",
+          "flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/70 disabled:opacity-50",
           className,
         )}
       >

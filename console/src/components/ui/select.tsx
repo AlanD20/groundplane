@@ -3,6 +3,7 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SearchableSelect } from "./searchable-select";
 
 export type SelectOption = { value: string; label: string };
 
@@ -14,6 +15,7 @@ function Select({
   className,
   id,
   disabled,
+  searchable = false,
   "aria-label": ariaLabel,
 }: {
   value?: string | null;
@@ -23,8 +25,24 @@ function Select({
   className?: string;
   id?: string;
   disabled?: boolean;
+  searchable?: boolean;
   "aria-label"?: string;
 }) {
+  if (searchable || options.length > 7)
+    return (
+      <SearchableSelect
+        id={id}
+        value={value ?? null}
+        onValueChange={(next) => onValueChange?.(next)}
+        options={options}
+        placeholder={placeholder}
+        disabled={disabled}
+        className={className}
+        aria-label={
+          ariaLabel ?? (id ? undefined : (placeholder ?? "Choose an option"))
+        }
+      />
+    );
   return (
     <SelectPrimitive.Root
       value={value}

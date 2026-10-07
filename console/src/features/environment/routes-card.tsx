@@ -479,6 +479,7 @@ function RouteForm({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="r-target">Target service</Label>
             <Select
+              searchable
               id="r-target"
               value={target}
               onValueChange={setTarget}

@@ -109,6 +109,7 @@ export function ScriptEditor({
             <Input id="script-service" value={service} disabled />
           ) : (
             <Select
+              searchable
               id="script-service"
               value={service}
               onValueChange={setService}

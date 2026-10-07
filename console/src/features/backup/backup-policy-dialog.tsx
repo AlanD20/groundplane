@@ -502,6 +502,7 @@ export function BackupPolicyDialog({
                     )}
                   >
                     <Select
+                      searchable
                       id="bp-connector"
                       value={connector}
                       onValueChange={(value) =>

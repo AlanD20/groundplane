@@ -69,8 +69,20 @@ export function RevealValue({
 
   return (
     <div className={cn("flex min-w-0 max-w-full items-start gap-1", className)}>
-      <code className="min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted px-2 py-1 font-mono text-xs [overflow-wrap:anywhere]">
-        {revealed ? displayedValue : sensitive ? "•".repeat(12) : "not loaded"}
+      <code className="min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted px-3 py-2 font-mono text-sm [overflow-wrap:anywhere]">
+        {revealed ? (
+          displayedValue === "" ? (
+            <span className="font-sans italic text-muted-foreground">
+              Empty value
+            </span>
+          ) : (
+            displayedValue
+          )
+        ) : sensitive ? (
+          "•".repeat(12)
+        ) : (
+          "not loaded"
+        )}
       </code>
       {revealed && (
         <CopyButton className="shrink-0" value={displayedValue ?? ""} />

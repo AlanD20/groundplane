@@ -122,6 +122,7 @@ export function DeployDialog({
             <div className="flex flex-col gap-1">
               <Label htmlFor="dep-service">Service</Label>
               <Select
+                searchable
                 id="dep-service"
                 value={service}
                 onValueChange={setService}
@@ -173,7 +174,13 @@ export function DeployDialog({
       steps={steps}
       startDisabled={!image.trim()}
       onDispatch={() =>
-        store.commitDeploy(env.id, svc.name, image.trim(), strategy, "switch_back")
+        store.commitDeploy(
+          env.id,
+          svc.name,
+          image.trim(),
+          strategy,
+          "switch_back",
+        )
       }
       onSettled={async () => {
         await Promise.all([
@@ -238,6 +245,7 @@ export function RollbackDialog({
             <div className="flex flex-col gap-1">
               <Label>Service</Label>
               <Select
+                searchable
                 value={service}
                 onValueChange={setService}
                 options={env.services.map((s) => ({

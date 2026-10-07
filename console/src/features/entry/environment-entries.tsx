@@ -26,14 +26,16 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { EntryReferenceFields } from "./entry-reference-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+
 import { Textarea } from "@/components/ui/textarea";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, EnvironmentEntry, Service } from "@/lib/types";
 import { Plus, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { BulkEntryDrawer } from "./bulk-entry-drawer";
+import { EntryProtection } from "./entry-protection";
 import { EntryRow } from "./entry-row";
 // ---- Variables (env vars + env files) ----
 
@@ -76,6 +78,39 @@ export function EnvVarsCard({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [query, setQuery] = useState("");
   const project = store.getProject(params.tenant, params.project);
+  const [search, setSearch] = useSearchParams();
+  const fromConnection = search.get("fromConnection");
+  const fromValue = search.get("connectionValue");
+  const fromGrant = search.get("connectionGrant") ?? "";
+  useEffect(() => {
+    if (!fromConnection || !fromValue) return;
+    const attach = env.attaches.find((item) => item.id === fromConnection);
+    const fact = attach?.factSets
+      .find((set) => (set.grantAttachId ?? "") === fromGrant)
+      ?.facts.find((item) => item.key === fromValue);
+    if (!fact) return;
+    setSourceKind("fact");
+    setFactAttach(fromConnection);
+    setFactGrantAttach(fromGrant);
+    setFactKey(fromValue);
+    setSecret(fact.secret);
+    setKey(fromValue);
+    setOpen(true);
+    setSearch(
+      (current) => {
+        const next = new URLSearchParams(current);
+        [
+          "fromConnection",
+          "connectionValue",
+          "connectionGrant",
+          "connectionSecret",
+        ].forEach((key) => next.delete(key));
+        return next;
+      },
+      { replace: true },
+    );
+  }, [fromConnection, fromValue, fromGrant, env.attaches, setSearch]);
+
   const table = useTableView(
     entries.filter((entry) =>
       `${entry.key ?? entry.path ?? ""} ${entry.exposure.join(" ")} ${entry.source.kind}`
@@ -216,9 +251,9 @@ export function EnvVarsCard({
         file={entry.type === "file"}
         source={
           entry.source.kind === "literal"
-            ? "Literal"
+            ? "Entered value"
             : entry.source.kind === "fact"
-              ? "Attach fact"
+              ? "Connection value"
               : "Secret reference"
         }
         exposure={
@@ -229,6 +264,7 @@ export function EnvVarsCard({
         secret={entry.secret}
         emptySecretValue={entry.emptySecretValue}
         value={entry.secret ? undefined : (literal ?? "Resolved on apply")}
+        copyValue={!entry.secret ? literal : undefined}
         loadValue={entry.secret ? () => store.revealEntry(entry.id) : undefined}
         onEdit={() => startEdit(entry)}
         onRemove={() => setRemoving(entry)}
@@ -285,9 +321,9 @@ export function EnvVarsCard({
                 <TableSortHead sort={table} field="name">
                   Key / path
                 </TableSortHead>
-                <TableHead>Source</TableHead>
+                <TableHead>Value source</TableHead>
                 <TableHead>Value</TableHead>
-                <TableHead>Exposure</TableHead>
+                <TableHead>Available to</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -390,7 +426,7 @@ export function EnvVarsCard({
             )}
 
             <div className="flex flex-col gap-1.5">
-              <Label>Source</Label>
+              <Label>Value source</Label>
               <div className="flex flex-wrap gap-2">
                 {(["literal", "secret_ref", "fact"] as const).map(
                   (candidate) => (
@@ -403,7 +439,7 @@ export function EnvVarsCard({
                     >
                       {
                         {
-                          literal: "Direct value",
+                          literal: "Enter value",
                           secret_ref: "Reusable Secret",
                           fact: "Connection value",
                         }[candidate]
@@ -415,7 +451,7 @@ export function EnvVarsCard({
             </div>
             {sourceKind === "literal" && (
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="entry-value">Literal value</Label>
+                <Label htmlFor="entry-value">Value</Label>
                 {kind === "file" ? (
                   <Textarea
                     id="entry-value"
@@ -428,6 +464,7 @@ export function EnvVarsCard({
                 ) : (
                   <Input
                     id="entry-value"
+                    type={secret ? "password" : "text"}
                     value={value}
                     onChange={(event) => setValue(event.target.value)}
                   />
@@ -461,7 +498,7 @@ export function EnvVarsCard({
             )}
 
             <div className="flex flex-col gap-1.5">
-              <Label>Exposure</Label>
+              <Label>Available to</Label>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant={exposure.includes("all") ? "default" : "outline"}
@@ -485,19 +522,11 @@ export function EnvVarsCard({
               </div>
             </div>
 
-            <label className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5">
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">Store as secret</span>
-                <span className="text-xs text-muted-foreground">
-                  Secret Entries are encrypted and materialize at mode 0600.
-                </span>
-              </div>
-              <Switch
-                checked={secret}
-                disabled={!!editing}
-                onCheckedChange={setSecret}
-              />
-            </label>
+            <EntryProtection
+              secret={secret}
+              editing={!!editing}
+              onChange={setSecret}
+            />
             {saveError && (
               <p className="text-sm text-destructive">{saveError}</p>
             )}

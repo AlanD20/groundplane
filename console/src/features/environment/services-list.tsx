@@ -72,6 +72,7 @@ export function ServicesList({
         label="Services"
       >
         <Select
+          searchable
           aria-label="Runtime status"
           className="w-auto min-w-44"
           value={status}

@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Runner } from "@/lib/types";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { RunnerOwnerPicker } from "./runner-owner-picker";
 import { RunnerInventory } from "./runner-inventory";
 
 export default function RunnerManager({
@@ -297,39 +298,14 @@ export default function RunnerManager({
                   autoFocus
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="runner-create-owner">Owner</Label>
-                <Select
-                  id="runner-create-owner"
-                  value={createOwner}
-                  onValueChange={setCreateOwner}
-                  disabled={!!scope}
-                  options={
-                    scope
-                      ? [
-                          {
-                            value: scope.id,
-                            label: `${scope.kind} · ${scope.name}`,
-                          },
-                        ]
-                      : [
-                          { value: "tenant", label: `Tenant · ${tenant.slug}` },
-                          ...projects.map((project) => ({
-                            value: project.id,
-                            label: `Project · ${project.slug}`,
-                          })),
-                          ...environments.map((environment) => ({
-                            value: environment.id,
-                            label: `Environment · ${environment.label}`,
-                          })),
-                        ]
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  Owner is permanent. Trusted workflows use normal GP CLI/API
-                  access.
-                </p>
-              </div>
+              <RunnerOwnerPicker
+                scope={scope}
+                tenant={tenant.slug}
+                projects={projects}
+                environments={environments}
+                value={createOwner}
+                onChange={setCreateOwner}
+              />
               <div className="space-y-2">
                 <Label htmlFor="runner-create-github">GitHub URL</Label>
                 <Input

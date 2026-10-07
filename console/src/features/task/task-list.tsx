@@ -86,6 +86,7 @@ export function TaskList({
             onValueChange={setFilter}
           />
           <Select
+            searchable
             aria-label="Task resource"
             className="w-40"
             value={resource}
@@ -118,6 +119,7 @@ export function TaskList({
             ]}
           />
           <Select
+            searchable
             aria-label="Task operation"
             className="w-40"
             value={operation}

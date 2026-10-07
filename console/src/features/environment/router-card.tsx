@@ -274,6 +274,7 @@ export function RouterCard({ env }: { env: Environment }) {
                         Primary network
                       </Label>
                       <Select
+                        searchable
                         id="component-primary-zone"
                         value={selectedZoneIds[0] ?? ""}
                         onValueChange={(id) =>
@@ -373,6 +374,7 @@ export function RouterCard({ env }: { env: Environment }) {
                             Reusable Secret
                           </Label>
                           <Select
+                            searchable
                             id="component-reusable-secret"
                             value={tunnelSecret}
                             onValueChange={setTunnelSecret}

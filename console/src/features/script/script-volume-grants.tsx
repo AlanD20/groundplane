@@ -56,6 +56,7 @@ export function ScriptVolumeGrants({
                 Volume {index + 1}
               </Label>
               <Select
+                searchable
                 id={`script-volume-${index}`}
                 value={grant.volumeId}
                 options={options}

@@ -59,6 +59,7 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
             />
           </label>
           <Select
+            searchable
             aria-label="Filter Services by Zone"
             className="w-auto min-w-40"
             value={zone ?? "all"}

@@ -179,6 +179,7 @@ function AttachForm({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="attach-backing">Backing service</Label>
             <Select
+              searchable
               id="attach-backing"
               value={gid}
               onValueChange={(v) => {
@@ -220,6 +221,7 @@ function AttachForm({
               </p>
             )}
             <Select
+              searchable
               id="attach-service"
               value={service}
               onValueChange={setService}
@@ -264,6 +266,7 @@ function AttachForm({
               />
               {credentialMode === "existing" && (
                 <Select
+                  searchable
                   aria-label="Existing credential owner"
                   value={credentialAttachId}
                   onValueChange={setCredentialAttachId}
