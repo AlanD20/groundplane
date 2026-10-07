@@ -22,6 +22,7 @@ type ServiceMutationReferences struct {
 func ServiceMutationReferenceConditions(
 	record ServiceRecord,
 	references ServiceMutationReferences,
+	desiredHead etcdstore.Condition,
 ) ([]etcdstore.Condition, error) {
 	wantZones := make(map[string]struct{}, len(record.Desired.Zones))
 	for _, name := range record.Desired.Zones {
@@ -30,7 +31,7 @@ func ServiceMutationReferenceConditions(
 	if len(wantZones) != len(references.Zones) || len(record.Desired.DependsOn) != len(references.Dependencies) {
 		return nil, errs.New(errs.KindValidationFailed, "Service mutation references are incomplete")
 	}
-	conditions := make([]etcdstore.Condition, 0, len(references.Zones)+2*len(references.Dependencies))
+	conditions := make([]etcdstore.Condition, 0, len(references.Zones)+len(references.Dependencies))
 	for _, zone := range references.Zones {
 		if err := zonerecord.ValidateRecord(zone.Record); err != nil || zone.Revision <= 0 ||
 			zone.ReadRevision < zone.Revision || zone.Record.EnvironmentID != record.EnvironmentID {
@@ -60,9 +61,13 @@ func ServiceMutationReferenceConditions(
 		if _, ok := wantDependencies[dependency.Record.Desired.Name]; !ok {
 			return nil, errs.New(errs.KindValidationFailed, "Service dependency reference is not desired")
 		}
+		// Every Service in this Environment uses the same desired head. The
+		// publisher compares it once; each captured dependency must match it.
+		if ServiceDesiredCondition(dependency) != desiredHead {
+			return nil, errs.New(errs.KindStateConflict, "Service dependency desired head changed")
+		}
 		delete(wantDependencies, dependency.Record.Desired.Name)
 		conditions = append(conditions,
-			ServiceDesiredCondition(dependency),
 			etcdstore.Condition{Key: deletions.TombstoneKey("service", dependency.Record.Desired.ID)},
 		)
 	}
@@ -76,7 +81,7 @@ func ClassifyServiceMutationReferenceConflict(
 	values []*etcdstore.KeyValue,
 	references ServiceMutationReferences,
 ) error {
-	if len(values) != len(references.Zones)+2*len(references.Dependencies) {
+	if len(values) != len(references.Zones)+len(references.Dependencies) {
 		return errs.New(errs.KindInternal, "Service reference compare evidence is incomplete")
 	}
 	offset := 0
@@ -86,14 +91,11 @@ func ClassifyServiceMutationReferenceConflict(
 		}
 		offset++
 	}
-	for _, dependency := range references.Dependencies {
-		if values[offset] == nil || values[offset].ModRevision != dependency.Revision {
-			return errs.New(errs.KindStateConflict, "Service dependency changed")
-		}
-		if values[offset+1] != nil {
+	for range references.Dependencies {
+		if values[offset] != nil {
 			return errs.New(errs.KindResourceInUse, "Service dependency removal is in progress")
 		}
-		offset += 2
+		offset++
 	}
 	return nil
 }

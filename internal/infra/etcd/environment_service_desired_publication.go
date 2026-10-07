@@ -97,7 +97,12 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err := validateDirectEnvironmentServiceChange(input); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	referenceConditions, err := servicerecord.ServiceMutationReferenceConditions(input.Change.Record, input.References)
+	referenceConditions, err := servicerecord.ServiceMutationReferenceConditions(
+		input.Change.Record, input.References, etcdstore.Condition{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(input.Environment.Record.ID),
+			ModRevision: input.ExpectedHeadRevision,
+		},
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
