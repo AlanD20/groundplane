@@ -186,13 +186,6 @@ export function Sidebar({
           item("Overview", "/platform/host", Server),
           item("Controller", "/platform/host/controller", Cpu),
           item("etcd", "/platform/host/etcd", Database),
-          ...store.platform.agents.map((agent) =>
-            item(
-              `Agent · ${agent.host}`,
-              `/platform/host/agents/${agent.id}`,
-              Server,
-            ),
-          ),
           item("Images", "/platform/host/images", Package),
           item("Components", "/platform/components", Boxes),
         ],
