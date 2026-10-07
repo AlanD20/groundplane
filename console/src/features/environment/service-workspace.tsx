@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AttachesCard } from "@/features/attach/environment-attaches";
-import { FactsCard } from "@/features/attach/environment-facts";
 import {
   serviceDestination,
   type ServiceDestination,
@@ -211,6 +210,7 @@ export function ServiceWorkspace({
                 service={service}
                 env={env}
                 now={now}
+                onNavigate={selectTab}
                 onOpenLogs={() => selectTab("logs")}
                 onOpenDeployments={() => selectTab("releases")}
               />
@@ -320,6 +320,8 @@ export function ServiceWorkspace({
           {tab === "report" && (
             <div>
               <ServiceConfiguration
+                env={env}
+                onNavigate={selectTab}
                 service={service}
                 loading={loading}
                 error={detailError}
@@ -329,7 +331,6 @@ export function ServiceWorkspace({
           {tab === "connections" && (
             <div className="space-y-5">
               <AttachesCard env={env} service={service} />
-              <FactsCard env={env} service={service} />
             </div>
           )}
           {tab === "network" && (

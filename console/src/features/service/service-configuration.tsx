@@ -1,131 +1,202 @@
 import { DetailRow } from "@/components/common/detail-row";
 import { ImageReference } from "@/components/common/image-reference";
+import {
+  ResourcePanel,
+  AdvancedDetails,
+} from "@/components/common/resource-panel";
+import { CopyButton } from "@/components/common/copy-button";
 import { CodeEditor } from "@/components/ui/code-editor";
-import type { Service } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import type { Environment, Service } from "@/lib/types";
+import type { ServiceDestination } from "./workspace-navigation";
 
 export function ServiceConfiguration({
   service,
+  env,
   loading,
   error,
+  onNavigate,
 }: {
   service: Service;
+  env?: Environment;
   loading: boolean;
   error?: string;
+  onNavigate?: (destination: ServiceDestination) => void;
 }) {
+  const edit = (destination: ServiceDestination) =>
+    onNavigate && (
+      <Button size="sm" variant="link" onClick={() => onNavigate(destination)}>
+        Open editor
+      </Button>
+    );
+  const zones = service.zones.map(
+    (id) =>
+      env?.zones.find((zone) => zone.id === id || zone.name === id)?.name ?? id,
+  );
   return (
-    <div className="flex min-w-0 flex-col gap-5">
-      <p className="text-xs text-muted-foreground">
-        Desired configuration. Saving does not deploy it or change the serving
-        Release.
-      </p>
-      <div className="flex flex-col gap-1.5 text-sm">
-        <DetailRow
-          label="Image"
-          value={<ImageReference value={service.image} />}
-        />
-        <DetailRow label="Note" value={service.role} />
-        <DetailRow label="Zones" value={service.zones.join(", ") || "—"} mono />
-        <DetailRow
-          label="Strategy"
-          value={`${service.strategy}${service.strategy === "rolling" ? " (deferred)" : ""}`}
-        />
-        <DetailRow
-          label="Env files"
-          value={service.envFiles.join(", ") || "—"}
-          mono
-        />
-        <DetailRow
-          label="Healthcheck"
-          value={
-            service.healthcheck
-              ? service.healthcheck.kind === "http"
-                ? `GET ${service.healthcheck.target} · every ${service.healthcheck.interval} · timeout ${service.healthcheck.timeout} · start ${service.healthcheck.startPeriod} · retries ${service.healthcheck.retries}`
-                : service.healthcheck.kind === "tcp"
-                  ? `TCP ${service.healthcheck.target} · every ${service.healthcheck.interval} · timeout ${service.healthcheck.timeout} · start ${service.healthcheck.startPeriod} · retries ${service.healthcheck.retries}`
-                  : `pgrep '${service.healthcheck.target}' · every ${service.healthcheck.interval} · timeout ${service.healthcheck.timeout} · start ${service.healthcheck.startPeriod} · retries ${service.healthcheck.retries}`
-              : "none"
-          }
-          mono
-        />
-        <DetailRow
-          label="Resources"
-          value={`${service.resources.mem} · ${service.resources.cpus} cpu`}
-          mono
-        />
-        <DetailRow
-          label="Environment"
-          value={
-            service.environment.map((e) => `${e.key}=${e.value}`).join(", ") ||
-            "—"
-          }
-          mono
-        />
-        <DetailRow
-          label="Mounts"
-          value={
-            service.mounts
-              .map((m) =>
-                m.type === "volume"
-                  ? `${m.volume} → ${m.mount}`
-                  : `${m.file} → ${m.mount} :ro`,
-              )
-              .join(", ") || "—"
-          }
-          mono
-        />
-        {service.command && (
-          <DetailRow label="Command" value={service.command} mono />
-        )}
-        {service.aliases.length > 0 && (
-          <DetailRow label="Aliases" value={service.aliases.join(", ")} mono />
-        )}
-        {service.dependsOn.length > 0 && (
+    <div className="min-w-0 space-y-5">
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <h2 className="text-lg font-semibold">Desired configuration</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Saved settings for the next deployment. These may differ from the
+          currently running containers.
+        </p>
+      </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <ResourcePanel title="Image & runtime" actions={edit("configuration")}>
           <DetailRow
-            label="Depends on"
-            value={service.dependsOn
-              .map((d) => `${d} (service_healthy)`)
-              .join(", ")}
+            label="Image"
+            value={<ImageReference value={service.image} />}
+          />
+          <DetailRow
+            label="Command"
+            value={service.command || "Image default"}
             mono
           />
+          <DetailRow label="Replicas" value={String(service.replicas)} />
+          <DetailRow
+            label="Memory limit"
+            value={service.resources.mem || "Not set"}
+          />
+          <DetailRow
+            label="CPU limit"
+            value={service.resources.cpus || "Not set"}
+          />
+          <DetailRow label="Restart policy" value={service.restart} />
+          <DetailRow
+            label="Deployment strategy"
+            value={`${service.strategy}${service.strategy === "rolling" ? " (deferred)" : ""}`}
+          />
+          <DetailRow label="Runtime intent" value={service.runtimeIntent} />
+          {service.role && <DetailRow label="Note" value={service.role} />}
+        </ResourcePanel>
+        <ResourcePanel title="Networking" actions={edit("network")}>
+          <DetailRow label="Zones" value={zones.join(", ") || "None"} />
+          <DetailRow
+            label="Exposed ports"
+            value={service.expose.join(", ") || "None"}
+            mono
+          />
+          <DetailRow
+            label="Aliases"
+            value={service.aliases.join(", ") || "None"}
+          />
+          <DetailRow
+            label="Dependencies"
+            value={
+              service.dependsOn.map((name) => `${name} (healthy)`).join(", ") ||
+              "None"
+            }
+          />
+        </ResourcePanel>
+        <ResourcePanel title="Healthcheck" actions={edit("configuration")}>
+          {service.healthcheck ? (
+            <>
+              <DetailRow
+                label="Check"
+                value={`${service.healthcheck.kind.toUpperCase()} ${service.healthcheck.target}`}
+                mono
+              />
+              <DetailRow
+                label="Interval"
+                value={service.healthcheck.interval}
+              />
+              <DetailRow label="Timeout" value={service.healthcheck.timeout} />
+              <DetailRow
+                label="Start period"
+                value={service.healthcheck.startPeriod}
+              />
+              <DetailRow
+                label="Retries"
+                value={String(service.healthcheck.retries)}
+              />
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No healthcheck configured.
+            </p>
+          )}
+        </ResourcePanel>
+        <ResourcePanel title="Mounts" actions={edit("storage")}>
+          {service.mounts.length ? (
+            service.mounts.map((mount, index) => (
+              <div
+                key={index}
+                className="space-y-1 rounded-lg border border-border p-3"
+              >
+                <p className="break-all text-sm font-medium">
+                  {mount.type === "volume"
+                    ? (env?.volumes.find((volume) => volume.id === mount.volume)
+                        ?.slug ?? mount.volume)
+                    : mount.file}
+                </p>
+                <p className="break-all font-mono text-sm">→ {mount.mount}</p>
+                <p className="text-xs text-muted-foreground">
+                  {mount.type === "file" || mount.ro
+                    ? "Read only"
+                    : "Read & write"}
+                </p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No mounts configured.
+            </p>
+          )}
+        </ResourcePanel>
+      </div>
+      <ResourcePanel
+        title="Variables & environment files"
+        actions={edit("entries")}
+      >
+        {service.environment.map((entry) => (
+          <DetailRow
+            key={entry.key}
+            label={entry.key}
+            value={entry.value === "" ? "Empty value" : entry.value}
+            mono
+          />
+        ))}
+        {!service.environment.length && (
+          <p className="text-sm text-muted-foreground">
+            No inline environment values. Managed Entries are listed in
+            Variables & files.
+          </p>
         )}
         <DetailRow
-          label="Expose"
-          value={service.expose.join(", ") || "—"}
+          label="Environment files"
+          value={service.envFiles.join(", ") || "None"}
           mono
         />
-        <DetailRow label="Restart" value={service.restart} mono />
+      </ResourcePanel>
+      <AdvancedDetails title="Generated Compose & managed labels">
+        <DetailRow label="Managed" value="com.groundplane.managed=true" mono />
         <DetailRow
-          label="Desired replicas"
-          value={String(service.replicas)}
+          label="Service label"
+          value={`com.groundplane.service-id=${service.id}`}
           mono
         />
-        <DetailRow label="Runtime intent" value={service.runtimeIntent} mono />
-        <DetailRow
-          label="Labels"
-          value={`com.groundplane.managed=true · com.groundplane.service-id=${service.id}`}
-          mono
-        />
-      </div>
-
-      {service.nativeCompose ? (
-        <CodeEditor
-          id={`service-compose-${service.id}`}
-          label="Native Compose desired state"
-          value={service.nativeCompose}
-          language="yaml"
-          readOnly
-        />
-      ) : loading ? (
-        <p role="status" className="text-xs text-muted-foreground">
-          Loading native Compose…
-        </p>
-      ) : (
-        !error && (
-          <p className="text-xs text-muted-foreground">
-            No native Compose is available.
+        {service.nativeCompose ? (
+          <>
+            <div className="flex justify-end">
+              <CopyButton value={service.nativeCompose} label="Copy Compose" />
+            </div>
+            <CodeEditor
+              id={`service-compose-${service.id}`}
+              label="Generated desired Compose"
+              value={service.nativeCompose}
+              language="yaml"
+              readOnly
+            />
+          </>
+        ) : (
+          <p role="status" className="text-sm text-muted-foreground">
+            {loading
+              ? "Loading generated Compose…"
+              : (error ?? "No generated Compose available.")}
           </p>
-        )
-      )}
+        )}
+      </AdvancedDetails>
     </div>
   );
 }

@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ConnectionValues } from "./connection-values";
+import { StatusBadge } from "@/components/common/status-badge";
 import { AttachFormDialog } from "@/features/environment/attach-form-dialog";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
@@ -62,7 +64,7 @@ export function AttachesCard({
   );
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between">
+      <CardHeader className="flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="flex items-center gap-2">
           <Plug className="size-4 text-muted-foreground" /> Backing connections
         </CardTitle>
@@ -75,8 +77,7 @@ export function AttachesCard({
           {service
             ? `Connections used by ${service.name}.`
             : `Connections owned by Services in ${env.name}.`}{" "}
-          Each connection is an Attach; its generated values must be explicitly
-          mapped to variables or files.
+          Connection values must be explicitly mapped to variables or files.
         </p>
         <ListToolbar
           label="Connections"
@@ -92,31 +93,35 @@ export function AttachesCard({
         {table.rows.map((a) => (
           <div
             key={a.id}
-            className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2"
+            className="space-y-3 rounded-xl border border-border bg-card p-4"
           >
-            <Link
-              to={`/platform/backing-services/${a.projectId}`}
-              className="flex min-w-0 flex-1 flex-col items-start gap-1 transition-colors hover:border-ring/50"
-            >
-              <span className="text-sm font-medium [overflow-wrap:anywhere]">
-                {a.name} ·{" "}
-                {store.getBackingProject(a.projectId)?.name ?? a.projectId}
-              </span>
-              <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                {a.database !== "—"
-                  ? `database ${a.database} · role ${a.role}`
-                  : "attached"}
-                {a.service ? ` · for ${a.service}` : ""}
-              </span>
-            </Link>
-            <RenameAttach env={env} attach={a} />
-            <DetachAttach env={env} attach={a} />
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                to={`/platform/backing-services/${a.projectId}`}
+                className="flex min-w-0 basis-full flex-col items-start gap-1 transition-colors hover:border-ring/50 sm:flex-1"
+              >
+                <span className="text-sm font-medium [overflow-wrap:anywhere]">
+                  {a.name} ·{" "}
+                  {store.getBackingProject(a.projectId)?.name ?? a.projectId}
+                </span>
+                <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  {a.database !== "—"
+                    ? `database ${a.database} · role ${a.role}`
+                    : "attached"}
+                  {a.service ? ` · for ${a.service}` : ""}
+                </span>
+              </Link>
+              <RenameAttach env={env} attach={a} />
+              <StatusBadge status={a.status} />
+              <DetachAttach env={env} attach={a} />
+            </div>
+            <ConnectionValues attach={a} env={env} />
           </div>
         ))}
         {attaches.length === 0 && (
           <div className="text-xs text-muted-foreground">
-            no backing service attached — connect a Service to a shared backing
-            service; provisioning depends on its adapter
+            No connections yet. Connect a database or another backing service to
+            get started.
           </div>
         )}
         {attaches.length > 0 && !table.total && (
@@ -170,14 +175,16 @@ export function RenameAttach({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename Attach</DialogTitle>
+            <DialogTitle>Rename connection</DialogTitle>
             <DialogDescription>
               Changes the Environment-scoped spec key. Stable identity, facts,
               grants, and network membership do not change.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`attach-rename-${attach.id}`}>Attach name</Label>
+            <Label htmlFor={`attach-rename-${attach.id}`}>
+              Connection name
+            </Label>
             <Input
               id={`attach-rename-${attach.id}`}
               value={name}

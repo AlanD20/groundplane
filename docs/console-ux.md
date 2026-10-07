@@ -102,6 +102,17 @@ separate page or put an entire resource's configuration into one large modal.
 Avoid nested modal chains; dependent creation must retain or restore the original
 selection and unsaved input.
 
+In Service workspaces, edit mounts, runtime, image, healthchecks and networking
+in place. Keep the section summary and neighboring sections visible, with a
+local Save/Cancel boundary. Confirm destructive operations separately. Put
+connection values and their variable/file usage beside the owning connection.
+
+Use the shared searchable selector for resource references; use the regular
+custom selector for short fixed choices. Native browser autocomplete is not a
+resource picker. Secret reference pickers retain explicit manual reference entry.
+Value rows provide labeled copy actions and a stable empty-value placeholder;
+copying an empty value copies the empty string, never its placeholder.
+
 Display current values before asking operators to edit. Keep validation near the
 field and the primary action visible. Make Save/Cancel and unsaved changes
 explicit for staged forms. An immediately applied control must communicate that

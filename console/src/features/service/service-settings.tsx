@@ -1,10 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Drawer } from "@/components/ui/drawer";
-import {
-  ServiceFormBody,
-  type ServiceFormSection,
-} from "@/components/common/service-form-body";
+import { ServiceFormBody } from "@/components/common/service-form-body";
+import type { ServiceFormSection } from "@/components/common/service-form-types";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import { ImageReference } from "@/components/common/image-reference";
 import type { Environment, Service } from "@/lib/types";
@@ -24,6 +21,7 @@ export function ServiceSettings({
   onSaved?: () => void;
   sections?: ServiceFormSection[];
 }) {
+  const [saved, setSaved] = useState(false);
   const [editing, setEditing] = useState<ServiceFormSection | null>(null);
   const rows: {
     section: ServiceFormSection;
@@ -50,7 +48,7 @@ export function ServiceSettings({
     {
       section: "network",
       label: "Networking",
-      value: `${service.zones.join(", ") || "No Zones"} · ${service.expose.join(", ") || "No exposed ports"}`,
+      value: `${service.zones.map((id) => env.zones.find((zone) => zone.id === id)?.name ?? id).join(", ") || "No Zones"} · ${service.expose.join(", ") || "No exposed ports"}`,
     },
   ];
   return (
@@ -72,25 +70,66 @@ export function ServiceSettings({
             .map((row) => (
               <div
                 key={row.section}
-                className="flex items-center justify-between gap-4 py-5 first:pt-0 last:pb-0"
+                className="space-y-4 py-5 first:pt-0 last:pb-0"
               >
-                <div className="min-w-0 space-y-1">
-                  <h3 className="text-sm font-medium">{row.label}</h3>
-                  <div className="[overflow-wrap:anywhere] text-sm text-muted-foreground">
-                    {row.value}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 space-y-1">
+                    <h3 className="text-sm font-medium">{row.label}</h3>
+                    <div className="[overflow-wrap:anywhere] text-sm text-muted-foreground">
+                      {row.value}
+                    </div>
                   </div>
+                  {row.section === "workload" && imageAction ? (
+                    imageAction
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Edit ${row.label.toLowerCase()}`}
+                      disabled={editing !== null}
+                      onClick={() => {
+                        setSaved(false);
+                        setEditing(row.section);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  )}
                 </div>
-                {row.section === "workload" && imageAction ? (
-                  imageAction
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-label={`Edit ${row.label.toLowerCase()}`}
-                    onClick={() => setEditing(row.section)}
-                  >
-                    Edit
-                  </Button>
+                {row.section === "workload" && service.command && (
+                  <p className="break-all text-sm text-muted-foreground">
+                    <span className="font-medium">Command: </span>
+                    <code>{service.command}</code> · managed in Blueprint
+                  </p>
+                )}
+                {row.section === "network" &&
+                  (service.aliases.length > 0 ||
+                    service.dependsOn.length > 0) && (
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      <p>Aliases: {service.aliases.join(", ") || "None"}</p>
+                      <p>
+                        Dependencies: {service.dependsOn.join(", ") || "None"}
+                      </p>
+                      <p>
+                        Update aliases and dependencies in the Environment
+                        Blueprint.
+                      </p>
+                    </div>
+                  )}
+                {editing === row.section && (
+                  <ServiceFormBody
+                    inline
+                    key={`${service.id}/${editing}`}
+                    env={env}
+                    workspace={workspace}
+                    initial={service}
+                    section={editing}
+                    onSaved={() => {
+                      setSaved(true);
+                      onSaved?.();
+                    }}
+                    onClose={() => setEditing(null)}
+                  />
                 )}
               </div>
             ))}
@@ -106,7 +145,11 @@ export function ServiceSettings({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setEditing("hooks")}
+                  disabled={editing !== null}
+                  onClick={() => {
+                    setSaved(false);
+                    setEditing("hooks");
+                  }}
                 >
                   Edit hooks
                 </Button>
@@ -114,26 +157,21 @@ export function ServiceSettings({
             )}
         </div>
       </ResourcePanel>
-      <Drawer
-        open={editing !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditing(null);
-        }}
-      >
-        {editing && (
-          <ServiceFormBody
-            key={`${service.id}/${editing}`}
-            env={env}
-            workspace={workspace}
-            initial={service}
-            section={editing}
-            onClose={() => {
-              setEditing(null);
-              onSaved?.();
-            }}
-          />
-        )}
-      </Drawer>
+      {editing === "hooks" && (
+        <ServiceFormBody
+          inline
+          env={env}
+          workspace={workspace}
+          initial={service}
+          section="hooks"
+          onSaved={() => {
+            setSaved(true);
+            onSaved?.();
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+      {saved && <p role="status">Saved. Deploy to apply changes.</p>}
     </>
   );
 }

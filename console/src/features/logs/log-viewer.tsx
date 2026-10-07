@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/common/copy-button";
+import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -47,6 +49,11 @@ export function LogViewer({
 
 export function LogStream({ target }: { target: LogTarget }) {
   const store = useStore();
+  const [query, setQuery] = useState("");
+  const [container, setContainer] = useState("all");
+  const [stream, setStream] = useState("all");
+  const [wrap, setWrap] = useState(true);
+  const [atEnd, setAtEnd] = useState(true);
   const [tail, setTail] = useState(200);
   const [follow, setFollow] = useState(true);
   const [events, setEvents] = useState<TransientLogEvent[]>([]);
@@ -85,6 +92,7 @@ export function LogStream({ target }: { target: LogTarget }) {
     setEvents([]);
     setStarted(true);
     pinnedToEnd.current = true;
+    setAtEnd(true);
     setError(null);
     setStreaming(true);
     void store
@@ -115,22 +123,105 @@ export function LogStream({ target }: { target: LogTarget }) {
       });
   };
 
-  useEffect(() => stop, []);
+  useEffect(() => {
+    setContainer("all");
+    start();
+    return stop;
+    // A new target owns a new stream; filters never restart it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.kind, target.id]);
   useEffect(() => {
     if (follow && pinnedToEnd.current && outputRef.current)
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
   }, [events, follow]);
 
+  const visible = events.filter(
+    (event) =>
+      (container === "all" || event.container_id === container) &&
+      (stream === "all" || event.stream === stream) &&
+      event.line.toLowerCase().includes(query.toLowerCase()),
+  );
+  const containers = [
+    ...new Map(
+      events.map((event) => [event.container_id, event.container_name]),
+    ).entries(),
+  ];
   return (
     <section
       aria-label="Container logs"
       className="flex min-w-0 flex-col gap-4"
     >
-      <div className="flex flex-wrap items-end gap-3 border-y border-border py-3">
-        <label className="grid gap-1 text-xs font-medium">
-          Tail per container
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
+        <Input
+          aria-label="Search loaded log lines"
+          placeholder="Search loaded lines…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="min-w-40 flex-1"
+        />
+        <Select
+          searchable
+          aria-label="Container"
+          value={container}
+          onValueChange={setContainer}
+          className="w-full sm:w-48"
+          options={[
+            { value: "all", label: "All containers" },
+            ...containers.map(([value, label]) => ({ value, label })),
+          ]}
+        />
+        <Select
+          aria-label="Output stream"
+          value={stream}
+          onValueChange={setStream}
+          className="w-full sm:w-32"
+          options={[
+            { value: "all", label: "All output" },
+            { value: "stdout", label: "stdout" },
+            { value: "stderr", label: "stderr" },
+          ]}
+        />
+        <Button
+          variant={streaming ? "default" : "outline"}
+          disabled={
+            !streaming &&
+            (!Number.isSafeInteger(tail) || tail < 0 || tail > 1000)
+          }
+          onClick={streaming ? stop : start}
+        >
+          {streaming ? "Pause live" : "Resume / reload"}
+        </Button>
+        <CopyButton
+          label="Copy visible logs"
+          value={visible
+            .map(
+              (event) =>
+                `${event.timestamp} ${event.container_name} ${event.stream} ${event.line}${event.truncated ? " [truncated]" : ""}`,
+            )
+            .join("\n")}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+        <label className="flex items-center gap-2">
+          <Checkbox
+            checked={wrap}
+            onChange={(event) => setWrap(event.target.checked)}
+          />
+          Wrap lines
+        </label>
+        <label className="flex items-center gap-2">
+          <Checkbox
+            checked={follow}
+            disabled={streaming}
+            onChange={(event) => setFollow(event.target.checked)}
+          />
+          Live on reload
+        </label>
+        <label className="flex items-center gap-2">
+          Recent lines per container
           <Input
-            className="w-32"
+            aria-label="Recent lines per container"
+            className="w-24"
             type="number"
             min={0}
             max={1000}
@@ -139,31 +230,6 @@ export function LogStream({ target }: { target: LogTarget }) {
             onChange={(event) => setTail(Number(event.target.value))}
           />
         </label>
-        <label className="flex h-9 items-center gap-2 text-sm">
-          <Checkbox
-            checked={follow}
-            disabled={streaming}
-            onChange={(event) => setFollow(event.target.checked)}
-          />{" "}
-          Follow new output
-        </label>
-        <Button
-          onClick={start}
-          disabled={
-            streaming || !Number.isSafeInteger(tail) || tail < 0 || tail > 1000
-          }
-        >
-          {streaming
-            ? "Reading logs"
-            : follow
-              ? "Open stream"
-              : "Read recent logs"}
-        </Button>
-        {streaming ? (
-          <Button variant="outline" onClick={stop}>
-            Stop
-          </Button>
-        ) : null}
       </div>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
@@ -180,8 +246,25 @@ export function LogStream({ target }: { target: LogTarget }) {
                 ? "Stream closed"
                 : "Ready"}
         </span>
-        <span>{events.length} / 1,000 buffered lines</span>
+        <span>
+          {visible.length} shown · {events.length} / 1,000 loaded lines
+        </span>
       </div>
+      {!atEnd && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="self-end"
+          onClick={() => {
+            pinnedToEnd.current = true;
+            setAtEnd(true);
+            if (outputRef.current)
+              outputRef.current.scrollTop = outputRef.current.scrollHeight;
+          }}
+        >
+          Jump to latest
+        </Button>
+      )}
       <div
         ref={outputRef}
         tabIndex={0}
@@ -190,28 +273,31 @@ export function LogStream({ target }: { target: LogTarget }) {
           const el = event.currentTarget;
           pinnedToEnd.current =
             el.scrollHeight - el.clientHeight - el.scrollTop < 32;
+          setAtEnd(pinnedToEnd.current);
         }}
-        className="h-[48vh] min-h-60 overflow-auto rounded-lg border border-border bg-[#100d17] p-4 font-mono text-xs text-[#f3effa]"
+        className="h-[60vh] min-h-72 overflow-auto rounded-xl border border-border bg-card p-3 font-mono text-sm"
       >
-        {events.length === 0 ? (
+        {visible.length === 0 ? (
           <p className="text-muted-foreground">
-            {!started
-              ? "Open a stream to read container output."
-              : streaming
-                ? "Waiting for container output…"
-                : "No log lines returned. There may be no deployed workload, or its containers have not written output."}
+            {events.length > 0
+              ? "No loaded lines match these filters."
+              : !started
+                ? "Open a stream to read container output."
+                : streaming
+                  ? "Waiting for container output…"
+                  : "No log lines returned. There may be no deployed workload, or its containers have not written output."}
           </p>
         ) : (
-          events.map((event) => (
+          visible.map((event) => (
             <div
               key={event.sequence}
-              className="grid grid-cols-[5rem_minmax(0,1fr)_4rem] gap-x-3 gap-y-1 border-b border-border py-2 xl:grid-cols-[5rem_minmax(10rem,18rem)_4rem_minmax(0,1fr)]"
+              className="grid grid-cols-[5rem_minmax(0,1fr)_4rem] gap-x-3 gap-y-1 rounded px-2 py-1 hover:bg-muted/50 xl:grid-cols-[5rem_10rem_4rem_minmax(0,1fr)]"
             >
               <span className="text-muted-foreground">
                 {new Date(event.timestamp).toLocaleTimeString()}
               </span>
               <span className="min-w-0 whitespace-normal break-words text-primary">
-                {event.service_name}
+                {event.container_name}
               </span>
               <span
                 className={
@@ -222,7 +308,9 @@ export function LogStream({ target }: { target: LogTarget }) {
               >
                 {event.stream}
               </span>
-              <span className="col-span-3 min-w-0 whitespace-pre-wrap break-all xl:col-span-1">
+              <span
+                className={`col-span-3 min-w-0 xl:col-span-1 ${wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "whitespace-pre"}`}
+              >
                 {event.line}
                 {event.truncated ? " [truncated]" : ""}
               </span>

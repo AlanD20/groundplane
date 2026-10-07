@@ -31,17 +31,28 @@ screens, Navigate opens the same scrollable navigation.
 Opening a Service replaces Environment navigation with that Service’s destinations:
 Overview, Logs, Deployments, Variables & files, Storage, Backing connections,
 Runtime & image, Networking and Configuration report. Runtime, healthcheck,
-networking and custom lifecycle hooks use focused editors. Start/Stop and Deploy
+networking and custom lifecycle hooks use inline editors with Save/Cancel. Start/Stop and Deploy
 remain visible actions. Variables & files lists Entries exposed to the Service,
 including shared Entries; editing a shared Entry affects its full exposure.
-The source editor offers Direct value, Reusable Secret and Connection value.
-Connection selectors use published Attach metadata; Secret references offer
-suggestions without revealing plaintext.
-Storage selects Environment Volumes, container paths and read-only access. Removing
+The source editor offers Enter value, Reusable Secret and Connection value,
+separately from Plain/Encrypted protection. Existing Entries retain their storage
+class. Resource selectors are searchable; Secret references also allow manual
+entry without revealing plaintext. Keys and plain values have copy actions;
+revealed empty values keep their layout and copy as empty strings.
+Storage edits Environment Volumes, container paths and read-only access inline. Removing
 a mount retains the Volume and its data. File Entries remain in Variables & files.
 Backing connections lists this Service’s Attaches, opens the shared connect editor
-with the Service selected, and shows its connection values. Reveal, Hide and Copy
+with the Service selected, and expands each connection's values and Entry usage
+in place. Use in variable opens a prefilled reference without copying credentials.
+Reveal, Hide and Copy
 use the shared value control and configured reveal confirmation.
+
+Overview shows runtime state, containers, deployment, addresses, storage and
+connections. The configuration report groups desired settings and links to their
+editors; generated Compose remains available. Logs opens recent output and follows
+new lines, with container/output filters, search of loaded lines, wrapping, copy
+and Jump to latest. The viewer retains at most 1,000 lines; filtering does not
+search historical output outside this buffer.
 
 Project Secrets distinguish Project-owned inputs from matching-key Platform
 fallbacks. Runners appears in Tenant, Project and Environment navigation. Project
