@@ -58,7 +58,7 @@ export function LogLine({
 }) {
   return (
     <div
-      className={`grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)_3rem] items-start gap-x-2 xl:gap-x-3 gap-y-1 border-l-2 px-2 py-1 hover:bg-muted/50 ${event.stream === "stderr" ? "border-destructive/50" : "border-transparent"} ${showSource ? "xl:grid-cols-[6rem_12rem_3.5rem_minmax(0,1fr)]" : "xl:grid-cols-[6rem_3.5rem_minmax(0,1fr)]"}`}
+      className={`grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)_3rem] items-start gap-x-2 xl:gap-x-3 gap-y-1 border-l-2 px-2 py-1 even:bg-muted/30 hover:bg-muted/50 ${event.stream === "stderr" ? "border-destructive/50" : "border-transparent"} ${showSource ? "xl:grid-cols-[6rem_12rem_3.5rem_minmax(0,1fr)]" : "xl:grid-cols-[6rem_3.5rem_minmax(0,1fr)]"}`}
     >
       <time
         dateTime={event.timestamp}
