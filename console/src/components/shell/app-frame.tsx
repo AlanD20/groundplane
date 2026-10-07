@@ -1,4 +1,5 @@
-"use client";
+import { ContextReturnLink } from "@/components/common/context-link";
+("use client");
 
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { TaskNotifications } from "@/features/task/task-access";
@@ -209,6 +210,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             className="mx-auto w-full max-w-[1580px] flex-1 px-4 pb-12 pt-6 outline-none sm:px-6 lg:px-7 console-content"
           >
             <div className="console-page" key={pathname}>
+              <ContextReturnLink />
               {children}
             </div>
           </main>

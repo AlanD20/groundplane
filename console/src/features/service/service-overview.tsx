@@ -125,7 +125,53 @@ export function ServiceOverview({
           </div>
         </div>
       </ResourcePanel>
-      <ResourcePanel title="Addresses">
+      <ResourcePanel
+        title="Networking"
+        actions={
+          onNavigate && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onNavigate("network")}
+            >
+              Manage networking
+            </Button>
+          )
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Network Zones</h3>
+            <div className="flex flex-wrap gap-2">
+              {service.zones.length ? (
+                service.zones.map((id) => (
+                  <Badge
+                    key={id}
+                    variant="primary"
+                    className="max-w-full whitespace-normal break-all"
+                  >
+                    {env.zones.find(
+                      (zone) => zone.id === id || zone.name === id,
+                    )?.name ?? id}
+                  </Badge>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No Zones selected
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Exposed ports</h3>
+            <p className="font-mono text-sm [overflow-wrap:anywhere]">
+              {service.expose.join(", ") || "No exposed ports"}
+            </p>
+          </div>
+        </div>
+        <h3 className="border-t border-border pt-4 text-sm font-medium">
+          HTTP addresses
+        </h3>
         {routes.length ? (
           <div className="divide-y divide-border">
             {routes.map((route) => (
@@ -259,20 +305,7 @@ export function ServiceOverview({
           )}
         </ResourcePanel>
       </div>
-      <AdvancedDetails title="Service identity & observation">
-        <DetailRow label="Service ID" value={service.id} mono />
-        <DetailRow
-          label="Network Zones"
-          value={
-            service.zones
-              .map(
-                (id) =>
-                  env.zones.find((zone) => zone.id === id || zone.name === id)
-                    ?.name ?? id,
-              )
-              .join(", ") || "None"
-          }
-        />
+      <AdvancedDetails title="Observation timestamps">
         {observation.state !== "unavailable" && (
           <>
             <DetailRow

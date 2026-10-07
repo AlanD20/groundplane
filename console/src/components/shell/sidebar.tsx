@@ -173,7 +173,7 @@ export function Sidebar({
         items: backingDestinations.map((entry) => ({
           label: entry.label,
           icon: entry.icon,
-          href: `${pathname}?tab=${entry.key}`,
+          href: `${pathname}?${new URLSearchParams([...search].filter(([key]) => key !== "tab").concat([["tab", entry.key]]))}`,
           active: selected === entry.key,
         })),
       },

@@ -1,3 +1,4 @@
+import { CompactReference } from "@/components/common/compact-reference";
 import { EmptyState } from "@/components/common/empty-state";
 import { DetailRow } from "@/components/common/detail-row";
 import { PageHeader } from "@/components/common/page-header";
@@ -37,7 +38,12 @@ export default function BackingServiceDetailPage() {
   const tab =
     backingDestinations.find((item) => item.key === requested)?.key ??
     "overview";
-  const setTab = (value: PlatformTab) => setSearch({ tab: value });
+  const setTab = (value: PlatformTab) =>
+    setSearch((current) => {
+      const next = new URLSearchParams(current);
+      next.set("tab", value);
+      return next;
+    });
   const [pendingAction, setPendingAction] = useState<
     "start" | "stop" | "destroy" | null
   >(null);
@@ -96,12 +102,6 @@ export default function BackingServiceDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link
-        to="/platform/backing-services"
-        className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> Backing services
-      </Link>
       <PageHeader
         title={g.name}
         eyebrow="Backing Service"
@@ -113,7 +113,12 @@ export default function BackingServiceDetailPage() {
           </>
         }
         icon={<Database />}
-        meta={<ServiceStateBadges service={svc} now={observationRefresh.now} />}
+        meta={
+          <>
+            <ServiceStateBadges service={svc} now={observationRefresh.now} />
+            <CompactReference value={g.id} label="Backing Service ID" />
+          </>
+        }
         actions={
           <>
             {running ? (

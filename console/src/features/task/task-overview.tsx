@@ -13,7 +13,7 @@ import {
 } from "@/lib/task-navigation";
 import type { ActivityEntry } from "@/lib/types";
 import { ArrowUpRight, CircleAlert, CircleCheck, Clock3 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ContextLink } from "@/components/common/context-link";
 import { TaskExecutionTerminal } from "./task-execution-terminal";
 
 export function taskPresentation(
@@ -189,14 +189,14 @@ export function TaskOverview({
           </p>
         </div>
         {view.destination && (
-          <Link
+          <ContextLink
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             to={view.destination.href}
             onClick={onClose}
           >
             {view.destination.label}
             <ArrowUpRight className="size-3.5" aria-hidden />
-          </Link>
+          </ContextLink>
         )}
       </section>
       <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">

@@ -1,3 +1,5 @@
+import { ContextLink } from "@/components/common/context-link";
+import { CompactReference } from "@/components/common/compact-reference";
 import { ServiceStorage } from "@/features/service/service-storage";
 import { ImageReference } from "@/components/common/image-reference";
 import { PageHeader } from "@/components/common/page-header";
@@ -48,7 +50,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 export function ServiceWorkspace({
   env,
@@ -148,7 +150,12 @@ export function ServiceWorkspace({
           eyebrow={`${params.tenant} / ${params.project} / ${env.name} / Service`}
           icon={<Boxes />}
           description={service.role || `Service in ${env.name}`}
-          meta={<ServiceStateBadges service={service} now={now} />}
+          meta={
+            <>
+              <ServiceStateBadges service={service} now={now} />
+              <CompactReference value={service.id} label="Service ID" />
+            </>
+          }
           actions={
             <>
               <Button
@@ -240,7 +247,7 @@ export function ServiceWorkspace({
                 {service.releaseLedger?.length ? (
                   <div className="divide-y divide-border rounded-xl border border-border">
                     {service.releaseLedger.map((release) => (
-                      <Link
+                      <ContextLink
                         key={release.id}
                         to={`/t/${params.tenant}/${params.project}/${params.env}/releases/${release.id}?service=${service.id}`}
                         className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-4 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
@@ -275,7 +282,7 @@ export function ServiceWorkspace({
                           </Badge>
                           <ChevronRight className="size-4 text-muted-foreground" />
                         </span>
-                      </Link>
+                      </ContextLink>
                     ))}
                   </div>
                 ) : (

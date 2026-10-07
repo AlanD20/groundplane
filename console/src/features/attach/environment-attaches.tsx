@@ -26,7 +26,7 @@ import { useStore } from "@/lib/store";
 import type { Attach, Environment, Service } from "@/lib/types";
 import { Pencil, Plug, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { ContextLink } from "@/components/common/context-link";
 
 // ---- Attaches ----
 
@@ -96,7 +96,8 @@ export function AttachesCard({
             className="space-y-3 rounded-xl border border-border bg-card p-4"
           >
             <div className="flex flex-wrap items-center gap-3">
-              <Link
+              <ContextLink
+                returnLabel={`${service?.name ?? env.name} · Backing connections`}
                 to={`/platform/backing-services/${a.projectId}`}
                 className="flex min-w-0 basis-full flex-col items-start gap-1 transition-colors hover:border-ring/50 sm:flex-1"
               >
@@ -110,7 +111,7 @@ export function AttachesCard({
                     : "attached"}
                   {a.service ? ` · for ${a.service}` : ""}
                 </span>
-              </Link>
+              </ContextLink>
               <RenameAttach env={env} attach={a} />
               <StatusBadge status={a.status} />
               <DetachAttach env={env} attach={a} />
