@@ -1,4 +1,11 @@
-"use client";
+import {
+  ResourceForm,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceFormDescription as DialogDescription,
+  ResourceFormFooter as DialogFooter,
+} from "@/components/common/resource-form";
+("use client");
 
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 
@@ -10,14 +17,6 @@ import {
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConnectionValues } from "./connection-values";
@@ -114,7 +113,7 @@ export function AttachesCard({
                   {a.service ? ` · for ${a.service}` : ""}
                 </span>
               </ContextLink>
-              <RenameAttach env={env} attach={a} />
+              <RenameAttach env={env} attach={a} inline={!service} />
               <StatusBadge status={a.status} />
               <DetachAttach env={env} attach={a} />
             </div>
@@ -135,6 +134,7 @@ export function AttachesCard({
         <TablePagination table={table} label="Connections" />
       </CardContent>
       <AttachFormDialog
+        inline={!service}
         initialServiceId={service?.id}
         env={env}
         open={open}
@@ -152,9 +152,11 @@ export function AttachesCard({
 export function RenameAttach({
   env,
   attach,
+  inline = false,
 }: {
   env: Environment;
   attach: Attach;
+  inline?: boolean;
 }) {
   const store = useStore();
   const [open, setOpen] = useState(false);
@@ -175,55 +177,51 @@ export function RenameAttach({
       >
         <Pencil className="size-3.5" />
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename connection</DialogTitle>
-            <DialogDescription>
-              Changes the Environment-scoped spec key. Stable identity, facts,
-              grants, and network membership do not change.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`attach-rename-${attach.id}`}>
-              Connection name
-            </Label>
-            <Input
-              id={`attach-rename-${attach.id}`}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="font-mono"
-              autoFocus
-            />
-            {error ? <p className="text-xs text-destructive">{error}</p> : null}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={saving || !name.trim() || name.trim() === attach.name}
-              onClick={() => {
-                setSaving(true);
-                setError(undefined);
-                void store
-                  .renameAttach(env.id, attach.id, name.trim())
-                  .then(() => setOpen(false))
-                  .catch((cause: unknown) => {
-                    setError(
-                      cause instanceof Error
-                        ? cause.message
-                        : "Unable to rename Attach",
-                    );
-                  })
-                  .finally(() => setSaving(false));
-              }}
-            >
-              {saving ? "Saving…" : "Rename"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ResourceForm inline={inline} open={open} onOpenChange={setOpen}>
+        <DialogHeader>
+          <DialogTitle>Rename connection</DialogTitle>
+          <DialogDescription>
+            Choose the connection name used in your Blueprint. Existing
+            credentials and network access stay the same.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`attach-rename-${attach.id}`}>Connection name</Label>
+          <Input
+            id={`attach-rename-${attach.id}`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className="font-mono"
+            autoFocus
+          />
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={saving || !name.trim() || name.trim() === attach.name}
+            onClick={() => {
+              setSaving(true);
+              setError(undefined);
+              void store
+                .renameAttach(env.id, attach.id, name.trim())
+                .then(() => setOpen(false))
+                .catch((cause: unknown) => {
+                  setError(
+                    cause instanceof Error
+                      ? cause.message
+                      : "Unable to rename Attach",
+                  );
+                })
+                .finally(() => setSaving(false));
+            }}
+          >
+            {saving ? "Saving…" : "Rename"}
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
     </>
   );
 }

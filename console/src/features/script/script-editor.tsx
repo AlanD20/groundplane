@@ -13,10 +13,10 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { CodeEditor } from "@/components/ui/code-editor";
 import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResourceFormFooter as DialogFooter,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+} from "@/components/common/resource-form";
 import { ScriptExecutionFields } from "./script-execution-fields";
 import { parseScriptOrder } from "./script-order";
 

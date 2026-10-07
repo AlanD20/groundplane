@@ -145,6 +145,36 @@ resource, with a link to detailed work and a return path. Show unavailable or
 stale observations honestly. Destructive actions must identify the target and
 data consequences using the owning feature's actual contract.
 
+## Locked reference design
+
+The Service detail workspace is the accepted visual and interaction reference.
+Preserve its current layout, typography, resource metadata, section boundaries,
+inline editors, contrasting fields, highlighted action footers and log viewer.
+An Environment or Platform consistency pass must reuse these patterns, not
+redesign Service detail incidentally through shared CSS changes. Changing this
+reference requires an explicit design decision from the user.
+
+Use the existing workspace-section styles, InlineEditorRegion, SettingsDraft,
+CompactReference and Service entry/mount presentation as implementation examples.
+Match equivalent work while retaining each resource’s scope and capabilities.
+Creation should identify a new draft; a successful create returns to the saved
+summary with the new resource identifiable. Ordinary edits stay in context;
+destructive review and recovery confirmation retain focused dialogs.
+
+## Mutation freshness
+
+Successful synchronous writes update the authoritative local resource state.
+Asynchronous acceptance is not completion: observe the durable Task and refresh
+the affected resource graph when it settles, including failure or recovery that
+may have changed state. Refresh ownership must outlive the initiating dialog.
+Coalesce matching invalidations, reject superseded reads, preserve deletion
+fences and keep errors retryable without a browser reload. Do not wipe mounted
+editors, selections or unsaved drafts when replacing read models.
+
+Large structured documents use the shared code editor with fold gutters and
+explicit Fold all / Expand all controls. Folding must work in read-only views,
+must not change document content, and must remain independent of saving or Apply.
+
 ## Workspace presentation
 
 Use the same visual structure for equivalent work across Tenant, Project,

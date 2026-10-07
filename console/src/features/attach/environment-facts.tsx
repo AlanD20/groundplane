@@ -59,9 +59,9 @@ export function FactsCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-xs text-muted-foreground">
-          These values belong to each connection (Attach facts). Reveal a value
-          when needed, or reference it from Variables & files to expose it to a
-          Service. Granted databases have separate value sets.
+          Each connection provides values you can use in your Service. Reveal a
+          value when needed, or reference it from Variables & files to expose it
+          to a Service. Granted databases have separate value sets.
         </p>
         {factGroups.map((grp) => (
           <div key={grp.id} className="flex flex-col gap-2">
@@ -81,7 +81,7 @@ export function FactsCard({
                     {set.label}
                   </span>
                 </div>
-                <div className="flex flex-col gap-1 border-t border-border pt-1.5">
+                <div className="flex flex-col divide-y divide-border border-t border-border [&>div]:py-3">
                   {set.rows.map((r) => (
                     <FactRow key={r.k} {...r} />
                   ))}

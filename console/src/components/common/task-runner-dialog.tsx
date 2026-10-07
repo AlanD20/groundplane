@@ -1,17 +1,17 @@
 "use client";
 
 import { CopyButton } from "@/components/common/copy-button";
+import {
+  ResourceForm,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceFormDescription as DialogDescription,
+  ResourceFormFooter as DialogFooter,
+} from "@/components/common/resource-form";
 import { TaskLink } from "@/components/common/task-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,7 +65,7 @@ export function TaskRunnerDialog({
   onDispatch: () => Promise<string | null>;
   // "drawer" for anything that takes inputs (deploy, rollback), "dialog"
   // for plain confirmations (restore, run, start/stop/destroy).
-  variant?: "drawer" | "dialog";
+  variant?: "drawer" | "dialog" | "inline";
 }) {
   const { abortTask, getTask, watchTaskEvents } = useStore();
   const [phase, setPhase] = useState<Phase>("review");
@@ -489,6 +489,12 @@ export function TaskRunnerDialog({
     </>
   );
 
+  if (variant === "inline")
+    return (
+      <ResourceForm open={open} onOpenChange={onOpenChange}>
+        {Body}
+      </ResourceForm>
+    );
   if (variant === "drawer") {
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>

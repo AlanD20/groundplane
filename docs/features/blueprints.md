@@ -7,6 +7,11 @@ extensions. It is not a record of running containers.
 ## Read, edit, validate and apply
 
 Use the Environment Blueprint editor in the Console, or the CLI workflow below.
+Choose **Edit Blueprint**, adjust the YAML, select one Service or the entire
+Environment under **Apply scope**, then review changes before confirming Apply.
+The editor supports per-section folding, **Fold all** and **Expand all** in both
+the saved view and the draft. Folding changes presentation only. A selected
+Service Apply keeps the draft so unapplied edits remain available.
 The Tenant, Project and Environment must already exist. For a first Blueprint,
 start with the [complete example](../blueprint.md#start-with-one-service).
 

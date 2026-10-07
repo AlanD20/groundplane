@@ -1,4 +1,6 @@
-"use client";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+import { CompactReference } from "@/components/common/compact-reference";
+("use client");
 
 import { EmptyState } from "@/components/common/empty-state";
 import { MetaPill } from "@/components/common/meta-pill";
@@ -81,10 +83,11 @@ export default function ReleaseGroupDetailPage() {
           </Link>
         }
         title={group.name}
-        description={group.id}
+        description="Deploy related Services in a defined order."
         icon={<Workflow />}
         meta={
           <>
+            <CompactReference value={group.id} label="Group ID" />
             <MetaPill icon={<GitCompareArrows />}>
               {group.order.length} ordered services
             </MetaPill>
@@ -119,7 +122,10 @@ export default function ReleaseGroupDetailPage() {
             {group.order.map((service, index) => (
               <div
                 key={service}
-                className="flex items-center gap-3 rounded-xl border border-border bg-surface/50 p-3"
+                className={workspaceSectionClassName(
+                  false,
+                  "flex flex-wrap items-center gap-3",
+                )}
               >
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 font-mono text-xs text-primary">
                   {index + 1}

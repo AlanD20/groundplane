@@ -1,4 +1,5 @@
-"use client";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+("use client");
 
 import { useState } from "react";
 import { RefreshCw, Terminal } from "lucide-react";
@@ -130,10 +131,13 @@ export function BackupsCard({ env }: { env: Environment }) {
         </CardHeader>
         {policyState.loadError && (
           <p className="mx-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {policyState.loadError}. The last loaded policy remains visible.
+            {policyState.loadError}.{" "}
+            {policyState.loaded
+              ? "The last loaded policy remains visible."
+              : "Backup policy is unavailable. Retry with Refresh."}
           </p>
         )}
-        {!backup.enabled && (
+        {policyState.loaded && !backup.enabled && (
           <p className="mx-4 my-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
             Backups are <span className="font-medium">off</span> for this
             environment — nothing is scheduled or backed up.
@@ -145,36 +149,48 @@ export function BackupsCard({ env }: { env: Environment }) {
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <PolicyCell
             label="Status"
-            value={backup.enabled ? "enabled" : "off"}
+            value={
+              !policyState.loaded
+                ? "Unavailable"
+                : backup.enabled
+                  ? "enabled"
+                  : "off"
+            }
           />
           <PolicyCell
             label="Frequency · UTC"
             value={
-              backup.frequency
-                ? backupScheduleDescription(backup.frequency)
-                : "not configured"
+              !policyState.loaded
+                ? "Unavailable"
+                : backup.frequency
+                  ? backupScheduleDescription(backup.frequency)
+                  : "not configured"
             }
           />
           <PolicyCell
             label="Retention"
             value={
-              backup.keep !== undefined
-                ? `keep ${backup.keep} points per source`
-                : "not configured"
+              !policyState.loaded
+                ? "Unavailable"
+                : backup.keep !== undefined
+                  ? `keep ${backup.keep} points per source`
+                  : "not configured"
             }
           />
           <PolicyCell
             label="Destination"
             value={
-              activeConnector
-                ? activeConnector.name
-                : backup.connectorId
-                  ? `missing : ${backup.connectorId}`
-                  : "not selected"
+              !policyState.loaded
+                ? "Unavailable"
+                : activeConnector
+                  ? activeConnector.name
+                  : backup.connectorId
+                    ? `missing : ${backup.connectorId}`
+                    : "not selected"
             }
           />
         </CardContent>
-        <CardContent className="flex flex-col gap-1.5 border-t border-border pt-3">
+        <CardContent className="flex flex-col gap-3 border-t border-border pt-4">
           <span className="text-xs font-medium text-muted-foreground">
             Sources · one run backs up every selected source
           </span>
@@ -190,7 +206,9 @@ export function BackupsCard({ env }: { env: Environment }) {
             ))}
             {backup.sources.length === 0 && (
               <span className="text-xs text-muted-foreground">
-                no sources selected
+                {policyState.loaded
+                  ? "No sources selected"
+                  : "Sources unavailable"}
               </span>
             )}
           </div>
@@ -375,7 +393,7 @@ export function BackupsCard({ env }: { env: Environment }) {
 
 export function PolicyCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-3">
+    <div className={workspaceSectionClassName(false, "flex flex-col gap-2")}>
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="break-all font-mono text-sm">{value}</span>
     </div>

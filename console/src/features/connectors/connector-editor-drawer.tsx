@@ -1,13 +1,13 @@
-"use client";
+import {
+  ResourceForm,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceFormFooter as DialogFooter,
+  ResourceFormDescription as DialogDescription,
+} from "@/components/common/resource-form";
+("use client");
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -237,232 +237,224 @@ export function ConnectorEditorDrawer(props: ConnectorEditorProps) {
   };
 
   return (
-    <Drawer
+    <ResourceForm
       open={open}
       onOpenChange={(next) => {
         if (!next) close();
       }}
     >
-      <DrawerContent>
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? "Add destination" : "Edit destination"} ·{" "}
-            {env.name}
-          </DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Choose where this Environment stores its backups."
-              : "Update the destination or replace either credential. Existing credential values are never read."}
-          </DialogDescription>
-        </DialogHeader>
-        {mode === "edit" && !snapshot ? (
-          <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-surface p-4">
-            <p
-              className={
-                props.loadError
-                  ? "text-sm text-destructive"
-                  : "text-sm text-muted-foreground"
-              }
-              role={props.loadError ? "alert" : "status"}
-            >
-              {props.loadError ?? "Loading current Connector metadata..."}
-            </p>
-            {props.loadError && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={props.onReload}
-                disabled={props.loading}
-              >
-                {props.loading ? "Retrying..." : "Retry"}
-              </Button>
-            )}
-          </div>
-        ) : (
-          <fieldset
-            disabled={submitting}
-            aria-label="Connector settings"
-            className="grid gap-4 sm:grid-cols-2"
+      <DialogHeader>
+        <DialogTitle>
+          {mode === "create" ? "Add destination" : "Edit destination"} ·{" "}
+          {env.name}
+        </DialogTitle>
+        <DialogDescription>
+          {mode === "create"
+            ? "Choose where this Environment stores its backups."
+            : "Update the destination or replace either credential. Existing credential values are never read."}
+        </DialogDescription>
+      </DialogHeader>
+      {mode === "edit" && !snapshot ? (
+        <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-surface p-4">
+          <p
+            className={
+              props.loadError
+                ? "text-sm text-destructive"
+                : "text-sm text-muted-foreground"
+            }
+            role={props.loadError ? "alert" : "status"}
           >
-            <Field
+            {props.loadError ?? "Loading current Connector metadata..."}
+          </p>
+          {props.loadError && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={props.onReload}
+              disabled={props.loading}
+            >
+              {props.loading ? "Retrying..." : "Retry"}
+            </Button>
+          )}
+        </div>
+      ) : (
+        <fieldset
+          disabled={submitting}
+          aria-label="Connector settings"
+          className="grid gap-4 sm:grid-cols-2"
+        >
+          <Field
+            id="connector-provider"
+            label="Provider"
+            className="sm:col-span-2"
+          >
+            <Select
               id="connector-provider"
-              label="Provider"
+              value={provider}
+              onValueChange={(value) => {
+                invalidateIntent();
+                setProvider(value);
+                setAccountId("");
+                setEndpoint("");
+                setRegion("");
+                setAddressing("");
+              }}
+              options={[
+                { value: "", label: "Select a backup provider" },
+                { value: "r2", label: "Cloudflare R2" },
+                { value: "s3", label: "Other S3-compatible storage" },
+              ]}
+            />
+          </Field>
+          <Field id="connector-name" label="Name" className="sm:col-span-2">
+            <Input
+              id="connector-name"
+              value={name}
+              onChange={(event) => change(setName, event.target.value)}
+              placeholder="r2-backups"
+              autoFocus
+            />
+            {duplicate && (
+              <p className="text-xs text-destructive">
+                This environment already has a destination with that name.
+              </p>
+            )}
+          </Field>
+          {isR2 ? (
+            <Field
+              id="connector-account-id"
+              label="Cloudflare account ID"
+              className="sm:col-span-2"
+            >
+              <Input
+                id="connector-account-id"
+                value={accountId}
+                onChange={(event) => change(setAccountId, event.target.value)}
+                placeholder="32-character account ID"
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                Find it on your R2 Overview page. Region and addressing are
+                configured automatically.
+              </p>
+            </Field>
+          ) : provider === "s3" ? (
+            <Field
+              id="connector-endpoint"
+              label="Endpoint"
+              className="sm:col-span-2"
+            >
+              <Input
+                id="connector-endpoint"
+                value={endpoint}
+                onChange={(event) => change(setEndpoint, event.target.value)}
+                placeholder="https://s3.example.com"
+              />
+            </Field>
+          ) : null}
+          <Field id="connector-bucket" label="Bucket">
+            <Input
+              id="connector-bucket"
+              value={bucket}
+              onChange={(event) => change(setBucket, event.target.value)}
+              placeholder="groundplane-backups"
+            />
+          </Field>
+          {provider === "s3" && (
+            <Field id="connector-region" label="Region">
+              <Input
+                id="connector-region"
+                value={region}
+                onChange={(event) => change(setRegion, event.target.value)}
+                placeholder="auto"
+              />
+            </Field>
+          )}
+          <Field id="connector-prefix" label="Prefix" className="sm:col-span-2">
+            <Input
+              id="connector-prefix"
+              value={prefix}
+              onChange={(event) => change(setPrefix, event.target.value)}
+              placeholder="backups/"
+            />
+          </Field>
+          {provider === "s3" && (
+            <Field
+              id="connector-addressing"
+              label="Addressing"
               className="sm:col-span-2"
             >
               <Select
-                id="connector-provider"
-                value={provider}
-                onValueChange={(value) => {
-                  invalidateIntent();
-                  setProvider(value);
-                  setAccountId("");
-                  setEndpoint("");
-                  setRegion("");
-                  setAddressing("");
-                }}
+                id="connector-addressing"
+                value={addressing}
+                onValueChange={(value) =>
+                  change(setAddressing, value as "path" | "virtual" | "")
+                }
                 options={[
-                  { value: "", label: "Select a backup provider" },
-                  { value: "r2", label: "Cloudflare R2" },
-                  { value: "s3", label: "Other S3-compatible storage" },
+                  { value: "", label: "Select addressing behavior" },
+                  {
+                    value: "path",
+                    label: "Path style : endpoint/bucket/key",
+                  },
+                  {
+                    value: "virtual",
+                    label: "Virtual hosted : bucket.endpoint/key",
+                  },
                 ]}
               />
             </Field>
-            <Field id="connector-name" label="Name" className="sm:col-span-2">
-              <Input
-                id="connector-name"
-                value={name}
-                onChange={(event) => change(setName, event.target.value)}
-                placeholder="r2-backups"
-                autoFocus
-              />
-              {duplicate && (
-                <p className="text-xs text-destructive">
-                  This environment already has a destination with that name.
-                </p>
-              )}
-            </Field>
-            {isR2 ? (
-              <Field
-                id="connector-account-id"
-                label="Cloudflare account ID"
-                className="sm:col-span-2"
-              >
-                <Input
-                  id="connector-account-id"
-                  value={accountId}
-                  onChange={(event) => change(setAccountId, event.target.value)}
-                  placeholder="32-character account ID"
-                  spellCheck={false}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Find it on your R2 Overview page. Region and addressing are
-                  configured automatically.
-                </p>
-              </Field>
-            ) : provider === "s3" ? (
-              <Field
-                id="connector-endpoint"
-                label="Endpoint"
-                className="sm:col-span-2"
-              >
-                <Input
-                  id="connector-endpoint"
-                  value={endpoint}
-                  onChange={(event) => change(setEndpoint, event.target.value)}
-                  placeholder="https://s3.example.com"
-                />
-              </Field>
-            ) : null}
-            <Field id="connector-bucket" label="Bucket">
-              <Input
-                id="connector-bucket"
-                value={bucket}
-                onChange={(event) => change(setBucket, event.target.value)}
-                placeholder="groundplane-backups"
-              />
-            </Field>
-            {provider === "s3" && (
-              <Field id="connector-region" label="Region">
-                <Input
-                  id="connector-region"
-                  value={region}
-                  onChange={(event) => change(setRegion, event.target.value)}
-                  placeholder="auto"
-                />
-              </Field>
-            )}
-            <Field
-              id="connector-prefix"
-              label="Prefix"
-              className="sm:col-span-2"
+          )}
+          <ConnectorCredentialField
+            id="connector-access-key"
+            label="Access key"
+            draft={accessKey}
+            existing={snapshot?.connector.credentials.accessKey}
+            onChange={(draft) => change(setAccessKey, draft)}
+            secretOptions={secretOptions}
+          />
+          <ConnectorCredentialField
+            id="connector-secret-key"
+            label="Secret key"
+            draft={secretKey}
+            existing={snapshot?.connector.credentials.secretKey}
+            onChange={(draft) => change(setSecretKey, draft)}
+            secretOptions={secretOptions}
+          />
+        </fieldset>
+      )}
+      {submitError && (
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-sm text-destructive" role="alert">
+            {submitError}
+          </p>
+          {mode === "edit" && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={submitting}
+              onClick={props.onReload}
             >
-              <Input
-                id="connector-prefix"
-                value={prefix}
-                onChange={(event) => change(setPrefix, event.target.value)}
-                placeholder="backups/"
-              />
-            </Field>
-            {provider === "s3" && (
-              <Field
-                id="connector-addressing"
-                label="Addressing"
-                className="sm:col-span-2"
-              >
-                <Select
-                  id="connector-addressing"
-                  value={addressing}
-                  onValueChange={(value) =>
-                    change(setAddressing, value as "path" | "virtual" | "")
-                  }
-                  options={[
-                    { value: "", label: "Select addressing behavior" },
-                    {
-                      value: "path",
-                      label: "Path style : endpoint/bucket/key",
-                    },
-                    {
-                      value: "virtual",
-                      label: "Virtual hosted : bucket.endpoint/key",
-                    },
-                  ]}
-                />
-              </Field>
-            )}
-            <ConnectorCredentialField
-              id="connector-access-key"
-              label="Access key"
-              draft={accessKey}
-              existing={snapshot?.connector.credentials.accessKey}
-              onChange={(draft) => change(setAccessKey, draft)}
-              secretOptions={secretOptions}
-            />
-            <ConnectorCredentialField
-              id="connector-secret-key"
-              label="Secret key"
-              draft={secretKey}
-              existing={snapshot?.connector.credentials.secretKey}
-              onChange={(draft) => change(setSecretKey, draft)}
-              secretOptions={secretOptions}
-            />
-          </fieldset>
-        )}
-        {submitError && (
-          <div className="flex flex-col items-start gap-2">
-            <p className="text-sm text-destructive" role="alert">
-              {submitError}
-            </p>
-            {mode === "edit" && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={submitting}
-                onClick={props.onReload}
-              >
-                Reload current settings
-              </Button>
-            )}
-          </div>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={close}>
-            Cancel
-          </Button>
-          <Button
-            disabled={
-              !valid || submitting || (mode === "edit" && props.loading)
-            }
-            onClick={submit}
-          >
-            {submitting
-              ? "Saving..."
-              : mode === "create"
-                ? "Create destination"
-                : "Save changes"}
-          </Button>
-        </DialogFooter>
-      </DrawerContent>
-    </Drawer>
+              Reload current settings
+            </Button>
+          )}
+        </div>
+      )}
+      <DialogFooter>
+        <Button variant="outline" onClick={close}>
+          Cancel
+        </Button>
+        <Button
+          disabled={!valid || submitting || (mode === "edit" && props.loading)}
+          onClick={submit}
+        >
+          {submitting
+            ? "Saving..."
+            : mode === "create"
+              ? "Create destination"
+              : "Save changes"}
+        </Button>
+      </DialogFooter>
+    </ResourceForm>
   );
 }
 

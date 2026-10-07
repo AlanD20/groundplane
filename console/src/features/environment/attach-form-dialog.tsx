@@ -1,15 +1,15 @@
+import {
+  ResourceForm,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceFormFooter as DialogFooter,
+} from "@/components/common/resource-form";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import type { Environment } from "@/lib/types";
 import { valkeyAuthenticationDetails } from "@/lib/valkey-authentication";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -19,9 +19,11 @@ export function AttachFormDialog({
   open,
   onOpenChange,
   initialServiceId,
+  inline = false,
 }: {
   env: Environment;
   initialServiceId?: string;
+  inline?: boolean;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -29,6 +31,7 @@ export function AttachFormDialog({
     <AttachForm
       key={`${env.id}/${initialServiceId ?? "all"}`}
       initialServiceId={initialServiceId}
+      inline={inline}
       env={env}
       open
       onOpenChange={onOpenChange}
@@ -41,9 +44,11 @@ function AttachForm({
   open,
   onOpenChange,
   initialServiceId,
+  inline = false,
 }: {
   env: Environment;
   initialServiceId?: string;
+  inline?: boolean;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -111,351 +116,348 @@ function AttachForm({
           ];
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DialogHeader>
-          <DialogTitle>Connect backing service · {env.name}</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <p className="text-xs text-muted-foreground">
-            {custom ? (
-              <>
-                Attaching grants a{" "}
-                <span className="font-medium text-foreground">
-                  specific service
-                </span>{" "}
-                network access to <span className="font-mono">{g?.name}</span>.{" "}
-                {customProvisioning
-                  ? "A new credential owner runs the configured attach hook. Facts become available only after successful provisioning."
-                  : "No provisioning hook is configured; the consumer only joins the backing network."}
-              </>
-            ) : authenticationDetails ? (
-              <>
-                Attaching grants a{" "}
-                <span className="font-medium text-foreground">
-                  specific service
-                </span>{" "}
-                access to <span className="font-mono">{g?.name}</span> and uses
-                the backing instance&apos;s fixed{" "}
-                <span className="font-medium text-foreground">
-                  {authenticationDetails.label.toLowerCase()}
-                </span>{" "}
-                authentication mode. {authenticationDetails.summary} The attach
-                name below is only the spec key; the mode cannot be changed
-                here.
-              </>
-            ) : (
-              <>
-                Connect the selected Service to this shared instance. A new
-                credential provisions a separate database and role; an existing
-                credential reuses its owner’s access. Connection values become
-                available after provisioning.
-              </>
-            )}
-          </p>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="attach-name">Connection name (Attach key)</Label>
-            <Input
-              id="attach-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={consumer ? `${consumer.name}-db` : "api-db"}
-              className="font-mono"
-            />
-            {attachName && !custom && needsDatabase && (
-              <p className="text-xs text-muted-foreground">
-                the Controller generates the collision-resistant database, role,
-                password, and URL
-              </p>
-            )}
-            {attachName && authenticationDetails && (
-              <p className="text-xs text-muted-foreground">
-                {svc?.authentication === "none"
-                  ? "the Controller creates a self-owned fact binding; it generates no credential"
-                  : `the Controller provisions the ${authenticationDetails.label.toLowerCase()} identity and mode-appropriate facts`}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="attach-backing">Backing service</Label>
-            <Select
-              searchable
-              id="attach-backing"
-              value={gid}
-              onValueChange={(v) => {
-                setGid(v);
-                setGrants([]);
-                setCredentialMode("new");
-                setCredentialAttachId("");
-              }}
-              options={
-                available.length > 0
-                  ? available.map((p) => ({
-                      value: p.id,
-                      label: `${p.name} (${p.environments?.[0]?.services[0]?.adapter ?? "—"})`,
-                    }))
-                  : [{ value: "", label: "— no backing services running —" }]
-              }
-            />
-            {alreadyAttached.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                already attached as{" "}
-                {alreadyAttached.map((a) => a.name).join(", ")} —{" "}
-                {custom
-                  ? customProvisioning
-                    ? "each new owner runs the custom attach hook; an existing owner reuses its facts"
-                    : "each Attach connects one consumer, without provisioning"
-                  : authenticationDetails
-                    ? svc?.authentication === "none"
-                      ? "attaching again creates another fact owner and network membership, with no credential"
-                      : `attaching again provisions another ${authenticationDetails.label.toLowerCase()} identity`
-                    : "attaching again provisions another database + role"}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="attach-service">Service that gains access</Label>
-            {env.services.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                no services yet — add a service first
-              </p>
-            )}
-            <Select
-              searchable
-              id="attach-service"
-              value={service}
-              onValueChange={setService}
-              options={
-                env.services.length > 0
-                  ? env.services.map((candidate) => ({
-                      value: candidate.id,
-                      label: candidate.name,
-                    }))
-                  : [{ value: "", label: "— no services yet —" }]
-              }
-            />
-          </div>
-          {(!custom || (customProvisioning && factRows.length > 0)) && (
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="attach-credential">
-                {authenticationDetails?.credentialLabel ?? "Credential"}
-              </Label>
-              <Select
-                id="attach-credential"
-                value={credentialMode}
-                onValueChange={(value) => {
-                  const mode = value as "new" | "existing";
-                  setCredentialMode(mode);
-                  setGrants([]);
-                  if (mode === "new") setCredentialAttachId("");
-                }}
-                options={[
-                  {
-                    value: "new",
-                    label:
-                      authenticationDetails?.newOwnerLabel ??
-                      "Create new credential",
-                  },
-                  {
-                    value: "existing",
-                    label:
-                      authenticationDetails?.existingOwnerLabel ??
-                      "Use existing credential",
-                  },
-                ]}
-              />
-              {credentialMode === "existing" && (
-                <Select
-                  searchable
-                  aria-label="Existing credential owner"
-                  value={credentialAttachId}
-                  onValueChange={setCredentialAttachId}
-                  options={
-                    credentialOwners.length > 0
-                      ? credentialOwners.map((attach) => ({
-                          value: attach.id,
-                          label: `${attach.name} (${attach.service})`,
-                        }))
-                      : [{ value: "", label: "— no ready credential owner —" }]
-                  }
-                />
-              )}
-            </div>
-          )}
-          {!custom && credentialMode === "new" && grantOptions.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <Label>
-                Also grant access to (other attaches' databases, same role)
-              </Label>
-              <div className="flex flex-wrap gap-2">
-                {grantOptions.map((grant) => (
-                  <label
-                    key={grant.id}
-                    className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs"
-                  >
-                    <Checkbox
-                      checked={grants.includes(grant.id)}
-                      onChange={(e) =>
-                        setGrants((prev) =>
-                          e.target.checked
-                            ? [...prev, grant.id]
-                            : prev.filter((x) => x !== grant.id),
-                        )
-                      }
-                      className="accent-primary"
-                    />
-                    <span className="font-mono">{grant.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-          {authenticationDetails && (
-            <div className="flex flex-col gap-1.5">
-              <Label>
-                {credentialMode === "new"
-                  ? "Provisioning for this mode"
-                  : "Existing owner behavior"}
-              </Label>
-              <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
-                {credentialMode === "existing" ? (
-                  <p className="text-xs text-muted-foreground">
-                    Reuses the selected owner&apos;s facts and only reconciles
-                    this Service&apos;s network membership. It provisions no new
-                    identity.
-                  </p>
-                ) : authenticationDetails.provision.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No credential is generated and no ACL identity is
-                    provisioned. The Attach creates the self-owned fact binding
-                    and joins the network.
-                  </p>
-                ) : (
-                  authenticationDetails.provision.map((operation) => (
-                    <div
-                      key={operation.op}
-                      className="flex items-baseline gap-2.5 text-xs"
-                    >
-                      <span className="w-36 shrink-0 font-mono text-primary">
-                        {operation.op}
-                      </span>
-                      <span className="break-all font-mono text-muted-foreground">
-                        {operation.detail}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-          {custom && !customProvisioning ? (
-            <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
-              <span>
-                <span className="font-medium text-foreground">
-                  Network-only attach.
-                </span>{" "}
-                No facts or credentials are generated. Groundplane manages the
-                backing container and connects this consumer to its network.
-              </span>
-            </div>
-          ) : authenticationUnavailable ? (
-            <p
-              role="alert"
-              className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-            >
-              The Controller did not return this Valkey backing instance&apos;s
-              authentication mode. Refresh before attaching.
-            </p>
+    <ResourceForm inline={inline} open={open} onOpenChange={onOpenChange}>
+      <DialogHeader>
+        <DialogTitle>Connect backing service · {env.name}</DialogTitle>
+      </DialogHeader>
+      <div className="flex flex-col gap-4">
+        <p className="text-xs text-muted-foreground">
+          {custom ? (
+            <>
+              Attaching grants a{" "}
+              <span className="font-medium text-foreground">
+                specific service
+              </span>{" "}
+              network access to <span className="font-mono">{g?.name}</span>.{" "}
+              {customProvisioning
+                ? "A new credential owner runs the configured attach hook. Facts become available only after successful provisioning."
+                : "No provisioning hook is configured; the consumer only joins the backing network."}
+            </>
+          ) : authenticationDetails ? (
+            <>
+              Attaching grants a{" "}
+              <span className="font-medium text-foreground">
+                specific service
+              </span>{" "}
+              access to <span className="font-mono">{g?.name}</span> and uses
+              the backing instance&apos;s fixed{" "}
+              <span className="font-medium text-foreground">
+                {authenticationDetails.label.toLowerCase()}
+              </span>{" "}
+              authentication mode. {authenticationDetails.summary} The attach
+              name below is only the spec key; the mode cannot be changed here.
+            </>
           ) : (
-            <div className="flex flex-col gap-1.5">
-              <Label>
-                Connection values available after provisioning (map them in
-                Variables & files)
-              </Label>
-              <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
-                {factRows.map((key) => (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between gap-2 font-mono text-xs"
-                  >
-                    <span className="text-muted-foreground">{key}</span>
-                    <span className="text-foreground">
-                      {custom
-                        ? "returned by attach hook"
-                        : "resolved by Controller"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {grants.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {grants.length} additional grant fact set
-                  {grants.length === 1 ? "" : "s"}
-                </p>
-              )}
-            </div>
+            <>
+              Connect the selected Service to this shared instance. A new
+              credential provisions a separate database and role; an existing
+              credential reuses its owner’s access. Connection values become
+              available after provisioning.
+            </>
+          )}
+        </p>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="attach-name">Connection name</Label>
+          <Input
+            id="attach-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={consumer ? `${consumer.name}-db` : "api-db"}
+            className="font-mono"
+          />
+          {attachName && !custom && needsDatabase && (
+            <p className="text-xs text-muted-foreground">
+              the Controller generates the collision-resistant database, role,
+              password, and URL
+            </p>
+          )}
+          {attachName && authenticationDetails && (
+            <p className="text-xs text-muted-foreground">
+              {svc?.authentication === "none"
+                ? "the Controller creates a self-owned fact binding; it generates no credential"
+                : `the Controller provisions the ${authenticationDetails.label.toLowerCase()} identity and mode-appropriate facts`}
+            </p>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          {saveError ? (
-            <p className="text-xs text-destructive">{saveError}</p>
-          ) : null}
-          <Button
-            disabled={
-              saving ||
-              authenticationUnavailable ||
-              !available.some((candidate) => candidate.id === gid) ||
-              !attachName ||
-              !svc?.id ||
-              !consumer ||
-              (credentialMode === "existing" &&
-                !credentialOwners.some(
-                  (owner) => owner.id === credentialAttachId,
-                ))
-            }
-            onClick={() => {
-              if (!svc?.id || !consumer) return;
-              setSaving(true);
-              setSaveError(undefined);
-              void store
-                .addAttach(env.id, {
-                  serviceId: consumer.id,
-                  backingServiceId: svc.id,
-                  name: attachName,
-                  credential:
-                    credentialMode === "new"
-                      ? { mode: "new" }
-                      : { mode: "existing", attachId: credentialAttachId },
-                  grantAttachIds:
-                    credentialMode === "new" && grants.length > 0
-                      ? grants
-                      : undefined,
-                })
-                .then(() => {
-                  onOpenChange(false);
-                  setService(env.services[0]?.id ?? "");
-                  setCredentialMode("new");
-                  setCredentialAttachId("");
-                  setGrants([]);
-                  setName("");
-                })
-                .catch((cause: unknown) => {
-                  setSaveError(
-                    cause instanceof Error
-                      ? cause.message
-                      : "Unable to attach backing service",
-                  );
-                })
-                .finally(() => setSaving(false));
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="attach-backing">Backing service</Label>
+          <Select
+            searchable
+            id="attach-backing"
+            value={gid}
+            onValueChange={(v) => {
+              setGid(v);
+              setGrants([]);
+              setCredentialMode("new");
+              setCredentialAttachId("");
             }}
+            options={
+              available.length > 0
+                ? available.map((p) => ({
+                    value: p.id,
+                    label: `${p.name} (${p.environments?.[0]?.services[0]?.adapter ?? "—"})`,
+                  }))
+                : [{ value: "", label: "— no backing services running —" }]
+            }
+          />
+          {alreadyAttached.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              already attached as{" "}
+              {alreadyAttached.map((a) => a.name).join(", ")} —{" "}
+              {custom
+                ? customProvisioning
+                  ? "each new owner runs the custom attach hook; an existing owner reuses its facts"
+                  : "each Attach connects one consumer, without provisioning"
+                : authenticationDetails
+                  ? svc?.authentication === "none"
+                    ? "attaching again creates another fact owner and network membership, with no credential"
+                    : `attaching again provisions another ${authenticationDetails.label.toLowerCase()} identity`
+                  : "attaching again provisions another database + role"}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="attach-service">Service that gains access</Label>
+          {env.services.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              no services yet — add a service first
+            </p>
+          )}
+          <Select
+            searchable
+            id="attach-service"
+            value={service}
+            onValueChange={setService}
+            options={
+              env.services.length > 0
+                ? env.services.map((candidate) => ({
+                    value: candidate.id,
+                    label: candidate.name,
+                  }))
+                : [{ value: "", label: "— no services yet —" }]
+            }
+          />
+        </div>
+        {(!custom || (customProvisioning && factRows.length > 0)) && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="attach-credential">
+              {authenticationDetails?.credentialLabel ?? "Credential"}
+            </Label>
+            <Select
+              id="attach-credential"
+              value={credentialMode}
+              onValueChange={(value) => {
+                const mode = value as "new" | "existing";
+                setCredentialMode(mode);
+                setGrants([]);
+                if (mode === "new") setCredentialAttachId("");
+              }}
+              options={[
+                {
+                  value: "new",
+                  label:
+                    authenticationDetails?.newOwnerLabel ??
+                    "Create new credential",
+                },
+                {
+                  value: "existing",
+                  label:
+                    authenticationDetails?.existingOwnerLabel ??
+                    "Use existing credential",
+                },
+              ]}
+            />
+            {credentialMode === "existing" && (
+              <Select
+                searchable
+                aria-label="Existing credential owner"
+                value={credentialAttachId}
+                onValueChange={setCredentialAttachId}
+                options={
+                  credentialOwners.length > 0
+                    ? credentialOwners.map((attach) => ({
+                        value: attach.id,
+                        label: `${attach.name} (${attach.service})`,
+                      }))
+                    : [{ value: "", label: "— no ready credential owner —" }]
+                }
+              />
+            )}
+          </div>
+        )}
+        {!custom && credentialMode === "new" && grantOptions.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <Label>
+              Also grant access to (other attaches' databases, same role)
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {grantOptions.map((grant) => (
+                <label
+                  key={grant.id}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs"
+                >
+                  <Checkbox
+                    checked={grants.includes(grant.id)}
+                    onChange={(e) =>
+                      setGrants((prev) =>
+                        e.target.checked
+                          ? [...prev, grant.id]
+                          : prev.filter((x) => x !== grant.id),
+                      )
+                    }
+                    className="accent-primary"
+                  />
+                  <span className="font-mono">{grant.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {authenticationDetails && (
+          <div className="flex flex-col gap-1.5">
+            <Label>
+              {credentialMode === "new"
+                ? "Provisioning for this mode"
+                : "Existing owner behavior"}
+            </Label>
+            <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
+              {credentialMode === "existing" ? (
+                <p className="text-xs text-muted-foreground">
+                  Reuses the selected owner&apos;s facts and only reconciles
+                  this Service&apos;s network membership. It provisions no new
+                  identity.
+                </p>
+              ) : authenticationDetails.provision.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No credential is generated and no ACL identity is provisioned.
+                  The Attach creates the self-owned fact binding and joins the
+                  network.
+                </p>
+              ) : (
+                authenticationDetails.provision.map((operation) => (
+                  <div
+                    key={operation.op}
+                    className="flex items-baseline gap-2.5 text-xs"
+                  >
+                    <span className="w-36 shrink-0 font-mono text-primary">
+                      {operation.op}
+                    </span>
+                    <span className="break-all font-mono text-muted-foreground">
+                      {operation.detail}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+        {custom && !customProvisioning ? (
+          <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
+            <span>
+              <span className="font-medium text-foreground">
+                Network-only attach.
+              </span>{" "}
+              No facts or credentials are generated. Groundplane manages the
+              backing container and connects this consumer to its network.
+            </span>
+          </div>
+        ) : authenticationUnavailable ? (
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
           >
-            {saving ? "Connecting…" : "Connect service"}
-          </Button>
-        </DialogFooter>
-      </DrawerContent>
-    </Drawer>
+            The Controller did not return this Valkey backing instance&apos;s
+            authentication mode. Refresh before attaching.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Label>
+              Connection values available after provisioning (map them in
+              Variables & files)
+            </Label>
+            <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
+              {factRows.map((key) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-2 font-mono text-xs"
+                >
+                  <span className="text-muted-foreground">{key}</span>
+                  <span className="text-foreground">
+                    {custom
+                      ? "returned by attach hook"
+                      : "resolved by Controller"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {grants.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {grants.length} additional grant fact set
+                {grants.length === 1 ? "" : "s"}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        {saveError ? (
+          <p className="text-xs text-destructive">{saveError}</p>
+        ) : null}
+        <Button
+          disabled={
+            saving ||
+            authenticationUnavailable ||
+            !available.some((candidate) => candidate.id === gid) ||
+            !attachName ||
+            !svc?.id ||
+            !consumer ||
+            (credentialMode === "existing" &&
+              !credentialOwners.some(
+                (owner) => owner.id === credentialAttachId,
+              ))
+          }
+          onClick={() => {
+            if (!svc?.id || !consumer) return;
+            setSaving(true);
+            setSaveError(undefined);
+            void store
+              .addAttach(env.id, {
+                serviceId: consumer.id,
+                backingServiceId: svc.id,
+                name: attachName,
+                credential:
+                  credentialMode === "new"
+                    ? { mode: "new" }
+                    : { mode: "existing", attachId: credentialAttachId },
+                grantAttachIds:
+                  credentialMode === "new" && grants.length > 0
+                    ? grants
+                    : undefined,
+              })
+              .then(() => {
+                onOpenChange(false);
+                setService(env.services[0]?.id ?? "");
+                setCredentialMode("new");
+                setCredentialAttachId("");
+                setGrants([]);
+                setName("");
+              })
+              .catch((cause: unknown) => {
+                setSaveError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Unable to attach backing service",
+                );
+              })
+              .finally(() => setSaving(false));
+          }}
+        >
+          {saving ? "Connecting…" : "Connect service"}
+        </Button>
+      </DialogFooter>
+    </ResourceForm>
   );
 }

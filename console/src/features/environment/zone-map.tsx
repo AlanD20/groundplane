@@ -3,20 +3,12 @@ import type { Environment, Zone } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ResourcePanel } from "@/components/common/resource-panel";
-import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
   TablePagination,
-  TableSortHead,
+  ListToolbar,
   useTableView,
 } from "@/components/common/table-controls";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Boxes, Network } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
@@ -52,8 +44,11 @@ export function ZoneMap({
     setSelectedZone((current) => (current === id ? null : id));
     setSelectedService(null);
   };
+  const [query, setQuery] = useState("");
   const table = useTableView(
-    env.zones,
+    env.zones.filter((zone) =>
+      `${zone.name} ${zone.subnet}`.toLowerCase().includes(query.toLowerCase()),
+    ),
     {
       name: (z) => z.name,
       subnet: (z) => z.subnet,
@@ -97,15 +92,30 @@ export function ZoneMap({
         }
         actions={actions}
       >
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {env.zones.map((z) => (
+        <ListToolbar
+          label="Zones"
+          query={query}
+          onQueryChange={setQuery}
+          sort={table}
+          fields={[
+            { value: "name", label: "Name" },
+            { value: "subnet", label: "Subnet" },
+            { value: "access", label: "Access" },
+            { value: "services", label: "Services" },
+          ]}
+        />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {table.rows.map((z) => (
             <Button
               key={z.id}
               variant="outline"
               size="content"
               aria-pressed={selectedZone === z.id}
               onClick={() => select(z.id)}
-              className={`flex-col items-start gap-2 rounded-lg p-4 text-left ${selectedZone === z.id ? "border-primary bg-accent" : selectedZone ? "opacity-60" : ""}`}
+              className={workspaceSectionClassName(
+                false,
+                `flex-col items-start gap-2 text-left ${selectedZone === z.id ? "border-primary bg-accent" : ""}`,
+              )}
             >
               <span className="grid size-10 place-items-center rounded-lg bg-accent text-primary">
                 <Network className="size-5" />
@@ -167,66 +177,13 @@ export function ZoneMap({
             {zone ? renderZone(zone, selection) : renderUnzoned(selection)}
           </div>
         )}
-        <ResourceTable>
-          <Table aria-label="Zones">
-            <TableHeader>
-              <TableRow>
-                <TableSortHead sort={table} field="name">
-                  Zone
-                </TableSortHead>
-                <TableSortHead sort={table} field="subnet">
-                  Subnet
-                </TableSortHead>
-                <TableSortHead sort={table} field="access">
-                  Access
-                </TableSortHead>
-                <TableSortHead sort={table} field="services">
-                  Services
-                </TableSortHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {table.rows.map((z) => (
-                <ResourceRow key={z.id} onOpen={() => select(z.id)}>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="content"
-                      onClick={() => select(z.id)}
-                      className="gap-2 p-0 text-xs"
-                    >
-                      <Network className="size-3" />
-                      {z.name}
-                    </Button>
-                  </TableCell>
-                  <TableCell className="font-mono text-muted-foreground">
-                    {z.subnet}
-                  </TableCell>
-                  <TableCell>
-                    {z.internal ? "Internal" : "Outbound allowed"}
-                  </TableCell>
-                  <TableCell className="max-w-64 text-muted-foreground">
-                    {members(z)
-                      .map((s) => s.name)
-                      .join(", ") || "None"}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => select(z.id)}
-                    >
-                      Inspect
-                    </Button>
-                  </TableCell>
-                </ResourceRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ResourceTable>
+        {!table.total && (
+          <p className="text-sm text-muted-foreground">
+            {env.zones.length
+              ? "No Zones match your search."
+              : "No Zones yet. Add a Zone to connect your Services."}
+          </p>
+        )}
         <TablePagination table={table} label="Zones" />
       </ResourcePanel>
     </section>

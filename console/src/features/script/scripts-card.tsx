@@ -1,3 +1,4 @@
+import { ResourceForm } from "@/components/common/resource-form";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
   ListToolbar,
@@ -8,7 +9,6 @@ import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, Script } from "@/lib/types";
@@ -188,31 +188,29 @@ export function ScriptsCard({ env }: { env: Environment }) {
           <TablePagination table={table} label="Scripts" />
         </CardContent>
       </Card>
-      <Drawer
+      <ResourceForm
         open={addOpen || !!editing}
         onOpenChange={(next) => {
           if (!next) closeEditor();
         }}
       >
-        <DrawerContent>
-          {(addOpen || editing) && (
-            <ScriptEditor
-              key={editing?.id ?? "new"}
-              env={env}
-              script={editing}
-              onClose={closeEditor}
-              onSave={async (input) => {
-                if (editing) {
-                  const { service: _service, ...patch } = input;
-                  await store.updateScript(env.id, editing.id, patch);
-                } else {
-                  await store.addScript(env.id, input);
-                }
-              }}
-            />
-          )}
-        </DrawerContent>
-      </Drawer>
+        {(addOpen || editing) && (
+          <ScriptEditor
+            key={editing?.id ?? "new"}
+            env={env}
+            script={editing}
+            onClose={closeEditor}
+            onSave={async (input) => {
+              if (editing) {
+                const { service: _service, ...patch } = input;
+                await store.updateScript(env.id, editing.id, patch);
+              } else {
+                await store.addScript(env.id, input);
+              }
+            }}
+          />
+        )}
+      </ResourceForm>
       <TaskRunnerDialog
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}

@@ -1,7 +1,12 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import { TaskLink } from '@/components/common/task-link';
+import { subscribeTerminalTasks } from "@/features/task/terminal-observation";
+import {
+  workspaceSectionClassName,
+  editorFooterClassName,
+} from "@/components/common/workspace-section";
+import { TaskLink } from "@/components/common/task-link";
 
 import {
   useCallback,
@@ -34,7 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { BlueprintApplyAction } from "@/features/blueprint/blueprint-apply-action";
 import { BlueprintReview } from "@/features/blueprint/blueprint-review";
-import { BlueprintApplyScope } from './blueprint-apply-scope';
+import { BlueprintApplyScope } from "./blueprint-apply-scope";
 import {
   createBlueprintTextApplyRequest,
   type BlueprintApplyRequest,
@@ -74,15 +79,24 @@ export function BlueprintWorkspace({
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  const [selectedService, setSelectedService] = useState('');
+  const [selectedService, setSelectedService] = useState("");
   const [error, setError] = useState("");
   const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null);
-  const [dispatched, setDispatched] = useState(false);
+  const submitted = useRef<{
+    taskId: string;
+    document: string;
+    service: string;
+  } | null>(null);
+  const loadGeneration = useRef(0);
+  const [savedChanged, setSavedChanged] = useState(false);
   const [confirmRefresh, setConfirmRefresh] = useState(false);
   const [recovery, setRecovery] = useState(readBlueprintApplyRecovery);
   const pendingApply = recovery.pending;
   const applyBlocked = pendingApply !== null || recovery.error !== "";
-  const refreshRecovery = useCallback(() => setRecovery(readBlueprintApplyRecovery()), []);
+  const refreshRecovery = useCallback(
+    () => setRecovery(readBlueprintApplyRecovery()),
+    [],
+  );
   const [resolveError, setResolveError] = useState("");
   const [resolving, setResolving] = useState(false);
 
@@ -93,19 +107,37 @@ export function BlueprintWorkspace({
     const timer = window.setInterval(() => {
       if (polling) return;
       polling = true;
-      void getTask(pendingApply.taskId!).then((task) => {
-        if (!active) return;
-        if (task.id !== pendingApply.taskId) throw new Error("Controller returned a different Task.");
-        setResolveError("");
-        if (["completed", "failed", "timed_out", "aborted"].includes(task.status)) {
-          settleBlueprintApply(task.id);
-          refreshRecovery();
-        }
-      }).catch((cause: unknown) => {
-        if (active) setResolveError(cause instanceof Error ? cause.message : "Task status is unavailable.");
-      }).finally(() => { polling = false; });
+      void getTask(pendingApply.taskId!)
+        .then((task) => {
+          if (!active) return;
+          if (task.id !== pendingApply.taskId)
+            throw new Error("Controller returned a different Task.");
+          setResolveError("");
+          if (
+            ["completed", "failed", "timed_out", "aborted"].includes(
+              task.status,
+            )
+          ) {
+            settleBlueprintApply(task.id);
+            refreshRecovery();
+          }
+        })
+        .catch((cause: unknown) => {
+          if (active)
+            setResolveError(
+              cause instanceof Error
+                ? cause.message
+                : "Task status is unavailable.",
+            );
+        })
+        .finally(() => {
+          polling = false;
+        });
     }, 2000);
-    return () => { active = false; window.clearInterval(timer); };
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [getTask, pendingApply, refreshRecovery]);
 
   async function resolveApply() {
@@ -114,7 +146,11 @@ export function BlueprintWorkspace({
     try {
       await resolvePendingBlueprintApply();
     } catch (cause) {
-      setResolveError(cause instanceof Error ? cause.message : "Unable to resolve Blueprint Apply.");
+      setResolveError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to resolve Blueprint Apply.",
+      );
     } finally {
       refreshRecovery();
       setResolving(false);
@@ -122,27 +158,53 @@ export function BlueprintWorkspace({
   }
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError("");
     try {
       const current = await getBlueprint(environment.id);
+      if (generation !== loadGeneration.current) return;
       setSnapshot(current);
       setDraft(current.document);
       setEditing(false);
+      setSavedChanged(false);
     } catch (cause) {
+      if (generation !== loadGeneration.current) return;
       setError(
         cause instanceof Error
           ? cause.message
           : "Blueprint could not be loaded.",
       );
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [environment.id, getBlueprint]);
 
   useEffect(() => {
     void load();
+    return () => {
+      loadGeneration.current++;
+    };
   }, [load]);
+
+  const currentDraft = useRef({ draft, editing });
+  currentDraft.current = { draft, editing };
+  useEffect(
+    () =>
+      subscribeTerminalTasks((task) => {
+        if (task.environment_id !== environment.id) return;
+        const ownFullApply =
+          task.id === submitted.current?.taskId &&
+          !submitted.current.service &&
+          task.status === "completed" &&
+          submitted.current.document === currentDraft.current.draft;
+        if (!currentDraft.current.editing || ownFullApply) {
+          submitted.current = null;
+          void load();
+        } else setSavedChanged(true);
+      }),
+    [environment.id, load],
+  );
 
   async function importDocument(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -190,7 +252,6 @@ export function BlueprintWorkspace({
         snapshot.revision,
       );
       setPrepared({ request, validation, key: newULID() });
-      setDispatched(false);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Blueprint validation failed.",
@@ -209,8 +270,9 @@ export function BlueprintWorkspace({
               <FileCode2 className="size-4 text-primary" /> Blueprint
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              Canonical authored input only. Runtime ids, generated paths,
-              observations, and secret values are excluded.
+              Edit the Environment’s Compose YAML, then review and apply changes
+              to one Service or the entire Environment. Secret values stay
+              private.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -223,7 +285,7 @@ export function BlueprintWorkspace({
             <Button
               variant="outline"
               size="sm"
-              disabled={!snapshot}
+              disabled={!snapshot || loading}
               onClick={() => fileInput.current?.click()}
             >
               <FileUp /> Import file
@@ -238,25 +300,51 @@ export function BlueprintWorkspace({
             <Button
               variant="outline"
               size="sm"
-              disabled={!snapshot}
+              disabled={!snapshot || loading}
               onClick={exportDocument}
             >
               <Download /> Export saved
             </Button>
-            {snapshot && <CopyButton value={draft} label="copy displayed Blueprint" />}
+            {snapshot && (
+              <CopyButton value={draft} label="copy displayed Blueprint" />
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {recovery.error && <p role="alert" className="text-sm text-destructive">Apply is unavailable: {recovery.error}</p>}
+          {recovery.error && (
+            <p role="alert" className="text-sm text-destructive">
+              Apply is unavailable: {recovery.error}
+            </p>
+          )}
           {pendingApply && (
-            <div role="status" className="space-y-2 rounded-lg border border-warning/40 p-3 text-sm">
-              <p>A Blueprint Apply is unresolved for Environment <code>{pendingApply.environmentId}</code>. Do not submit another Apply until the original Task settles.</p>
-              {pendingApply.taskId ? <TaskLink taskId={pendingApply.taskId}>{pendingApply.taskId}</TaskLink> : (
-                <Button size="sm" variant="outline" disabled={resolving} onClick={() => void resolveApply()}>
+            <div
+              role="status"
+              className="space-y-2 rounded-lg border border-warning/40 p-3 text-sm"
+            >
+              <p>
+                A Blueprint Apply is unresolved for Environment{" "}
+                <code>{pendingApply.environmentId}</code>. Do not submit another
+                Apply until the original Task settles.
+              </p>
+              {pendingApply.taskId ? (
+                <TaskLink taskId={pendingApply.taskId}>
+                  {pendingApply.taskId}
+                </TaskLink>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={resolving}
+                  onClick={() => void resolveApply()}
+                >
                   {resolving ? "Resolving…" : "Resolve original Apply"}
                 </Button>
               )}
-              {resolveError && <p role="alert" className="text-xs text-destructive">{resolveError}</p>}
+              {resolveError && (
+                <p role="alert" className="text-xs text-destructive">
+                  {resolveError}
+                </p>
+              )}
             </div>
           )}
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -278,54 +366,74 @@ export function BlueprintWorkspace({
               {!editing && (
                 <Button
                   size="sm"
-                  disabled={!snapshot}
+                  disabled={!snapshot || loading}
                   onClick={() => setEditing(true)}
                 >
-                  <Pencil /> Edit
+                  <Pencil /> Edit Blueprint
                 </Button>
-              )}
-              {editing && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setDraft(snapshot?.document ?? "");
-                      setEditing(false);
-                      setError("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={working || !draft.trim() || applyBlocked}
-                    onClick={() => void reviewDraft()}
-                  >
-                    <Upload /> {working ? "Validating…" : "Review apply"}
-                  </Button>
-                </>
               )}
             </div>
           </div>
-          {editing && <BlueprintApplyScope environment={environment} value={selectedService} onChange={setSelectedService} disabled={working} />}
-          <CodeEditor
-            id="environment-blueprint"
-            label="Environment Blueprint YAML"
-            language="yaml"
-            value={loading ? "Loading Blueprint…" : draft}
-            readOnly={!editing || loading}
-            onValueChange={setDraft}
-          />
+          {savedChanged && (
+            <p role="status" className="text-sm text-warning">
+              The saved configuration may have changed. Your draft is preserved;
+              refresh when ready to load the latest version.
+            </p>
+          )}
+          <div className={workspaceSectionClassName(editing, "space-y-4")}>
+            <BlueprintApplyScope
+              environment={environment}
+              value={selectedService}
+              onChange={setSelectedService}
+              disabled={working || applyBlocked}
+            />
+            <CodeEditor
+              id="environment-blueprint"
+              label="Environment Blueprint YAML"
+              language="yaml"
+              value={loading && !snapshot ? "Loading Blueprint…" : draft}
+              readOnly={!editing || loading}
+              onValueChange={setDraft}
+            />
+            {editing && (
+              <div
+                className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
+              >
+                <Button
+                  variant="outline"
+                  disabled={working}
+                  onClick={() => {
+                    setDraft(snapshot?.document ?? "");
+                    setEditing(false);
+                    setError("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={working || !draft.trim() || applyBlocked}
+                  onClick={() => void reviewDraft()}
+                >
+                  <Upload />
+                  {working
+                    ? "Validating…"
+                    : selectedService
+                      ? `Review ${selectedService} changes`
+                      : "Review Environment changes"}
+                </Button>
+              </div>
+            )}
+          </div>
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Review the validation result before applying. Omitted Blueprint
-            Entries are removed; other resource omissions may be retained or
-            rejected until their removal workflows are supported.
+            Review the validation result before applying. It lists proposed
+            changes and any resources that need a separate Remove action.
+            Volumes and backing networks with active consumers require protected
+            removal.
           </p>
         </CardContent>
       </Card>
@@ -336,7 +444,6 @@ export function BlueprintWorkspace({
           onOpenChange={(open) => {
             if (open) return;
             setPrepared(null);
-            if (dispatched) void load();
           }}
           title={`Apply Blueprint · ${environment.name}`}
           description="Confirm the validated changes. Apply requires the reviewed base revision to remain current."
@@ -359,7 +466,11 @@ export function BlueprintWorkspace({
                 snapshot.revision,
                 prepared.key,
               );
-              setDispatched(true);
+              submitted.current = {
+                taskId: accepted.task_id,
+                document: draft,
+                service: selectedService,
+              };
               return accepted.task_id;
             } finally {
               refreshRecovery();
@@ -380,7 +491,12 @@ export function BlueprintWorkspace({
             <Button variant="outline" onClick={() => setConfirmRefresh(false)}>
               Keep editing
             </Button>
-            <Button onClick={() => { setConfirmRefresh(false); void load(); }}>
+            <Button
+              onClick={() => {
+                setConfirmRefresh(false);
+                void load();
+              }}
+            >
               Discard and refresh
             </Button>
           </DialogFooter>

@@ -1,3 +1,10 @@
+import {
+  ResourceForm,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceFormFooter as DialogFooter,
+  ResourceFormDescription as DialogDescription,
+} from "@/components/common/resource-form";
 import { DetailRow } from "@/components/common/detail-row";
 import { CompactReference } from "@/components/common/compact-reference";
 ("use client");
@@ -18,15 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/common/copy-button";
 import { cn } from "@/lib/utils";
 import type { Environment } from "@/lib/types";
@@ -217,7 +216,7 @@ export function SettingsCard({ env }: { env: Environment }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Drawer
+      <ResourceForm
         open={networkPoolOpen}
         onOpenChange={(open) => {
           if (networkPoolSaving) return;
@@ -225,63 +224,61 @@ export function SettingsCard({ env }: { env: Environment }) {
           if (!open) setNetworkPoolError(null);
         }}
       >
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>Edit network pool · {env.name}</DialogTitle>
-            <DialogDescription>
-              The replacement must be a canonical IPv4 CIDR, contain every
-              existing Zone subnet, and overlap no other Environment allocation.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="environment-network-pool">Network pool</Label>
-            <Input
-              id="environment-network-pool"
-              value={networkPool}
-              onChange={(event) => setNetworkPool(event.target.value)}
-              placeholder="10.40.0.0/16"
-              autoFocus
-            />
-            {networkPoolError && (
-              <p className="text-xs text-destructive">{networkPoolError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={networkPoolSaving}
-              onClick={() => setNetworkPoolOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                networkPoolSaving ||
-                !networkPool.trim() ||
-                networkPool.trim() === env.networkPool
+        <DialogHeader>
+          <DialogTitle>Edit network pool · {env.name}</DialogTitle>
+          <DialogDescription>
+            The replacement must be a canonical IPv4 CIDR, contain every
+            existing Zone subnet, and overlap no other Environment allocation.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="environment-network-pool">Network pool</Label>
+          <Input
+            id="environment-network-pool"
+            value={networkPool}
+            onChange={(event) => setNetworkPool(event.target.value)}
+            placeholder="10.40.0.0/16"
+            autoFocus
+          />
+          {networkPoolError && (
+            <p className="text-xs text-destructive">{networkPoolError}</p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={networkPoolSaving}
+            onClick={() => setNetworkPoolOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={
+              networkPoolSaving ||
+              !networkPool.trim() ||
+              networkPool.trim() === env.networkPool
+            }
+            onClick={async () => {
+              setNetworkPoolSaving(true);
+              setNetworkPoolError(null);
+              try {
+                await store.editEnvironment(env.id, networkPool.trim());
+                setNetworkPoolOpen(false);
+              } catch (error) {
+                setNetworkPoolError(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to edit Environment network pool",
+                );
+              } finally {
+                setNetworkPoolSaving(false);
               }
-              onClick={async () => {
-                setNetworkPoolSaving(true);
-                setNetworkPoolError(null);
-                try {
-                  await store.editEnvironment(env.id, networkPool.trim());
-                  setNetworkPoolOpen(false);
-                } catch (error) {
-                  setNetworkPoolError(
-                    error instanceof Error
-                      ? error.message
-                      : "Unable to edit Environment network pool",
-                  );
-                } finally {
-                  setNetworkPoolSaving(false);
-                }
-              }}
-            >
-              {networkPoolSaving ? "Saving…" : "Save pool"}
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
+            }}
+          >
+            {networkPoolSaving ? "Saving…" : "Save pool"}
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">
@@ -380,9 +377,11 @@ export function SettingsCard({ env }: { env: Environment }) {
             </>
           ) : (
             <p className="text-xs text-muted-foreground">
-              {!backupState.loaded
-                ? "Loading encryption key…"
-                : "No encryption key yet. Enable age-encrypted backups on the Backups tab to generate one."}
+              {backupState.loadError && !backupState.loaded
+                ? "Encryption key information is unavailable."
+                : !backupState.loaded
+                  ? "Loading encryption key…"
+                  : "No encryption key yet. Enable age-encrypted backups on the Backups tab to generate one."}
             </p>
           )}
           {backupState.loadError && (
@@ -427,7 +426,7 @@ export function SettingsCard({ env }: { env: Environment }) {
         </CardContent>
       </Card>
 
-      <Drawer
+      <ResourceForm
         open={renameOpen}
         onOpenChange={(open) => {
           if (renameSaving) return;
@@ -435,73 +434,71 @@ export function SettingsCard({ env }: { env: Environment }) {
           if (!open) setRenameError(null);
         }}
       >
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>Rename environment · {env.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ren-name">Name (label only)</Label>
-              <Input
-                id="ren-name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="production"
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">
-                The id <span className="font-mono">{env.id}</span> stays fixed —
-                every reference (secrets, age identity, backups, volume folder)
-                keys off it, so renaming never breaks anything. The URL,
-                deterministic env file, and activity labels follow the new name.
+        <DialogHeader>
+          <DialogTitle>Rename environment · {env.name}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ren-name">Name (label only)</Label>
+            <Input
+              id="ren-name"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="production"
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              The id <span className="font-mono">{env.id}</span> stays fixed —
+              every reference (secrets, age identity, backups, volume folder)
+              keys off it, so renaming never breaks anything. The URL,
+              deterministic env file, and activity labels follow the new name.
+            </p>
+            {renameError && (
+              <p className="text-xs text-destructive" role="alert">
+                {renameError}
               </p>
-              {renameError && (
-                <p className="text-xs text-destructive" role="alert">
-                  {renameError}
-                </p>
-              )}
-            </div>
+            )}
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={renameSaving}
-              onClick={() => setRenameOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                renameSaving || !newName.trim() || newName.trim() === env.name
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={renameSaving}
+            onClick={() => setRenameOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={
+              renameSaving || !newName.trim() || newName.trim() === env.name
+            }
+            onClick={async () => {
+              setRenameSaving(true);
+              setRenameError(null);
+              try {
+                const renamed = await store.renameEnvironment(
+                  env.id,
+                  newName.trim(),
+                );
+                setRenameOpen(false);
+                navigate(
+                  `/t/${params.tenant}/${params.project}/${encodeURIComponent(renamed.name)}`,
+                );
+              } catch (error) {
+                setRenameError(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to rename Environment",
+                );
+              } finally {
+                setRenameSaving(false);
               }
-              onClick={async () => {
-                setRenameSaving(true);
-                setRenameError(null);
-                try {
-                  const renamed = await store.renameEnvironment(
-                    env.id,
-                    newName.trim(),
-                  );
-                  setRenameOpen(false);
-                  navigate(
-                    `/t/${params.tenant}/${params.project}/${encodeURIComponent(renamed.name)}`,
-                  );
-                } catch (error) {
-                  setRenameError(
-                    error instanceof Error
-                      ? error.message
-                      : "Unable to rename Environment",
-                  );
-                } finally {
-                  setRenameSaving(false);
-                }
-              }}
-            >
-              {renameSaving ? "Renaming…" : "Rename"}
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
+            }}
+          >
+            {renameSaving ? "Renaming…" : "Rename"}
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>

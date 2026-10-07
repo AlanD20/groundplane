@@ -1,15 +1,17 @@
-"use client";
+import { ResourceForm } from "@/components/common/resource-form";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+("use client");
 
 import { DetailRow } from "@/components/common/detail-row";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { DNSProtectedRemoval } from "@/features/platform-component/dns-protected-removal";
 import { Button } from "@/components/ui/button";
 import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+  ResourceFormFooter as DialogFooter,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+} from "@/components/common/resource-form";
+
 import {
   DetachAttach,
   RenameAttach,
@@ -122,7 +124,9 @@ export function ZoneColumn({
   const impactAttaches = removalImpact?.attaches ?? [];
   const impactDatabases = removalImpact?.databases ?? [];
   return (
-    <div className="flex min-w-[240px] flex-1 flex-col gap-2 rounded-xl border border-border bg-card p-3">
+    <div
+      className={workspaceSectionClassName(false, "flex flex-1 flex-col gap-3")}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-semibold text-primary">{zone.name}</span>
         <span className="flex items-center gap-1">
@@ -222,46 +226,48 @@ export function ZoneColumn({
         ))}
       </div>
 
-      <Drawer open={detailOpen} onOpenChange={setDetailOpen}>
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>Zone details · {zone.name}</DialogTitle>
-          </DialogHeader>
-          {!detailZone && !detailError ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              Loading Zone details...
-            </p>
-          ) : null}
-          {detailError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {detailError}
-            </p>
-          ) : null}
-          {detailZone ? (
-            <div className="flex flex-col">
-              <DetailRow label="ID" value={detailZone.id} mono />
-              <DetailRow
-                label="Environment"
-                value={detailZone.environmentId}
-                mono
-              />
-              <DetailRow label="Name" value={detailZone.name} mono />
-              <DetailRow label="Subnet" value={detailZone.subnet} mono />
-              <DetailRow
-                label="Internal"
-                value={detailZone.internal ? "yes" : "no"}
-              />
-              <DetailRow label="Owner kind" value={detailZone.ownerKind} />
-              <DetailRow label="Owner ID" value={detailZone.ownerId} mono />
-            </div>
-          ) : null}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDetailOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
+      <ResourceForm
+        editing={false}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      >
+        <DialogHeader>
+          <DialogTitle>Zone details · {zone.name}</DialogTitle>
+        </DialogHeader>
+        {!detailZone && !detailError ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading Zone details...
+          </p>
+        ) : null}
+        {detailError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {detailError}
+          </p>
+        ) : null}
+        {detailZone ? (
+          <div className="flex flex-col">
+            <DetailRow label="ID" value={detailZone.id} mono />
+            <DetailRow
+              label="Environment"
+              value={detailZone.environmentId}
+              mono
+            />
+            <DetailRow label="Name" value={detailZone.name} mono />
+            <DetailRow label="Subnet" value={detailZone.subnet} mono />
+            <DetailRow
+              label="Internal"
+              value={detailZone.internal ? "yes" : "no"}
+            />
+            <DetailRow label="Owner kind" value={detailZone.ownerKind} />
+            <DetailRow label="Owner ID" value={detailZone.ownerId} mono />
+          </div>
+        ) : null}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setDetailOpen(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
 
       <DNSProtectedRemoval
         open={removeOpen}

@@ -1,4 +1,6 @@
-"use client";
+import { CompactReference } from "@/components/common/compact-reference";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+("use client");
 
 import { useState } from "react";
 import { useRequiredParams } from "@/lib/router";
@@ -124,7 +126,10 @@ export function RouterCard({ env }: { env: Environment }) {
             return (
               <div
                 key={component.id}
-                className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-3"
+                className={workspaceSectionClassName(
+                  false,
+                  "flex flex-col gap-3",
+                )}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -136,9 +141,10 @@ export function RouterCard({ env }: { env: Environment }) {
                       </span>
                       <StatusBadge status={component.status} />
                     </div>
-                    <p className="mt-1 font-mono text-xs text-muted-foreground">
-                      {component.id}
-                    </p>
+                    <CompactReference
+                      value={component.id}
+                      label="Component ID"
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
@@ -171,27 +177,39 @@ export function RouterCard({ env }: { env: Environment }) {
                   </div>
                 </div>
                 {component.kind === "caddy" ? (
-                  <div className="grid gap-1 font-mono text-xs text-muted-foreground sm:grid-cols-2">
+                  <div className="grid gap-3 border-t border-border pt-4 text-sm text-muted-foreground [overflow-wrap:anywhere] sm:grid-cols-2">
                     <span>
-                      zones=
-                      {component.config?.zone_ids.join(", ") ||
-                        "not configured"}
+                      Networks:
+                      {component.config?.zone_ids
+                        .map(
+                          (id) =>
+                            env.zones.find((zone) => zone.id === id)?.name ??
+                            id,
+                        )
+                        .join(", ") || "not configured"}
                     </span>
                     <span>
-                      ipv4={component.state.pinnedIPv4 || "not allocated"}
+                      IP address:{" "}
+                      {component.state.pinnedIPv4 || "not allocated"}
                     </span>
                   </div>
                 ) : (
-                  <div className="grid gap-1 font-mono text-xs text-muted-foreground sm:grid-cols-2">
+                  <div className="grid gap-3 border-t border-border pt-4 text-sm text-muted-foreground [overflow-wrap:anywhere] sm:grid-cols-2">
                     <span>
-                      secret={component.config?.secret_id || "not configured"}
+                      Token reference:{" "}
+                      {component.config?.secret_id || "not configured"}
                     </span>
                     <span>
-                      zones=
-                      {component.config?.zone_ids.join(", ") ||
-                        "not configured"}
+                      Networks:
+                      {component.config?.zone_ids
+                        .map(
+                          (id) =>
+                            env.zones.find((zone) => zone.id === id)?.name ??
+                            id,
+                        )
+                        .join(", ") || "not configured"}
                     </span>
-                    <span>routing=provider managed</span>
+                    <span>Routing: managed in Cloudflare</span>
                   </div>
                 )}
               </div>
@@ -220,7 +238,7 @@ export function RouterCard({ env }: { env: Environment }) {
           onOpenChange={(open) => {
             if (!open) setOperation(null);
           }}
-          variant={configuring ? "drawer" : "dialog"}
+          variant={configuring ? "inline" : "dialog"}
           title={`${operation.action === "config" ? "Configure" : operation.action === "enable" ? "Enable" : operation.action === "disable" ? "Disable" : "Update"} ${componentName} · ${env.name}`}
           description={
             operation.component.kind === "caddy"

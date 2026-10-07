@@ -1,15 +1,16 @@
-"use client";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+import {
+  ResourceForm,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceFormFooter as DialogFooter,
+} from "@/components/common/resource-form";
+("use client");
 
 import { DetailRow } from "@/components/common/detail-row";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -70,7 +71,10 @@ export function RoutesCard({ env }: { env: Environment }) {
         {env.routes.map((r) => (
           <div
             key={r.id}
-            className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2"
+            className={workspaceSectionClassName(
+              false,
+              "flex flex-wrap items-center justify-between gap-3",
+            )}
           >
             <div className="flex min-w-0 items-center gap-3">
               <ExposurePill exposure={r.exposure} />
@@ -148,7 +152,8 @@ export function RoutesCard({ env }: { env: Environment }) {
         )}
       </CardContent>
       <RouteFormDialog env={env} open={open} onOpenChange={setOpen} />
-      <Drawer
+      <ResourceForm
+        editing={false}
         open={detailTarget !== null}
         onOpenChange={(next) => {
           if (!next) {
@@ -157,60 +162,58 @@ export function RoutesCard({ env }: { env: Environment }) {
           }
         }}
       >
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>
-              Route details ·{" "}
-              {detailTarget
-                ? `${detailTarget.host || "internal"}${detailTarget.path}`
-                : ""}
-            </DialogTitle>
-          </DialogHeader>
-          {!detailRoute && !detailError ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              Loading Route details...
-            </p>
-          ) : null}
-          {detailError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {detailError}
-            </p>
-          ) : null}
-          {detailRoute ? (
-            <div className="flex flex-col">
-              <DetailRow label="ID" value={detailRoute.id} mono />
-              <DetailRow
-                label="Environment"
-                value={detailRoute.environmentId}
-                mono
-              />
-              <DetailRow
-                label="Host"
-                value={detailRoute.host || "hostless internal"}
-                mono
-              />
-              <DetailRow label="Path" value={detailRoute.path} mono />
-              <DetailRow label="Exposure" value={detailRoute.exposure} />
-              <DetailRow
-                label="Target Service"
-                value={detailRoute.targetServiceId}
-                mono
-              />
-              <DetailRow
-                label="Target port"
-                value={String(detailRoute.targetPort)}
-                mono
-              />
-            </div>
-          ) : null}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDetailTarget(null)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
-      <Drawer
+        <DialogHeader>
+          <DialogTitle>
+            Route details ·{" "}
+            {detailTarget
+              ? `${detailTarget.host || "internal"}${detailTarget.path}`
+              : ""}
+          </DialogTitle>
+        </DialogHeader>
+        {!detailRoute && !detailError ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading Route details...
+          </p>
+        ) : null}
+        {detailError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {detailError}
+          </p>
+        ) : null}
+        {detailRoute ? (
+          <div className="flex flex-col">
+            <DetailRow label="ID" value={detailRoute.id} mono />
+            <DetailRow
+              label="Environment"
+              value={detailRoute.environmentId}
+              mono
+            />
+            <DetailRow
+              label="Host"
+              value={detailRoute.host || "hostless internal"}
+              mono
+            />
+            <DetailRow label="Path" value={detailRoute.path} mono />
+            <DetailRow label="Exposure" value={detailRoute.exposure} />
+            <DetailRow
+              label="Target Service"
+              value={detailRoute.targetServiceId}
+              mono
+            />
+            <DetailRow
+              label="Target port"
+              value={String(detailRoute.targetPort)}
+              mono
+            />
+          </div>
+        ) : null}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setDetailTarget(null)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
+      <ResourceForm
         open={!!editing}
         onOpenChange={(next) => {
           if (!next) {
@@ -219,55 +222,51 @@ export function RoutesCard({ env }: { env: Environment }) {
           }
         }}
       >
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>
-              Edit route ·{" "}
-              {editing ? `${editing.host || "internal"}${editing.path}` : ""}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="route-edit-exposure">Exposure</Label>
-              <Select
-                id="route-edit-exposure"
-                value={exposure}
-                onValueChange={(value) =>
-                  setExposure(value as Route["exposure"])
-                }
-                options={[
-                  {
-                    value: "public",
-                    label: "public — needs ingress component",
-                  },
-                  { value: "internal", label: "internal — no host port" },
-                ]}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              The route host, path, target service, and target port remain
-              unchanged.
-            </p>
-            {editError ? (
-              <p role="alert" className="text-sm text-destructive">
-                {editError}
-              </p>
-            ) : null}
+        <DialogHeader>
+          <DialogTitle>
+            Edit route ·{" "}
+            {editing ? `${editing.host || "internal"}${editing.path}` : ""}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="route-edit-exposure">Exposure</Label>
+            <Select
+              id="route-edit-exposure"
+              value={exposure}
+              onValueChange={(value) => setExposure(value as Route["exposure"])}
+              options={[
+                {
+                  value: "public",
+                  label: "public — needs ingress component",
+                },
+                { value: "internal", label: "internal — no host port" },
+              ]}
+            />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>
-              Cancel
-            </Button>
-            <Button
-              data-action-id="route.edit"
-              disabled={editSubmitting}
-              onClick={() => void saveExposure()}
-            >
-              {editSubmitting ? "Saving..." : "Save exposure"}
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
+          <p className="text-xs text-muted-foreground">
+            The route host, path, target service, and target port remain
+            unchanged.
+          </p>
+          {editError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {editError}
+            </p>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditing(null)}>
+            Cancel
+          </Button>
+          <Button
+            data-action-id="route.edit"
+            disabled={editSubmitting}
+            onClick={() => void saveExposure()}
+          >
+            {editSubmitting ? "Saving..." : "Save exposure"}
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
       <TaskRunnerDialog
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}
@@ -424,122 +423,120 @@ function RouteForm({
     }
   };
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DialogHeader>
-          <DialogTitle>Add route · {env.name}</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <p className="text-xs text-muted-foreground">
-            A Route sends traffic to a Service. Public Routes require separately
-            managed ingress components to be served; creating a Route never
-            enables them.
-          </p>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="r-host">Host</Label>
-            <Input
-              id="r-host"
-              value={host}
-              onChange={(event) => setHost(event.target.value)}
-              placeholder="app.example.com"
-              aria-invalid={hostValidationError !== null}
-              autoFocus
-            />
-            <p
-              className={
-                hostValidationError
-                  ? "text-xs text-destructive"
-                  : "text-xs text-muted-foreground"
-              }
-            >
-              {hostValidationError ??
-                "Required for public Routes; optional for hostless internal Routes."}
-            </p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="r-path">Path</Label>
-            <Input
-              id="r-path"
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              placeholder="/api/*"
-              aria-invalid={pathValidationError !== null}
-            />
-            <p
-              className={
-                pathValidationError
-                  ? "text-xs text-destructive"
-                  : "text-xs text-muted-foreground"
-              }
-            >
-              {pathValidationError ??
-                "Absolute path with one optional terminal wildcard."}
-            </p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="r-target">Target service</Label>
-            <Select
-              searchable
-              id="r-target"
-              value={target}
-              onValueChange={setTarget}
-              options={
-                env.services.length > 0
-                  ? env.services.map((service) => ({
-                      value: service.id,
-                      label: service.name,
-                    }))
-                  : [{ value: "", label: "— no services yet —" }]
-              }
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="r-target-port">Target port</Label>
-            <Input
-              id="r-target-port"
-              inputMode="numeric"
-              value={targetPort}
-              onChange={(event) => setTargetPort(event.target.value)}
-              placeholder="8080"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="r-exposure">Exposure</Label>
-            <Select
-              id="r-exposure"
-              value={exposure}
-              onValueChange={(v) => setExposure(v as "public" | "internal")}
-              options={[
-                { value: "public", label: "public — needs ingress component" },
-                { value: "internal", label: "internal — no host port" },
-              ]}
-            />
-          </div>
-          {submitError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {submitError}
-            </p>
-          ) : null}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            data-action-id="route.create"
-            disabled={
-              hostValidationError !== null ||
-              pathValidationError !== null ||
-              !env.services.some((service) => service.id === target) ||
-              !validTargetPort ||
-              submitting
+    <ResourceForm open={open} onOpenChange={onOpenChange}>
+      <DialogHeader>
+        <DialogTitle>Add route · {env.name}</DialogTitle>
+      </DialogHeader>
+      <div className="flex flex-col gap-4">
+        <p className="text-xs text-muted-foreground">
+          A Route sends traffic to a Service. Public Routes require separately
+          managed ingress components to be served; creating a Route never
+          enables them.
+        </p>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="r-host">Host</Label>
+          <Input
+            id="r-host"
+            value={host}
+            onChange={(event) => setHost(event.target.value)}
+            placeholder="app.example.com"
+            aria-invalid={hostValidationError !== null}
+            autoFocus
+          />
+          <p
+            className={
+              hostValidationError
+                ? "text-xs text-destructive"
+                : "text-xs text-muted-foreground"
             }
-            onClick={() => void submit()}
           >
-            {submitting ? "Adding..." : "Add route"}
-          </Button>
-        </DialogFooter>
-      </DrawerContent>
-    </Drawer>
+            {hostValidationError ??
+              "Required for public Routes; optional for hostless internal Routes."}
+          </p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="r-path">Path</Label>
+          <Input
+            id="r-path"
+            value={path}
+            onChange={(event) => setPath(event.target.value)}
+            placeholder="/api/*"
+            aria-invalid={pathValidationError !== null}
+          />
+          <p
+            className={
+              pathValidationError
+                ? "text-xs text-destructive"
+                : "text-xs text-muted-foreground"
+            }
+          >
+            {pathValidationError ??
+              "Absolute path with one optional terminal wildcard."}
+          </p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="r-target">Target service</Label>
+          <Select
+            searchable
+            id="r-target"
+            value={target}
+            onValueChange={setTarget}
+            options={
+              env.services.length > 0
+                ? env.services.map((service) => ({
+                    value: service.id,
+                    label: service.name,
+                  }))
+                : [{ value: "", label: "— no services yet —" }]
+            }
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="r-target-port">Target port</Label>
+          <Input
+            id="r-target-port"
+            inputMode="numeric"
+            value={targetPort}
+            onChange={(event) => setTargetPort(event.target.value)}
+            placeholder="8080"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="r-exposure">Exposure</Label>
+          <Select
+            id="r-exposure"
+            value={exposure}
+            onValueChange={(v) => setExposure(v as "public" | "internal")}
+            options={[
+              { value: "public", label: "public — needs ingress component" },
+              { value: "internal", label: "internal — no host port" },
+            ]}
+          />
+        </div>
+        {submitError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {submitError}
+          </p>
+        ) : null}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button
+          data-action-id="route.create"
+          disabled={
+            hostValidationError !== null ||
+            pathValidationError !== null ||
+            !env.services.some((service) => service.id === target) ||
+            !validTargetPort ||
+            submitting
+          }
+          onClick={() => void submit()}
+        >
+          {submitting ? "Adding..." : "Add route"}
+        </Button>
+      </DialogFooter>
+    </ResourceForm>
   );
 }

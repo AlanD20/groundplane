@@ -1,3 +1,9 @@
+import {
+  ResourceForm,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceFormFooter as DialogFooter,
+} from "@/components/common/resource-form";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
 
@@ -9,14 +15,7 @@ import {
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRequiredParams } from "@/lib/router";
@@ -261,69 +260,65 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
         </p>
       </CardContent>
 
-      <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>Add volume · {env.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="v-slug">Slug</Label>
-              <Input
-                id="v-slug"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="app-data"
-                autoFocus
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="v-key">Compose key (optional)</Label>
-              <Input
-                id="v-key"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder="app_data"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Slugs are operator-facing labels. The immutable Compose key is
-              used in desired state; the Controller derives the managed path.
-            </p>
-            {saveError && (
-              <p className="text-xs text-destructive">{saveError}</p>
-            )}
+      <ResourceForm open={open} onOpenChange={setOpen}>
+        <DialogHeader>
+          <DialogTitle>Add volume · {env.name}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="v-slug">Slug</Label>
+            <Input
+              id="v-slug"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="app-data"
+              autoFocus
+            />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!slug.trim()}
-              onClick={async () => {
-                setSaveError(null);
-                try {
-                  await store.addVolume(env.id, {
-                    slug: slug.trim(),
-                    key: key.trim() || undefined,
-                  });
-                  setOpen(false);
-                  setSlug("");
-                  setKey("");
-                } catch (cause: unknown) {
-                  setSaveError(
-                    cause instanceof Error
-                      ? cause.message
-                      : "Unable to add volume",
-                  );
-                }
-              }}
-            >
-              Add volume
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="v-key">Compose key (optional)</Label>
+            <Input
+              id="v-key"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="app_data"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Slugs are operator-facing labels. The immutable Compose key is used
+            in desired state; the Controller derives the managed path.
+          </p>
+          {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!slug.trim()}
+            onClick={async () => {
+              setSaveError(null);
+              try {
+                await store.addVolume(env.id, {
+                  slug: slug.trim(),
+                  key: key.trim() || undefined,
+                });
+                setOpen(false);
+                setSlug("");
+                setKey("");
+              } catch (cause: unknown) {
+                setSaveError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Unable to add volume",
+                );
+              }
+            }}
+          >
+            Add volume
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
       <Dialog
         open={!!viewing}
         onOpenChange={(next) => !next && setViewing(null)}
@@ -364,60 +359,56 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Drawer
+      <ResourceForm
         open={!!editing}
         onOpenChange={(next) => !next && setEditing(null)}
       >
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>Edit volume · {editing?.slug}</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="volume-edit-slug">Slug</Label>
-              <Input
-                id="volume-edit-slug"
-                value={editSlug}
-                onChange={(event) => setEditSlug(event.target.value)}
-                autoFocus
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Changing the slug does not change the immutable Compose key or the
-              derived path.
-            </p>
-            {saveError && (
-              <p className="text-xs text-destructive">{saveError}</p>
-            )}
+        <DialogHeader>
+          <DialogTitle>Edit volume · {editing?.slug}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="volume-edit-slug">Slug</Label>
+            <Input
+              id="volume-edit-slug"
+              value={editSlug}
+              onChange={(event) => setEditSlug(event.target.value)}
+              autoFocus
+            />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!editSlug.trim()}
-              onClick={async () => {
-                if (!editing) return;
-                setSaveError(null);
-                try {
-                  const edited = await store.updateVolume(env.id, editing.id, {
-                    slug: editSlug.trim(),
-                  });
-                  setEditing(null);
-                } catch (cause: unknown) {
-                  setSaveError(
-                    cause instanceof Error
-                      ? cause.message
-                      : "Unable to edit volume",
-                  );
-                }
-              }}
-            >
-              Save slug
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
+          <p className="text-xs text-muted-foreground">
+            Changing the slug does not change the immutable Compose key or the
+            derived path.
+          </p>
+          {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditing(null)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!editSlug.trim()}
+            onClick={async () => {
+              if (!editing) return;
+              setSaveError(null);
+              try {
+                const edited = await store.updateVolume(env.id, editing.id, {
+                  slug: editSlug.trim(),
+                });
+                setEditing(null);
+              } catch (cause: unknown) {
+                setSaveError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Unable to edit volume",
+                );
+              }
+            }}
+          >
+            Save slug
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
       <TaskRunnerDialog
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}

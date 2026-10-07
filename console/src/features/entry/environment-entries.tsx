@@ -1,4 +1,10 @@
-"use client";
+import {
+  ResourceForm,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceFormFooter as DialogFooter,
+} from "@/components/common/resource-form";
+("use client");
 
 import {
   ListToolbar,
@@ -8,12 +14,6 @@ import {
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { ResourcePanel } from "@/components/common/resource-panel";
-import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { EntryReferenceFields } from "./entry-reference-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -323,220 +323,215 @@ export function EnvVarsCard({
         </p>
       </ResourcePanel>
 
-      <Drawer
+      <ResourceForm
+        inline={!service}
         open={open}
         onOpenChange={(next) => (next ? undefined : closeDrawer())}
       >
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editing ? "Edit variable or file" : "Add variable or file"} ·{" "}
-              {env.name}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label>Type</Label>
-              <div className="flex gap-2">
-                {(["env", "file"] as const).map((candidate) => (
-                  <Button
-                    key={candidate}
-                    variant={kind === candidate ? "default" : "outline"}
-                    size="sm"
-                    disabled={!!editing}
-                    onClick={() => setKind(candidate)}
-                  >
-                    {candidate === "env" ? "Variable" : "File"}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {kind === "env" ? (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="entry-key">Key</Label>
-                <Input
-                  id="entry-key"
-                  value={key}
+        <DialogHeader>
+          <DialogTitle>
+            {editing ? "Edit variable or file" : "Add variable or file"} ·{" "}
+            {env.name}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Type</Label>
+            <div className="flex gap-2">
+              {(["env", "file"] as const).map((candidate) => (
+                <Button
+                  key={candidate}
+                  variant={kind === candidate ? "default" : "outline"}
+                  size="sm"
                   disabled={!!editing}
-                  onChange={(event) => setKey(event.target.value)}
-                  placeholder="APP_ENV"
+                  onClick={() => setKind(candidate)}
+                >
+                  {candidate === "env" ? "Variable" : "File"}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {kind === "env" ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="entry-key">Key</Label>
+              <Input
+                id="entry-key"
+                value={key}
+                disabled={!!editing}
+                onChange={(event) => setKey(event.target.value)}
+                placeholder="APP_ENV"
+              />
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="entry-path">Destination path</Label>
+                <Input
+                  id="entry-path"
+                  value={path}
+                  disabled={!!editing}
+                  onChange={(event) => setPath(event.target.value)}
+                  placeholder="config/app.ini"
                 />
               </div>
-            ) : (
-              <>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="entry-path">Destination path</Label>
+                  <Label htmlFor="entry-uid">UID</Label>
                   <Input
-                    id="entry-path"
-                    value={path}
+                    id="entry-uid"
+                    type="number"
+                    min={0}
+                    max={4294967294}
+                    value={uid}
                     disabled={!!editing}
-                    onChange={(event) => setPath(event.target.value)}
-                    placeholder="config/app.ini"
+                    onChange={(event) => setUID(event.target.value)}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="entry-uid">UID</Label>
-                    <Input
-                      id="entry-uid"
-                      type="number"
-                      min={0}
-                      max={4294967294}
-                      value={uid}
-                      disabled={!!editing}
-                      onChange={(event) => setUID(event.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="entry-gid">GID</Label>
-                    <Input
-                      id="entry-gid"
-                      type="number"
-                      min={0}
-                      max={4294967294}
-                      value={gid}
-                      disabled={!!editing}
-                      onChange={(event) => setGID(event.target.value)}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Value source</Label>
-              <div className="flex flex-wrap gap-2">
-                {(["literal", "secret_ref", "fact"] as const).map(
-                  (candidate) => (
-                    <Button
-                      key={candidate}
-                      variant={sourceKind === candidate ? "default" : "outline"}
-                      size="sm"
-                      aria-pressed={sourceKind === candidate}
-                      onClick={() => setSourceKind(candidate)}
-                    >
-                      {
-                        {
-                          literal: "Enter value",
-                          secret_ref: "Reusable Secret",
-                          fact: "Connection value",
-                        }[candidate]
-                      }
-                    </Button>
-                  ),
-                )}
-              </div>
-            </div>
-            {sourceKind === "literal" && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="entry-value">Value</Label>
-                {kind === "file" ? (
-                  <Textarea
-                    id="entry-value"
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
-                    rows={6}
-                    spellCheck={false}
-                    className="font-mono text-xs"
-                  />
-                ) : (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="entry-gid">GID</Label>
                   <Input
-                    id="entry-value"
-                    type={secret ? "password" : "text"}
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
+                    id="entry-gid"
+                    type="number"
+                    min={0}
+                    max={4294967294}
+                    value={gid}
+                    disabled={!!editing}
+                    onChange={(event) => setGID(event.target.value)}
                   />
-                )}
-                {editing?.secret && (
-                  <p className="text-xs text-muted-foreground">
-                    The existing secret is never loaded into this form. Enter a
-                    replacement value.
-                  </p>
-                )}
+                </div>
               </div>
-            )}
-            {sourceKind !== "literal" && (
-              <EntryReferenceFields
-                env={env}
-                projectId={project?.id}
-                sourceKind={sourceKind}
-                secretRef={secretRef}
-                connectionSource={{
-                  attachId: factAttach,
-                  grantAttachId: factGrantAttach,
-                  key: factKey,
-                }}
-                onSecretChange={setSecretRef}
-                onConnectionChange={(source) => {
-                  setFactAttach(source.attachId);
-                  setFactGrantAttach(source.grantAttachId);
-                  setFactKey(source.key);
-                }}
-              />
-            )}
+            </>
+          )}
 
-            <div className="flex flex-col gap-1.5">
-              <Label>Available to</Label>
-              <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-1.5">
+            <Label>Value source</Label>
+            <div className="flex flex-wrap gap-2">
+              {(["literal", "secret_ref", "fact"] as const).map((candidate) => (
                 <Button
-                  variant={exposure.includes("all") ? "default" : "outline"}
+                  key={candidate}
+                  variant={sourceKind === candidate ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setExposure(["all"])}
+                  aria-pressed={sourceKind === candidate}
+                  onClick={() => setSourceKind(candidate)}
                 >
-                  All services
+                  {
+                    {
+                      literal: "Enter value",
+                      secret_ref: "Reusable Secret",
+                      fact: "Connection value",
+                    }[candidate]
+                  }
                 </Button>
-                {env.services.map((service) => (
-                  <Button
-                    key={service.id}
-                    variant={
-                      exposure.includes(service.name) ? "default" : "outline"
-                    }
-                    size="sm"
-                    onClick={() => toggleServiceExposure(service.name)}
-                  >
-                    {service.name}
-                  </Button>
-                ))}
-              </div>
+              ))}
             </div>
-
-            <EntryProtection
-              secret={secret}
-              editing={!!editing}
-              onChange={setSecret}
-            />
-            {saveError && (
-              <p className="text-sm text-destructive">{saveError}</p>
-            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDrawer} disabled={saving}>
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                saving ||
-                (kind === "env" ? !key.trim() : !path.trim()) ||
-                exposure.length === 0 ||
-                (sourceKind === "secret_ref" && !secretRef.trim()) ||
-                (sourceKind === "fact" &&
-                  (!factAttach.trim() || !factKey.trim()))
-              }
-              onClick={() => void saveEntry()}
-            >
-              {saving
-                ? "Saving…"
-                : editing
-                  ? "Save changes"
-                  : kind === "env"
-                    ? "Add variable"
-                    : "Add file"}
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
+          {sourceKind === "literal" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="entry-value">Value</Label>
+              {kind === "file" ? (
+                <Textarea
+                  id="entry-value"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  rows={6}
+                  spellCheck={false}
+                  className="font-mono text-xs"
+                />
+              ) : (
+                <Input
+                  id="entry-value"
+                  type={secret ? "password" : "text"}
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                />
+              )}
+              {editing?.secret && (
+                <p className="text-xs text-muted-foreground">
+                  The existing secret is never loaded into this form. Enter a
+                  replacement value.
+                </p>
+              )}
+            </div>
+          )}
+          {sourceKind !== "literal" && (
+            <EntryReferenceFields
+              env={env}
+              projectId={project?.id}
+              sourceKind={sourceKind}
+              secretRef={secretRef}
+              connectionSource={{
+                attachId: factAttach,
+                grantAttachId: factGrantAttach,
+                key: factKey,
+              }}
+              onSecretChange={setSecretRef}
+              onConnectionChange={(source) => {
+                setFactAttach(source.attachId);
+                setFactGrantAttach(source.grantAttachId);
+                setFactKey(source.key);
+              }}
+            />
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Available to</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={exposure.includes("all") ? "default" : "outline"}
+                size="sm"
+                onClick={() => setExposure(["all"])}
+              >
+                All services
+              </Button>
+              {env.services.map((service) => (
+                <Button
+                  key={service.id}
+                  variant={
+                    exposure.includes(service.name) ? "default" : "outline"
+                  }
+                  size="sm"
+                  onClick={() => toggleServiceExposure(service.name)}
+                >
+                  {service.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <EntryProtection
+            secret={secret}
+            editing={!!editing}
+            onChange={setSecret}
+          />
+          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={closeDrawer} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            disabled={
+              saving ||
+              (kind === "env" ? !key.trim() : !path.trim()) ||
+              exposure.length === 0 ||
+              (sourceKind === "secret_ref" && !secretRef.trim()) ||
+              (sourceKind === "fact" && (!factAttach.trim() || !factKey.trim()))
+            }
+            onClick={() => void saveEntry()}
+          >
+            {saving
+              ? "Saving…"
+              : editing
+                ? "Save changes"
+                : kind === "env"
+                  ? "Add variable"
+                  : "Add file"}
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
       <BulkEntryDrawer
+        inline={!service}
         env={env}
         bulkOpen={bulkOpen}
         setBulkOpen={setBulkOpen}

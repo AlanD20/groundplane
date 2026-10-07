@@ -1,4 +1,7 @@
-"use client";
+import { subscribeTerminalTasks } from "@/features/task/terminal-observation";
+import { workspaceSectionClassName } from "@/components/common/workspace-section";
+import { CompactReference } from "@/components/common/compact-reference";
+("use client");
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ImageReference } from "@/components/common/image-reference";
@@ -38,20 +41,36 @@ export default function ReleaseDetailPage() {
     const controller = new AbortController();
     setRelease(null);
     setError(null);
-    void fetchReleaseDetail(params.id, controller.signal)
-      .then(setRelease)
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Release detail failed to load",
-          );
-      });
-    return () => controller.abort();
-  }, [params.id]);
+    let version = 0;
+    const refresh = () => {
+      const requestVersion = ++version;
+      void fetchReleaseDetail(params.id, controller.signal)
+        .then((next) => {
+          if (!controller.signal.aborted && requestVersion === version) {
+            setRelease(next);
+            setError(null);
+          }
+        })
+        .catch((cause: unknown) => {
+          if (!controller.signal.aborted && requestVersion === version)
+            setError(
+              cause instanceof Error
+                ? cause.message
+                : "Deployment could not be refreshed",
+            );
+        });
+    };
+    refresh();
+    const unsubscribe = subscribeTerminalTasks((task) => {
+      if (task.environment_id === environment?.id) refresh();
+    });
+    return () => {
+      controller.abort();
+      unsubscribe();
+    };
+  }, [params.id, environment?.id]);
 
-  if (!environment || error) {
+  if (!environment || (error && !release)) {
     return (
       <EmptyState
         icon={<History />}
@@ -108,7 +127,7 @@ export default function ReleaseDetailPage() {
           </Link>
         }
         title={service}
-        description="Deployment (Release) · image and execution details"
+        description="Deployment image, configuration and execution"
         icon={<History />}
         meta={
           <>
@@ -124,9 +143,9 @@ export default function ReleaseDetailPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Frozen release input</CardTitle>
+            <CardTitle>Image & configuration</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
+          <CardContent className="space-y-0 divide-y divide-border text-sm [&>p]:py-4 [&>div]:py-4">
             <p>
               <span className="text-muted-foreground">Image</span>
               <br />
@@ -154,7 +173,7 @@ export default function ReleaseDetailPage() {
           <CardHeader>
             <CardTitle>Execution</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
+          <CardContent className="space-y-0 divide-y divide-border text-sm [&>p]:py-4 [&>div]:py-4">
             <div className="flex gap-2">
               <Badge variant={release.serving ? "success" : "outline"}>
                 {release.serving ? "serving" : "not serving"}
@@ -187,10 +206,14 @@ export default function ReleaseDetailPage() {
           </CardContent>
         </Card>
       </div>
-      <details className="rounded-lg border border-border p-4 text-xs text-muted-foreground">
-        <summary>Release identity</summary>
-        <p className="mt-2 break-all font-mono">{release.id}</p>
-      </details>
+      <div className={workspaceSectionClassName(false, "space-y-3")}>
+        <CompactReference value={release.id} />
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          Refresh failed: {error}. The last loaded deployment remains visible.
+        </p>
+      )}
     </div>
   );
 }
