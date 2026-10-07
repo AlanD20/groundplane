@@ -189,3 +189,46 @@ Current source: [shared release values](../../internal/common/controllerupgrade)
 The upgrade architecture is accepted. Interrupted-boundary, rollback-under-
 traffic, bootstrap, dual-platform, and live-host qualification remain evidence
 requirements tracked by the feature and capability status documents.
+
+## Host-built development versions
+
+Accepted design; preparation is not implemented yet. Controller and Agent source
+selection will offer published GitHub releases and an explicit branch, tag or
+commit from the Groundplane repository. GitHub release assets and source refs
+are distinct inputs: a tag without a published release is a source build.
+
+Source builds run on the GP host with build tooling inside Docker. Resolve the
+requested ref to an exact commit before accepting preparation and retain both
+values. Build only for the host architecture and label the result a development
+version. This is an explicit exception to the two-platform published-release
+requirement above; it does not change published release qualification.
+
+Preparation and activation are separate operator actions. A durable preparation
+Task downloads or builds, verifies output, and records the immutable artifact.
+The Console shows its progress and failure; reconnect follows the same Task.
+Preparation must never replace the running Controller or Agent. Console, CLI
+and API must expose the same preparation and selection capabilities.
+
+Push a built Agent image to the managed GP registry and retain its manifest
+digest, exact commit and host platform. Tags are readable labels only. Agent
+activation uses the existing digest-pinned update and predecessor recovery.
+A completed build does not establish Agent readiness or update success.
+
+The Controller remains native. Its Docker build produces the binary and release
+metadata; an OCI artifact may transport that bundle through the GP registry,
+but it is never run as the Controller container. Stage verified bytes in the
+existing private release store, then use the normal protected Controller update.
+Compatibility checks, enrolled-Agent preservation and predecessor recovery
+remain mandatory for development builds as well as published releases.
+
+Build containers receive neither the host Docker socket nor update-store or
+registry credentials. Trusted host orchestration owns publication and staging.
+Bound build resources and clean only operation-owned temporary artifacts;
+never prune application images or volumes. Cancellation and process interruption
+must leave running software unchanged and retain enough evidence to resolve
+whether publication completed before a retry.
+
+This adds a software-preparation capability, not an application build service
+or a configurable command runner. Runtime source selection remains limited to
+the Groundplane repository. Prepared artifacts and active build inputs need
+explicit retention protection before this workflow can ship.

@@ -129,6 +129,10 @@ Workload Deploy resolves an image already present in the host Docker daemon.
 GP neither pulls nor builds workload images during Deploy. Historical operations
 use the captured local image id, not a mutable tag resolved again. Managed GP
 images are installation/release assets with their own immutable selection.
+An accepted, not-yet-implemented software-preparation workflow allows Docker
+builds of Groundplane source refs on this host for Controller and Agent updates.
+These host-specific development versions remain distinct from qualified published
+releases; preparation never activates software. See [update safety](features/upgrade-safety.md#source-builds-accepted-not-yet-available).
 Explicit image Fetch accepts public registries and GP's managed private registry
 before Deploy; it is not an implicit Deploy side effect. Host image inventory and
 protected removal are available through the Console, CLI and API. Removal must

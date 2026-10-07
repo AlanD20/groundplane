@@ -18,6 +18,16 @@ Use [installation and updates](../deployment.md) for commands and artifact
 selection. An Agent update pins its exact image digest; changing that digest with
 the same idempotency key is a conflict.
 
+## Source builds (accepted, not yet available)
+
+The accepted preparation workflow covers published releases and branch/commit
+builds for both Controller and Agent. Development builds will run in Docker on
+the GP host for its architecture, with immutable artifacts retained separately
+from activation. Published releases keep their existing requirements. The
+current Console still activates staged Controller releases and explicit Agent
+image digests; it does not yet fetch release tags or launch source builds.
+See [host-built development versions](../decisions/release-packaging.md#host-built-development-versions).
+
 ## Admission and activation
 
 The candidate must be staged, intact and compatible before activation. An unstaged
