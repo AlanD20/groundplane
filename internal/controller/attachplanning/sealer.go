@@ -14,6 +14,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -106,7 +107,7 @@ func (sealer *Sealer) SealDraft(
 	identity *taskplanning.AttachPlanIdentity,
 	hookBundle *attachrecord.EncryptedFacts,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-) (serviceruntimerecord.AttachPreparation, error) {
+) (etcd.TaskRecord, serviceruntimerecord.AttachPreparation, error) {
 	state := &draftAttachPlanState{
 		repository: sealer.repository, facts: sealer.facts, current: current,
 		renderInput: renderInput, identity: identity, hookBundle: hookBundle, hookInputs: hookInputs,
@@ -116,14 +117,20 @@ func (sealer *Sealer) SealDraft(
 		sealer.componentCatalog,
 	)
 	if err != nil {
-		return serviceruntimerecord.AttachPreparation{}, err
+		return etcd.TaskRecord{}, serviceruntimerecord.AttachPreparation{}, err
 	}
 	plan, err := resolver.ResolveExecutionPlan(ctx, task)
 	if err != nil {
-		return serviceruntimerecord.AttachPreparation{}, err
+		return etcd.TaskRecord{}, serviceruntimerecord.AttachPreparation{}, err
 	}
 	defer clearAttachPlanSecrets(plan)
-	return sealer.runtimes.PrepareAttachRuntime(ctx, plan)
+	prepared, err := sealer.runtimes.PrepareAttachRuntime(ctx, plan)
+	if err != nil {
+		return etcd.TaskRecord{}, serviceruntimerecord.AttachPreparation{}, err
+	}
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
+	task.PlanHash, task.TargetName = prepared.PlanHash, current.Record.Name
+	return task, prepared, nil
 }
 
 type draftAttachPlanState struct {

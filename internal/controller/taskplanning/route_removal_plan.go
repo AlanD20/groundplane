@@ -130,6 +130,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		return etcd.RouteRemovalTaskPreparation{}, err
 	}
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
 	return etcd.RouteRemovalTaskPreparation{Intent: intent, Task: task}, nil
 }
 

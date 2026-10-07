@@ -96,6 +96,7 @@ func finalizePlatformComponentTask(
 		return etcd.TaskRecord{}, err
 	}
 	task.PlanHash = input.ExecutionPlanSHA256
+	task.Steps = taskjournal.CloneTaskSteps(input.PreparedSteps)
 	return task, nil
 }
 

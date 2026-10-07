@@ -87,7 +87,7 @@ func (planner *Planner) BuildHierarchyDeletionAttachPlan(
 	}
 	defer clearPlanSecrets(plan)
 	return etcd.HierarchyDeletionAttachPlan{
-		PlanHash: hex.EncodeToString(plan.GetPlanHash()), Steps: prepared.Steps,
+		PlanHash: hex.EncodeToString(plan.GetPlanHash()), Steps: taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps),
 		Configuration: prepared.Configuration, HookInputs: inputs,
 	}, nil
 }

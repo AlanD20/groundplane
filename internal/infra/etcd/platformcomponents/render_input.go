@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
 	"sort"
 	"strings"
@@ -30,48 +31,49 @@ type PlatformDNSHost struct {
 }
 
 type PlatformComponentTaskRenderInput struct {
-	ReferenceConditions            []keyvalue.Condition        `json:"reference_conditions,omitempty"`
-	PlanID                         string                      `json:"plan_id"`
-	TaskID                         string                      `json:"task_id"`
-	ComponentID                    string                      `json:"component_id"`
-	DesiredSHA256                  string                      `json:"desired_sha256"`
-	BaselineGeneration             uint64                      `json:"baseline_generation"`
-	BaselineSHA256                 string                      `json:"baseline_sha256"`
-	HostResolutionInputRevision    int64                       `json:"host_resolution_input_revision"`
-	HostResolutionSHA256           string                      `json:"host_resolution_sha256"`
-	Config                         core.CoreDNSComponentConfig `json:"config"`
-	Hosts                          []PlatformDNSHost           `json:"hosts,omitempty"`
-	PrivateListener                string                      `json:"private_listener,omitempty"`
-	GeneratedServiceID             string                      `json:"generated_service_id"`
-	EnsureService                  bool                        `json:"ensure_service"`
-	DisableService                 bool                        `json:"disable_service"`
-	DefinitionSHA256               string                      `json:"definition_sha256"`
-	CatalogSHA256                  string                      `json:"catalog_sha256"`
-	ActionID                       string                      `json:"action_id"`
-	ArtifactID                     string                      `json:"artifact_id"`
-	ComposeArtifactID              string                      `json:"compose_artifact_id"`
-	ComposeArtifact                *agentpb.ComposeArtifact    `json:"compose_artifact,omitempty"`
-	RollbackComposeArtifact        *agentpb.ComposeArtifact    `json:"rollback_compose_artifact,omitempty"`
-	OwnershipPlanID                string                      `json:"ownership_plan_id"`
-	OwnershipGeneration            uint64                      `json:"ownership_generation"`
-	PriorObservationModRevision    int64                       `json:"prior_observation_mod_revision"`
-	PriorObservationRevision       uint64                      `json:"prior_observation_revision"`
-	PredecessorTaskID              string                      `json:"predecessor_task_id,omitempty"`
-	ExpectedPreviousArtifactSHA256 string                      `json:"expected_previous_artifact_sha256,omitempty"`
-	ExpectedPreviousArtifactID     string                      `json:"expected_previous_artifact_id,omitempty"`
-	ExpectedPreviousGeneration     uint64                      `json:"expected_previous_generation,omitempty"`
-	ImageRepository                string                      `json:"image_repository"`
-	ImageIndexDigest               string                      `json:"image_index_digest"`
-	ImageConfigDigest              string                      `json:"image_config_digest"`
-	ImageOS                        string                      `json:"image_os"`
-	ImageArchitecture              string                      `json:"image_architecture"`
-	ImageVariant                   string                      `json:"image_variant,omitempty"`
-	ImageChildDigest               string                      `json:"image_child_digest"`
-	ImageReference                 string                      `json:"image_reference"`
-	ArtifactSHA256                 string                      `json:"artifact_sha256"`
-	ArtifactLength                 uint64                      `json:"artifact_length"`
-	PlanSHA256                     string                      `json:"plan_sha256"`
-	ExecutionPlanSHA256            string                      `json:"execution_plan_sha256"`
+	ReferenceConditions            []keyvalue.Condition         `json:"reference_conditions,omitempty"`
+	PlanID                         string                       `json:"plan_id"`
+	TaskID                         string                       `json:"task_id"`
+	ComponentID                    string                       `json:"component_id"`
+	DesiredSHA256                  string                       `json:"desired_sha256"`
+	BaselineGeneration             uint64                       `json:"baseline_generation"`
+	BaselineSHA256                 string                       `json:"baseline_sha256"`
+	HostResolutionInputRevision    int64                        `json:"host_resolution_input_revision"`
+	HostResolutionSHA256           string                       `json:"host_resolution_sha256"`
+	Config                         core.CoreDNSComponentConfig  `json:"config"`
+	Hosts                          []PlatformDNSHost            `json:"hosts,omitempty"`
+	PrivateListener                string                       `json:"private_listener,omitempty"`
+	GeneratedServiceID             string                       `json:"generated_service_id"`
+	EnsureService                  bool                         `json:"ensure_service"`
+	DisableService                 bool                         `json:"disable_service"`
+	DefinitionSHA256               string                       `json:"definition_sha256"`
+	CatalogSHA256                  string                       `json:"catalog_sha256"`
+	ActionID                       string                       `json:"action_id"`
+	ArtifactID                     string                       `json:"artifact_id"`
+	ComposeArtifactID              string                       `json:"compose_artifact_id"`
+	ComposeArtifact                *agentpb.ComposeArtifact     `json:"compose_artifact,omitempty"`
+	RollbackComposeArtifact        *agentpb.ComposeArtifact     `json:"rollback_compose_artifact,omitempty"`
+	OwnershipPlanID                string                       `json:"ownership_plan_id"`
+	OwnershipGeneration            uint64                       `json:"ownership_generation"`
+	PriorObservationModRevision    int64                        `json:"prior_observation_mod_revision"`
+	PriorObservationRevision       uint64                       `json:"prior_observation_revision"`
+	PredecessorTaskID              string                       `json:"predecessor_task_id,omitempty"`
+	ExpectedPreviousArtifactSHA256 string                       `json:"expected_previous_artifact_sha256,omitempty"`
+	ExpectedPreviousArtifactID     string                       `json:"expected_previous_artifact_id,omitempty"`
+	ExpectedPreviousGeneration     uint64                       `json:"expected_previous_generation,omitempty"`
+	ImageRepository                string                       `json:"image_repository"`
+	ImageIndexDigest               string                       `json:"image_index_digest"`
+	ImageConfigDigest              string                       `json:"image_config_digest"`
+	ImageOS                        string                       `json:"image_os"`
+	ImageArchitecture              string                       `json:"image_architecture"`
+	ImageVariant                   string                       `json:"image_variant,omitempty"`
+	ImageChildDigest               string                       `json:"image_child_digest"`
+	ImageReference                 string                       `json:"image_reference"`
+	ArtifactSHA256                 string                       `json:"artifact_sha256"`
+	ArtifactLength                 uint64                       `json:"artifact_length"`
+	PlanSHA256                     string                       `json:"plan_sha256"`
+	ExecutionPlanSHA256            string                       `json:"execution_plan_sha256"`
+	PreparedSteps                  []taskjournal.TaskStepRecord `json:"-"`
 }
 
 func PlatformComponentTaskRenderInputKey(planID string) string {

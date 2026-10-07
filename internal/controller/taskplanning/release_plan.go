@@ -49,6 +49,7 @@ func (resolver *TaskPlanResolver) PrepareReleaseTask(
 		return etcd.TaskRecord{}, nil, err
 	}
 	prepared.PlanHash = hex.EncodeToString(plan.PlanHash)
+	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps)
 	return prepared, plan, nil
 }
 

@@ -403,7 +403,7 @@ func hierarchyDeletionTask(
 			taskjournal.TaskHierarchyDeletionTargetKindParam: string(begin.TargetKind),
 		},
 		Steps: []taskjournal.TaskStepRecord{
-			{Kind: taskjournal.TaskStepOperation, ID: "step_" + suffix},
+			{Kind: taskjournal.TaskStepOperation, ID: "step_" + suffix, Action: "Remove resource hierarchy", Description: "Coordinate child cleanup and remove the selected hierarchy after its effects are verified.", Target: begin.TargetID, TimeoutSeconds: uint32(hierarchydeletion.AttemptTimeout / time.Second)},
 		}, TimeoutSeconds: int64(hierarchydeletion.AttemptTimeout / time.Second),
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
 	}

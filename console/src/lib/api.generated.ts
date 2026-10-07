@@ -3479,6 +3479,9 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             environment_id?: string;
+            /** @enum {string} */
+            executor: "agent" | "controller" | "blueprint";
+            failure_summary?: string;
             /** Format: date-time */
             finished_at: string | null;
             id: string;
@@ -3487,13 +3490,18 @@ export interface components {
             plan_hash?: string;
             project_id?: string;
             reconciliation_required: boolean;
+            resource_kind?: string;
+            result_summary?: string;
             retry_of?: string;
             /** Format: date-time */
             started_at: string | null;
             status: string;
             steps?: components["schemas"]["TaskStep"][] | null;
             target: string;
+            target_name?: string;
             tenant_id?: string;
+            /** Format: int64 */
+            timeout_seconds: number;
             /** @enum {string} */
             type: "deploy" | "rollback" | "backup" | "backup_prune" | "restore" | "attach" | "detach" | "run" | "script" | "provision" | "create" | "update" | "remove" | "start" | "stop" | "destroy" | "rotate" | "fetch";
             /** Format: date-time */
@@ -3531,12 +3539,14 @@ export interface components {
         };
         TaskStep: {
             action: string;
+            description?: string;
             /** @enum {string} */
             kind: "operation" | "script";
             name: string;
             script_id?: string;
             script_slug?: string;
             status: string;
+            target?: string;
             /** Format: int32 */
             timeout_seconds?: number;
         } & ({

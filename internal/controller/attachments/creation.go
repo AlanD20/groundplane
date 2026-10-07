@@ -180,7 +180,7 @@ func (service *MutationService) createAttachOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	prepared, err := service.plans.SealDraft(
+	task, prepared, err := service.plans.SealDraft(
 		ctx,
 		etcdstore.Versioned[attachrecord.Record]{Record: record},
 		renderInput,

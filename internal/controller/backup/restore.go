@@ -93,6 +93,7 @@ func (service *RestoreService) Restore(ctx context.Context, environmentID, idemp
 		return idempotency.IdempotencyResponse{}, err
 	}
 	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed.Steps)
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)

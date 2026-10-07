@@ -64,6 +64,7 @@ func PrepareBlueprintAttachUnit(
 		return etcd.TaskRecord{}, nil, err
 	}
 	prepared.PlanHash = hex.EncodeToString(plan.GetPlanHash())
+	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps)
 	return prepared, plan, nil
 }
 

@@ -392,7 +392,7 @@ func newEnvironmentCreationTask(
 		Params: map[string]string{
 			taskcontract.EnvironmentCreateVolumeDirectoryParam: environment.VolumeDir,
 		},
-		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}},
+		Steps:          taskjournal.CaptureStepDescriptions([]taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}, plan.Steps),
 		TimeoutSeconds: environmentCreationTimeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil

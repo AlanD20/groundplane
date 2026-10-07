@@ -489,7 +489,7 @@ func (service *MutationService) mutateOnce(
 		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
 		RenderGeneration: int32(generation), Type: volumeMutationTaskType(request.action), Target: request.volumeID,
-		Params: params, Steps: steps, TimeoutSeconds: volumeMutationTimeoutSeconds,
+		Params: params, Steps: taskjournal.CaptureStepDescriptions(steps, plan.Steps), TimeoutSeconds: volumeMutationTimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	response, err := volumeMutationResponse(request, environment.Record, taskID)

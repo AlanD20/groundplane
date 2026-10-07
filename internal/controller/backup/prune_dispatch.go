@@ -163,6 +163,7 @@ func (service *BackupPruneService) publishPrepared(ctx context.Context,
 		return zero, err
 	}
 	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed.Steps)
 	body, err := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: taskID})

@@ -214,7 +214,6 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	s.describeTask(ctx, task.Record, &response)
 	return &taskOutput{Body: response}, nil
 }
 
@@ -255,6 +254,10 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 		ImageFetch:             fetch,
 		ID:                     record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
 		PlanHash: record.PlanHash, Type: taskType, Target: record.Target, Status: status,
+		Executor: string(record.Executor), TimeoutSeconds: record.TimeoutSeconds,
+		TargetName:     record.TargetName,
+		ResourceKind:   taskResourceKind(record),
+		FailureSummary: taskFailureSummary(record), ResultSummary: taskResultSummary(record),
 		WorkspaceType: workspace, TenantID: record.Owner.TenantID, ProjectID: record.Owner.ProjectID,
 		EnvironmentID: record.Owner.EnvironmentID, Actor: actor,
 		CreatedAt: record.CreatedAt.UTC(), UpdatedAt: record.UpdatedAt.UTC(),

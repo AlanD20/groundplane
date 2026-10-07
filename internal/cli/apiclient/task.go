@@ -271,6 +271,9 @@ func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
 		Actor: apiTypes.TaskActor(task.Actor), CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
 		StartedAt: task.StartedAt, FinishedAt: task.FinishedAt,
 		ReconciliationRequired: task.ReconciliationRequired,
+		TargetName:             valueOrEmpty(task.TargetName), ResourceKind: valueOrEmpty(task.ResourceKind),
+		Executor: string(task.Executor), TimeoutSeconds: task.TimeoutSeconds,
+		FailureSummary: valueOrEmpty(task.FailureSummary), ResultSummary: valueOrEmpty(task.ResultSummary),
 	}
 	if task.RetryOf != nil {
 		result.RetryOf = *task.RetryOf
@@ -319,7 +322,14 @@ func taskStepFromGenerated(step generated.TaskStep) (apiTypes.TaskStep, error) {
 	if !step.Kind.Valid() {
 		return apiTypes.TaskStep{}, errs.New(errs.KindInternal, "apiclient: Task response has unknown step kind")
 	}
-	result := apiTypes.TaskStep{Name: step.Name, Status: apiTypes.TaskStatus(step.Status)}
+	result := apiTypes.TaskStep{Name: step.Name, Status: apiTypes.TaskStatus(step.Status), Action: step.Action,
+		Description: valueOrEmpty(step.Description), Target: valueOrEmpty(step.Target)}
+	if step.TimeoutSeconds != nil {
+		if *step.TimeoutSeconds <= 0 {
+			return apiTypes.TaskStep{}, errs.New(errs.KindInternal, "apiclient: Task step has an invalid timeout")
+		}
+		result.TimeoutSeconds = uint32(*step.TimeoutSeconds)
+	}
 	switch step.Kind {
 	case generated.TaskStepKindOperation:
 		if step.ScriptId != nil || step.ScriptSlug != nil {

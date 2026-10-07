@@ -185,7 +185,7 @@ func (service *MutationService) detachAttachOnce(
 	}
 	draft := current
 	draft.Record = detaching
-	prepared, err := service.plans.SealDraft(ctx, draft, renderInput, task, nil, nil, hookInputs)
+	task, prepared, err := service.plans.SealDraft(ctx, draft, renderInput, task, nil, nil, hookInputs)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

@@ -7,6 +7,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -82,6 +83,7 @@ func sealPlatformComponentTaskPlanHash(
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	input.ExecutionPlanSHA256 = hex.EncodeToString(execution.GetPlanHash())
+	input.PreparedSteps = taskjournal.CaptureStepDescriptions(task.Steps, execution.Steps)
 	return input, nil
 }
 

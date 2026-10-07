@@ -177,6 +177,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 			return hierarchydeletion.HierarchyDeletionChildEntry{}, planErr
 		}
 		planHash = hex.EncodeToString(plan.PlanHash)
+		taskSteps = taskjournal.CaptureStepDescriptions(taskSteps, plan.Steps)
 	}
 	parentTask, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(operation.Tombstone.CurrentTaskID))
 	if err != nil {

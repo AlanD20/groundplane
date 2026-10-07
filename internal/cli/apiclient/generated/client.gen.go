@@ -555,16 +555,16 @@ func (e RunnerLifecycle) Valid() bool {
 
 // Defines values for ScriptOrigin.
 const (
-	Api       ScriptOrigin = "api"
-	Blueprint ScriptOrigin = "blueprint"
+	ScriptOriginApi       ScriptOrigin = "api"
+	ScriptOriginBlueprint ScriptOrigin = "blueprint"
 )
 
 // Valid indicates whether the value is a known member of the ScriptOrigin enum.
 func (e ScriptOrigin) Valid() bool {
 	switch e {
-	case Api:
+	case ScriptOriginApi:
 		return true
-	case Blueprint:
+	case ScriptOriginBlueprint:
 		return true
 	default:
 		return false
@@ -724,6 +724,27 @@ func (e TaskActor) Valid() bool {
 	case Operator:
 		return true
 	case System:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskExecutor.
+const (
+	TaskExecutorAgent      TaskExecutor = "agent"
+	TaskExecutorBlueprint  TaskExecutor = "blueprint"
+	TaskExecutorController TaskExecutor = "controller"
+)
+
+// Valid indicates whether the value is a known member of the TaskExecutor enum.
+func (e TaskExecutor) Valid() bool {
+	switch e {
+	case TaskExecutorAgent:
+		return true
+	case TaskExecutorBlueprint:
+		return true
+	case TaskExecutorController:
 		return true
 	default:
 		return false
@@ -3027,6 +3048,8 @@ type Task struct {
 	Actor                  TaskActor         `json:"actor"`
 	CreatedAt              time.Time         `json:"created_at"`
 	EnvironmentId          *string           `json:"environment_id,omitempty"`
+	Executor               TaskExecutor      `json:"executor"`
+	FailureSummary         *string           `json:"failure_summary,omitempty"`
 	FinishedAt             *time.Time        `json:"finished_at"`
 	Id                     string            `json:"id"`
 	ImageFetch             *TaskImageFetch   `json:"image_fetch,omitempty"`
@@ -3034,12 +3057,16 @@ type Task struct {
 	PlanHash               *string           `json:"plan_hash,omitempty"`
 	ProjectId              *string           `json:"project_id,omitempty"`
 	ReconciliationRequired bool              `json:"reconciliation_required"`
+	ResourceKind           *string           `json:"resource_kind,omitempty"`
+	ResultSummary          *string           `json:"result_summary,omitempty"`
 	RetryOf                *string           `json:"retry_of,omitempty"`
 	StartedAt              *time.Time        `json:"started_at"`
 	Status                 string            `json:"status"`
 	Steps                  *[]TaskStep       `json:"steps,omitempty"`
 	Target                 string            `json:"target"`
+	TargetName             *string           `json:"target_name,omitempty"`
 	TenantId               *string           `json:"tenant_id,omitempty"`
+	TimeoutSeconds         int64             `json:"timeout_seconds"`
 	Type                   TaskType          `json:"type"`
 	UpdatedAt              time.Time         `json:"updated_at"`
 	WorkspaceType          TaskWorkspaceType `json:"workspace_type"`
@@ -3047,6 +3074,9 @@ type Task struct {
 
 // TaskActor defines model for Task.Actor.
 type TaskActor string
+
+// TaskExecutor defines model for Task.Executor.
+type TaskExecutor string
 
 // TaskType defines model for Task.Type.
 type TaskType string
@@ -3087,11 +3117,13 @@ type TaskImageFetch struct {
 // TaskStep defines model for TaskStep.
 type TaskStep struct {
 	Action         string       `json:"action"`
+	Description    *string      `json:"description,omitempty"`
 	Kind           TaskStepKind `json:"kind"`
 	Name           string       `json:"name"`
 	ScriptId       *string      `json:"script_id,omitempty"`
 	ScriptSlug     *string      `json:"script_slug,omitempty"`
 	Status         string       `json:"status"`
+	Target         *string      `json:"target,omitempty"`
 	TimeoutSeconds *int32       `json:"timeout_seconds,omitempty"`
 	union          json.RawMessage
 }
@@ -5119,6 +5151,13 @@ func (t TaskStep) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error marshaling 'action': %w", err)
 	}
 
+	if t.Description != nil {
+		object["description"], err = json.Marshal(t.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
 	object["kind"], err = json.Marshal(t.Kind)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
@@ -5148,6 +5187,13 @@ func (t TaskStep) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error marshaling 'status': %w", err)
 	}
 
+	if t.Target != nil {
+		object["target"], err = json.Marshal(t.Target)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'target': %w", err)
+		}
+	}
+
 	if t.TimeoutSeconds != nil {
 		object["timeout_seconds"], err = json.Marshal(t.TimeoutSeconds)
 		if err != nil {
@@ -5173,6 +5219,13 @@ func (t *TaskStep) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Action)
 		if err != nil {
 			return fmt.Errorf("error reading 'action': %w", err)
+		}
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &t.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
 		}
 	}
 
@@ -5208,6 +5261,13 @@ func (t *TaskStep) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Status)
 		if err != nil {
 			return fmt.Errorf("error reading 'status': %w", err)
+		}
+	}
+
+	if raw, found := object["target"]; found {
+		err = json.Unmarshal(raw, &t.Target)
+		if err != nil {
+			return fmt.Errorf("error reading 'target': %w", err)
 		}
 	}
 

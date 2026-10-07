@@ -149,6 +149,7 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 		return etcd.RouteMutationTaskPreparation{}, err
 	}
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
 	return etcd.RouteMutationTaskPreparation{Intent: intent, Task: task}, nil
 }
 
@@ -163,7 +164,7 @@ func prepareNativeRouteMutation(
 		taskjournal.TaskResourceKindParam:     taskjournal.TaskResourceRoute,
 		taskjournal.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
-	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
+	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep), Action: "Publish Route configuration", Description: "Commit the selected Route's desired configuration without changing a running workload.", Target: intent.RouteID, TimeoutSeconds: 30}}
 	value, err := json.Marshal(struct {
 		Version    int                                  `json:"version"`
 		Kind       environmentchanges.RouteMutationKind `json:"kind"`

@@ -71,7 +71,7 @@ type attachDraftPlanSealer interface {
 		*taskplanning.AttachPlanIdentity,
 		*attachrecord.EncryptedFacts,
 		*taskconfiguration.BackingHookEncryptedInputs,
-	) (serviceruntimerecord.AttachPreparation, error)
+	) (etcd.TaskRecord, serviceruntimerecord.AttachPreparation, error)
 }
 
 type MutationService struct {

@@ -12,7 +12,7 @@ import (
 func TestManifestBoundary(t *testing.T) {
 	valid := []byte(`{"agent_image":"registry.example/agent@sha256:` + strings.Repeat("a", 64) +
 		`","channel_schema":1,"controller_sha256":"sha256:` + strings.Repeat("b", 64) +
-		`","controller_version":"0.1.0","schema":1,"storage_epoch":4}`)
+		fmt.Sprintf(`","controller_version":"0.1.0","schema":1,"storage_epoch":%d}`, StorageEpoch))
 	id := Digest(fmt.Sprintf("sha256:%x", sha256.Sum256(valid)))
 	manifest, err := ParseManifest(valid, id)
 	if err != nil || manifest.ControllerVersion != "0.1.0" {
@@ -23,7 +23,7 @@ func TestManifestBoundary(t *testing.T) {
 		"duplicate":                 []byte(strings.Replace(string(valid), `"schema":1`, `"schema":1,"schema":1`, 1)),
 		"unknown":                   []byte(strings.Replace(string(valid), `"schema":1`, `"other":1,"schema":1`, 1)),
 		"tag":                       []byte(strings.Replace(string(valid), "@sha256:"+strings.Repeat("a", 64), ":latest", 1)),
-		"storage":                   []byte(strings.Replace(string(valid), `"storage_epoch":4`, `"storage_epoch":3`, 1)),
+		"storage":                   []byte(strings.Replace(string(valid), fmt.Sprintf(`"storage_epoch":%d`, StorageEpoch), `"storage_epoch":3`, 1)),
 		"protocol":                  []byte(strings.Replace(string(valid), `"channel_schema":1`, `"channel_schema":2`, 1)),
 		"version control character": []byte(strings.Replace(string(valid), "0.1.0", `0.1.0\n`, 1)),
 		"oversized":                 []byte(strings.Repeat(" ", MaxManifestBytes+1)),

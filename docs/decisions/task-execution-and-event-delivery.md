@@ -70,6 +70,14 @@ decision.
 
 ## Task events resume by durable sequence
 
+Task publication captures a bounded, secret-free description of each sealed
+step. Read presentation uses that metadata, not the dispatch resolver: dispatch
+checks current execution eligibility, which legitimately changes after completion.
+Descriptions are presentation only, never permission to execute. Missing older
+metadata stays missing; no live-state reconstruction or history rewrite is used.
+See [the safe projector](../../internal/common/taskdescription) and
+[Task journal capture](../../internal/infra/etcd/taskjournal/descriptions.go).
+
 The public Server-Sent Events id is the canonical decimal Task-event sequence,
 never a storage revision. `Last-Event-ID` selects a suffix of one Task journal.
 Within a connection, each sequence is emitted at most once and in order;

@@ -27,6 +27,7 @@ type taskRecordData struct {
 	RenderGeneration   int32                                     `json:"render_generation"`
 	Type               taskjournal.TaskType                      `json:"type"`
 	Target             string                                    `json:"target"`
+	TargetName         string                                    `json:"target_name,omitempty"`
 	Params             map[string]string                         `json:"params,omitempty"`
 	Steps              []taskjournal.TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record            `json:"materializations,omitempty"`
@@ -90,7 +91,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		IdempotencyKey: record.IdempotencyKey, Owner: record.Owner, Actor: record.Actor,
 		Executor: record.Executor, PlanID: record.PlanID,
 		PlanHash: record.PlanHash, RenderGeneration: record.RenderGeneration,
-		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
+		Type: record.Type, Target: record.Target, TargetName: record.TargetName, Params: cloneStringMap(record.Params),
 		Steps: taskjournal.CloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
 		ComponentActionStepIDs: append([]string(nil), record.ComponentActionStepIDs...),
 		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(
@@ -143,7 +144,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		IdempotencyKey: data.IdempotencyKey, Owner: data.Owner, Actor: data.Actor,
 		Executor: data.Executor, PlanID: data.PlanID,
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
-		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
+		Type: data.Type, Target: data.Target, TargetName: data.TargetName, Params: data.Params, Steps: data.Steps,
 		ImageFetchProgress:     data.ImageFetchProgress,
 		ComponentActionStepIDs: append([]string(nil), data.ComponentActionStepIDs...),
 		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(

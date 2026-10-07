@@ -26,10 +26,14 @@ The link opens that exact Task, not a filtered history list; it can be copied or
 opened in another tab. The inspector refreshes pending/running status until the
 Task finishes. A rejected request without a Task ID has no Task to open.
 The inspector leads with the action, affected resource, status and execution
-timing. The execution terminal names the actual operations from the Task's exact
-retained plan, with state transitions, timestamps, attempts and timeouts. It does
-not expose shell commands, credentials or stdout. If the plan is no longer
-available, it identifies missing execution details instead of inventing step names.
+timing. New Tasks capture safe step descriptions when their execution plan is
+sealed, so completing an operation or changing its resource cannot erase those
+descriptions. Expand a step to see its purpose, selected target, timeout, attempts
+and recorded transitions. Event timestamps show when the Controller received
+the transition; they are not exact subprocess timing. The inspector shows saved
+failure diagnostics and runtime evidence when present, not guessed outcomes.
+It does not expose shell commands, credentials or stdout. Older Tasks without
+captured descriptions are explicitly marked; their history is not rewritten.
 Unavailable failure details are
 identified explicitly, not inferred from a failed status. Exact IDs and plan
 hashes remain available under Technical details.

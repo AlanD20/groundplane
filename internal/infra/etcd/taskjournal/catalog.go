@@ -84,10 +84,14 @@ const (
 // TaskStepRecord is the immutable execution procedure stored with a Task.
 // ID is stable within the task and participates in Agent event identity.
 type TaskStepRecord struct {
-	Kind       TaskStepKind `json:"kind"`
-	ID         string       `json:"id"`
-	ScriptID   string       `json:"script_id,omitempty"`
-	ScriptSlug string       `json:"script_slug,omitempty"`
+	Kind           TaskStepKind `json:"kind"`
+	ID             string       `json:"id"`
+	ScriptID       string       `json:"script_id,omitempty"`
+	ScriptSlug     string       `json:"script_slug,omitempty"`
+	Action         string       `json:"action,omitempty"`
+	Description    string       `json:"description,omitempty"`
+	Target         string       `json:"target,omitempty"`
+	TimeoutSeconds uint32       `json:"timeout_seconds,omitempty"`
 }
 
 type TaskResultKind string

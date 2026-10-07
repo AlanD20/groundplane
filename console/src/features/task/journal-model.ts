@@ -16,6 +16,21 @@ export type TaskPageItem = NonNullable<TaskPageResponse["items"]>[number];
 export type TaskEventResponse =
   operations["task.events"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 
+type TaskPresentationItem = TaskPageItem & {
+  executor?: "agent" | "controller" | "blueprint";
+  failure_summary?: string;
+  resource_kind?: string;
+  result_summary?: string;
+  target_name?: string;
+  timeout_seconds?: number;
+  steps?:
+    | (NonNullable<TaskPageItem["steps"]>[number] & {
+        description?: string;
+        target?: string;
+      })[]
+    | null;
+};
+
 const taskStatuses = new Set<TaskStatus>([
   "pending",
   "running",
@@ -112,7 +127,7 @@ function taskTitle(type: TaskType, target: string): string {
   return `${labels[type]} · ${target}`;
 }
 export function taskFromAPI(value: TaskPageItem): ActivityEntry {
-  const task = value;
+  const task = value as TaskPresentationItem;
   if (!taskStatuses.has(task.status as TaskStatus))
     throw new Error(`Controller returned unknown Task status ${task.status}`);
   if (task.workspace_type !== "platform" && task.workspace_type !== "tenant") {
@@ -122,6 +137,16 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
   }
   if (task.actor !== "operator" && task.actor !== "system") {
     throw new Error(`Controller returned unknown Task actor ${task.actor}`);
+  }
+  if (
+    task.executor !== undefined &&
+    task.executor !== "agent" &&
+    task.executor !== "controller" &&
+    task.executor !== "blueprint"
+  ) {
+    throw new Error(
+      `Controller returned unknown Task executor ${task.executor}`,
+    );
   }
   if (task.workspace_type === "tenant" && !task.tenant_id) {
     throw new Error(
@@ -154,9 +179,18 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     retryOf: task.retry_of,
     planHash: task.plan_hash,
     type,
-    title: taskTitle(type, task.image_fetch?.requested ?? task.target),
+    title: taskTitle(
+      type,
+      task.image_fetch?.requested ?? task.target_name ?? task.target,
+    ),
     imageFetch: task.image_fetch,
     target: task.target,
+    targetName: task.target_name,
+    resourceKind: task.resource_kind,
+    executor: task.executor,
+    timeoutSeconds: task.timeout_seconds,
+    resultSummary: task.result_summary,
+    failureSummary: task.failure_summary,
     workspace:
       task.workspace_type === "platform" ? "platform" : task.tenant_id!,
     workspaceType: task.workspace_type,
@@ -173,6 +207,8 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     steps: task.steps?.map((step) => ({
       label: step.name,
       action: step.action,
+      description: step.description,
+      target: step.target,
       timeoutSeconds: step.timeout_seconds,
       detail: step.script_slug,
       state: taskStepState(step.status),

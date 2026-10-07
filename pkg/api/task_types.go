@@ -39,6 +39,12 @@ type Task struct {
 	PlanHash               string            `json:"plan_hash,omitempty"`
 	Type                   string            `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate,fetch"`
 	Target                 string            `json:"target"`
+	TargetName             string            `json:"target_name,omitempty"`
+	ResourceKind           string            `json:"resource_kind,omitempty"`
+	Executor               string            `json:"executor" enum:"agent,controller,blueprint"`
+	TimeoutSeconds         int64             `json:"timeout_seconds"`
+	FailureSummary         string            `json:"failure_summary,omitempty"`
+	ResultSummary          string            `json:"result_summary,omitempty"`
 	Status                 TaskStatus        `json:"status"`
 	ReconciliationRequired bool              `json:"reconciliation_required"`
 	WorkspaceType          TaskWorkspaceType `json:"workspace_type"           enum:"platform,tenant"`
@@ -71,6 +77,8 @@ const (
 type TaskStep struct {
 	Name           string       `json:"name"`
 	Action         string       `json:"action"`
+	Description    string       `json:"description,omitempty"`
+	Target         string       `json:"target,omitempty"`
 	TimeoutSeconds uint32       `json:"timeout_seconds,omitempty"`
 	Status         TaskStatus   `json:"status"`
 	Kind           TaskStepKind `json:"kind" enum:"operation,script"`

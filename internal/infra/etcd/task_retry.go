@@ -51,6 +51,7 @@ func CloneRetryTask(
 		PlanHash: source.PlanHash, RenderGeneration: source.RenderGeneration,
 		Type: source.Type, Target: source.Target, Params: cloneStringMap(source.Params),
 		Steps: taskjournal.CloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
+		TargetName:             source.TargetName,
 		ComponentActionStepIDs: append([]string(nil), source.ComponentActionStepIDs...),
 		ManagedComponentTeardownSources: environmentprojection.CloneManagedComponentRuntimeSources(
 			source.ManagedComponentTeardownSources,

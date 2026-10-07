@@ -305,6 +305,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		}
 	}
 	task.PlanHash = renderInput.ExecutionPlanSHA256
+	task.Steps = taskjournal.CloneTaskSteps(renderInput.PreparedSteps)
 	if err := ValidateTaskRecord(task); err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}

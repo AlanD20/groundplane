@@ -65,6 +65,9 @@ func ValidateTaskRecord(record TaskRecord) error {
 	if record.Target == "" || !utf8.ValidString(record.Target) {
 		return errs.New(errs.KindValidationFailed, "task target is required and must be valid UTF-8")
 	}
+	if err := taskjournal.ValidateTargetName(record.TargetName); err != nil {
+		return err
+	}
 	if err := recordcodec.ValidateID(ids.KindPlan, record.PlanID); err != nil {
 		return err
 	}

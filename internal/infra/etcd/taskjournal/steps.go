@@ -12,6 +12,9 @@ func ValidateTaskSteps(steps []TaskStepRecord) error {
 	seenScriptIDs := make(map[string]struct{}, len(steps))
 	seenScriptSlugs := make(map[string]struct{}, len(steps))
 	for _, step := range steps {
+		if err := validateStepDescription(step); err != nil {
+			return err
+		}
 		if err := recordcodec.ValidateID(ids.KindStep, step.ID); err != nil {
 			return err
 		}

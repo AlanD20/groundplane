@@ -329,6 +329,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	if err != nil {
 		return etcd.TaskRecord{}, nil, err
 	}
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
 	return task, plan, nil
 }
 

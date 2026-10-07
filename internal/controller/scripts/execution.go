@@ -92,6 +92,7 @@ func (service *scriptMutationService) RunScript(
 	}
 	task.RenderGeneration = int32(plan.RenderGeneration)
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
 	execution, err := etcd.NewScriptExecutionRecord(task, plan, now)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

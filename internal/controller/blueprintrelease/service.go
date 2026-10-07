@@ -24,6 +24,7 @@ import (
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"strings"
@@ -198,6 +199,7 @@ func (service *Service) prepareSelected(
 			return Prepared{}, buildErr
 		}
 		task.Steps = taskStepRecords(plan.Steps)
+		task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
 		publication, buildErr := service.prepareRetainedPublication(
 			ctx,
 			input,

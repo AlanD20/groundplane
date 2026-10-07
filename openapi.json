@@ -6180,6 +6180,17 @@
           "environment_id": {
             "type": "string"
           },
+          "executor": {
+            "enum": [
+              "agent",
+              "controller",
+              "blueprint"
+            ],
+            "type": "string"
+          },
+          "failure_summary": {
+            "type": "string"
+          },
           "finished_at": {
             "format": "date-time",
             "type": [
@@ -6204,6 +6215,12 @@
           },
           "reconciliation_required": {
             "type": "boolean"
+          },
+          "resource_kind": {
+            "type": "string"
+          },
+          "result_summary": {
+            "type": "string"
           },
           "retry_of": {
             "type": "string"
@@ -6230,8 +6247,15 @@
           "target": {
             "type": "string"
           },
+          "target_name": {
+            "type": "string"
+          },
           "tenant_id": {
             "type": "string"
+          },
+          "timeout_seconds": {
+            "format": "int64",
+            "type": "integer"
           },
           "type": {
             "enum": [
@@ -6273,6 +6297,8 @@
           "operation_id",
           "type",
           "target",
+          "executor",
+          "timeout_seconds",
           "status",
           "reconciliation_required",
           "workspace_type",
@@ -6421,6 +6447,9 @@
           "action": {
             "type": "string"
           },
+          "description": {
+            "type": "string"
+          },
           "kind": {
             "enum": [
               "operation",
@@ -6438,6 +6467,9 @@
             "type": "string"
           },
           "status": {
+            "type": "string"
+          },
+          "target": {
             "type": "string"
           },
           "timeout_seconds": {

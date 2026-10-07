@@ -405,6 +405,8 @@ export type TaskStepState = "pending" | "running" | "done" | "failed";
 export type TaskStep = {
   label: string;
   action?: string;
+  description?: string;
+  target?: string;
   timeoutSeconds?: number;
   state: TaskStepState;
   detail?: string;
@@ -457,6 +459,12 @@ export type ActivityEntry = {
   type: TaskType;
   title: string;
   target: string;
+  targetName?: string;
+  resourceKind?: string;
+  executor?: "agent" | "controller" | "blueprint";
+  timeoutSeconds?: number;
+  resultSummary?: string;
+  failureSummary?: string;
   workspace: string; // "platform" or tenant slug
   status: TaskStatus;
   actor: string;

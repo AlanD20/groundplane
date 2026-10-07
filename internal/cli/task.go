@@ -104,6 +104,8 @@ func renderTaskPage(cmd *cobra.Command, page apiTypes.Page[apiTypes.Task]) error
 
 func taskFields(task apiTypes.Task) map[string]any {
 	return map[string]any{
+		"target_name": task.TargetName, "resource_kind": task.ResourceKind, "executor": task.Executor,
+		"timeout_seconds": task.TimeoutSeconds, "failure_summary": task.FailureSummary, "result_summary": task.ResultSummary,
 		"image_fetch": task.ImageFetch,
 		"id":          task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
 		"plan_hash": task.PlanHash, "type": task.Type, "target": task.Target,

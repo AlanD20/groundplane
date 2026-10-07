@@ -87,6 +87,7 @@ func (runtime EntryMutationRuntime) PrepareTask(
 		return etcd.TaskRecord{}, err
 	}
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
 	return task, nil
 }
 

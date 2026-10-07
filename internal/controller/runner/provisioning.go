@@ -464,7 +464,7 @@ func newRunnerCreateTask(
 			runnerrecord.RunnerRegistrationTokenPresentParam: "true",
 		},
 		Steps: []taskjournal.TaskStepRecord{
-			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep), Action: "Register and start GitHub Runner", Description: "Prepare the Runner's isolated runtime and register it with GitHub.", Target: desired.ID, TimeoutSeconds: uint32(runnerCreateTimeoutSeconds)},
 		}, TimeoutSeconds: runnerCreateTimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}, nil

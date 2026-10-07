@@ -99,7 +99,11 @@ type RemovalTaskPlan struct {
 }
 
 type RemovalStep struct {
-	ID string
+	ID             string
+	Action         string
+	Description    string
+	Target         string
+	TimeoutSeconds uint32
 }
 
 type RemovalMaterialization struct {

@@ -49,6 +49,7 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 		return etcd.TaskRecord{}, err
 	}
 	prepared.PlanHash = hex.EncodeToString(plan.PlanHash)
+	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps)
 	return prepared, nil
 }
 

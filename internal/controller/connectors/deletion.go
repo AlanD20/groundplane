@@ -361,7 +361,7 @@ func newConnectorDeletionTask(
 			etcd.TaskConnectorEnvironmentParam: connector.EnvironmentID,
 			etcd.TaskConnectorNameParam:        connector.Name,
 		},
-		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
+		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep), Action: "Remove Connector", Description: "Delete the unreferenced Connector and its owned credentials; stored backup objects remain untouched.", Target: connector.ID, TimeoutSeconds: uint32(connectorDeletionTimeoutSeconds)}},
 		TimeoutSeconds: connectorDeletionTimeoutSeconds, PlanHash: planHash,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil

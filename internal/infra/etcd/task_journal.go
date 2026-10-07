@@ -29,6 +29,7 @@ type TaskRecord struct {
 	RenderGeneration   int32                                     `json:"render_generation"`
 	Type               taskjournal.TaskType                      `json:"type"`
 	Target             string                                    `json:"target"`
+	TargetName         string                                    `json:"target_name,omitempty"`
 	Params             map[string]string                         `json:"params,omitempty"`
 	Steps              []taskjournal.TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record            `json:"materializations,omitempty"`
