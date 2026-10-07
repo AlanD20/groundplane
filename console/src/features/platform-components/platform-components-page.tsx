@@ -14,7 +14,6 @@ import {
 import { useStore } from "@/lib/store";
 import { Network, RefreshCw, Server } from "lucide-react";
 import { Link } from "react-router-dom";
-import { EnvironmentComponentsTable } from "./environment-components-table";
 
 export default function PlatformInfraPage() {
   const {
@@ -27,6 +26,7 @@ export default function PlatformInfraPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Components"
+        description="CoreDNS provides shared DNS for this host. Manage routing and tunnels from their Environment."
         icon={<Server />}
         actions={
           <Button
@@ -40,7 +40,7 @@ export default function PlatformInfraPage() {
           </Button>
         }
       />
-      <ResourcePanel title="Platform Components">
+      <ResourcePanel title="Host resolver">
         {platformComponentsLoading && (
           <p role="status" className="text-sm text-muted-foreground">
             Loading Components…
@@ -64,7 +64,7 @@ export default function PlatformInfraPage() {
             </Button>
           </div>
         )}
-        {!platformComponentsLoading && !platformComponentError && (
+        {platform.components.length > 0 && (
           <ResourceTable>
             <Table>
               <TableHeader>
@@ -76,38 +76,37 @@ export default function PlatformInfraPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {platform.components.map((component) => (
-                  <ResourceRow
-                    key={component.id}
-                    href={`/platform/components/${component.kind}`}
-                  >
-                    <TableCell>
-                      <Link
-                        to={`/platform/components/${component.kind}`}
-                        className="inline-flex items-center gap-2 font-medium hover:text-primary"
-                      >
-                        <Network className="size-4 text-muted-foreground" />
-                        {component.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={component.status} />
-                    </TableCell>
-                    <TableCell>{component.runtime}</TableCell>
-                    <TableCell>
-                      {component.hostNetwork
-                        ? "Host network"
-                        : "Container network"}
-                    </TableCell>
-                  </ResourceRow>
-                ))}
+                {platform.components
+                  .filter((component) => component.kind === "coredns")
+                  .map((component) => (
+                    <ResourceRow
+                      key={component.id}
+                      href={`/platform/components/${component.kind}`}
+                    >
+                      <TableCell>
+                        <Link
+                          to={`/platform/components/${component.kind}`}
+                          className="inline-flex items-center gap-2 font-medium hover:text-primary"
+                        >
+                          <Network className="size-4 text-muted-foreground" />
+                          {component.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={component.status} />
+                      </TableCell>
+                      <TableCell>{component.runtime}</TableCell>
+                      <TableCell>
+                        {component.hostNetwork
+                          ? "Host network"
+                          : "Container network"}
+                      </TableCell>
+                    </ResourceRow>
+                  ))}
               </TableBody>
             </Table>
           </ResourceTable>
         )}
-      </ResourcePanel>
-      <ResourcePanel title="Environment Components">
-        <EnvironmentComponentsTable />
       </ResourcePanel>
     </div>
   );

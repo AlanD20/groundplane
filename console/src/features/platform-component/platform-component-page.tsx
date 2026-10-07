@@ -1,23 +1,21 @@
-"use client";
+import { CompactReference } from "@/components/common/compact-reference";
+("use client");
 
 import { useSearchParams } from "react-router-dom";
 
 import { DetailRow } from "@/components/common/detail-row";
 import { PageHeader } from "@/components/common/page-header";
 import {
-  AdvancedDetails,
   SummaryItem,
   SummaryStrip,
   ResourcePanel,
 } from "@/components/common/resource-panel";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
-import { environmentPlatformIngress } from "@/features/environment/platform-ingress";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { ArrowLeft, Network, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { CoreDnsSettings } from "./coredns-settings";
 import { DNSRecordSettings } from "./dns-record-settings";
@@ -29,16 +27,19 @@ const kindIcon: Record<string, React.ReactNode> = {
 
 export default function PlatformComponentPage() {
   const params = useRequiredParams("component");
-  const [search, setSearch] = useSearchParams();
+  const [search] = useSearchParams();
   const tab = ["overview", "records", "configuration"].includes(
     search.get("tab") ?? "",
   )
     ? search.get("tab")!
     : "overview";
-  const setTab = (value: string) => setSearch({ tab: value });
+  const destination = (value: string) => {
+    const next = new URLSearchParams(search);
+    next.set("tab", value);
+    return `?${next}`;
+  };
   const {
     platform,
-    tenantProjects,
     platformComponentsLoading,
     platformComponentError,
     managedConfigFiles,
@@ -97,8 +98,6 @@ export default function PlatformComponentPage() {
     refreshPlatformComponents,
   ]);
 
-  const { unavailable: environmentsWithoutComponentProjection } =
-    environmentPlatformIngress(tenantProjects);
   const dnsConfig =
     platform.dns.upstream !== undefined &&
     platform.dns.upstreamAuto !== undefined &&
@@ -123,14 +122,14 @@ export default function PlatformComponentPage() {
     records: [],
   };
 
-  if (platformComponentsLoading) {
+  if (platformComponentsLoading && !component) {
     return (
       <div className="py-10 text-sm text-muted-foreground">
         Loading platform components…
       </div>
     );
   }
-  if (platformComponentError) {
+  if (platformComponentError && !component) {
     return (
       <div className="flex flex-col items-start gap-4 py-10">
         <p className="text-sm text-destructive">{platformComponentError}</p>
@@ -171,161 +170,191 @@ export default function PlatformComponentPage() {
       </div>
       <PageHeader
         title={component.name}
+        description="Shared host DNS, custom records and upstream forwarding."
         icon={kindIcon[component.kind]}
         meta={<StatusBadge status={component.status} />}
       />
 
-      <SummaryStrip>
-        <SummaryItem label="Runtime">{component.runtime}</SummaryItem>
-        <SummaryItem label="Network">
-          {component.hostNetwork ? "Host network" : "Container network"}
-        </SummaryItem>
-        <SummaryItem label="Resolver">
-          {platform.dns.enabled ? "Enabled" : "Disabled"}
-        </SummaryItem>
-        <SummaryItem label="Forwarders">
-          {editableDNSConfig.forwarders.length}
-        </SummaryItem>
-      </SummaryStrip>
-      <Tabs value={tab} onValueChange={(value) => setTab(String(value))}>
-        <TabsList aria-label="CoreDNS sections">
-          <TabsTab value="overview">Overview</TabsTab>
-          <TabsTab value="records">DNS records</TabsTab>
-          <TabsTab value="configuration">Resolver settings</TabsTab>
-        </TabsList>
-        <TabsPanel value="configuration" keepMounted className="pt-5">
-          <CoreDnsSettings
-            activeTaskId={
-              managedConfigComponentId === component.id
-                ? managedConfigTaskId
-                : null
-            }
-            upstream={editableDNSConfig.upstream}
-            upstreamAuto={editableDNSConfig.upstreamAuto}
-            tailnetDelegation={editableDNSConfig.tailnetDelegation}
-            corefileTemplate={editableDNSConfig.corefileTemplate}
-            forwarders={editableDNSConfig.forwarders}
-            enabled={platform.dns.enabled}
-            configured={dnsConfig !== undefined}
-            managedFiles={managedConfigFiles}
-            managedConfigLoading={managedConfigLoading}
-            managedConfigError={managedConfigError}
-            onRefreshManagedConfig={() => refreshComponentConfig(component.id)}
-            onEnabled={async (enabled) => {
-              await setComponentEnabled(component.id, enabled);
-              await refreshComponentConfig(component.id);
-              await refreshPlatformComponents();
-            }}
-            onTailnet={(tailnetDelegation) =>
-              replaceCoreDNSConfig(
-                updateComponentConfig,
-                refreshPlatformComponents,
-                refreshComponentConfig,
-                component.id,
-                editableDNSConfig,
-                { tailnetDelegation },
-              )
-            }
-            onAddForwarder={(domain, upstream) =>
-              replaceCoreDNSConfig(
-                updateComponentConfig,
-                refreshPlatformComponents,
-                refreshComponentConfig,
-                component.id,
-                editableDNSConfig,
-                {
-                  forwarders: [
-                    ...editableDNSConfig.forwarders,
-                    { domain, upstream },
-                  ],
-                },
-              )
-            }
-            onRemoveForwarder={(index) =>
-              replaceCoreDNSConfig(
-                updateComponentConfig,
-                refreshPlatformComponents,
-                refreshComponentConfig,
-                component.id,
-                editableDNSConfig,
-                {
-                  forwarders: editableDNSConfig.forwarders.filter(
-                    (_, candidateIndex) => candidateIndex !== index,
-                  ),
-                },
-              )
-            }
-            onSave={(upstream, upstreamAuto, corefileTemplate) =>
-              replaceCoreDNSConfig(
-                updateComponentConfig,
-                refreshPlatformComponents,
-                refreshComponentConfig,
-                component.id,
-                editableDNSConfig,
-                { upstream, upstreamAuto, corefileTemplate },
-              )
-            }
-          />
-        </TabsPanel>
-        <TabsPanel value="records" keepMounted className="pt-5">
-          <DNSRecordSettings
-            records={editableDNSConfig.records}
-            disabled={
-              managedConfigComponentId === component.id && !!managedConfigTaskId
-            }
-            onChange={(records) =>
-              replaceCoreDNSConfig(
-                updateComponentConfig,
-                refreshPlatformComponents,
-                refreshComponentConfig,
-                component.id,
-                editableDNSConfig,
-                { records },
-              )
-            }
-          />
-        </TabsPanel>
-        <TabsPanel value="overview" className="space-y-5 pt-5">
-          <ResourcePanel title="Resolver runtime">
-            <DetailRow label="Runtime" value={component.runtime} />
-            <DetailRow
-              label="Network"
-              value={
-                component.hostNetwork ? "Host network" : "Container network"
-              }
-            />
-            <DetailRow
-              label="Local resolver"
-              value={platform.dns.enabled ? "Enabled" : "Disabled"}
-            />
-          </ResourcePanel>
-          <AdvancedDetails title="Component ID & mounts">
-            <DetailRow label="Component ID" value={component.id} mono />
-            <DetailRow
-              label="Mounts"
-              value={component.mounts.join(", ") || "None"}
-              mono
-            />
-            {component.notes.map((note) => (
-              <p key={note} className="text-muted-foreground">
-                {note}
-              </p>
-            ))}
-          </AdvancedDetails>
-        </TabsPanel>
-      </Tabs>
-
-      {environmentsWithoutComponentProjection > 0 && (
-        <p
-          className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
-          role="status"
-        >
-          Ingress for {environmentsWithoutComponentProjection} Environment
-          {environmentsWithoutComponentProjection === 1 ? "" : "s"} is
-          unavailable because the Controller did not publish an authoritative
-          Component projection.
+      <div className="rounded-lg border border-border bg-card p-4">
+        <CompactReference value={component.id} label="Component ID" />
+      </div>
+      {platformComponentError && (
+        <p role="alert" className="text-sm text-warning">
+          {platformComponentError}
         </p>
       )}
+      <div hidden={tab !== "configuration"}>
+        <CoreDnsSettings
+          activeTaskId={
+            managedConfigComponentId === component.id
+              ? managedConfigTaskId
+              : null
+          }
+          upstream={editableDNSConfig.upstream}
+          upstreamAuto={editableDNSConfig.upstreamAuto}
+          tailnetDelegation={editableDNSConfig.tailnetDelegation}
+          corefileTemplate={editableDNSConfig.corefileTemplate}
+          forwarders={editableDNSConfig.forwarders}
+          enabled={platform.dns.enabled}
+          configured={dnsConfig !== undefined}
+          managedFiles={managedConfigFiles}
+          managedConfigLoading={managedConfigLoading}
+          managedConfigError={managedConfigError}
+          onRefreshManagedConfig={() => refreshComponentConfig(component.id)}
+          onEnabled={async (enabled) => {
+            await setComponentEnabled(component.id, enabled);
+            await refreshComponentConfig(component.id);
+            await refreshPlatformComponents();
+          }}
+          onTailnet={(tailnetDelegation) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              { tailnetDelegation },
+            )
+          }
+          onAddForwarder={(domain, upstream) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              {
+                forwarders: [
+                  ...editableDNSConfig.forwarders,
+                  { domain, upstream },
+                ],
+              },
+            )
+          }
+          onRemoveForwarder={(index) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              {
+                forwarders: editableDNSConfig.forwarders.filter(
+                  (_, candidateIndex) => candidateIndex !== index,
+                ),
+              },
+            )
+          }
+          onSave={(upstream, upstreamAuto, corefileTemplate) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              { upstream, upstreamAuto, corefileTemplate },
+            )
+          }
+        />
+      </div>
+      <div hidden={tab !== "records"}>
+        <DNSRecordSettings
+          records={editableDNSConfig.records}
+          disabled={
+            managedConfigComponentId === component.id && !!managedConfigTaskId
+          }
+          onChange={(records) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              { records },
+            )
+          }
+        />
+      </div>
+      <div hidden={tab !== "overview"} className="space-y-5">
+        <SummaryStrip>
+          <SummaryItem label="Resolver">
+            {platform.dns.enabled ? "Enabled" : "Disabled"}
+          </SummaryItem>
+          <SummaryItem label="DNS records">
+            {dnsConfig ? dnsConfig.records.length : "Unavailable"}
+          </SummaryItem>
+          <SummaryItem label="Forwarding rules">
+            {dnsConfig ? dnsConfig.forwarders.length : "Unavailable"}
+          </SummaryItem>
+          <SummaryItem label="Network">
+            {component.hostNetwork ? "Host" : "Container"}
+          </SummaryItem>
+        </SummaryStrip>
+        <ResourcePanel
+          title="DNS resolution"
+          actions={
+            <Link
+              to={destination("configuration")}
+              className="text-sm text-primary hover:underline"
+            >
+              Resolver settings →
+            </Link>
+          }
+        >
+          <DetailRow
+            label="Default upstream"
+            value={
+              !dnsConfig
+                ? "Unavailable"
+                : dnsConfig.upstreamAuto
+                  ? "Automatic"
+                  : dnsConfig.upstream || "Not set"
+            }
+          />
+          <DetailRow
+            label="Tailnet delegation"
+            value={
+              !dnsConfig
+                ? "Unavailable"
+                : dnsConfig.tailnetDelegation
+                  ? "Enabled"
+                  : "Disabled"
+            }
+          />
+          <DetailRow label="Runtime" value={component.runtime} />
+        </ResourcePanel>
+        <ResourcePanel
+          title="Custom DNS records"
+          actions={
+            <Link
+              to={destination("records")}
+              className="text-sm text-primary hover:underline"
+            >
+              Manage records →
+            </Link>
+          }
+        >
+          <p className="text-sm text-muted-foreground">
+            {!dnsConfig
+              ? "DNS configuration is unavailable."
+              : dnsConfig.records.length
+                ? `${dnsConfig.records.length} custom records configured for this host.`
+                : "No custom records. Add a record to resolve a name to a Service or address."}
+          </p>
+        </ResourcePanel>
+        <ResourcePanel title="Storage & runtime notes">
+          <DetailRow
+            label="Mounts"
+            value={component.mounts.join(", ") || "None"}
+            mono
+          />
+          {component.notes.map((note) => (
+            <p key={note} className="text-muted-foreground">
+              {note}
+            </p>
+          ))}
+        </ResourcePanel>
+      </div>
     </div>
   );
 }

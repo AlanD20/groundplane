@@ -30,6 +30,17 @@ Use `controller config show` and `controller config set --file PATH` from the
 CLI. The matching API is `GET/PUT /controller/config`.
 See [installation](../deployment.md) before changing listeners or host paths.
 
+## Host workspace
+
+Host Overview brings together capacity, Controller and etcd health, CoreDNS and
+Agents. Open each resource for its actions. Controller has separate Overview,
+Updates and Startup configuration sections; saving startup configuration remains
+separate from updating software.
+
+Host Components lists CoreDNS. Environment routers and tunnels remain in their
+Environment workspace. CoreDNS has Overview, DNS records and Resolver settings
+sections, with configuration drafts retained when switching sections.
+
 ## etcd configuration
 
 Open Host → etcd to edit its YAML. Save validates and atomically stores the
@@ -78,8 +89,10 @@ observation, not the registry catalog. Counts include stopped containers; zero
 does not mean an image can safely be removed. The MVP has one local Agent host.
 
 Each row represents one image ID. Names, compact tags, size and usage are shown
-in the list; open the image for full references, Fetch history and protection
-details. Several tags or repository names can point to that same image.
+in the list; open the image as a full workspace for Overview, Containers, Tags & digests,
+and Fetch history. Its URL retains the selected image and section. Links to
+Services and Environments provide a return to the image; returning to the image
+list preserves its search and usage filters. Several tags or repository names can point to that same image.
 Click the usage badge to see container names and states, including stopped
 containers. Matched Services and Environments link to their current Console
 pages; containers outside GP are identified separately. Missing GP resource

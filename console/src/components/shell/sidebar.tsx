@@ -1,3 +1,8 @@
+import {
+  controllerDestinations,
+  coreDNSDestinations,
+  imageDestinations,
+} from "@/features/platform-host/workspace-navigation";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -176,6 +181,47 @@ export function Sidebar({
           href: `${pathname}?${new URLSearchParams([...search].filter(([key]) => key !== "tab").concat([["tab", entry.key]]))}`,
           active: selected === entry.key,
         })),
+      },
+    ];
+  } else if (
+    (parts[1] === "components" && parts[2] === "coredns") ||
+    (parts[1] === "host" && parts[2] === "controller") ||
+    (parts[1] === "host" && parts[2] === "images" && search.has("image"))
+  ) {
+    const isImage = parts[2] === "images";
+    const isDNS = parts[1] === "components";
+    const key = isImage ? "imageTab" : "tab";
+    const destinations = isImage
+      ? imageDestinations
+      : isDNS
+        ? coreDNSDestinations
+        : controllerDestinations;
+    const selected = destinations.some((entry) => entry.key === search.get(key))
+      ? search.get(key)
+      : "overview";
+    const parentSearch = new URLSearchParams(search);
+    parentSearch.delete("image");
+    parentSearch.delete("imageTab");
+    parent = {
+      label: isImage ? "All images" : isDNS ? "Components" : "Host overview",
+      href: isImage
+        ? `${pathname}?${parentSearch}`
+        : isDNS
+          ? "/platform/components"
+          : "/platform/host",
+    };
+    groups = [
+      {
+        label: isImage ? "Image" : isDNS ? "CoreDNS" : "Controller",
+        items: destinations.map((entry) => {
+          const next = new URLSearchParams(search);
+          next.set(key, entry.key);
+          return {
+            ...entry,
+            href: `${pathname}?${next}`,
+            active: selected === entry.key,
+          };
+        }),
       },
     ];
   } else if (parts[1] === "host" || parts[1] === "components") {

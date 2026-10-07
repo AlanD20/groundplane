@@ -12,16 +12,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ArrowUpRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ContextLink } from "@/components/common/context-link";
 import type { HostImage } from "./api";
 
-export function ImageUsage({
-  image,
-  onClose,
-}: {
-  image: HostImage;
-  onClose: () => void;
-}) {
+export function ImageUsage({ image }: { image: HostImage }) {
   const table = useTableView(
     image.container_uses,
     {
@@ -78,14 +72,14 @@ export function ImageUsage({
                     <TableRow key={use.id}>
                       <TableCell className="max-w-40 break-words">
                         {servicePath ? (
-                          <Link
+                          <ContextLink
                             className="text-primary hover:underline"
-                            onClick={onClose}
+                            returnLabel="Image containers"
                             to={servicePath}
                           >
                             {owner?.service_name}
                             <ArrowUpRight className="ml-1 inline size-3" />
-                          </Link>
+                          </ContextLink>
                         ) : (
                           <span className="text-muted-foreground">
                             {use.managed
@@ -96,9 +90,9 @@ export function ImageUsage({
                       </TableCell>
                       <TableCell>
                         {environmentPath ? (
-                          <Link
+                          <ContextLink
                             className="text-primary hover:underline"
-                            onClick={onClose}
+                            returnLabel="Image containers"
                             to={environmentPath}
                           >
                             {owner?.environment_name}
@@ -108,7 +102,7 @@ export function ImageUsage({
                                 ? "Backing service"
                                 : `${owner?.tenant_slug} / ${owner?.project_slug}`}
                             </span>
-                          </Link>
+                          </ContextLink>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
