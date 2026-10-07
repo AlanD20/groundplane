@@ -50,11 +50,13 @@ export function CopyButton({
   className,
   label,
   children,
+  iconOnly = false,
 }: {
   value: string;
   className?: string;
   label?: string;
   children?: ReactNode;
+  iconOnly?: boolean;
 }) {
   const [status, setStatus] = useState<
     "idle" | "copying" | "copied" | "failed"
@@ -103,7 +105,7 @@ export function CopyButton({
       ) : (
         <Copy className="size-3.5" />
       )}
-      {label && !children && (
+      {label && !children && !iconOnly && (
         <span className="text-xs">
           {copied ? "Copied" : failed ? "Copy failed" : label}
         </span>

@@ -8,15 +8,6 @@ import {
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { ResourcePanel } from "@/components/common/resource-panel";
-import { ResourceTable } from "@/components/common/resource-table";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TableSortHead } from "@/components/common/table-controls";
 import {
   DialogFooter,
   DialogHeader,
@@ -314,22 +305,12 @@ export function EnvVarsCard({
             { value: "type", label: "Type" },
           ]}
         />
-        <ResourceTable>
-          <Table aria-label="Variables & files">
-            <TableHeader>
-              <TableRow>
-                <TableSortHead sort={table} field="name">
-                  Key / path
-                </TableSortHead>
-                <TableHead>Value source</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead>Available to</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>{table.rows.map(renderEntry)}</TableBody>
-          </Table>
-        </ResourceTable>
+        <ul
+          aria-label="Variables & files"
+          className="min-w-0 divide-y divide-border"
+        >
+          {table.rows.map(renderEntry)}
+        </ul>
         {!table.total && (
           <p className="p-6 text-center text-xs text-muted-foreground">
             {entries.length

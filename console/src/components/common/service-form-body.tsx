@@ -576,7 +576,7 @@ export function ServiceFormBody({
                 : isBacking
                   ? "Create + deploy"
                   : editing
-                    ? "Save"
+                    ? "Save changes"
                     : "Create service"}
             </Button>
           </DialogFooter>

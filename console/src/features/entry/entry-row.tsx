@@ -1,13 +1,17 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { File, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RevealValue } from "@/components/common/reveal-value";
 import { CopyButton } from "@/components/common/copy-button";
 import { EmptySecretValueBadge } from "@/components/common/empty-secret-value-badge";
-import { ResourceRow } from "@/components/common/resource-table";
-import { TableCell } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 export function EntryRow({
   label,
@@ -34,82 +38,97 @@ export function EntryRow({
   onEdit?: () => void;
   onRemove?: () => void;
 }) {
-  return (
-    <ResourceRow onOpen={onEdit}>
-      <TableCell>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Button
-            variant="ghost"
-            size="content"
-            className="max-w-72 justify-start truncate p-0 font-mono text-sm"
-            onClick={onEdit}
-            title={label}
-          >
-            {label}
-          </Button>
-          <CopyButton value={label} label="Copy key or path" />
-          {file && <Badge variant="muted">file</Badge>}
-          {secret && <Badge variant="warning">secret</Badge>}
-          {secret && <EmptySecretValueBadge empty={emptySecretValue} />}
-        </div>
-      </TableCell>
-      <TableCell className="text-muted-foreground">{source}</TableCell>
-      <TableCell className="max-w-96">
-        {secret && loadValue ? (
-          <RevealValue
-            loadValue={loadValue}
-            label={label}
-            className="min-w-0 [&_code]:min-w-0"
-          />
+  const preview = (
+    <div className="flex min-w-0 items-start gap-2">
+      <code className="block min-h-9 min-w-0 max-h-40 flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-muted/60 px-3 py-2 font-mono text-sm [overflow-wrap:anywhere]">
+        {value === "" ? (
+          <span className="font-sans italic text-muted-foreground">
+            Empty value
+          </span>
         ) : (
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              title={value}
-              className="block min-h-9 min-w-0 max-w-72 flex-1 truncate rounded-md bg-muted px-3 py-2 font-mono text-sm"
-            >
-              {value === "" ? (
-                <span className="font-sans italic text-muted-foreground">
-                  Empty value
-                </span>
-              ) : (
-                value
-              )}
-            </span>
-            {copyValue !== undefined && (
-              <CopyButton value={copyValue} label="Copy value" />
-            )}
-          </div>
+          value
         )}
-      </TableCell>
-      <TableCell className="max-w-64 break-words text-muted-foreground">
-        {exposure}
-      </TableCell>
-      <TableCell>
-        <div className="flex items-center gap-2">
+      </code>
+      {copyValue !== undefined && (
+        <CopyButton
+          value={copyValue}
+          label="Copy value"
+          iconOnly
+          className="shrink-0"
+        />
+      )}
+    </div>
+  );
+  return (
+    <li className="min-w-0 space-y-3 py-5 first:pt-1 last:pb-1">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
+        <div className="min-w-0 basis-full space-y-1.5 sm:basis-auto sm:flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {file && (
+              <File
+                aria-hidden
+                className="size-4 shrink-0 text-muted-foreground"
+              />
+            )}
+            <span className="min-w-0 break-all font-mono text-sm font-medium">
+              {label}
+            </span>
+            <CopyButton
+              value={label}
+              label={file ? "Copy path" : "Copy key"}
+              iconOnly
+              className="shrink-0"
+            />
+            {secret && <Badge variant="muted">Encrypted</Badge>}
+            {secret && <EmptySecretValueBadge empty={emptySecretValue} />}
+          </div>
+          <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            {source} · Available to {exposure}
+          </p>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {onEdit && (
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground hover:text-primary"
+              size="sm"
               onClick={onEdit}
-              title={`Edit ${label}`}
+              aria-label={`Edit ${label}`}
             >
-              <Pencil className="size-3.5" />
+              <Pencil className="size-3.5" /> Edit
             </Button>
           )}
           {onRemove && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={onRemove}
-              title={`Remove ${label}`}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label={`More actions for ${label}`}
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "icon-sm",
+                })}
+              >
+                <MoreHorizontal className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem variant="destructive" onClick={onRemove}>
+                  <Trash2 /> Remove {file ? "file" : "variable"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
-      </TableCell>
-    </ResourceRow>
+      </div>
+      {secret && loadValue ? (
+        <RevealValue loadValue={loadValue} label={label} />
+      ) : file ? (
+        <details className="min-w-0 rounded-lg border border-border">
+          <summary className="cursor-pointer px-3 py-2 text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+            Preview file contents
+          </summary>
+          <div className="min-w-0 border-t border-border p-3">{preview}</div>
+        </details>
+      ) : (
+        preview
+      )}
+    </li>
   );
 }
