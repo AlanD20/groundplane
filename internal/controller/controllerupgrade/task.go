@@ -27,12 +27,19 @@ type Input struct {
 }
 
 func (input Input) Validate() error {
+	if err := input.validateRecord(); err != nil {
+		return err
+	}
+	return input.Manifest.Validate()
+}
+
+func (input Input) validateRecord() error {
 	if !input.Release.Valid() ||
 		!input.PreviousController.Valid() ||
 		input.Manifest.ControllerSHA256 == input.PreviousController {
 		return errs.New(errs.KindValidationFailed, "controller update identities are invalid or unchanged")
 	}
-	return (upgrade.Release{Release: input.Release, Manifest: input.Manifest}).Validate()
+	return (upgrade.Release{Release: input.Release, Manifest: input.Manifest}).ValidateRecord()
 }
 
 func NewTask(now time.Time, idempotencyKey string, input Input) (etcd.TaskRecord, error) {
@@ -65,31 +72,10 @@ func NewTask(now time.Time, idempotencyKey string, input Input) (etcd.TaskRecord
 }
 
 func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Journal, error) {
-	if task.Executor != taskjournal.TaskExecutorController ||
-		task.Type != taskjournal.TaskUpdate ||
-		task.Target != Target ||
-		task.Owner != taskjournal.PlatformTaskOwner() ||
-		task.Actor != taskjournal.TaskActorOperator ||
-		ids.Validate(ids.KindTask, task.ID) != nil ||
-		ids.Validate(ids.KindOperation, task.OperationID) != nil ||
-		ids.Validate(ids.KindPlan, task.PlanID) != nil ||
-		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds ||
-		task.RenderGeneration != 1 ||
-		task.RetryOf != "" ||
-		len(task.Steps) != 0 ||
-		len(task.Materializations) != 0 ||
-		len(task.Params) != 2 ||
-		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceController ||
-		deadline.Sub(started) != upgrade.TaskTimeoutSeconds*time.Second {
-		return upgrade.Journal{}, errs.New(errs.KindValidationFailed, "controller update Task authority is invalid")
+	if deadline.Sub(started) != upgrade.TaskTimeoutSeconds*time.Second {
+		return upgrade.Journal{}, errs.New(errs.KindValidationFailed, "controller update Task deadline is invalid")
 	}
-	raw := []byte(task.Params[InputParam])
-	if len(raw) == 0 ||
-		len(raw) > 8192 ||
-		string(upgrade.Hash(raw))[7:] != task.PlanHash {
-		return upgrade.Journal{}, errs.New(errs.KindValidationFailed, "controller update Task input hash is invalid")
-	}
-	input, err := jcs.Decode[Input](raw)
+	input, err := decodeTaskInput(task)
 	if err != nil {
 		return upgrade.Journal{}, err
 	}
@@ -105,4 +91,40 @@ func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Jour
 		return upgrade.Journal{}, err
 	}
 	return journal, nil
+}
+
+// decodeTaskInput reads one closed, hash-verified stored format. Execution adds
+// current-epoch and recovery validation in DecodeTask; history does not activate.
+func decodeTaskInput(task etcd.TaskRecord) (Input, error) {
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Type != taskjournal.TaskUpdate ||
+		task.Target != Target ||
+		task.Owner != taskjournal.PlatformTaskOwner() ||
+		task.Actor != taskjournal.TaskActorOperator ||
+		ids.Validate(ids.KindTask, task.ID) != nil ||
+		ids.Validate(ids.KindOperation, task.OperationID) != nil ||
+		ids.Validate(ids.KindPlan, task.PlanID) != nil ||
+		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds ||
+		task.RenderGeneration != 1 ||
+		task.RetryOf != "" ||
+		len(task.Steps) != 0 ||
+		len(task.Materializations) != 0 ||
+		len(task.Params) != 2 ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceController {
+		return Input{}, errs.New(errs.KindValidationFailed, "controller update Task authority is invalid")
+	}
+	raw := []byte(task.Params[InputParam])
+	if len(raw) == 0 ||
+		len(raw) > 8192 ||
+		string(upgrade.Hash(raw))[7:] != task.PlanHash {
+		return Input{}, errs.New(errs.KindValidationFailed, "controller update Task input hash is invalid")
+	}
+	input, err := jcs.Decode[Input](raw)
+	if err != nil {
+		return Input{}, err
+	}
+	if err := input.validateRecord(); err != nil {
+		return Input{}, err
+	}
+	return input, nil
 }

@@ -72,12 +72,24 @@ func ParseManifest(raw []byte, expected Digest) (Manifest, error) {
 }
 
 func (manifest Manifest) Validate() error {
-	if manifest.Schema != ManifestSchema || manifest.StorageEpoch != StorageEpoch ||
+	if err := manifest.ValidateRecord(); err != nil {
+		return err
+	}
+	if manifest.StorageEpoch != StorageEpoch ||
 		manifest.ChannelSchema != executionplan.SchemaVersion {
 		return errs.New(
 			errs.KindValidationFailed,
 			"controller release has incompatible storage or protocol format",
 		)
+	}
+	return nil
+}
+
+// ValidateRecord checks recorded identity without authorizing activation under
+// the current storage or channel epoch. Historical releases remain readable.
+func (manifest Manifest) ValidateRecord() error {
+	if manifest.Schema != ManifestSchema || manifest.StorageEpoch < 1 || manifest.ChannelSchema < 1 {
+		return errs.New(errs.KindValidationFailed, "controller release record format is invalid")
 	}
 	if !manifest.ControllerSHA256.Valid() || !imageref.IsDigestPinned(manifest.AgentImage) ||
 		len(manifest.AgentImage) > 1024 || !validVersion(manifest.ControllerVersion) {

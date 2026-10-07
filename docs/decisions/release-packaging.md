@@ -131,6 +131,12 @@ define release identity. Both manifest and binary are rechecked before use, and
 the candidate must be storage- and channel-compatible. Distribution and
 signature policy remain deployment concerns rather than runtime upload paths.
 
+Update history checks the stored input's closed format and immutable digest,
+not its eligibility for activation under today's epochs. Completed releases
+remain readable after an epoch change; execution still requires the current
+storage and channel epochs. The shared record decoder lives in
+`internal/controller/controllerupgrade/task.go`.
+
 Console, CLI, and API invoke the same protected update operation. The Task
 freezes candidate, predecessor, Agent, and idempotency identity. Lost acceptance
 is resolved from durable evidence, and only one native activation may be

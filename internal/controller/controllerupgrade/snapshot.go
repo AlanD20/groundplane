@@ -2,7 +2,6 @@ package controllerupgrade
 
 import (
 	"context"
-	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -28,7 +27,7 @@ func (service *Service) ControllerUpdateSnapshot(ctx context.Context) (apiTypes.
 		return state, ctx.Err()
 	}
 	task := latest.Record
-	input, err := DecodeTask(task, task.CreatedAt, task.CreatedAt.Add(upgrade.TaskTimeoutSeconds*time.Second))
+	input, err := decodeTaskInput(task)
 	if err != nil {
 		return unavailableSnapshot(ctx, state, "Controller update history is invalid.")
 	}

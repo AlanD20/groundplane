@@ -4,11 +4,69 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/common/jcs"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// Rationale: advancing the storage epoch must not hide completed upgrade history
+// or disable compatible new upgrades, but the old input must remain unexecutable.
+func TestControllerUpdateSnapshotReadsPreviousEpochWithoutAuthorizingExecution(t *testing.T) {
+	h := newServiceHarness(t)
+	ctx := context.Background()
+	if _, err := h.service.UpdateController(ctx, string(h.input.Release), "snapshot-recorded-epoch-0001"); err != nil {
+		t.Fatal(err)
+	}
+	for key, entry := range h.storage.entries {
+		task, err := etcd.DecodeTaskRecord(entry.Value)
+		if err != nil {
+			continue
+		}
+		input := h.input
+		input.Manifest.StorageEpoch--
+		manifest, _ := json.Marshal(input.Manifest)
+		canonicalManifest, err := jcs.Canonicalize(manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.Release = upgrade.Hash(canonicalManifest)
+		raw, _ := json.Marshal(input)
+		canonicalInput, err := jcs.Canonicalize(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		task.Params[InputParam] = string(canonicalInput)
+		task.PlanHash = string(upgrade.Hash(canonicalInput))[7:]
+		task, err = etcd.TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, h.now.Add(time.Second))
+		if err != nil {
+			t.Fatal(err)
+		}
+		task, err = etcd.TransitionTaskStatus(task, taskjournal.TaskStatusRunning, taskjournal.TaskStatusCompleted, h.now.Add(2*time.Second))
+		if err != nil {
+			t.Fatal(err)
+		}
+		entry.Value, err = etcd.EncodeTaskRecord(task)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.storage.entries[key] = entry
+		if _, err := DecodeTask(task, task.CreatedAt, task.CreatedAt.Add(upgrade.TaskTimeoutSeconds*time.Second)); err == nil {
+			t.Fatal("previous epoch was authorized for execution")
+		}
+		snapshot, err := h.service.ControllerUpdateSnapshot(ctx)
+		if err != nil || !snapshot.Available || snapshot.LastUpdate == nil ||
+			snapshot.LastUpdate.Release != string(input.Release) || snapshot.LastUpdate.Status != "completed" {
+			t.Fatalf("completed previous-epoch history = %#v, %v", snapshot, err)
+		}
+		return
+	}
+	t.Fatal("published Task was not found")
+}
 
 // Rationale: a safe staged candidate does not prove the installed predecessor
 // is immutable and is the actual running binary required for recovery.
