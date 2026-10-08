@@ -31,7 +31,7 @@ func (authority PruneAuthority) Validate(prefix string) error {
 		ids.Validate(ids.KindRecoveryPoint, authority.RecoveryPointID) != nil ||
 		authority.Evidence.SourceSizeBytes == 0 || authority.Evidence.StoredSizeBytes == 0 ||
 		authority.Evidence.StoredSizeBytes > MaxObjectSize || authority.Discriminator.Validate() != nil ||
-		(authority.MetadataCount != 10 && authority.MetadataCount != 11) {
+		!ValidMetadataCount(authority.MetadataCount) {
 		return errs.New(errs.KindValidationFailed, "backup prune authority is invalid")
 	}
 	parts := []string{authority.EnvironmentID, authority.SourceID, authority.RecoveryPointID, artifactObjectName}

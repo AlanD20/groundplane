@@ -50,8 +50,7 @@ func backupCheckpointFinalName(value string) bool {
 }
 
 func validBackupCheckpointMetadata(count uint32, digest []byte) bool {
-	// MySQL adds exact observed server and tool versions to the complete set.
-	return (count >= 10 && count <= 13) && backupCheckpointDigest(digest)
+	return backupobject.ValidMetadataCount(count) && backupCheckpointDigest(digest)
 }
 
 func backupCheckpointRevision(value *agentpb.RevisionDigest) bool {

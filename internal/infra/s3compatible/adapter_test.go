@@ -579,11 +579,13 @@ func testConfig() Config {
 func testArtifact(body []byte, encryption backupobject.Encryption) backupobject.Artifact {
 	digest := sha256.Sum256(body)
 	artifact := backupobject.Artifact{
-		EnvironmentID:   ids.NewAt(ids.KindEnvironment, testInstant, 1),
-		SourceID:        ids.NewAt(ids.KindBackupSource, testInstant, 2),
-		RecoveryPointID: ids.NewAt(ids.KindRecoveryPoint, testInstant, 3),
-		SourceFormat:    backupobject.SourceFormatPostgresCustom,
-		Encryption:      encryption,
+		EnvironmentID:       ids.NewAt(ids.KindEnvironment, testInstant, 1),
+		SourceID:            ids.NewAt(ids.KindBackupSource, testInstant, 2),
+		RecoveryPointID:     ids.NewAt(ids.KindRecoveryPoint, testInstant, 3),
+		SourceFormat:        backupobject.SourceFormatPostgresCustom,
+		SourceServerVersion: "16.9",
+		BackupToolVersion:   "16.9",
+		Encryption:          encryption,
 		Evidence: backupobject.Evidence{
 			SourceSizeBytes: uint64(len(body)), SourceSHA256: digest,
 			StoredSizeBytes: uint64(len(body)), StoredSHA256: digest,

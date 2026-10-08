@@ -156,6 +156,12 @@ func (artifact Artifact) ExpectedKey(prefix string) string {
 		artifact.RecoveryPointID + "/" + artifactFilename
 }
 
+// ValidMetadataCount admits the base set, optional encryption era and the
+// paired database server/tool versions. Exact values remain hash-bound.
+func ValidMetadataCount(count uint32) bool {
+	return count >= 10 && count <= 13
+}
+
 // Metadata returns a fresh map containing the complete version-1 S3 user
 // metadata set. There is no compatibility key for the former ambiguous digest.
 func (artifact Artifact) Metadata() map[string]string {
