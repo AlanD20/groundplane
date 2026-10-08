@@ -65,15 +65,8 @@ func validateReleaseRecoveryProof(
 			}
 			absenceIndex++
 		case taskassignments.ReleaseRestorationServingPredecessor:
-			if authority.AppliedPredecessor == nil {
-				return taskassignments.CorruptTaskAssignment()
-			}
 			artifact := &agentpb.ComposeArtifact{}
-			encoded := authority.AppliedPredecessor.ComposeArtifact
-			if len(expectation.nativeArtifact) != 0 {
-				encoded = expectation.nativeArtifact
-			}
-			if proto.Unmarshal(encoded, artifact) != nil {
+			if len(expectation.nativeArtifact) == 0 || proto.Unmarshal(expectation.nativeArtifact, artifact) != nil {
 				return taskassignments.CorruptTaskAssignment()
 			}
 			var workload, proxy *agentpb.ComposeService

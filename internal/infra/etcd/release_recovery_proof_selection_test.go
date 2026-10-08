@@ -36,13 +36,12 @@ func TestNativeRecreateRecoveryProofWithStableProxy(t *testing.T) {
 			Candidates: []testtaskassignments.ReleaseRestorationCandidate{
 				{ServiceID: "service", Target: testtaskassignments.ReleaseRestorationServingPredecessor},
 			},
-			AppliedPredecessor: &testtaskassignments.ReleaseAppliedPredecessorAuthority{ComposeArtifact: encoded},
 		},
 	}
 	result := testtaskjournal.TaskResultRecord{RecreateEvidence: []testtaskjournal.TaskRecreateEvidence{{
 		ServiceID: "service", ArtifactID: "prior", ReleaseID: "release", Target: "singleton", Compensated: true,
 	}}}
-	if err := validateReleaseRecoveryProof(assignment, nil, result, []releaseRecoveryProofExpectation{{kind: releaseRecoveryProofRecreate, priorTopologyArtifactID: "prior"}}); err != nil {
+	if err := validateReleaseRecoveryProof(assignment, nil, result, []releaseRecoveryProofExpectation{{kind: releaseRecoveryProofRecreate, priorTopologyArtifactID: "prior", nativeArtifact: encoded}}); err != nil {
 		t.Fatalf("exact native recreate recovery proof rejected: %v", err)
 	}
 }

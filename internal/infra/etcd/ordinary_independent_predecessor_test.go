@@ -57,4 +57,17 @@ func TestOrdinaryClaimAfterUnrelatedEnvironmentApply(t *testing.T) {
 		authority.Candidates[0].Target != testtaskassignments.ReleaseRestorationServingPredecessor {
 		t.Fatal("claim lost independent serving Service")
 	}
+	// The first explicit Service Deploy need not publish an Environment-wide
+	// runtime. Its sealed serving witness must remain sufficient on redeploy.
+	removed, err := fixture.repository.store.Transact(t.Context(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationDelete, Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority, _, _, err = fixture.repository.prepareOrdinaryRestorationAuthority(t.Context(), task, removed.Revision)
+	if err != nil || authority.AppliedPredecessor != nil || len(authority.NativePredecessors) != 1 ||
+		len(authority.NativePredecessors[0].CurrentArtifact) == 0 {
+		t.Fatalf("claim without aggregate runtime lost exact serving witness: %v", err)
+	}
 }

@@ -3,7 +3,6 @@ package etcd
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -88,7 +87,6 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	keys := []string{
 		releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -156,26 +154,6 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	if err := validateNativeRestorationDescriptor(authority, procedure); err != nil {
 		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
-	projectionRevision := int64(0)
-	if read.Values[2] != nil {
-		projectionRevision = read.Values[2].ModRevision
-	}
-	if target == taskassignments.ReleaseRestorationServingPredecessor {
-		if read.Values[2] == nil {
-			return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
-		}
-		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[2].Value)
-		if decodeErr != nil || projection.EnvironmentID != task.Owner.EnvironmentID ||
-			len(projection.ComposeArtifact) == 0 {
-			return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
-		}
-		digest := sha256.Sum256(projection.ComposeArtifact)
-		authority.AppliedPredecessor = &taskassignments.ReleaseAppliedPredecessorAuthority{
-			KeyRevision: projectionRevision, RevisionID: projection.RevisionID,
-			RenderGeneration: projection.RenderGeneration, ComposeArtifactSHA256: hex.EncodeToString(digest[:]),
-			ComposeArtifact: append([]byte(nil), projection.ComposeArtifact...),
-		}
-	}
 	digest, err := taskassignments.ReleaseRestorationAuthoritySHA256(authority)
 	if err != nil {
 		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
@@ -183,7 +161,6 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	return authority, digest, append(sourceConditions, []etcdstore.Condition{
 		{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
-		{Key: keys[2], ModRevision: projectionRevision},
 	}...), nil
 }
 
