@@ -261,6 +261,10 @@ func environmentPoolMutationFixtureWithStore(
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
 	}
+	record, err = testhierarchy.CompleteEnvironmentProvisioning(record, record.CreateTaskID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := repository.CreateEnvironment(context.Background(), record); err != nil {
 		t.Fatalf("CreateEnvironment() error = %v", err)
 	}
