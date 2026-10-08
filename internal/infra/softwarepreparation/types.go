@@ -42,10 +42,9 @@ const (
 )
 
 var (
-	commitPattern    = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	digestPattern    = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	operationPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{7,63}$`)
-	versionPattern   = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
+	commitPattern  = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	digestPattern  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	versionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 )
 
 type Selection string

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
@@ -161,7 +162,7 @@ func (preparer *Preparer) Prepare(
 }
 
 func ValidateInput(input Input) error {
-	if !operationPattern.MatchString(input.OperationID) {
+	if ids.Validate(ids.KindOperation, input.OperationID) != nil {
 		return errs.New(errs.KindValidationFailed, "software preparation operation identity is invalid")
 	}
 	if err := input.Source.validate(); err != nil {
