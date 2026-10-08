@@ -97,9 +97,8 @@ func NewBackupServiceFactResolver(store etcdstore.Store) backupplanning.BackupSe
 			if err := validateBackupBackingCatalog(read.Values[3], selected, input); err != nil {
 				return nil, err
 			}
-		} else if kind == servicefactauthority.BackingRuntime &&
-			(adapter != "mysql" || projection.Record.BackingRuntime == nil ||
-				projection.Record.BackingRuntime.Adapter != "mysql" || selected.Workload.PostgresToolsImage != "") {
+		} else if kind == servicefactauthority.MySQLRuntime &&
+			(adapter != "mysql" || selected.Workload.PostgresToolsImage != "") {
 			return nil, errs.New(errs.KindStateConflict, "MySQL backup Service lacks acknowledged applied runtime evidence")
 		}
 		artifact, workload := selected.Artifact, selected.Workload

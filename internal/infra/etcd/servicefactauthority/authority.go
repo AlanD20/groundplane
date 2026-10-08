@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -23,6 +24,7 @@ type Kind uint8
 const (
 	ReleaseRuntime Kind = iota + 1
 	BackingRuntime
+	MySQLRuntime
 )
 
 type Applied struct {
@@ -39,6 +41,9 @@ func KindForService(service services.EnvironmentServiceProjection) (Kind, error)
 	if service.BackingNetworkID != "" && service.Desired.Adapter == "postgres" {
 		return BackingRuntime, nil
 	}
+	if service.BackingNetworkID != "" && service.Desired.Adapter == "mysql" {
+		return MySQLRuntime, nil
+	}
 	return 0, errs.New(errs.KindStrategyNotImplemented, "backup Service runtime kind is unsupported")
 }
 
@@ -48,6 +53,8 @@ func Key(kind Kind, environmentID, serviceID string) string {
 		return serviceruntimerecord.Key(serviceID)
 	case BackingRuntime:
 		return backingpostgresruntime.Key(environmentID, serviceID)
+	case MySQLRuntime:
+		return environmentprojection.EnvironmentComposeProjectionStorageKey(environmentID)
 	default:
 		return ""
 	}
@@ -56,6 +63,18 @@ func Key(kind Kind, environmentID, serviceID string) string {
 func ReadApplied(value *etcdstore.KeyValue, kind Kind, environmentID, serviceID string) (Applied, error) {
 	if value == nil || value.ModRevision <= 0 || value.Key != Key(kind, environmentID, serviceID) {
 		return Applied{}, invalid()
+	}
+	if kind == MySQLRuntime {
+		record, err := environmentprojection.DecodeEnvironmentComposeProjectionStorage(value.Value)
+		if err != nil || record.EnvironmentID != environmentID || record.BackingRuntime == nil ||
+			record.BackingRuntime.Adapter != "mysql" {
+			return Applied{}, invalid()
+		}
+		artifact, workload, err := environmentprojection.SelectBackingRuntime(record, serviceID)
+		if err != nil {
+			return Applied{}, err
+		}
+		return Applied{Artifact: artifact, Workload: workload, LocalImageID: record.BackingRuntime.LocalImageID}, nil
 	}
 	if kind == BackingRuntime {
 		record, err := backingpostgresruntime.Decode(value.Value)

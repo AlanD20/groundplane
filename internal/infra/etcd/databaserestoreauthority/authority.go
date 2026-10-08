@@ -90,6 +90,9 @@ func Read(
 		kind := servicefactauthority.ReleaseRuntime
 		if service.ServiceID == target.databaseService.ServiceID {
 			kind = servicefactauthority.BackingRuntime
+			if record.CurrentTarget.MySQL != nil {
+				kind = servicefactauthority.MySQLRuntime
+			}
 		}
 		facts := []struct {
 			key   string

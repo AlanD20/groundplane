@@ -136,9 +136,11 @@ func (repository *Planner) PrepareDatabaseRestoreSelection(ctx context.Context,
 	}
 	var attachID string
 	var attachRevision int64
+	var databaseKind servicefactauthority.Kind
 	var backingEnvironmentID, backingServiceID, consumerEnvironmentID, consumerServiceID string
 	switch point.Record.SourceFormat {
 	case backupruntime.BackupRuntimeFormatPostgres:
+		databaseKind = servicefactauthority.BackingRuntime
 		current, identity := attempt.Snapshot.Postgres, point.Record.Postgres
 		if current == nil || attempt.Snapshot.MySQL != nil || current.Database != identity.Database ||
 			current.Role != identity.Role || current.BackingEnvironmentID != identity.BackingEnvironmentID ||
@@ -153,6 +155,7 @@ func (repository *Planner) PrepareDatabaseRestoreSelection(ctx context.Context,
 		backingEnvironmentID, backingServiceID = current.BackingEnvironmentID, current.BackingServiceID
 		consumerEnvironmentID, consumerServiceID = current.ConsumerEnvironmentID, current.ConsumerServiceID
 	case backupruntime.BackupRuntimeFormatMySQL:
+		databaseKind = servicefactauthority.MySQLRuntime
 		current, identity := attempt.Snapshot.MySQL, point.Record.MySQL
 		if current == nil || attempt.Snapshot.Postgres != nil || current.Database != identity.Database ||
 			current.Role != identity.Role || current.BackingEnvironmentID != identity.BackingEnvironmentID ||
@@ -206,7 +209,7 @@ func (repository *Planner) PrepareDatabaseRestoreSelection(ctx context.Context,
 		backingEnvironmentID,
 		databaseArtifact,
 		anchor.ReadRevision,
-		servicefactauthority.BackingRuntime,
+		databaseKind,
 	)
 	if err != nil {
 		return zero, err
