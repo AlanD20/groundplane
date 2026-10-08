@@ -13,8 +13,11 @@ import (
 	"strings"
 	"time"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	commandrunner "github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/internal/infra/registryconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -38,9 +41,11 @@ type dockerOperation struct {
 }
 
 type imageInspection struct {
-	ID           string `json:"Id"`
-	OS           string `json:"Os"`
-	Architecture string `json:"Architecture"`
+	ID           string              `json:"Id"`
+	OS           string              `json:"Os"`
+	Architecture string              `json:"Architecture"`
+	Variant      string              `json:"Variant"`
+	Descriptor   *ocispec.Descriptor `json:"Descriptor"`
 	Config       struct {
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
@@ -277,8 +282,12 @@ func (operation *dockerOperation) publish(
 	if err != nil {
 		return Artifact{}, err
 	}
-	if plan.ConfigDigest != inspection.ID || plan.Architecture != source.Platform.Architecture {
+	if plan.Architecture != source.Platform.Architecture || plan.Variant != inspection.Variant {
 		return Artifact{}, errs.New(errs.KindStateConflict, "managed registry readback differs from prepared image")
+	}
+	if err := managedimage.Verify(inspection.ID, inspection.Descriptor, plan.ManifestDigest, plan.ConfigDigest,
+		ocispec.Platform{OS: source.Platform.OS, Architecture: plan.Architecture, Variant: plan.Variant}); err != nil {
+		return Artifact{}, err
 	}
 	return Artifact{
 		Reference: plan.Reference(), ManifestDigest: plan.ManifestDigest, ConfigDigest: plan.ConfigDigest,
