@@ -378,9 +378,9 @@ func TestPrepareEnvironmentComponentTaskAllowsInitialProjectionAbsence(t *testin
 }
 
 func TestPrepareEnvironmentComponentTaskUsesAppliedProjectionAuthority(t *testing.T) {
-	// Rationale: desired publication may precede runtime application, so a new
-	// Zone is fenced against the applied projection and that absence must remain
-	// unchanged through atomic Component publication.
+	// Rationale: directly authored Zones exist before their first application.
+	// First enable must accept that desired identity while fencing absent runtime
+	// against an application racing with atomic Component publication.
 	t.Parallel()
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
@@ -439,7 +439,15 @@ func TestPrepareEnvironmentComponentTaskUsesAppliedProjectionAuthority(t *testin
 		Config:            core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneIDs: []string{zone.Desired.ID}}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, task.CreatedAt, 1523)},
 	}
-	zoneChanges := []testblueprints.EnvironmentBlueprintZoneChange{{Record: zone}}
+	zones, err := newZoneRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentZone, err := zones.GetZone(ctx, zone.Desired.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zoneChanges := []testblueprints.EnvironmentBlueprintZoneChange{{Current: &currentZone, Record: zone}}
 	preparation, err := repository.PrepareEnvironmentComponentTask(
 		ctx,
 		task.ID,

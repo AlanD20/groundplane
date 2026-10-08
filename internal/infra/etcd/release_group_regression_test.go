@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -319,7 +320,15 @@ func newReleaseGroupPublisherFixture(
 		ComposeArtifact:   artifactValue,
 		NormalizedCompose: []byte("services: {}\n"),
 	}
-	projectionValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
+	// These Services are authored but have never been deployed. Grouping their
+	// definitions must not depend on an acknowledged runtime projection.
+	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 701)
+	task.ID = projection.RevisionID
+	stageEnvironmentBlueprintForPublicationTest(t, repository, 0,
+		environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
+		projection, environmentBlueprintTestMarker(task, environment.Record.ID))
+	seedEffectiveBlueprintFixture(t, store, projection)
+	projectionValue, err := testidempotency.EncodeTaskReference(projection.RevisionID)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
 	}
@@ -343,7 +352,7 @@ func newReleaseGroupPublisherFixture(
 	mutations = append(
 		mutations, testkeyvalue.Mutation{
 			Type:  testkeyvalue.MutationPut,
-			Key:   testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+			Key:   testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
 			Value: projectionValue,
 		}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testreleasegroups.ReleaseGroupRecordKey(group.ID), Value: groupValue}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testreleasegroups.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testreleasegroups.ReleaseGroupNameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testreleasegroups.ReleaseGroupCollectionEpochKey(group.EnvironmentID), Value: collectionValue},
 	)

@@ -13,6 +13,7 @@ import {
 } from "./component-zone-picker-state";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdvancedDetails } from "@/components/common/resource-panel";
+import { zoneSubnetError } from "./zone-subnet";
 
 export type ComponentZonePickerProps = {
   zones: Zone[];
@@ -47,7 +48,7 @@ export function ComponentZonePicker({
     normalizedName && !/^[A-Za-z0-9._-]+$/.test(normalizedName)
       ? "Use only letters, numbers, dot, underscore, and hyphen."
       : null;
-  const subnetError = normalizedSubnet ? null : "Subnet is required.";
+  const subnetError = zoneSubnetError(normalizedSubnet);
   const createDisabled =
     disabled ||
     creating ||

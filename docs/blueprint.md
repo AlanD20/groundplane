@@ -296,7 +296,10 @@ network name, subnet, `internal` setting, and ownership are immutable. Subnets
 must not overlap other reserved Zones. See
 [Network and shared access](decisions/network-and-shared-access.md).
 
-Current Zones are IPv4 bridge networks. Use one `ipam.config` item with only
+Current Zones are IPv4 bridge networks. Use an IPv4 subnet of /30 or larger;
+/31 and /32 leave no usable container address
+after network, gateway and broadcast reservations. Prefer /28 or larger for
+multiple containers. Use one `ipam.config` item with only
 `subnet`; do not supply gateway, address range, auxiliary addresses, driver
 options, attachable mode or IPv6. If Compose would create an implicit `default`
 network, declare that network with its explicit subnet too.

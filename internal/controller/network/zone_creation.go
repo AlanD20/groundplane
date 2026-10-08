@@ -437,7 +437,7 @@ func validateZoneCreationInput(input apiTypes.ZoneCreate) error {
 	if err != nil || subnet.String() != input.Subnet {
 		return errs.New(errs.KindValidationFailed, "Zone subnet must be a canonical IPv4 CIDR")
 	}
-	return nil
+	return ipam.ValidateBridgeSubnet(subnet)
 }
 
 func isUnknownZoneCreationOutcome(err error) bool {

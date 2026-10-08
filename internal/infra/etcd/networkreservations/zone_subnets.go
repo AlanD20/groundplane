@@ -31,6 +31,9 @@ func (registry ZonePoolRegistry) Reserve(
 	if err != nil || candidate.String() != zone.Desired.Subnet {
 		return ZonePoolRegistry{}, errs.New(errs.KindValidationFailed, "Zone subnet must be a canonical IPv4 CIDR")
 	}
+	if err := ipam.ValidateBridgeSubnet(candidate); err != nil {
+		return ZonePoolRegistry{}, err
+	}
 	if current, exists := registry.Reservations[zone.Desired.ID]; exists {
 		if current != candidate.String() {
 			return ZonePoolRegistry{}, errs.New(

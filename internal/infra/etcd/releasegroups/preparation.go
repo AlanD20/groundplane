@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -162,7 +162,7 @@ func (repository *Preparer) prepareReleaseGroupMutationEvidence(
 		ReleaseGroupRecordKey(group.ID),
 		ReleaseGroupOwnerKey(group.EnvironmentID, group.ID),
 		ReleaseGroupNameKey(group.EnvironmentID, group.Name),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(group.EnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(group.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID),
 	}
 	if oldName != "" && oldName != group.Name {
@@ -201,11 +201,21 @@ func (repository *Preparer) prepareReleaseGroupMutationEvidence(
 		clear(epochValue)
 		return releaseGroupMutationEvidence{}, errs.New(
 			errs.KindResourceInUse,
-			"release group environment has no enabled compose project",
+			"release group Environment has no Service definitions",
 		)
 	}
-	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(result.Values[7].Value)
-	if err != nil || projection.EnvironmentID != group.EnvironmentID {
+	projection, found, err := blueprints.ReadCurrentProjection(
+		ctx,
+		repository.store,
+		group.EnvironmentID,
+		result.ReadRevision,
+	)
+	if err != nil {
+		clear(epochValue)
+		return releaseGroupMutationEvidence{}, err
+	}
+	if !found || projection.Revision != result.Values[7].ModRevision ||
+		projection.Record.EnvironmentID != group.EnvironmentID {
 		clear(epochValue)
 		return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 	}
@@ -296,7 +306,7 @@ func (repository *Preparer) prepareReleaseGroupMutationEvidence(
 	if err != nil {
 		return releaseGroupMutationEvidence{}, err
 	}
-	memberConditions, err := repository.prepareReleaseGroupMemberEvidence(ctx, group, projection)
+	memberConditions, err := repository.prepareReleaseGroupMemberEvidence(ctx, group, projection.Record)
 	if err != nil {
 		return releaseGroupMutationEvidence{}, err
 	}

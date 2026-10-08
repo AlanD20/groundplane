@@ -102,7 +102,9 @@ current configuration.
 
 ## Release Groups
 
-A group contains an explicit ordered list of 2–32 Services. Members run serially,
+A group contains an explicit ordered list of 2–32 Services, which may be grouped
+before their first deployment. Creating or editing a group
+changes configuration only. During Deploy, members run serially,
 not as an atomic simultaneous traffic switch. All required pre-deploy hooks must
 finish and clean up before the first member starts.
 

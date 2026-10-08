@@ -19,6 +19,8 @@ Environment, not Caddy: disabling the router preserves them and reports them as
 Enable and Configure write the selected Component into the Environment Blueprint.
 They add its declaration if absent, or edit its existing declaration in place;
 other Component declarations and Environment resources remain unchanged.
+No earlier Blueprint Apply is needed: enabling the router also creates its
+selected networks if they have not yet been applied.
 
 A Route selects a Service and target port, public or internal exposure, host and
 path. Public Routes require a lowercase ASCII DNS host; internal Routes may omit

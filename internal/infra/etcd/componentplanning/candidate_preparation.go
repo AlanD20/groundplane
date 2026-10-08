@@ -84,6 +84,7 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		return ordered[left].Current.Record.Desired.ID < ordered[right].Current.Record.Desired.ID
 	})
 	zoneSet := make(map[string]struct{})
+	appliedZoneRequired := make(map[string]struct{})
 	previousID := ""
 	for _, input := range ordered {
 		if err := componentrecord.ValidateComponentVersion(input.Current); err != nil {
@@ -112,6 +113,7 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		}
 		if currentPresent {
 			zoneSet[currentBinding.ZoneID()] = struct{}{}
+			appliedZoneRequired[currentBinding.ZoneID()] = struct{}{}
 		}
 		candidateZoneID, candidatePresent, err := projectedComponentCandidateZone(candidate)
 		if err != nil {
@@ -216,18 +218,25 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 			}
 			continue
 		}
-		if !found {
-			return ComponentTaskPreparation{}, errs.New(
-				errs.KindStateConflict,
-				"Component candidate Environment projection is unavailable",
-			)
-		}
 		current, desiredZone := desiredZones[zoneID]
 		if !desiredZone || change.Current.Revision != current.Revision ||
 			change.Current.Record != current.Record {
 			return ComponentTaskPreparation{}, errs.New(
 				errs.KindStateConflict,
 				"Component candidate desired Zone changed",
+			)
+		}
+		// A directly authored Zone may not have been applied yet. Its desired
+		// revision is authoritative for first placement; publication also fences
+		// the absent applied projection. Only an existing address binding needs
+		// predecessor placement evidence for restoration.
+		if !selectedZone {
+			if _, required := appliedZoneRequired[zoneID]; !required {
+				continue
+			}
+			return ComponentTaskPreparation{}, errs.New(
+				errs.KindStateConflict,
+				"active Component Zone is missing from applied runtime",
 			)
 		}
 		// The selected projection is runtime placement evidence. Its Zone

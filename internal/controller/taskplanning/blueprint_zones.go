@@ -96,6 +96,9 @@ func validatedBlueprintZones(project *types.Project) ([]blueprintZoneDefinition,
 				name,
 			)
 		}
+		if err := ipam.ValidateBridgeSubnet(subnet); err != nil {
+			return nil, err
+		}
 		definitions = append(definitions, blueprintZoneDefinition{
 			Name: name, Subnet: subnet.String(), Internal: network.Internal,
 		})

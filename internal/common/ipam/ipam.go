@@ -134,6 +134,19 @@ func FirstAvailableChild(parent netip.Prefix, bits int, reserved []netip.Prefix)
 	)
 }
 
+// ValidateBridgeSubnet requires space beyond the network, gateway and broadcast
+// addresses reserved by GP's Docker bridges.
+func ValidateBridgeSubnet(prefix netip.Prefix) error {
+	if _, err := canonicalIPv4(prefix); err != nil {
+		return err
+	}
+	if prefix.Bits() > 30 {
+		return errs.Newf(errs.KindValidationFailed,
+			"Zone subnet %s has no usable container addresses; use /30 or a larger network (/28 recommended)", prefix)
+	}
+	return nil
+}
+
 // ValidateUsableIPv4 enforces the MVP bridge-address exclusions: network,
 // gateway, and broadcast addresses can never be assigned to a component.
 func ValidateUsableIPv4(prefix netip.Prefix, address netip.Addr) error {

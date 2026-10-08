@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { FormSection } from "@/components/ui/form-section";
 import { NetworkRange } from "@/components/common/network-range";
+import { zoneSubnetError } from "./zone-subnet";
 
 export function ZoneFormDialog({
   env,
@@ -34,7 +35,7 @@ export function ZoneFormDialog({
     normalizedName !== "" && !/^[A-Za-z0-9._-]+$/.test(normalizedName)
       ? "Use only letters, numbers, dot, underscore, and hyphen."
       : null;
-  const subnetError = subnet.trim() ? null : "Subnet is required.";
+  const subnetError = zoneSubnetError(subnet);
   const submit = async () => {
     setSubmitting(true);
     setSubmitError(null);
@@ -101,9 +102,16 @@ export function ZoneFormDialog({
             onChange={(e) => setSubnet(e.target.value)}
             placeholder="10.200.20.0/24"
           />
-          <p className="text-xs text-muted-foreground">
-            Required. Must be inside {env.networkPool} and must not overlap an
-            existing zone.
+          <p
+            className={
+              subnet.trim() && subnetError
+                ? "text-xs text-destructive"
+                : "text-xs text-muted-foreground"
+            }
+          >
+            {subnet.trim() && subnetError
+              ? subnetError
+              : `Must be inside ${env.networkPool}, with no overlap. Use /28 or a larger network for multiple containers.`}
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
