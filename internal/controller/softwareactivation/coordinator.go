@@ -185,6 +185,9 @@ func (service *Service) publishAgent(
 			errs.New(errs.KindStateConflict, "Agent activation input is incomplete"), now)
 	}
 	target := record.Input.Preparation.Progress.Result.Agent.Artifact.Reference
+	if err := service.stager.StageAgent(ctx, record.Input.Preparation.Progress.Result.Agent.Artifact); err != nil {
+		return service.handleActionError(ctx, task, record, err, now)
+	}
 	accepted, err := service.agentUpdates.PublishAgentUpdate(
 		ctx, *predecessor, target, childKey(task.ID, "agent"),
 	)

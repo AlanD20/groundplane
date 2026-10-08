@@ -239,5 +239,8 @@ retains its child Task evidence while the parent remains nonterminal.
 The preparation owner is [softwarepreparation](../../internal/controller/softwarepreparation),
 its bounded Docker/GitHub transport is [infrastructure](../../internal/infra/softwarepreparation),
 and [softwareactivation](../../internal/controller/softwareactivation) coordinates
-existing protected update operations. [Bundle staging](../../internal/infra/controllerbundle)
+existing protected update operations. [Software staging](../../internal/infra/softwarestaging)
 verifies the digest-pinned native payload before entering the release store.
+Agent activation first imports and verifies its prepared registry image locally;
+only then may the existing protected update replace the predecessor container.
+Preparation publication and its temporary-image cleanup are not host image staging.

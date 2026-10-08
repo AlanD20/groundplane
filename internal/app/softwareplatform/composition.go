@@ -18,7 +18,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/controller/softwareactivation"
 	"github.com/AlanD20/groundplane/internal/controller/softwarepreparation"
-	"github.com/AlanD20/groundplane/internal/infra/controllerbundle"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -26,6 +25,7 @@ import (
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	preparation "github.com/AlanD20/groundplane/internal/infra/softwarepreparation"
+	"github.com/AlanD20/groundplane/internal/infra/softwarestaging"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -76,7 +76,7 @@ func New(deps Dependencies) (*Composition, error) {
 	if deps.Releases == nil {
 		return result, nil
 	}
-	stager, err := controllerbundle.New(deps.Releases, deps.WorkspaceRoot)
+	stager, err := softwarestaging.New(deps.Releases, deps.WorkspaceRoot)
 	if err != nil {
 		return nil, err
 	}

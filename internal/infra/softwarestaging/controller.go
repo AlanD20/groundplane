@@ -1,6 +1,7 @@
-// Package controllerbundle retrieves a prepared OCI payload without running it
-// and stages verified native bytes through the Controller release store.
-package controllerbundle
+// Package softwarestaging imports verified software artifacts for activation.
+// Native Controller payloads are staged without execution; Agent images are
+// imported without replacing their running container.
+package softwarestaging
 
 import (
 	"archive/tar"

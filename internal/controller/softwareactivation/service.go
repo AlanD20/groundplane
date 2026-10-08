@@ -75,6 +75,7 @@ type Stager interface {
 	// restart can replay it after host publication but before the release
 	// checkpoint commits.
 	Stage(context.Context, preparationrecord.Record, string) (upgrade.Release, error)
+	StageAgent(context.Context, preparation.Artifact) error
 }
 
 // Update ports must replay the same accepted TaskID for a stable key even
