@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/common/disclosure";
 "use client";
 
 import { CopyButton } from "@/components/common/copy-button";
@@ -263,10 +264,9 @@ export function TaskRunnerDialog({
         {description && <DialogDescription>{description}</DialogDescription>}
       </DialogHeader>
 
-      <details className="text-xs text-muted-foreground">
-        <summary>Operation target</summary>
+      <Disclosure className="text-xs text-muted-foreground" summary={<>Operation target</>}>
         <code className="mt-2 block break-all font-mono">{target}</code>
-      </details>
+      </Disclosure>
 
       {phase === "review" && (
         <div className="flex flex-col gap-3">

@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/common/disclosure";
 import { StatusBadge } from "@/components/common/status-badge";
 import type { ActivityEntry, TaskStep } from "@/lib/types";
 import { ChevronDown, Terminal } from "lucide-react";
@@ -223,31 +224,35 @@ function TaskStepDetails({
     "A description was not recorded when this Task was created.";
 
   return (
-    <details
+    <Disclosure
+      indicator={false}
       className="group overflow-hidden rounded-lg border border-border bg-card"
       open={expanded}
-      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      onOpenChange={setExpanded}
+      summaryClassName="flex cursor-pointer list-none items-start gap-3 px-3 py-3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+      summary={
+        <>
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-xs font-medium tabular-nums text-muted-foreground">
+            {index + 1}
+          </span>
+          <span className="min-w-0 flex-1 space-y-1">
+            <span className="block break-words text-sm font-medium [overflow-wrap:anywhere]">
+              {step.action || "Action not recorded"}
+            </span>
+            <span className="block break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {description}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <StatusBadge status={state} label={eventStateLabel(state)} />
+            <ChevronDown
+              className="size-3.5 text-muted-foreground transition-transform group-data-[open=true]:rotate-180"
+              aria-hidden
+            />
+          </span>
+        </>
+      }
     >
-      <summary className="flex cursor-pointer list-none items-start gap-3 px-3 py-3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-xs font-medium tabular-nums text-muted-foreground">
-          {index + 1}
-        </span>
-        <span className="min-w-0 flex-1 space-y-1">
-          <span className="block break-words text-sm font-medium [overflow-wrap:anywhere]">
-            {step.action || "Action not recorded"}
-          </span>
-          <span className="block break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
-            {description}
-          </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <StatusBadge status={state} label={eventStateLabel(state)} />
-          <ChevronDown
-            className="size-3.5 text-muted-foreground transition-transform group-open:rotate-180"
-            aria-hidden
-          />
-        </span>
-      </summary>
       <div className="space-y-4 border-t border-border bg-surface/40 px-4 py-3">
         <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
           <StepDatum label="Action" value={step.action || "Not recorded"} />
@@ -303,7 +308,7 @@ function TaskStepDetails({
           </p>
         )}
       </div>
-    </details>
+    </Disclosure>
   );
 }
 

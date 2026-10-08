@@ -1,3 +1,4 @@
+import { ReorderList, ReorderItem, reorderItems } from "@/components/common/reorder-list";
 'use client'
 
 import { Select } from '@/components/ui/select'
@@ -97,9 +98,7 @@ export function BlueprintApplyAction({ environment, workspace, disabled = false,
     setComposeSources((current) => {
       const target = index + offset
       if (target < 0 || target >= current.length) return current
-      const next = [...current]
-      ;[next[index], next[target]] = [next[target], next[index]]
-      return next
+      return reorderItems(current, index, target)
     })
   }
 
@@ -213,15 +212,17 @@ export function BlueprintApplyAction({ environment, workspace, disabled = false,
               <Select id="blueprint-root" value={rootPath} onValueChange={changeRoot} options={inputOptions} placeholder="Select the root file…" />
             </div>
             {rootPath && <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"><span className="font-mono text-xs text-muted-foreground">01</span><span className="min-w-0 truncate font-mono">{rootPath}</span><Badge className="ml-auto" variant="outline">root</Badge></div>}
+            <ReorderList className="space-y-2" onMove={(from, to) => setComposeSources(current => reorderItems(current, from, to))}>
             {composeSources.map((source, index) => (
-              <div key={source} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+              <ReorderItem index={index} label={source} key={source} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
                 <span className="font-mono text-xs text-muted-foreground">{String(index + 2).padStart(2, '0')}</span>
                 <span className="min-w-0 flex-1 truncate font-mono">{source}</span>
                 <Button aria-label={`Move ${source} up`} variant="ghost" size="icon-xs" disabled={index === 0} onClick={() => moveSource(index, -1)}><ArrowUp /></Button>
                 <Button aria-label={`Move ${source} down`} variant="ghost" size="icon-xs" disabled={index === composeSources.length - 1} onClick={() => moveSource(index, 1)}><ArrowDown /></Button>
                 <Button aria-label={`Remove ${source} source`} variant="ghost" size="icon-xs" onClick={() => setComposeSources((current) => current.filter((candidate) => candidate !== source))}><Trash2 /></Button>
-              </div>
+              </ReorderItem>
             ))}
+            </ReorderList>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Select id="blueprint-compose-source" aria-label="Additional Compose source" value={sourceCandidate} onValueChange={setSourceCandidate} options={sourceOptions} placeholder="Select an additional source…" />
               <Button variant="outline" disabled={!sourceCandidate} onClick={addSource}><Plus /> Add source</Button>

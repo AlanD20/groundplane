@@ -1,4 +1,9 @@
 import {
+  ReorderList,
+  ReorderItem,
+  reorderItems,
+} from "@/components/common/reorder-list";
+import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
   ResourceFormTitle as DialogTitle,
@@ -112,8 +117,7 @@ function ReleaseGroupForm({
       const nextIndex = index + offset;
       if (index < 0 || nextIndex < 0 || nextIndex >= current.order.length)
         return current;
-      const order = [...current.order];
-      [order[index], order[nextIndex]] = [order[nextIndex], order[index]];
+      const order = reorderItems(current.order, index, nextIndex);
       return { ...current, order };
     });
   }
@@ -241,37 +245,50 @@ function ReleaseGroupForm({
               Selected services appear here.
             </p>
           ) : (
-            draft.order.map((service, index) => (
-              <div
-                key={service}
-                className="flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
-              >
-                <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 font-mono text-xs text-primary">
-                  {index + 1}
-                </span>
-                <span className="flex-1 font-mono text-sm">{service}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Move ${service} up`}
-                  disabled={index === 0}
-                  onClick={() => move(service, -1)}
+            <ReorderList
+              className="space-y-2"
+              disabled={saving}
+              onMove={(from, to) =>
+                setDraft((current) => ({
+                  ...current,
+                  order: reorderItems(current.order, from, to),
+                }))
+              }
+            >
+              {draft.order.map((service, index) => (
+                <ReorderItem
+                  index={index}
+                  label={service}
+                  key={service}
+                  className="flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
                 >
-                  <ArrowUp />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Move ${service} down`}
-                  disabled={index === draft.order.length - 1}
-                  onClick={() => move(service, 1)}
-                >
-                  <ArrowDown />
-                </Button>
-              </div>
-            ))
+                  <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 font-mono text-xs text-primary">
+                    {index + 1}
+                  </span>
+                  <span className="flex-1 font-mono text-sm">{service}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Move ${service} up`}
+                    disabled={saving || index === 0}
+                    onClick={() => move(service, -1)}
+                  >
+                    <ArrowUp />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Move ${service} down`}
+                    disabled={saving || index === draft.order.length - 1}
+                    onClick={() => move(service, 1)}
+                  >
+                    <ArrowDown />
+                  </Button>
+                </ReorderItem>
+              ))}
+            </ReorderList>
           )}
         </div>
         <div className="flex flex-col gap-1.5">

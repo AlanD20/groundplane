@@ -1,3 +1,5 @@
+import { InlineEditorRegion } from "@/components/common/inline-editor-region";
+import { AnimatedSection } from "@/components/common/animated-section";
 import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
@@ -168,7 +170,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
       <DialogHeader>
         <DialogTitle>Add volume · {env.name}</DialogTitle>
       </DialogHeader>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="v-slug">Slug</Label>
           <Input
@@ -348,88 +350,91 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           ]}
         />
         {table.rows.map((v) => (
-          <div
-            key={v.id}
-            className={workspaceSectionClassName(
-              false,
-              "flex flex-wrap items-center justify-between gap-3",
-            )}
-          >
-            <div className="flex min-w-0 max-w-full flex-col">
-              <span className="break-all font-mono text-sm">{v.slug}</span>
-              <span className="break-all font-mono text-xs text-muted-foreground">
-                key: {v.key}
-              </span>
-              {v.path && (
-                <span className="max-w-56 truncate font-mono text-xs text-muted-foreground">
-                  {v.path}
-                </span>
-              )}
+          <InlineEditorRegion key={v.id} editing={false}>
+            <div className={workspaceSectionClassName()}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 max-w-full flex-col">
+                  <span className="break-all font-mono text-sm">{v.slug}</span>
+                  <span className="break-all font-mono text-xs text-muted-foreground">
+                    key: {v.key}
+                  </span>
+                  {v.path && (
+                    <span className="max-w-56 truncate font-mono text-xs text-muted-foreground">
+                      {v.path}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">
+                    {v.state ?? "unknown"}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    title="Toggle volume details"
+                    aria-label={`Show volume ${v.slug}`}
+                    aria-expanded={viewing?.id === v.id}
+                    onClick={async () => {
+                      const request = ++detailRequest.current;
+                      if (viewing?.id === v.id) {
+                        setViewing(null);
+                        return;
+                      }
+                      setViewing(v);
+                      setDetailError(undefined);
+                      setDetailLoading(true);
+                      try {
+                        const volume = await store.getVolume(v.id);
+                        if (request === detailRequest.current)
+                          setViewing(volume);
+                      } catch (cause: unknown) {
+                        if (request === detailRequest.current)
+                          setDetailError(
+                            cause instanceof Error
+                              ? cause.message
+                              : "Unable to load volume",
+                          );
+                      } finally {
+                        if (request === detailRequest.current)
+                          setDetailLoading(false);
+                      }
+                    }}
+                  >
+                    <Eye className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    title="Edit volume slug"
+                    onClick={() => {
+                      detailRequest.current++;
+                      setViewing(null);
+                      setSaveError(null);
+                      setEditSlug(v.slug);
+                      setEditing(v);
+                    }}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="text-muted-foreground hover:text-destructive"
+                    title="Remove volume"
+                    onClick={() => setRemoving(v)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <AnimatedSection open={viewing?.id === v.id}>
+                {viewing?.id === v.id && details}
+              </AnimatedSection>
+              <AnimatedSection open={editing?.id === v.id}>
+                {editing?.id === v.id && editor}
+              </AnimatedSection>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">
-                {v.state ?? "unknown"}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                title="Toggle volume details"
-                aria-label={`Show volume ${v.slug}`}
-                aria-expanded={viewing?.id === v.id}
-                onClick={async () => {
-                  const request = ++detailRequest.current;
-                  if (viewing?.id === v.id) {
-                    setViewing(null);
-                    return;
-                  }
-                  setViewing(v);
-                  setDetailError(undefined);
-                  setDetailLoading(true);
-                  try {
-                    const volume = await store.getVolume(v.id);
-                    if (request === detailRequest.current) setViewing(volume);
-                  } catch (cause: unknown) {
-                    if (request === detailRequest.current)
-                      setDetailError(
-                        cause instanceof Error
-                          ? cause.message
-                          : "Unable to load volume",
-                      );
-                  } finally {
-                    if (request === detailRequest.current)
-                      setDetailLoading(false);
-                  }
-                }}
-              >
-                <Eye className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                title="Edit volume slug"
-                onClick={() => {
-                  detailRequest.current++;
-                  setViewing(null);
-                  setSaveError(null);
-                  setEditSlug(v.slug);
-                  setEditing(v);
-                }}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="text-muted-foreground hover:text-destructive"
-                title="Remove volume"
-                onClick={() => setRemoving(v)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-            {viewing?.id === v.id && details}
-            {editing?.id === v.id && editor}
-          </div>
+          </InlineEditorRegion>
         ))}
         {table.total === 0 && (
           <p className="p-6 text-center text-xs text-muted-foreground">

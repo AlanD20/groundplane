@@ -1,3 +1,5 @@
+import { InlineEditorRegion } from "@/components/common/inline-editor-region";
+import { AnimatedSection } from "@/components/common/animated-section";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
   ResourceForm,
@@ -88,7 +90,7 @@ export function RoutesCard({ env }: { env: Environment }) {
       ) : null}
       {detailRoute ? (
         <div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
             <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
               <p className="text-xs font-medium text-muted-foreground">
                 Incoming request
@@ -215,91 +217,93 @@ export function RoutesCard({ env }: { env: Environment }) {
       <CardContent className="flex flex-col gap-3">
         <RouteFormDialog env={env} open={open} onOpenChange={setOpen} />
         {env.routes.map((r) => (
-          <div
-            key={r.id}
-            className={workspaceSectionClassName(
-              false,
-              "flex flex-wrap items-center justify-between gap-3",
-            )}
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <ExposurePill exposure={r.exposure} />
-              <span className="truncate font-mono text-sm">
-                {r.host || "internal"}
-                {r.path}
-              </span>
+          <InlineEditorRegion key={r.id} editing={false}>
+            <div className={workspaceSectionClassName()}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <ExposurePill exposure={r.exposure} />
+                  <span className="truncate font-mono text-sm">
+                    {r.host || "internal"}
+                    {r.path}
+                  </span>
+                </div>
+                <div className="flex min-w-0 items-center gap-1">
+                  <span className="truncate font-mono text-xs text-muted-foreground">
+                    →{" "}
+                    {env.services.find(
+                      (service) => service.id === r.targetServiceId,
+                    )?.name ?? r.targetServiceId}
+                    :{r.targetPort}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    data-action-id="route.show"
+                    aria-label={`Show Route ${r.host || "internal"}${r.path}`}
+                    title="Toggle route details"
+                    aria-expanded={detailTarget?.id === r.id}
+                    onClick={() => {
+                      const request = ++detailRequest.current;
+                      if (detailTarget?.id === r.id) {
+                        setDetailTarget(null);
+                        return;
+                      }
+                      setDetailTarget(r);
+                      setDetailRoute(undefined);
+                      setDetailError(undefined);
+                      void store
+                        .getRoute(r.id)
+                        .then((route) => {
+                          if (request === detailRequest.current)
+                            setDetailRoute(route);
+                        })
+                        .catch((error: unknown) => {
+                          if (request !== detailRequest.current) return;
+                          setDetailError(
+                            error instanceof Error
+                              ? error.message
+                              : "Unable to load Route details",
+                          );
+                        });
+                    }}
+                  >
+                    <ChevronRight
+                      className={`size-3.5 transition-transform ${detailTarget?.id === r.id ? "rotate-90" : ""}`}
+                    />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    title="Edit route exposure"
+                    onClick={() => {
+                      detailRequest.current++;
+                      setDetailTarget(null);
+                      setExposure(r.exposure);
+                      setEditError(undefined);
+                      setEditing(r);
+                    }}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="text-muted-foreground hover:text-destructive"
+                    title="Remove route"
+                    onClick={() => setRemoving(r)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <AnimatedSection open={detailTarget?.id === r.id}>
+                {detailTarget?.id === r.id && details}
+              </AnimatedSection>
+              <AnimatedSection open={editing?.id === r.id}>
+                {editing?.id === r.id && editor}
+              </AnimatedSection>
             </div>
-            <div className="flex min-w-0 items-center gap-1">
-              <span className="truncate font-mono text-xs text-muted-foreground">
-                →{" "}
-                {env.services.find(
-                  (service) => service.id === r.targetServiceId,
-                )?.name ?? r.targetServiceId}
-                :{r.targetPort}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                data-action-id="route.show"
-                aria-label={`Show Route ${r.host || "internal"}${r.path}`}
-                title="Toggle route details"
-                aria-expanded={detailTarget?.id === r.id}
-                onClick={() => {
-                  const request = ++detailRequest.current;
-                  if (detailTarget?.id === r.id) {
-                    setDetailTarget(null);
-                    return;
-                  }
-                  setDetailTarget(r);
-                  setDetailRoute(undefined);
-                  setDetailError(undefined);
-                  void store
-                    .getRoute(r.id)
-                    .then((route) => {
-                      if (request === detailRequest.current)
-                        setDetailRoute(route);
-                    })
-                    .catch((error: unknown) => {
-                      if (request !== detailRequest.current) return;
-                      setDetailError(
-                        error instanceof Error
-                          ? error.message
-                          : "Unable to load Route details",
-                      );
-                    });
-                }}
-              >
-                <ChevronRight
-                  className={`size-3.5 transition-transform ${detailTarget?.id === r.id ? "rotate-90" : ""}`}
-                />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                title="Edit route exposure"
-                onClick={() => {
-                  detailRequest.current++;
-                  setDetailTarget(null);
-                  setExposure(r.exposure);
-                  setEditError(undefined);
-                  setEditing(r);
-                }}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="text-muted-foreground hover:text-destructive"
-                title="Remove route"
-                onClick={() => setRemoving(r)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-            {detailTarget?.id === r.id && details}
-            {editing?.id === r.id && editor}
-          </div>
+          </InlineEditorRegion>
         ))}
         {env.routes.length === 0 && (
           <div className="text-xs text-muted-foreground">
@@ -409,9 +413,13 @@ export function RouteFormDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  return open ? (
-    <RouteForm key={env.id} env={env} open onOpenChange={onOpenChange} />
-  ) : null;
+  return (
+    <AnimatedSection open={open}>
+      {open ? (
+        <RouteForm key={env.id} env={env} open onOpenChange={onOpenChange} />
+      ) : null}
+    </AnimatedSection>
+  );
 }
 
 function RouteForm({
@@ -468,7 +476,7 @@ function RouteForm({
       <DialogHeader>
         <DialogTitle>Add route · {env.name}</DialogTitle>
       </DialogHeader>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
         <p className="text-xs text-muted-foreground sm:col-span-2">
           A Route sends traffic to a Service. Public Routes require separately
           managed ingress components to be served; creating a Route never

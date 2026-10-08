@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/common/disclosure";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { Link } from "react-router-dom";
 import { FactRow } from "./environment-facts";
@@ -15,10 +16,9 @@ export function ConnectionValues({
     (item) => item.id === attach.serviceId || item.name === attach.service,
   );
   return (
-    <details className="group border-t border-border pt-3">
-      <summary className="cursor-pointer text-sm font-medium">
+    <Disclosure className="group border-t border-border pt-3" summaryClassName="cursor-pointer text-sm font-medium" summary={<>
         Connection values & usage
-      </summary>
+      </>}>
       <div className="mt-4 space-y-5">
         {!attach.factSets.some((set) => set.facts.length) && (
           <p className="text-sm text-muted-foreground">
@@ -89,6 +89,6 @@ export function ConnectionValues({
           </section>
         ))}
       </div>
-    </details>
+    </Disclosure>
   );
 }

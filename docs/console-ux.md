@@ -308,8 +308,14 @@ When configuring an existing component, expand its current section in place;
 keep the section mounted and animate its height with reduced-motion support.
 The highlight surrounds both the added fields and their action footer. Do not
 append a detached configuration card beneath the component list.
-Bound form width and pair related short fields on wide screens; stack them on
-narrow screens. Group section actions together at the header's trailing edge.
+Use full-width form panels with bounded inputs and pair related short fields on
+wide screens; stack them on narrow screens. Use the shared AnimatedSection for
+disclosures and InlineEditorRegion for summary/editor replacement. Keep the outer
+region mounted so opening, closing and asynchronous content changes animate;
+closed content must be inert and removed after exit, with reduced-motion support.
+Reorderable lists use the shared ReorderList drag handle alongside their up/down
+buttons; dragging changes draft order only and respects the same locked items and
+saving state. Group section actions together at the header's trailing edge.
 Long paths and identifiers must not push row actions outside the visible area.
 
 Alternating log backgrounds use explicit theme tokens with a visible difference

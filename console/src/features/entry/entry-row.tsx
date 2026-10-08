@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/common/disclosure";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
 
@@ -124,12 +125,11 @@ export function EntryRow({
       {secret && loadValue ? (
         <RevealValue loadValue={loadValue} label={label} />
       ) : file ? (
-        <details className="min-w-0 rounded-lg border border-border">
-          <summary className="cursor-pointer px-3 py-2 text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+        <Disclosure className="min-w-0 rounded-lg border border-border" summaryClassName="cursor-pointer px-3 py-2 text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring" summary={<>
             Preview file contents
-          </summary>
+          </>}>
           <div className="min-w-0 border-t border-border p-3">{preview}</div>
-        </details>
+        </Disclosure>
       ) : (
         preview
       )}

@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/common/disclosure";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -83,14 +84,13 @@ export function AdvancedDetails({
   children: ReactNode;
 }) {
   return (
-    <details className="rounded-lg border border-border bg-card">
-      <summary className="cursor-pointer rounded-lg px-4 py-3 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+    <Disclosure className="rounded-lg border border-border bg-card" summaryClassName="cursor-pointer rounded-lg px-4 py-3 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" summary={<>
         {title}
-      </summary>
+      </>}>
       <div className="space-y-3 border-t border-border p-4 text-xs">
         {children}
       </div>
-    </details>
+    </Disclosure>
   );
 }
 

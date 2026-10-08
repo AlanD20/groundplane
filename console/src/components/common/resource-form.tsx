@@ -16,7 +16,7 @@ import {
   workspaceSectionClassName,
   editorFooterClassName,
 } from "./workspace-section";
-import { InlineEditorRegion } from "./inline-editor-region";
+import { AnimatedSection } from "./animated-section";
 import { cn } from "@/lib/utils";
 
 const Inline = createContext(false);
@@ -49,32 +49,44 @@ export function ResourceForm({
   const region = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open || !inline || !editing) return;
-    const frame = requestAnimationFrame(() =>
-      region.current?.scrollIntoView({ block: "start" }),
-    );
-    return () => cancelAnimationFrame(frame);
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const frame = requestAnimationFrame(() => {
+      region.current?.scrollIntoView({ block: "nearest" });
+      region.current
+        ?.querySelector<HTMLElement>(
+          "input, button[role=combobox], select, textarea",
+        )
+        ?.focus({ preventScroll: true });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (region.current?.contains(document.activeElement))
+        previousFocus?.focus({ preventScroll: true });
+    };
   }, [open, inline, editing]);
-  if (inline && !open) return null;
   return (
     <Inline.Provider value={inline}>
       {inline ? (
-        <div
-          ref={region}
-          className={cn(
-            "w-full min-w-0 basis-full scroll-mt-24 py-2",
-            className,
-          )}
-        >
-          <div className="max-w-4xl">
-            <InlineEditorRegion editing={editing}>
+        <AnimatedSection open={open} className="w-full min-w-0 basis-full">
+          <div
+            ref={region}
+            className={cn(
+              "w-full min-w-0 basis-full scroll-mt-24 py-2",
+              className,
+            )}
+          >
+            <div className="w-full">
               <section
-                className={workspaceSectionClassName(editing, "space-y-4")}
+                className={workspaceSectionClassName(
+                  editing,
+                  "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
+                )}
               >
                 {children}
               </section>
-            </InlineEditorRegion>
+            </div>
           </div>
-        </div>
+        </AnimatedSection>
       ) : (
         <Drawer open={open} onOpenChange={onOpenChange}>
           <DrawerContent>{children}</DrawerContent>

@@ -1,4 +1,9 @@
 import {
+  ReorderList,
+  ReorderItem,
+  reorderItems,
+} from "@/components/common/reorder-list";
+import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
   ResourceFormTitle as DialogTitle,
@@ -115,9 +120,7 @@ export function BackupPolicyDialog({
     setSources((current) => {
       const destination = index + offset;
       if (destination < 0 || destination >= current.length) return current;
-      const next = [...current];
-      [next[index], next[destination]] = [next[destination], next[index]];
-      return next;
+      return reorderItems(current, index, destination);
     });
   };
   const keepNumber =
@@ -375,12 +378,20 @@ export function BackupPolicyDialog({
                   selected.
                 </p>
                 {sources.length > 0 && (
-                  <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface p-2">
+                  <ReorderList
+                    className="space-y-2"
+                    disabled={policyState.saving}
+                    onMove={(from, to) =>
+                      setSources((current) => reorderItems(current, from, to))
+                    }
+                  >
                     <span className="text-xs font-medium text-muted-foreground">
                       Backup order
                     </span>
                     {sources.map((source, index) => (
-                      <div
+                      <ReorderItem
+                        index={index}
+                        label={backupSourceInputLabel(store, env, source)}
                         key={`${source.kind}:${source.targetId}`}
                         className="flex items-center gap-2 rounded-md bg-background px-2 py-1.5 text-xs"
                       >
@@ -410,9 +421,9 @@ export function BackupPolicyDialog({
                         >
                           <ChevronDown className="size-3.5" />
                         </Button>
-                      </div>
+                      </ReorderItem>
                     ))}
-                  </div>
+                  </ReorderList>
                 )}
               </div>
               <BackupScheduleEditor

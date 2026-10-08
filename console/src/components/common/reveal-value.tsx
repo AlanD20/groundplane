@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { AnimatedSection } from "./animated-section";
 import { CopyButton } from "./copy-button";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -68,100 +69,104 @@ export function RevealValue({
   }
 
   return (
-    <div className={cn("flex min-w-0 max-w-full items-start gap-1", className)}>
-      <code className="min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted px-3 py-2 font-mono text-sm [overflow-wrap:anywhere]">
-        {revealed ? (
-          displayedValue === "" ? (
-            <span className="font-sans italic text-muted-foreground">
-              Empty value
-            </span>
-          ) : (
-            displayedValue
-          )
-        ) : sensitive ? (
-          "•".repeat(12)
-        ) : (
-          "not loaded"
-        )}
-      </code>
-      {revealed && (
-        <CopyButton className="shrink-0" value={displayedValue ?? ""} />
-      )}
-      <Button
-        variant="ghost"
-        size="content"
-        type="button"
-        onClick={() => {
-          if (loading) return;
-          if (revealed) hide();
-          else if (sensitive && requireRevealConfirm) {
-            setTyped("");
-            setOpen(true);
-          } else void reveal();
-        }}
-        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        aria-label={
-          revealed ? "Hide value" : sensitive ? "Reveal value" : "Show value"
-        }
-        aria-disabled={loading}
-        aria-busy={loading}
+    <AnimatedSection>
+      <div
+        className={cn("flex min-w-0 max-w-full items-start gap-1", className)}
       >
-        {revealed ? (
-          <EyeOff className="size-3.5" />
-        ) : (
-          <Eye className="size-3.5" />
+        <code className="min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted px-3 py-2 font-mono text-sm [overflow-wrap:anywhere]">
+          {revealed ? (
+            displayedValue === "" ? (
+              <span className="font-sans italic text-muted-foreground">
+                Empty value
+              </span>
+            ) : (
+              displayedValue
+            )
+          ) : sensitive ? (
+            "•".repeat(12)
+          ) : (
+            "not loaded"
+          )}
+        </code>
+        {revealed && (
+          <CopyButton className="shrink-0" value={displayedValue ?? ""} />
         )}
-        {loading
-          ? "Loading…"
-          : revealed
-            ? "Hide"
-            : sensitive
-              ? "Reveal"
-              : "Show"}
-      </Button>
-      {error && (
-        <span className="min-w-0 text-xs text-destructive [overflow-wrap:anywhere]">
-          {error}
-        </span>
-      )}
+        <Button
+          variant="ghost"
+          size="content"
+          type="button"
+          onClick={() => {
+            if (loading) return;
+            if (revealed) hide();
+            else if (sensitive && requireRevealConfirm) {
+              setTyped("");
+              setOpen(true);
+            } else void reveal();
+          }}
+          className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={
+            revealed ? "Hide value" : sensitive ? "Reveal value" : "Show value"
+          }
+          aria-disabled={loading}
+          aria-busy={loading}
+        >
+          {revealed ? (
+            <EyeOff className="size-3.5" />
+          ) : (
+            <Eye className="size-3.5" />
+          )}
+          {loading
+            ? "Loading…"
+            : revealed
+              ? "Hide"
+              : sensitive
+                ? "Reveal"
+                : "Show"}
+        </Button>
+        {error && (
+          <span className="min-w-0 text-xs text-destructive [overflow-wrap:anywhere]">
+            {error}
+          </span>
+        )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reveal {label ?? "secret"}</DialogTitle>
-            <DialogDescription>
-              This value is sensitive and never cached or logged. Type{" "}
-              <span className="font-mono text-foreground">{confirmWord}</span>{" "}
-              to reveal it.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="reveal-confirm">Confirmation</Label>
-            <Input
-              id="reveal-confirm"
-              autoFocus
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              placeholder={confirmWord}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={typed !== confirmWord || loading}
-              onClick={() => {
-                void reveal().then((success) => {
-                  if (success) setOpen(false);
-                });
-              }}
-            >
-              {loading ? "Revealing…" : "Reveal value"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reveal {label ?? "secret"}</DialogTitle>
+              <DialogDescription>
+                This value is sensitive and never cached or logged. Type{" "}
+                <span className="font-mono text-foreground">{confirmWord}</span>{" "}
+                to reveal it.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reveal-confirm">Confirmation</Label>
+              <Input
+                id="reveal-confirm"
+                autoFocus
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder={confirmWord}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={typed !== confirmWord || loading}
+                onClick={() => {
+                  void reveal().then((success) => {
+                    if (success) setOpen(false);
+                  });
+                }}
+              >
+                {loading ? "Revealing…" : "Reveal value"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </AnimatedSection>
   );
 }

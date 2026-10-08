@@ -1,3 +1,5 @@
+import { InlineEditorRegion } from "@/components/common/inline-editor-region";
+import { AnimatedSection } from "@/components/common/animated-section";
 import { ResourceForm } from "@/components/common/resource-form";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
@@ -98,7 +100,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {addOpen && editor}
+          <AnimatedSection open={addOpen}>{addOpen && editor}</AnimatedSection>
           <ListToolbar
             label="Scripts"
             query={query}
@@ -121,95 +123,103 @@ export function ScriptsCard({ env }: { env: Environment }) {
             </p>
           )}
           {visibleRows.map((script) => (
-            <div
-              key={script.id}
-              className={workspaceSectionClassName(
-                false,
-                "flex flex-wrap items-center justify-between gap-3",
-              )}
-            >
-              <div className="flex min-w-0 flex-col">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="break-all font-mono text-sm">
-                    {script.slug}
-                  </span>
-                  <Badge
-                    variant={script.when === "manual" ? "default" : "primary"}
-                  >
-                    {script.when}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    order {script.order} · {script.execution.mode}
-                  </span>
-                </div>
-                <span className="truncate font-mono text-xs text-muted-foreground">
-                  {script.body.split("\n")[0]}
-                  {script.body.split("\n").length > 1
-                    ? ` · +${script.body.split("\n").length - 1} lines`
-                    : ""}
-                </span>
-                {!servingServices.has(script.service) && (
-                  <span className="text-xs text-muted-foreground">
-                    Deploy {script.service} before running this Script manually.
-                    {script.when === "pre-deploy" &&
-                      " This hook runs automatically during Deploy."}
-                  </span>
+            <InlineEditorRegion key={script.id} editing={false}>
+              <div
+                key={script.id}
+                className={workspaceSectionClassName(
+                  false,
+                  "flex flex-wrap items-center justify-between gap-3",
                 )}
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <span className="font-mono text-xs text-muted-foreground">
-                  → {script.service}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    !!runningRequest || !servingServices.has(script.service)
-                  }
-                  onClick={async () => {
-                    setRunError(undefined);
-                    setRunningRequest(script.id);
-                    try {
-                      await store.runScript(script.id);
-                    } catch (error) {
-                      setRunError(
-                        error instanceof Error
-                          ? error.message
-                          : "Unable to run Script",
-                      );
-                    } finally {
-                      setRunningRequest(undefined);
+              >
+                <div className="flex min-w-0 flex-col">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="break-all font-mono text-sm">
+                      {script.slug}
+                    </span>
+                    <Badge
+                      variant={script.when === "manual" ? "default" : "primary"}
+                    >
+                      {script.when}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      order {script.order} · {script.execution.mode}
+                    </span>
+                  </div>
+                  <span className="truncate font-mono text-xs text-muted-foreground">
+                    {script.body.split("\n")[0]}
+                    {script.body.split("\n").length > 1
+                      ? ` · +${script.body.split("\n").length - 1} lines`
+                      : ""}
+                  </span>
+                  {!servingServices.has(script.service) && (
+                    <span className="text-xs text-muted-foreground">
+                      Deploy {script.service} before running this Script
+                      manually.
+                      {script.when === "pre-deploy" &&
+                        " This hook runs automatically during Deploy."}
+                    </span>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs text-muted-foreground">
+                    → {script.service}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      !!runningRequest || !servingServices.has(script.service)
                     }
-                  }}
+                    onClick={async () => {
+                      setRunError(undefined);
+                      setRunningRequest(script.id);
+                      try {
+                        await store.runScript(script.id);
+                      } catch (error) {
+                        setRunError(
+                          error instanceof Error
+                            ? error.message
+                            : "Unable to run Script",
+                        );
+                      } finally {
+                        setRunningRequest(undefined);
+                      }
+                    }}
+                  >
+                    <Terminal className="size-3.5" />{" "}
+                    {runningRequest === script.id ? "Submitting…" : "Run"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    title="Edit script"
+                    aria-label={`Edit script ${script.slug}`}
+                    onClick={() => {
+                      setAddOpen(false);
+                      setEditing(script);
+                    }}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="text-muted-foreground hover:text-destructive"
+                    title="Remove script"
+                    aria-label={`Remove script ${script.slug}`}
+                    onClick={() => setRemoving(script)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+                <AnimatedSection
+                  className="w-full basis-full"
+                  open={editing?.id === script.id}
                 >
-                  <Terminal className="size-3.5" />{" "}
-                  {runningRequest === script.id ? "Submitting…" : "Run"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  title="Edit script"
-                  aria-label={`Edit script ${script.slug}`}
-                  onClick={() => {
-                    setAddOpen(false);
-                    setEditing(script);
-                  }}
-                >
-                  <Pencil className="size-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="text-muted-foreground hover:text-destructive"
-                  title="Remove script"
-                  aria-label={`Remove script ${script.slug}`}
-                  onClick={() => setRemoving(script)}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
+                  {editing?.id === script.id && editor}
+                </AnimatedSection>
               </div>
-              {editing?.id === script.id && editor}
-            </div>
+            </InlineEditorRegion>
           ))}
           {env.scripts.length === 0 && (
             <p className="text-xs text-muted-foreground">

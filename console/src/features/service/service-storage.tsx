@@ -1,3 +1,5 @@
+import { AnimatedSection } from "@/components/common/animated-section";
+import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import {
   workspaceSectionClassName,
   editorFooterClassName,
@@ -304,68 +306,75 @@ export function ServiceStorage({
         Mount Environment Volumes at paths inside this Service. Each mount is
         saved independently.
       </p>
-      {draft && !draft.original && editor}
+      <AnimatedSection open={!!draft && !draft.original}>
+        {draft && !draft.original && editor}
+      </AnimatedSection>
       <div className="space-y-2">
-        {mounts.map((mount) =>
-          draft?.original && sameMount(mount, draft.original) ? (
-            <div key={mount.mount}>{editor}</div>
-          ) : (
-            <div
-              key={mount.mount}
-              className={workspaceSectionClassName(
-                false,
-                "flex flex-wrap items-center justify-between gap-3",
-              )}
-            >
-              <div className="flex min-w-0 flex-1 items-start gap-3">
-                <HardDrive
-                  aria-hidden
-                  className="size-9 shrink-0 rounded-lg border border-border bg-muted p-2 text-primary"
-                />
-                <div className="min-w-0 space-y-1">
-                  <p className="text-sm font-medium [overflow-wrap:anywhere]">
-                    {env.volumes.find((volume) => volume.id === mount.volume)
-                      ?.slug ?? mount.volume}
-                  </p>
-                  <p className="w-fit max-w-full break-all rounded-md bg-muted px-2 py-1 font-mono text-sm">
-                    {mount.mount}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {mount.ro ? "Read only" : "Read & write"}
-                    {saved?.path === mount.mount && (
-                      <span className="ml-2 text-success">
-                        Just {saved.action}
-                      </span>
-                    )}
-                  </p>
+        {mounts.map((mount) => (
+          <InlineEditorRegion
+            key={mount.mount}
+            editing={!!draft?.original && sameMount(mount, draft.original)}
+          >
+            {draft?.original && sameMount(mount, draft.original) ? (
+              <div key={mount.mount}>{editor}</div>
+            ) : (
+              <div
+                key={mount.mount}
+                className={workspaceSectionClassName(
+                  false,
+                  "flex flex-wrap items-center justify-between gap-3",
+                )}
+              >
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <HardDrive
+                    aria-hidden
+                    className="size-9 shrink-0 rounded-lg border border-border bg-muted p-2 text-primary"
+                  />
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium [overflow-wrap:anywhere]">
+                      {env.volumes.find((volume) => volume.id === mount.volume)
+                        ?.slug ?? mount.volume}
+                    </p>
+                    <p className="w-fit max-w-full break-all rounded-md bg-muted px-2 py-1 font-mono text-sm">
+                      {mount.mount}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {mount.ro ? "Read only" : "Read & write"}
+                      {saved?.path === mount.mount && (
+                        <span className="ml-2 text-success">
+                          Just {saved.action}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!!draft}
+                    aria-label={`Edit mount ${mount.mount}`}
+                    ref={(node) => {
+                      editButtons.current[mount.mount] = node;
+                    }}
+                    onClick={() => edit(mount)}
+                  >
+                    <Pencil className="size-3.5" /> Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={!!draft}
+                    aria-label={`Remove mount ${mount.mount}`}
+                    onClick={() => edit(mount, true)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!!draft}
-                  aria-label={`Edit mount ${mount.mount}`}
-                  ref={(node) => {
-                    editButtons.current[mount.mount] = node;
-                  }}
-                  onClick={() => edit(mount)}
-                >
-                  <Pencil className="size-3.5" /> Edit
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={!!draft}
-                  aria-label={`Remove mount ${mount.mount}`}
-                  onClick={() => edit(mount, true)}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-          ),
-        )}
+            )}
+          </InlineEditorRegion>
+        ))}
         {draft?.original &&
           !mounts.some((mount) => sameMount(mount, draft.original!)) &&
           editor}

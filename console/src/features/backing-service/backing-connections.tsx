@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/common/disclosure";
 import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import {
   CollectionToolbar,
@@ -360,10 +361,9 @@ export function ConnectionsTab({
                   </div>
                 )}
                 {!adapter?.custom && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-primary">
+                  <Disclosure className="mt-2" summaryClassName="cursor-pointer text-xs text-primary" summary={<>
                       procedure the Agent runs · {provision.length} steps
-                    </summary>
+                    </>}>
                     <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
                       {authenticationUnavailable ? (
                         <p className="text-xs text-muted-foreground">
@@ -396,7 +396,7 @@ export function ConnectionsTab({
                         </div>
                       ))}
                     </div>
-                  </details>
+                  </Disclosure>
                 )}
               </div>
             </>

@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/common/disclosure";
 import type { ActivityEntry } from '@/lib/types'
 import { CopyButton } from '@/components/common/copy-button'
 import { TaskJournalMetadata } from '@/components/common/task-journal-metadata'
@@ -37,14 +38,13 @@ export function ImageFetchTaskDetails({ task }: { task: ActivityEntry }) {
     </div>}
     {task.status === 'failed' && !progress.error_detail && <p className="text-sm text-muted-foreground">No failure explanation was recorded for this attempt. The Controller log contains its diagnostic.</p>}
     <TaskJournalMetadata entry={task} />
-    <details className="rounded-lg border border-border p-3">
-      <summary className="cursor-pointer text-sm font-medium">Image digest & Task identifiers</summary>
+    <Disclosure className="rounded-lg border border-border p-3" summaryClassName="cursor-pointer text-sm font-medium" summary={<>Image digest & Task identifiers</>}>
       <dl className="mt-3 space-y-3 text-xs">
         {[['Requested image', fetch.requested], ['Selected digest', fetch.image], ['Task', task.id], ['Operation', task.operationId]].map(([label, value]) => value && <div key={label}>
           <dt className="mb-1 text-muted-foreground">{label}</dt>
           <dd className="flex min-w-0 items-start gap-2"><code className="min-w-0 flex-1 break-all">{value}</code><CopyButton value={value} label={`Copy ${label?.toLowerCase()}`} /></dd>
         </div>)}
       </dl>
-    </details>
+    </Disclosure>
   </div>
 }
