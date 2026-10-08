@@ -3789,7 +3789,7 @@ export interface components {
             created_at: string;
             environment_id?: string;
             /** @enum {string} */
-            executor: "agent" | "controller" | "blueprint";
+            executor: "agent" | "controller" | "blueprint" | "software";
             failure_summary?: string;
             /** Format: date-time */
             finished_at: string | null;

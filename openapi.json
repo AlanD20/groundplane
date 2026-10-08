@@ -6826,7 +6826,8 @@
             "enum": [
               "agent",
               "controller",
-              "blueprint"
+              "blueprint",
+              "software"
             ],
             "type": "string"
           },

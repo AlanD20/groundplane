@@ -1041,6 +1041,7 @@ const (
 	TaskExecutorAgent      TaskExecutor = "agent"
 	TaskExecutorBlueprint  TaskExecutor = "blueprint"
 	TaskExecutorController TaskExecutor = "controller"
+	TaskExecutorSoftware   TaskExecutor = "software"
 )
 
 // Valid indicates whether the value is a known member of the TaskExecutor enum.
@@ -1051,6 +1052,8 @@ func (e TaskExecutor) Valid() bool {
 	case TaskExecutorBlueprint:
 		return true
 	case TaskExecutorController:
+		return true
+	case TaskExecutorSoftware:
 		return true
 	default:
 		return false

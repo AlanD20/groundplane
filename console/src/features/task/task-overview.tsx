@@ -294,6 +294,7 @@ function durationLabel(seconds: number) {
 function executorLabel(executor: NonNullable<ActivityEntry["executor"]>) {
   if (executor === "agent") return "Agent";
   if (executor === "blueprint") return "Blueprint coordinator";
+  if (executor === "software") return "Software coordinator";
   return "Controller";
 }
 

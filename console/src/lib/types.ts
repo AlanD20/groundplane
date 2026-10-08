@@ -485,7 +485,7 @@ export type ActivityEntry = {
   target: string;
   targetName?: string;
   resourceKind?: string;
-  executor?: "agent" | "controller" | "blueprint";
+  executor?: TaskResponse["executor"];
   timeoutSeconds?: number;
   resultSummary?: string;
   failureSummary?: string;

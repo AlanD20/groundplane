@@ -41,7 +41,7 @@ type Task struct {
 	Target                 string            `json:"target"`
 	TargetName             string            `json:"target_name,omitempty"`
 	ResourceKind           string            `json:"resource_kind,omitempty"`
-	Executor               string            `json:"executor" enum:"agent,controller,blueprint"`
+	Executor               string            `json:"executor" enum:"agent,controller,blueprint,software"`
 	TimeoutSeconds         int64             `json:"timeout_seconds"`
 	FailureSummary         string            `json:"failure_summary,omitempty"`
 	ResultSummary          string            `json:"result_summary,omitempty"`

@@ -17,7 +17,6 @@ export type TaskEventResponse =
   operations["task.events"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 
 type TaskPresentationItem = TaskPageItem & {
-  executor?: "agent" | "controller" | "blueprint";
   failure_summary?: string;
   resource_kind?: string;
   result_summary?: string;
@@ -148,7 +147,8 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     task.executor !== undefined &&
     task.executor !== "agent" &&
     task.executor !== "controller" &&
-    task.executor !== "blueprint"
+    task.executor !== "blueprint" &&
+    task.executor !== "software"
   ) {
     throw new Error(
       `Controller returned unknown Task executor ${task.executor}`,
