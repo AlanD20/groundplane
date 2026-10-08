@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -21,6 +23,42 @@ import (
 )
 
 type attachRuntimeTestPreparation func(testattachrender.AttachTaskRenderInput, TaskRecord, testidempotency.IdempotencyMarker) (testattachrender.AttachTaskRenderInput, TaskRecord)
+
+func refreshAttachDesiredScope(t *testing.T, ctx context.Context, repository *AttachRepository,
+	scope AttachCreateScope,
+) AttachCreateScope {
+	t.Helper()
+	projection, found, err := testblueprints.ReadCurrentProjection(
+		ctx,
+		repository.store,
+		scope.Environment.Record.ID,
+		0,
+	)
+	if err != nil || !found {
+		t.Fatalf("read current Attach desired scope: found=%t, error=%v", found, err)
+	}
+	scope.ComposeProjection = projection
+	scope.DesiredHead = testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintHead]{
+		Record: testblueprints.EnvironmentBlueprintHead{
+			EnvironmentID: scope.Environment.Record.ID,
+			RevisionID:    projection.Record.RevisionID,
+		},
+		Revision:     projection.Revision,
+		ReadRevision: projection.ReadRevision,
+	}
+	services, err := NewServiceRepository(repository.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope.Services = slices.Clone(scope.Services)
+	for index, service := range scope.Services {
+		scope.Services[index], err = services.GetService(ctx, service.Record.Desired.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return scope
+}
 
 func createTestAttach(
 	t *testing.T,
@@ -40,6 +78,7 @@ func createTestAttach(
 	if err != nil {
 		t.Fatalf("GetEnvironment() error = %v", err)
 	}
+	scope = refreshAttachDesiredScope(t, ctx, repository, scope)
 	recordDigest := sha256.Sum256([]byte(record.ID))
 	seed := int64(binary.BigEndian.Uint64(recordDigest[:8]))
 	planDigest := sha256.Sum256([]byte("attach-plan-" + record.ID))
@@ -188,6 +227,7 @@ func publishTestDetach(
 	if err != nil {
 		t.Fatalf("GetEnvironment() error = %v", err)
 	}
+	scope = refreshAttachDesiredScope(t, ctx, repository, scope)
 	task := validTaskRecord(createdAt)
 	owner, err := testtaskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {

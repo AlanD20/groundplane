@@ -249,10 +249,10 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 			t.Fatal("completed execution still admitted its body")
 		}
 		fixture.RemoveCompletedManualScript(t, scripts, task.Target)
-		fixture.CheckManualJourneyServiceRemoval(t, intent.ServiceID, false)
 		if withEntry {
 			fixture.CheckManualJourneyEntryRemoval(t, entryRecord.Entry.ID, false)
 		}
+		fixture.CheckManualJourneyServiceRemoval(t, intent.ServiceID, false)
 		if secretID != "" {
 			fixture.CheckManualJourneySecretDeletion(t, secretID, false)
 		}

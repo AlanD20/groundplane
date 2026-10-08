@@ -56,7 +56,16 @@ func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testi
 	}
 
 	task := environmentBlueprintTestTask(t, fixture.project.Record, fixture.environment.Record, 5100)
-	projection := environmentBlueprintTestProjection(fixture.environment.Record.ID, task, 1)
+	prior, found, err := testblueprints.ReadCurrentProjection(ctx, fixture.store, fixture.environment.Record.ID, 0)
+	if err != nil || !found {
+		t.Fatalf("read seeded Backup projection: %t, %v", found, err)
+	}
+	task.RenderGeneration = int32(prior.Record.RenderGeneration + 1)
+	projection := environmentBlueprintTestProjection(
+		fixture.environment.Record.ID,
+		task,
+		prior.Record.RenderGeneration+1,
+	)
 	projection.DesiredZones[0].Desired.Subnet = "10.240.0.0/25"
 	beforePreparation := fixture.store.revision
 	prepared, err := fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(
@@ -79,8 +88,12 @@ func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+	head, found, err := hierarchy.GetEnvironmentBlueprintHead(ctx, fixture.environment.Record.ID)
+	if err != nil || !found {
+		t.Fatalf("read seeded Backup desired head: %t, %v", found, err)
+	}
 	claim := stageEnvironmentBlueprintForPublicationTest(
-		t, hierarchy.HierarchyRepository, 0,
+		t, hierarchy.HierarchyRepository, head.Revision,
 		environmentBlueprintTestRevision(fixture.environment.Record.ID, task, "services: {}\n"),
 		projection, marker,
 	)
@@ -103,7 +116,7 @@ func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testi
 		fixture.environment.Record.NetworkPool,
 		fixture.project,
 		fixture.environment,
-		0,
+		head.Revision,
 		claim,
 		testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: fixture.environment.Record.ID,
@@ -134,7 +147,11 @@ func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testi
 		outcome != IdempotencyKnownConflict {
 		t.Fatalf("raced publication = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	for _, key := range []string{testblueprints.EnvironmentBlueprintHeadKey(fixture.environment.Record.ID), testtaskjournal.TaskStorageKey(task.ID), testtaskjournal.TaskQueueKey(task.Executor, task.ID), testbackuppolicy.BackupKeyKey(fixture.environment.Record.ID), testbackuppolicy.BackupKeyValueKey(fixture.environment.Record.ID)} {
+	afterHead, found, err := hierarchy.GetEnvironmentBlueprintHead(ctx, fixture.environment.Record.ID)
+	if err != nil || !found || afterHead.Revision != head.Revision || afterHead.Record != head.Record {
+		t.Fatalf("raced publication changed the existing head: %v", err)
+	}
+	for _, key := range []string{testtaskjournal.TaskStorageKey(task.ID), testtaskjournal.TaskQueueKey(task.Executor, task.ID), testbackuppolicy.BackupKeyKey(fixture.environment.Record.ID), testbackuppolicy.BackupKeyValueKey(fixture.environment.Record.ID)} {
 		value, getErr := fixture.store.Get(ctx, key)
 		if getErr != nil || value.Entry != nil {
 			t.Fatalf("raced publication exposed %q = %#v, %v", key, value, getErr)

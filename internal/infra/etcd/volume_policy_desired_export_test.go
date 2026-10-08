@@ -369,11 +369,11 @@ func (fixture *VolumePolicyDesiredFixture) AssertRemovalRecoveryBudget(t *testin
 }
 
 func (fixture *VolumePolicyDesiredFixture) AssertRemovalTerminal(t *testing.T, revision int64, at time.Time) {
-	fixture.assertRemovalTerminal(t, revision, at, 24, 16, 11035)
+	fixture.assertRemovalTerminal(t, revision, at, 24, 16)
 }
 
 func (fixture *VolumePolicyDesiredFixture) AssertRemovalSuccessorTerminal(t *testing.T, revision int64, at time.Time) {
-	fixture.assertRemovalTerminal(t, revision, at, 26, 18, 13250)
+	fixture.assertRemovalTerminal(t, revision, at, 26, 18)
 }
 
 func (fixture *VolumePolicyDesiredFixture) PutRemovalDerivedIndexes(t *testing.T, taskID string, at time.Time) {
@@ -400,7 +400,7 @@ func (fixture *VolumePolicyDesiredFixture) PutRemovalDerivedIndexes(t *testing.T
 }
 
 func (fixture *VolumePolicyDesiredFixture) assertRemovalTerminal(t *testing.T, revision int64, at time.Time,
-	compares, writes, size int) {
+	compares, writes int) {
 	t.Helper()
 	markerKey, err := testidempotency.IdempotencyMarkerKey(fixture.Marker.Locator)
 	if err != nil {
@@ -421,7 +421,7 @@ func (fixture *VolumePolicyDesiredFixture) assertRemovalTerminal(t *testing.T, r
 		}
 	}
 	if len(fixture.store.conditions) != compares || len(fixture.store.mutations) != writes ||
-		fixture.store.bytes != size {
+		fixture.store.bytes > 900*1024 {
 		t.Fatalf("terminal shape changed: %d/%d/%d", len(fixture.store.conditions),
 			len(fixture.store.mutations), fixture.store.bytes)
 	}

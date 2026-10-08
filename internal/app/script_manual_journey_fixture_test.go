@@ -192,6 +192,11 @@ func (fixture *ExecutedArtifactFixture) RemoveCompletedManualScript(
 	if _, err := scripts.GetScript(ctx, scriptID); !isKind(err, errs.KindScriptNotFound) {
 		t.Fatalf("removed Script still readable: %v", err)
 	}
+	head, found, err := fixture.Hierarchy.GetEnvironmentBlueprintHead(ctx, fixture.Environment.Record.ID)
+	if err != nil || !found {
+		t.Fatalf("desired head after Script removal: %t, %v", found, err)
+	}
+	fixture.head = head.Revision
 }
 
 func (fixture *ExecutedArtifactFixture) CompleteManualScript(

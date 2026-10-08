@@ -36,6 +36,11 @@ func publishBlueprintRequirementCandidateForAttach(
 ) (TaskRecord, int64) {
 	t.Helper()
 	ctx := context.Background()
+	attaches, err := NewAttachRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope = refreshAttachDesiredScope(t, ctx, attaches, scope)
 	task := environmentBlueprintTestTask(t, scope.Project.Record, scope.Environment.Record, 930)
 	task.RenderGeneration = int32(scope.ComposeProjection.Record.RenderGeneration + 1)
 	publicationID := ids.NewULID()
@@ -48,6 +53,14 @@ func publishBlueprintRequirementCandidateForAttach(
 	task.Params[testtaskjournal.TaskComposeArtifactParam] = artifactID
 	task.Steps = append(
 		task.Steps,
+		testtaskjournal.TaskStepRecord{
+			Kind: testtaskjournal.TaskStepOperation,
+			ID:   ids.NewAt(ids.KindStep, task.CreatedAt, 937),
+		},
+		testtaskjournal.TaskStepRecord{
+			Kind: testtaskjournal.TaskStepOperation,
+			ID:   ids.NewAt(ids.KindStep, task.CreatedAt, 938),
+		},
 		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: probeStepID},
 		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: compensateStepID},
 	)
@@ -196,12 +209,13 @@ func blueprintRequirementGateCandidatePlan(
 ) *agentpb.ExecutionPlan {
 	t.Helper()
 	artifactID := task.Params[testtaskjournal.TaskComposeArtifactParam]
-	forwardStepID, probeStepID, compensateStepID := task.Steps[0].ID, task.Steps[1].ID, task.Steps[2].ID
+	forwardStepID, waitStepID, acknowledgeStepID := task.Steps[0].ID, task.Steps[1].ID, task.Steps[2].ID
+	probeStepID, compensateStepID := task.Steps[3].ID, task.Steps[4].ID
 	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
 		Members: []executionplan.CandidateReleaseMemberInput{{
 			ServiceID: service.ID, CandidateReleaseID: releaseID, CandidateArtifactID: artifactID,
-			ForwardStepIDs: []string{forwardStepID},
+			ForwardStepIDs: []string{forwardStepID, waitStepID, acknowledgeStepID},
 			ServingPredecessor: &executionplan.ServingPredecessorInput{
 				ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
 			},
@@ -253,6 +267,22 @@ func blueprintRequirementGateCandidatePlan(
 				Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
 					ArtifactId: artifactID, ServiceIds: []string{service.ID}, ForceRecreate: true, NoDependencies: true,
 				}},
+			},
+			{
+				StepId: waitStepID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+				Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
+					ArtifactId: artifactID, ServiceIds: []string{service.ID},
+				}},
+			},
+			{
+				StepId: acknowledgeStepID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+				Payload: &agentpb.ExecutionStep_ServiceRecreateAcknowledge{
+					ServiceRecreateAcknowledge: &agentpb.ServiceRecreateAcknowledge{
+						ArtifactId: artifactID, ServiceId: service.ID, ReleaseId: releaseID,
+					},
+				},
 			},
 			{
 				StepId: probeStepID, TimeoutSeconds: uint32(task.TimeoutSeconds),

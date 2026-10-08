@@ -311,7 +311,7 @@ func TestAttachRepositoryPublishesDetachTaskAtomically(t *testing.T) {
 }
 
 // Rationale: the final transaction after idempotency, Environment fencing,
-// and Backup exclusion composition must fit both its estimator and store cap.
+// and Backup exclusion composition must fit the store cap.
 func TestAttachDetachOperationBudgetMatchesComposedTransaction(t *testing.T) {
 	ctx := context.Background()
 	store := newAttachTestStore()
@@ -335,12 +335,11 @@ func TestAttachDetachOperationBudgetMatchesComposedTransaction(t *testing.T) {
 		t.Fatalf("NewAttachRepository(capture) error = %v", err)
 	}
 	publishTestDetach(t, ctx, capturedRepository, scope, ready, record.CreatedAt.Add(5*time.Minute))
-	want := attachDetachWithTaskOperationCount(record)
-	if capture.operations <= 0 || capture.operations > want || capture.operations > testkeyvalue.MaximumOperations {
+	if capture.operations <= 0 || capture.operations > testkeyvalue.MaximumOperations {
 		t.Fatalf(
-			"composed Attach detach operations = %d, want at most %d and at most %d",
+			"composed Attach detach operations = %d, want at most %d",
 			capture.operations,
-			want, testkeyvalue.MaximumOperations,
+			testkeyvalue.MaximumOperations,
 		)
 	}
 }

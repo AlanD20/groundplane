@@ -6,7 +6,6 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -245,6 +244,10 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	rootCondition, err := attachBlueprintRootCondition(ctx, repository.store, scope)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID)},
@@ -271,13 +274,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: attachrender.AttachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
-		{
-			Key: blueprints.EnvironmentBlueprintRootKey(
-				current.Record.EnvironmentID,
-				renderInput.DesiredRevisionID,
-			),
-			ModRevision: scope.ComposeProjection.Revision,
-		},
+		rootCondition,
 	}
 	conditions = append(conditions, desiredHeadConditions...)
 	mutations := []etcdstore.Mutation{

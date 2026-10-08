@@ -206,6 +206,7 @@ func TestConnectorDeletionPreservesUnknownOutcomeForExactReplay(t *testing.T) {
 		fixture.now.Add(8*time.Minute),
 		2710,
 	)
+	store.failKey = testtaskjournal.TaskStorageKey(task.ID)
 	if _, err := connectors.BeginConnectorDeletionWithTask(
 		ctx,
 		fixture.environment,

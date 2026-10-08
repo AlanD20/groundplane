@@ -23,7 +23,20 @@ func (repository *AttachRepository) publishAttachRuntimeTask(
 	mutations []etcdstore.Mutation,
 	classifyConflict func(int64, []*etcdstore.KeyValue) error,
 ) (IdempotencyTransactionResult, error) {
-	conditions = append(conditions, attachRuntimeSourceConditions(input)...)
+	baseConditionCount := len(conditions)
+	sourceConditions := attachRuntimeSourceConditions(input)
+	conditions = append(conditions, sourceConditions...)
+	classifySources := func(revision int64, values []*etcdstore.KeyValue) error {
+		if len(values) != baseConditionCount+len(sourceConditions) {
+			return errs.New(errs.KindInternal, "Attach runtime source evidence is incomplete")
+		}
+		for index, condition := range sourceConditions {
+			if !etcdstore.ConditionMatchesRead(condition, values[baseConditionCount+index]) {
+				return errs.New(errs.KindStateConflict, "Attach consumer runtime changed concurrently")
+			}
+		}
+		return classifyConflict(revision, values[:baseConditionCount])
+	}
 	binding, err := mutationContext.Bind(ctx, repository.store, conditions, mutations, true)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -31,7 +44,7 @@ func (repository *AttachRepository) publishAttachRuntimeTask(
 	defer binding.Clear()
 	defer etcdstore.ClearMutationValues(binding.Mutations())
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
-		return binding.ClassifyConflict(revision, values, classifyConflict)
+		return binding.ClassifyConflict(revision, values, classifySources)
 	}
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, binding.Conditions(), binding.Mutations(), classify)
 	if err != nil {

@@ -167,6 +167,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 			}
 		}
 		preparedTasks[task.ID] = cloneTaskRecord(task)
+		prepared.PreparedSteps = testtaskjournal.CloneTaskSteps(task.Steps)
 		captured := prepared
 		captured.Config = *core.CloneComponentConfig(core.ComponentConfig{CoreDNS: &prepared.Config}).CoreDNS
 		captured.Hosts = make([]testplatformcomponents.PlatformDNSHost, len(prepared.Hosts))

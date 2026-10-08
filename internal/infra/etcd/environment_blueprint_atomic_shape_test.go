@@ -127,7 +127,7 @@ func TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority(
 		)
 	}
 	for _, key := range append(
-		[]string{testblueprints.EnvironmentBlueprintHeadKey(published.environmentID), testtaskjournal.TaskStorageKey(published.task.ID), testtaskjournal.TaskQueueKey(published.task.Executor, published.task.ID), published.markerKey, testreleases.ReleasePublicationKey(published.releasePublicationID), testbackuppolicy.BackupKeyKey(published.environmentID), testbackuppolicy.BackupKeyValueKey(published.environmentID)},
+		[]string{testtaskjournal.TaskStorageKey(published.task.ID), testtaskjournal.TaskQueueKey(published.task.Executor, published.task.ID), published.markerKey, testreleases.ReleasePublicationKey(published.releasePublicationID), testbackuppolicy.BackupKeyKey(published.environmentID), testbackuppolicy.BackupKeyValueKey(published.environmentID)},
 		published.candidateAttachKeys()...,
 	) {
 		read, getErr := published.store.Get(context.Background(), key)

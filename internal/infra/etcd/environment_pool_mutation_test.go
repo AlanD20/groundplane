@@ -58,7 +58,7 @@ func TestHierarchyEnvironmentPoolReplacementIsAtomicAndReplays(t *testing.T) {
 	}
 
 	replayed, err := repository.ReplaceEnvironmentPoolIdempotent(
-		context.Background(), netip.MustParsePrefix("10.0.0.0/8"), current, replacement, marker,
+		context.Background(), netip.MustParsePrefix("10.0.0.0/8"), stored, replacement, marker,
 	)
 	if err != nil || replayed.kind != idempotencyTransactionExisting {
 		t.Fatalf("ReplaceEnvironmentPoolIdempotent(replay) = %#v, %v", replayed, err)

@@ -186,10 +186,22 @@ func publishEnvironmentBlueprintAtomicShape(
 			})
 		}
 	}
+	prior, hasPrior, err := testblueprints.ReadCurrentProjection(ctx, fixture.store, fixture.environment.Record.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasPrior {
+		projection.RenderGeneration = prior.Record.RenderGeneration + 1
+		task.RenderGeneration = int32(projection.RenderGeneration)
+	}
 	projection = withTestEnvironmentComposeArtifact(projection)
 
 	ensureEnvironmentBlueprintActiveScriptSet(t, fixture)
 	fixedRevision := fixture.store.revision
+	head, _, err := hierarchy.GetEnvironmentBlueprintHead(ctx, fixture.environment.Record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	releaseSourceMembers := environmentBlueprintStagedReleaseSources(
 		t, fixture, task, projection, fixedRevision, shape.physicalSources,
 	)
@@ -236,6 +248,9 @@ func publishEnvironmentBlueprintAtomicShape(
 	var newBackupSourceIDs []string
 	var newBackupSources []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput
 	preexistingBackupRevisions := map[string]int64{}
+	if head.Revision > 0 {
+		preexistingBackupRevisions[testblueprints.EnvironmentBlueprintHeadKey(fixture.environment.Record.ID)] = head.Revision
+	}
 	if shape.backup {
 		sourceInputs := make(
 			[]testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput,
@@ -342,7 +357,7 @@ func publishEnvironmentBlueprintAtomicShape(
 	claim := stageEnvironmentBlueprintForPublicationTest(
 		t,
 		hierarchy,
-		0,
+		head.Revision,
 		environmentBlueprintTestRevision(fixture.environment.Record.ID, task, "services: {}\n"),
 		projection,
 		marker,
@@ -404,7 +419,7 @@ func publishEnvironmentBlueprintAtomicShape(
 		fixture.environment.Record.NetworkPool,
 		fixture.project,
 		fixture.environment,
-		0,
+		head.Revision,
 		claim, testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: fixture.environment.Record.ID,
 			RevisionID:    task.ID,

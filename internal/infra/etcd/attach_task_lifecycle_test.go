@@ -842,6 +842,7 @@ func attachDetachRaceEnvelope(
 	if err != nil {
 		t.Fatalf("GetEnvironment() error = %v", err)
 	}
+	scope = refreshAttachDesiredScope(t, ctx, repository, scope)
 	task := validTaskRecord(createdAt)
 	owner, err := testtaskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {
