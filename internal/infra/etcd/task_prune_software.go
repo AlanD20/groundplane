@@ -87,9 +87,7 @@ func (repository *TaskRepository) prepareSoftwareProjectionPrune(
 			return nil, nil, errs.New(errs.KindInternal, "software activation prune authority differs")
 		}
 	}
-	return []etcdstore.Condition{
-		{Key: key, ModRevision: read.Values[0].ModRevision},
-	}, []etcdstore.Mutation{
-		{Type: etcdstore.MutationDelete, Key: key},
-	}, nil
+	conditions := []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: key}}
+	return conditions, mutations, nil
 }
