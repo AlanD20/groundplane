@@ -34,48 +34,50 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	nativeBacking bool,
 	task etcd.TaskRecord,
 ) (etcd.TaskRecord, releaserender.ServiceLifecycleRenderInput, *taskconfiguration.BackingHookEncryptedInputs, error) {
-	releaseAuthority, err := controllerlifecycle.CaptureRelease(
-		ctx, service.repository, projection, environment.Record.ID, current.Record.Desired.ID,
-	)
-	if err != nil {
-		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
-	}
-	runtime, err := service.repository.GetServiceRemovalRuntime(
-		ctx,
-		environment.Record.ID,
-		current.Record.Desired.ID,
-		projection.ReadRevision,
-	)
-	if err != nil {
-		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
-	}
-	if runtime.ReadRevision != projection.ReadRevision || runtime.Revision <= 0 ||
-		runtime.Revision > projection.ReadRevision {
-		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, errs.New(
-			errs.KindStateConflict,
-			"Service lifecycle runtime snapshot changed",
-		)
-	}
-	// The serving Release and acknowledged runtime above prove membership.
-	// Environment-wide snapshots can omit individually deployed Services.
 	input := releaserender.ServiceLifecycleRenderInput{
 		PlanID: task.PlanID, ServiceID: current.Record.Desired.ID,
 		ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
 		EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
-		AuthorizedVolumeDir:         environment.Record.VolumeDir,
-		ArtifactID:                  releaseAuthority.Current.ArtifactID,
-		AppliedRenderGeneration:     projection.Record.RenderGeneration,
-		AppliedProjectionRevision:   projection.Revision,
-		Release:                     releaseAuthority,
-		AcknowledgedRuntime:         &runtime.Record,
-		AcknowledgedRuntimeRevision: runtime.Revision,
+		AuthorizedVolumeDir:       environment.Record.VolumeDir,
+		AppliedRenderGeneration:   projection.Record.RenderGeneration,
+		AppliedProjectionRevision: projection.Revision,
+	}
+	if nativeBacking {
+		artifact, _, err := projectionrecord.SelectBackingRuntime(projection.Record, current.Record.Desired.ID)
+		if err != nil {
+			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
+		}
+		native := projectionrecord.CloneEnvironmentComposeProjection(projection.Record)
+		input.NativeBacking, input.ArtifactID = &native, artifact.ArtifactId
+	} else {
+		releaseAuthority, err := controllerlifecycle.CaptureRelease(
+			ctx, service.repository, projection, environment.Record.ID, current.Record.Desired.ID,
+		)
+		if err != nil {
+			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
+		}
+		runtime, err := service.repository.GetServiceRemovalRuntime(
+			ctx, environment.Record.ID, current.Record.Desired.ID, projection.ReadRevision,
+		)
+		if err != nil {
+			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
+		}
+		if runtime.ReadRevision != projection.ReadRevision || runtime.Revision <= 0 || runtime.Revision > projection.ReadRevision {
+			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, errs.New(
+				errs.KindStateConflict, "Service lifecycle runtime snapshot changed",
+			)
+		}
+		input.ArtifactID, input.Release = releaseAuthority.Current.ArtifactID, &releaseAuthority
+		input.AcknowledgedRuntime, input.AcknowledgedRuntimeRevision = &runtime.Record, runtime.Revision
 	}
 	if tenant != nil {
 		input.TenantID, input.TenantSlug = tenant.Record.ID, tenant.Record.Slug
 	}
 	var sealed *taskconfiguration.BackingHookEncryptedInputs
+	var err error
 	definition := serviceLifecycleHookDefinition(taskType, current.Record.Desired.Hooks)
 	if definition != nil {
 		if current.Record.Desired.Adapter != "custom" {

@@ -140,6 +140,9 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 	input releaserender.ServiceLifecycleRenderInput,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 ) (*agentpb.ExecutionPlan, error) {
+	if err := releaserender.ValidateServiceLifecycleRenderInput(input); err != nil {
+		return nil, err
+	}
 	event, definition := serviceLifecycleHook(input, task.Type)
 	wantSteps := input.RuntimeMemberCount()
 	if definition != nil {
@@ -150,7 +153,17 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 		task.Params[taskjournal.TaskComposeArtifactParam] != input.ArtifactID {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle Task procedure changed")
 	}
-	artifacts, err := serviceRuntimeArtifacts(task, input.ServiceID, input.AcknowledgedRuntime)
+	var artifacts []*agentpb.ComposeArtifact
+	var err error
+	if input.NativeBacking != nil {
+		artifacts, err = serviceRuntimeArtifactMembers(
+			task,
+			input.ServiceID,
+			[][]byte{input.NativeBacking.ComposeArtifact},
+		)
+	} else {
+		artifacts, err = serviceRuntimeArtifacts(task, input.ServiceID, input.AcknowledgedRuntime)
+	}
 	if err != nil {
 		return nil, err
 	}

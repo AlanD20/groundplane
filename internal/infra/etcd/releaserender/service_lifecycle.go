@@ -20,24 +20,22 @@ const (
 // applied Service lifecycle Task attempt. It prevents queued and retried work
 // from observing a newer Blueprint, hierarchy label, or applied projection.
 type ServiceLifecycleRenderInput struct {
-	PlanID              string                     `json:"plan_id"`
-	ServiceID           string                     `json:"service_id"`
-	TenantID            string                     `json:"tenant_id"`
-	TenantSlug          string                     `json:"tenant_slug"`
-	ProjectID           string                     `json:"project_id"`
-	ProjectSlug         string                     `json:"project_slug"`
-	EnvironmentID       string                     `json:"environment_id"`
-	EnvironmentName     string                     `json:"environment_name"`
-	AuthorizedVolumeDir string                     `json:"authorized_volume_dir"`
-	ArtifactID          string                     `json:"artifact_id"`
-	AdapterKey          string                     `json:"adapter_key,omitempty"`
-	HookConfiguration   *backinghook.Configuration `json:"hook_configuration,omitempty"`
-	// Projection is present only in lifecycle records written before the
-	// applied-generation witness replaced the redundant full projection.
-	Projection                  *projectionrecord.EnvironmentComposeProjection `json:"projection,omitempty"`
+	PlanID                      string                                         `json:"plan_id"`
+	ServiceID                   string                                         `json:"service_id"`
+	TenantID                    string                                         `json:"tenant_id"`
+	TenantSlug                  string                                         `json:"tenant_slug"`
+	ProjectID                   string                                         `json:"project_id"`
+	ProjectSlug                 string                                         `json:"project_slug"`
+	EnvironmentID               string                                         `json:"environment_id"`
+	EnvironmentName             string                                         `json:"environment_name"`
+	AuthorizedVolumeDir         string                                         `json:"authorized_volume_dir"`
+	ArtifactID                  string                                         `json:"artifact_id"`
+	AdapterKey                  string                                         `json:"adapter_key,omitempty"`
+	HookConfiguration           *backinghook.Configuration                     `json:"hook_configuration,omitempty"`
+	NativeBacking               *projectionrecord.EnvironmentComposeProjection `json:"native_backing,omitempty"`
 	AppliedRenderGeneration     uint64                                         `json:"applied_render_generation,omitempty"`
 	AppliedProjectionRevision   int64                                          `json:"applied_projection_revision"`
-	Release                     ServiceLifecycleRelease                        `json:"release"`
+	Release                     *ServiceLifecycleRelease                       `json:"release,omitempty"`
 	AcknowledgedRuntime         *serviceruntimerecord.Record                   `json:"acknowledged_runtime"`
 	AcknowledgedRuntimeRevision int64                                          `json:"acknowledged_runtime_revision"`
 }
@@ -83,13 +81,14 @@ func DecodeServiceLifecycleRenderInput(value []byte) (ServiceLifecycleRenderInpu
 }
 
 func ValidateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) error {
-	if input.AcknowledgedRuntime == nil || input.AcknowledgedRuntimeRevision <= 0 ||
-		serviceruntimerecord.Validate(*input.AcknowledgedRuntime) != nil ||
-		input.AcknowledgedRuntime.EnvironmentID != input.EnvironmentID ||
-		input.AcknowledgedRuntime.Runtime.ServiceID != input.ServiceID ||
-		input.AcknowledgedRuntime.Runtime.ReleaseID != input.Release.ServingReleaseID ||
-		input.AcknowledgedRuntime.Runtime.Target != string(input.Release.Current.CandidateTarget) ||
-		(len(input.AcknowledgedRuntime.Runtime.RetainedPriorArtifact) != 0) != (input.Release.RetainedPrior != nil) {
+	if input.NativeBacking == nil &&
+		(input.Release == nil || input.AcknowledgedRuntime == nil || input.AcknowledgedRuntimeRevision <= 0 ||
+			serviceruntimerecord.Validate(*input.AcknowledgedRuntime) != nil ||
+			input.AcknowledgedRuntime.EnvironmentID != input.EnvironmentID ||
+			input.AcknowledgedRuntime.Runtime.ServiceID != input.ServiceID ||
+			input.AcknowledgedRuntime.Runtime.ReleaseID != input.Release.ServingReleaseID ||
+			input.AcknowledgedRuntime.Runtime.Target != string(input.Release.Current.CandidateTarget) ||
+			(len(input.AcknowledgedRuntime.Runtime.RetainedPriorArtifact) != 0) != (input.Release.RetainedPrior != nil)) {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle acknowledged runtime is invalid")
 	}
 	if ids.Validate(ids.KindPlan, input.PlanID) != nil ||
@@ -109,46 +108,42 @@ func ValidateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) erro
 			return errs.New(errs.KindValidationFailed, "Service lifecycle hook configuration is invalid")
 		}
 	}
-	if input.AppliedProjectionRevision <= 0 || input.RenderGeneration() == 0 ||
-		input.Projection != nil && (projectionrecord.ValidateEnvironmentComposeProjection(*input.Projection) != nil ||
-			input.Projection.EnvironmentID != input.EnvironmentID ||
-			input.AppliedRenderGeneration != 0 && input.AppliedRenderGeneration != input.Projection.RenderGeneration) {
+	if input.AppliedProjectionRevision <= 0 || input.RenderGeneration() == 0 {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle render projection is invalid")
 	}
-	if input.Projection != nil {
-		found := false
-		for _, service := range input.Projection.DesiredServices {
-			if service.Desired.ID == input.ServiceID {
-				found = true
-				break
-			}
+	if input.NativeBacking != nil {
+		if input.AcknowledgedRuntime != nil || input.AcknowledgedRuntimeRevision != 0 ||
+			input.Release != nil || input.TenantID != "" || input.HookConfiguration != nil || input.AdapterKey != "" ||
+			input.NativeBacking.EnvironmentID != input.EnvironmentID ||
+			input.NativeBacking.RenderGeneration != input.AppliedRenderGeneration ||
+			projectionrecord.ValidateEnvironmentComposeProjection(*input.NativeBacking) != nil {
+			return errs.New(errs.KindValidationFailed, "Service lifecycle native Backing authority is invalid")
 		}
-		if !found {
-			return errs.New(errs.KindValidationFailed, "Service lifecycle render projection does not contain Service")
+		artifact, _, err := projectionrecord.SelectBackingRuntime(*input.NativeBacking, input.ServiceID)
+		if err != nil {
+			return err
 		}
+		if artifact.ArtifactId != input.ArtifactID {
+			return errs.New(errs.KindValidationFailed, "Service lifecycle native Backing artifact changed")
+		}
+		return nil
 	}
-	if err := ValidateServiceLifecycleRelease(input.Release, input); err != nil {
+	if err := ValidateServiceLifecycleRelease(*input.Release, input); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (input ServiceLifecycleRenderInput) RenderGeneration() uint64 {
-	if input.AppliedRenderGeneration != 0 {
-		return input.AppliedRenderGeneration
-	}
-	if input.Projection != nil {
-		return input.Projection.RenderGeneration
-	}
-	return 0
+	return input.AppliedRenderGeneration
 }
 
 func (input ServiceLifecycleRenderInput) RuntimeMemberCount() int {
 	count := 1
-	if len(input.Release.Current.ProxyPorts) != 0 {
+	if input.Release != nil && len(input.Release.Current.ProxyPorts) != 0 {
 		count++
 	}
-	if input.Release.RetainedPrior != nil {
+	if input.Release != nil && input.Release.RetainedPrior != nil {
 		count++
 	}
 	return count
@@ -184,21 +179,25 @@ func ValidateServiceLifecycleRelease(authority ServiceLifecycleRelease, input Se
 func cloneServiceLifecycleRenderInput(source ServiceLifecycleRenderInput) ServiceLifecycleRenderInput {
 	clone := source
 	clone.HookConfiguration = backinghook.CloneConfiguration(source.HookConfiguration)
-	if source.Projection != nil {
-		projection := projectionrecord.CloneEnvironmentComposeProjection(*source.Projection)
-		clone.Projection = &projection
+	if source.NativeBacking != nil {
+		projection := projectionrecord.CloneEnvironmentComposeProjection(*source.NativeBacking)
+		clone.NativeBacking = &projection
 	}
-	clone.Release.Current = CloneReleaseRenderInput(source.Release.Current)
+	if source.Release != nil {
+		release := *source.Release
+		release.Current = CloneReleaseRenderInput(source.Release.Current)
+		if source.Release.RetainedPrior != nil {
+			prior := CloneReleaseRenderInput(*source.Release.RetainedPrior)
+			release.RetainedPrior = &prior
+		}
+		clone.Release = &release
+	}
 	if source.AcknowledgedRuntime != nil {
 		runtime := *source.AcknowledgedRuntime
 		runtime.Runtime.CurrentArtifact = append([]byte(nil), runtime.Runtime.CurrentArtifact...)
 		runtime.Runtime.RetainedPriorArtifact = append([]byte(nil), runtime.Runtime.RetainedPriorArtifact...)
 		runtime.Runtime.ProxyConfigSHA256 = append([]byte(nil), runtime.Runtime.ProxyConfigSHA256...)
 		clone.AcknowledgedRuntime = &runtime
-	}
-	if source.Release.RetainedPrior != nil {
-		prior := CloneReleaseRenderInput(*source.Release.RetainedPrior)
-		clone.Release.RetainedPrior = &prior
 	}
 	return clone
 }

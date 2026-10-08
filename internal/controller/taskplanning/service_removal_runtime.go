@@ -26,9 +26,18 @@ func serviceRuntimeArtifacts(
 	if err := serviceruntimerecord.Validate(*runtime); err != nil {
 		return nil, err
 	}
+	return serviceRuntimeArtifactMembers(task, serviceID,
+		[][]byte{runtime.Runtime.CurrentArtifact, runtime.Runtime.RetainedPriorArtifact})
+}
+
+func serviceRuntimeArtifactMembers(
+	task etcd.TaskRecord,
+	serviceID string,
+	encoded [][]byte,
+) ([]*agentpb.ComposeArtifact, error) {
 	var artifacts []*agentpb.ComposeArtifact
 	seen := make(map[string]bool)
-	for _, raw := range [][]byte{runtime.Runtime.CurrentArtifact, runtime.Runtime.RetainedPriorArtifact} {
+	for _, raw := range encoded {
 		if len(raw) == 0 {
 			continue
 		}

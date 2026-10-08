@@ -258,7 +258,15 @@ func (service *serviceLifecycleService) runOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	applied := runtime.Revision > 0
+	nativeBacking := project.Record.Kind == hierarchyrecord.ProjectKindBacking &&
+		(current.Record.Desired.Adapter == "postgres" || current.Record.Desired.Adapter == "mysql") &&
+		runtime.Revision == 0 && hasProjection
+	applied := runtime.Revision > 0 || nativeBacking
+	if nativeBacking {
+		if _, _, err := projectionrecord.SelectBackingRuntime(projection.Record, serviceID); err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+	}
 	if applied && !hasProjection || !applied && hasProjection &&
 		serviceInComposeProjection(projection.Record, serviceID) {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -289,7 +297,7 @@ func (service *serviceLifecycleService) runOnce(
 		projectionInput = &projection
 		var input releaserender.ServiceLifecycleRenderInput
 		task, input, sealedHookInputs, err = service.prepareAppliedServiceLifecycle(
-			ctx, taskType, current, tenant, project, environment, projection, task,
+			ctx, taskType, current, tenant, project, environment, projection, nativeBacking, task,
 		)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err

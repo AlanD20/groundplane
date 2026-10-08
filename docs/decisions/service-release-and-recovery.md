@@ -17,6 +17,14 @@ or Volumes. If the Service has never been applied, the action is still an
 observable Controller-owned no-op Task. A durable per-Service owner serializes
 lifecycle actions so queued work cannot execute a newer Blueprint accidentally.
 
+Ordinary lifecycle Tasks pin the serving Release and its acknowledged physical
+members. A freshly provisioned PostgreSQL or MySQL Backing Service instead pins
+its native provisioning receipt and exact artifact; provisioning is not a
+Release. Publication fences that applied projection and the absence of a newer
+Release-based runtime. After a database Deploy, lifecycle uses the acknowledged
+Release runtime rather than the older provisioning receipt. Neither path invents
+historical authority or reads newer desired state during execution.
+
 Remove captures the acknowledged runtime separately from desired configuration.
 Its publication compares that runtime's revision, including absence for an
 undeployed Service. Cleanup selects the captured proxy, active workload and

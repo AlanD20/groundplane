@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -65,6 +66,16 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	if renderInput != nil {
+		if renderInput.NativeBacking != nil && (project.Record.Kind != hierarchyrecord.ProjectKindBacking ||
+			renderInput.ProjectID != project.Record.ID || renderInput.EnvironmentID != environment.Record.ID ||
+			projection.Record.BackingRuntime == nil || renderInput.NativeBacking.BackingRuntime == nil ||
+			*renderInput.NativeBacking.BackingRuntime != *projection.Record.BackingRuntime ||
+			renderInput.NativeBacking.BackingRuntime.Adapter != current.Record.Desired.Adapter ||
+			!bytes.Equal(renderInput.NativeBacking.ComposeArtifact, projection.Record.ComposeArtifact)) {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed, "Service lifecycle native Backing snapshot changed before publication",
+			)
+		}
 		expectedHooks := serviceLifecycleHooks(current.Record.Desired.Hooks, task.Type)
 		if !backinghook.EqualConfiguration(renderInput.HookConfiguration, expectedHooks) ||
 			renderInput.HookConfiguration != nil && renderInput.AdapterKey != current.Record.Desired.Adapter {
@@ -207,28 +218,33 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 				Key:         serviceLifecycleProjectionFenceKey(renderInput.EnvironmentID),
 				ModRevision: renderInput.AppliedProjectionRevision,
 			},
-			etcdstore.Condition{
+		)
+		if renderInput.Release != nil {
+			conditions = append(conditions, etcdstore.Condition{
 				Key:         releases.ReleaseProjectionKey(renderInput.ServiceID),
 				ModRevision: renderInput.Release.ProjectionRevision,
 			},
-			etcdstore.Condition{
-				Key:         releases.ReleaseIntentStagingKey("", renderInput.Release.ServingReleaseID),
-				ModRevision: renderInput.Release.IntentRevision,
-			},
-			etcdstore.Condition{
-				Key:         releases.ReleaseRenderInputStagingKey("", renderInput.Release.ServingReleaseID),
-				ModRevision: renderInput.Release.RenderRevision,
-			},
-			etcdstore.Condition{
-				Key:         serviceruntimerecord.Key(renderInput.ServiceID),
-				ModRevision: renderInput.AcknowledgedRuntimeRevision,
-			},
-		)
-		if renderInput.Release.RetainedPrior != nil {
-			conditions = append(conditions, etcdstore.Condition{
-				Key:         releases.ReleaseRenderInputStagingKey("", renderInput.Release.PriorServingReleaseID),
-				ModRevision: renderInput.Release.RetainedPriorRenderRevision,
-			})
+				etcdstore.Condition{
+					Key:         releases.ReleaseIntentStagingKey("", renderInput.Release.ServingReleaseID),
+					ModRevision: renderInput.Release.IntentRevision,
+				},
+				etcdstore.Condition{
+					Key:         releases.ReleaseRenderInputStagingKey("", renderInput.Release.ServingReleaseID),
+					ModRevision: renderInput.Release.RenderRevision,
+				},
+				etcdstore.Condition{
+					Key:         serviceruntimerecord.Key(renderInput.ServiceID),
+					ModRevision: renderInput.AcknowledgedRuntimeRevision,
+				},
+			)
+			if renderInput.Release.RetainedPrior != nil {
+				conditions = append(conditions, etcdstore.Condition{
+					Key:         releases.ReleaseRenderInputStagingKey("", renderInput.Release.PriorServingReleaseID),
+					ModRevision: renderInput.Release.RetainedPriorRenderRevision,
+				})
+			}
+		} else {
+			conditions = append(conditions, etcdstore.Condition{Key: serviceruntimerecord.Key(renderInput.ServiceID)})
 		}
 		mutations = append(mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationPut, Key: releaserender.ServiceLifecycleRenderInputKey(task.ID), Value: inputValue,
@@ -441,9 +457,12 @@ func classifyServiceLifecycleStartConflict(
 		expected := deletionEnd
 		applied := input != nil
 		if applied {
-			expected += 6
-			if input.Release.RetainedPrior != nil {
-				expected++
+			expected += 3
+			if input.Release != nil {
+				expected += 3
+				if input.Release.RetainedPrior != nil {
+					expected++
+				}
 			}
 		} else {
 			expected++
@@ -503,6 +522,12 @@ func classifyServiceLifecycleStartConflict(
 				return errs.New(errs.KindInternal, "Service lifecycle render input already exists")
 			}
 			for index := deletionEnd + 1; index < len(values); index++ {
+				if input.NativeBacking != nil && index == len(values)-1 {
+					if values[index] != nil {
+						return recordcodec.StateConflict("service runtime authority", service.Record.Desired.ID)
+					}
+					continue
+				}
 				if values[index] == nil {
 					return errs.New(errs.KindStateConflict, "Service lifecycle immutable runtime authority changed")
 				}

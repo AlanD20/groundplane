@@ -93,8 +93,8 @@ func TestServiceLifecyclePlanSelectsAppliedSealedAddressableRuntime(t *testing.T
 		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
 		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
 		AuthorizedVolumeDir: reader.environment.VolumeDir,
-		ArtifactID:          source.ArtifactId, Projection: &reader.projection, AppliedProjectionRevision: 20,
-		Release: testreleaserender.ServiceLifecycleRelease{
+		ArtifactID:          source.ArtifactId, AppliedRenderGeneration: reader.projection.RenderGeneration, AppliedProjectionRevision: 20,
+		Release: &testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID: releaseID, ProjectionRevision: 21, IntentRevision: 22,
 			RenderRevision: 23, Current: releaseRender,
 		},
@@ -253,9 +253,9 @@ func TestServiceLifecyclePlanPinsAcknowledgedRuntimeAcrossRestart(t *testing.T) 
 		TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug,
 		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
 		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-		AuthorizedVolumeDir: reader.environment.VolumeDir,
-		ArtifactID:          "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Projection:          &reader.projection,
+		AuthorizedVolumeDir:     reader.environment.VolumeDir,
+		ArtifactID:              "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		AppliedRenderGeneration: reader.projection.RenderGeneration,
 	}
 	project := &composetypes.Project{
 		Services: composetypes.Services{
@@ -293,13 +293,13 @@ func TestServiceLifecyclePlanPinsAcknowledgedRuntimeAcrossRestart(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	input.Projection = &reader.projection
+	input.AppliedRenderGeneration = reader.projection.RenderGeneration
 	workload := domain.WorkloadSeal{
 		RequestedReference: "example/api:deployed",
 		LocalImageID:       "sha256:" + strings.Repeat("a", 64), ReplicaCount: 1,
 	}
 	input.AppliedProjectionRevision = 20
-	input.Release = testreleaserender.ServiceLifecycleRelease{
+	input.Release = &testreleaserender.ServiceLifecycleRelease{
 		ServingReleaseID:   "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ProjectionRevision: 21, IntentRevision: 22, RenderRevision: 23,
 		Current: testreleaserender.ReleaseRenderInput{
