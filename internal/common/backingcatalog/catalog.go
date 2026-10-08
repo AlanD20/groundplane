@@ -5,6 +5,7 @@ package backingcatalog
 import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"regexp"
+	"strings"
 )
 
 type Version struct {
@@ -96,4 +97,20 @@ func ValidImage(family, version, reference string) bool {
 	}
 	pattern, err := regexp.Compile(selected.ImagePattern)
 	return err == nil && pattern.MatchString(reference)
+}
+
+// ValidPinnedImage admits a catalog-selected upstream image with exact bytes.
+// The tag retains the supported server line while the digest pins its runtime.
+func ValidPinnedImage(reference string) bool {
+	if !strings.Contains(reference, "@sha256:") {
+		return false
+	}
+	for _, family := range Families() {
+		for _, version := range family.Versions {
+			if ValidImage(family.Key, version.Number, reference) {
+				return true
+			}
+		}
+	}
+	return false
 }

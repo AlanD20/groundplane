@@ -6,13 +6,12 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/backupservicefact"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
-	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -92,7 +91,7 @@ func Workload(
 		selected.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED ||
 		selected.Slot != "" || selected.OwnerComponentId != "" ||
 		!(imageref.IsDigestPinned(selected.ImageReference) ||
-			postgres16protocol.ValidDatabaseImage(selected.ImageReference) && strings.Contains(selected.ImageReference, "@sha256:")) {
+			backingcatalog.ValidPinnedImage(selected.ImageReference)) {
 		return nil, invalid()
 	}
 	if _, err := backupservicefact.LabelsDigest(selected.ExpectedLabels); err != nil {
