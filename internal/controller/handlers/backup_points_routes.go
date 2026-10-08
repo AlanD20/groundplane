@@ -96,5 +96,14 @@ func recoveryPointResponse(record backupruntime.BackupRecoveryPointRecord) apiTy
 		response.Capture = &apiTypes.RecoveryPointCapture{TaskID: record.Capture.TaskID,
 			CreatedAt: record.Capture.CreatedAt.UTC().Format(time.RFC3339), SourceCount: record.Capture.SourceCount}
 	}
+	if archive := record.PostgresArchive; record.SourceFormat == backupruntime.BackupRuntimeFormatPostgres {
+		response.Database = &apiTypes.RecoveryPointDatabase{Family: "postgres",
+			SourceServerVersion: archive.SourceServerVersion, BackupToolVersion: archive.BackupToolVersion,
+			ArtifactFormat: string(record.SourceFormat)}
+	} else if archive := record.MySQLArchive; record.SourceFormat == backupruntime.BackupRuntimeFormatMySQL {
+		response.Database = &apiTypes.RecoveryPointDatabase{Family: "mysql",
+			SourceServerVersion: archive.SourceServerVersion, BackupToolVersion: archive.BackupToolVersion,
+			ArtifactFormat: archive.ArtifactFormat}
+	}
 	return response
 }

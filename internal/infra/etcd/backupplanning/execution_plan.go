@@ -100,16 +100,26 @@ func backupRunSourcePlanSnapshotEqual(
 ) bool {
 	switch source.Kind {
 	case backupruntime.BackupRuntimeSourceAttach:
-		snapshot := source.Snapshot.Postgres
-		postgres := capture.GetPostgres()
-		service := backupScopeService(scope, snapshotServiceID(snapshot))
-		return snapshot != nil && postgres != nil && service != nil &&
-			source.Format == backupruntime.BackupRuntimeFormatPostgres &&
-			capture.Resource.Kind == agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ATTACH &&
-			postgres.DatabaseServiceId == snapshot.BackingServiceID &&
-			service.GetService().GetModRevision() == snapshot.BackingServiceRevision &&
-			postgres.DatabaseName == snapshot.Database &&
-			postgres.RoleName == snapshot.Role && string(postgres.ManagedReleaseIndex) == snapshot.ManagedReleaseIndex
+		if snapshot := source.Snapshot.Postgres; snapshot != nil {
+			postgres := capture.GetPostgres()
+			service := backupScopeService(scope, snapshot.BackingServiceID)
+			return postgres != nil && service != nil && source.Format == backupruntime.BackupRuntimeFormatPostgres &&
+				capture.Resource.Kind == agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ATTACH &&
+				postgres.DatabaseServiceId == snapshot.BackingServiceID &&
+				service.GetService().GetModRevision() == snapshot.BackingServiceRevision &&
+				postgres.DatabaseName == snapshot.Database && postgres.RoleName == snapshot.Role &&
+				string(postgres.ManagedReleaseIndex) == snapshot.ManagedReleaseIndex
+		}
+		if snapshot := source.Snapshot.MySQL; snapshot != nil {
+			mysql := capture.GetMysql()
+			service := backupScopeService(scope, snapshot.BackingServiceID)
+			return mysql != nil && service != nil && source.Format == backupruntime.BackupRuntimeFormatMySQL &&
+				capture.Resource.Kind == agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ATTACH &&
+				mysql.DatabaseServiceId == snapshot.BackingServiceID &&
+				service.GetService().GetModRevision() == snapshot.BackingServiceRevision &&
+				mysql.DatabaseName == snapshot.Database && mysql.RoleName == snapshot.Role
+		}
+		return false
 	case backupruntime.BackupRuntimeSourceConfig:
 		snapshot := source.Snapshot.Config
 		config := capture.GetConfig()
@@ -147,13 +157,6 @@ func backupRunSourcePlanSnapshotEqual(
 	default:
 		return false
 	}
-}
-
-func snapshotServiceID(snapshot *backupruntime.BackupPostgresSourceSnapshot) string {
-	if snapshot == nil {
-		return ""
-	}
-	return snapshot.BackingServiceID
 }
 
 func backupScopeService(scope *agentpb.BackupPlanScope, serviceID string) *agentpb.BackupServiceFact {

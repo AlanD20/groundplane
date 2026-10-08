@@ -98,6 +98,9 @@ func testBackupRun(createdAt time.Time, updatedAt time.Time, recipient string) t
 		CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}
 	run.Sources[0].Object = testBackupObject(run.Sources[0].ObjectKey)
+	run.Sources[0].PostgresArchive = testbackupruntime.BackupPostgresArchiveEvidence{
+		PGDumpMajor: 16, AdapterContractVersion: 1, SourceServerVersion: "16.9", BackupToolVersion: "16.9",
+	}
 	run.Sources[0].Upload = testbackupruntime.BackupUploadOutcome{
 		Kind:   testbackupruntime.BackupUploadReturned,
 		Target: run.Sources[0].Object.Target, ReturnedObject: run.Sources[0].Object,
@@ -148,6 +151,9 @@ func testBackupLaterSource(
 		Phase:                  phase,
 	}
 	if state == testbackupruntime.BackupSourceAttemptSucceeded {
+		record.PostgresArchive = testbackupruntime.BackupPostgresArchiveEvidence{
+			PGDumpMajor: 16, AdapterContractVersion: 1, SourceServerVersion: "16.9", BackupToolVersion: "16.9",
+		}
 		record.Evidence = testBackupArtifact()
 		record.Object = testBackupObject(record.ObjectKey)
 		record.Upload = testbackupruntime.BackupUploadOutcome{

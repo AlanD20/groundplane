@@ -48,15 +48,16 @@ const (
 
 	// Adapter-issued steps — what internal/adapters kinds compose their
 	// Provision/Grant/Detach/Backup sequences from.
-	StepExec    StepOp = "exec"
-	StepSQL     StepOp = "sql"
-	StepDump    StepOp = "dump"
-	StepRestore StepOp = "restore"
-	StepEncrypt StepOp = "encrypt"
-	StepUpload  StepOp = "upload"
-	StepVerify  StepOp = "verify"
-	StepPrune   StepOp = "prune"
-	StepAck     StepOp = "ack"
+	StepExec     StepOp = "exec"
+	StepSQL      StepOp = "sql"
+	StepMySQLSQL StepOp = "mysql_sql"
+	StepDump     StepOp = "dump"
+	StepRestore  StepOp = "restore"
+	StepEncrypt  StepOp = "encrypt"
+	StepUpload   StepOp = "upload"
+	StepVerify   StepOp = "verify"
+	StepPrune    StepOp = "prune"
+	StepAck      StepOp = "ack"
 )
 
 // Step is one locally compiled operation in a provision/detach/backup/restore
@@ -109,16 +110,17 @@ type FactDefinition struct {
 
 // Adapter is the contract every backing-service kind implements.
 type Adapter interface {
-	Key() string                   // e.g. "postgres:16" — looked up by core.Service.Adapter
-	Label() string                 // display only
-	DefaultImage() (string, error) // release-owned image selection; no operator fallback
-	FactsPrefix() string           // e.g. "pg16_" — empty for Custom()
-	URLScheme() string             // e.g. "pgsql://" — empty for Custom()
-	Port() string                  // e.g. "5432" — empty for Custom()
+	Key() string                                 // e.g. "postgres" — looked up by core.Service.Adapter
+	Label() string                               // display only
+	DefaultImage(version string) (string, error) // exact supported server version
+	FactsPrefix() string                         // e.g. "pg_" — empty for Custom()
+	URLScheme() string                           // e.g. "pgsql://" — empty for Custom()
+	Port() string                                // e.g. "5432" — empty for Custom()
 	FactSchema(core.BackingAuthentication) []FactDefinition
 	SupportsAuthenticationModes() bool
 	Custom() bool // true => network-only attach, no facts, no backups (see mvp.md, "The custom adapter")
 	SupportsGrants() bool
+	CredentialIdentityLimit() int // maximum ASCII database/user identity bytes
 
 	ProvisionSteps(p Input) []Step
 	GrantSteps(p Input) []Step // p.GrantOn set — access to another attach's database
@@ -226,7 +228,7 @@ func renderFactValue(scheme string, field FactField, params Input) ([]byte, erro
 }
 
 func renderFactURL(scheme string, params Input) ([]byte, error) {
-	if scheme != "pgsql://" && scheme != "redis://" {
+	if scheme != "pgsql://" && scheme != "redis://" && scheme != "mysql://" {
 		return nil, fmt.Errorf("adapter fact URL scheme is invalid")
 	}
 	var output bytes.Buffer

@@ -26,7 +26,7 @@ func (repository *TaskRepository) prepareConfigRestoreFailure(ctx context.Contex
 		return repository.prepareVolumeRestoreFailure(ctx, runtime, current, status, result, at, restored)
 	}
 	if restored.Record.Point.SourceKind == backupruntime.BackupRuntimeSourceAttach {
-		return repository.preparePostgresRestoreFailure(ctx, runtime, current, status, result, at, restored)
+		return repository.prepareDatabaseRestoreFailure(ctx, runtime, current, status, result, at, restored)
 	}
 	// A publication send with a lost response makes the worker conservative,
 	// but only the native intent can prove whether live effects began. This

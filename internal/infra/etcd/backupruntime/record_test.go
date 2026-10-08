@@ -417,6 +417,7 @@ func TestBackupRunValidationEnforcesFailFastCheckpointTable(t *testing.T) {
 	run.State = BackupRunFailed
 	run.Sources[0].State = BackupSourceAttemptFailed
 	run.Sources[0].Phase = BackupSourcePhaseCapture
+	run.Sources[0].PostgresArchive = BackupPostgresArchiveEvidence{}
 	run.Sources[0].Evidence = BackupArtifactEvidence{}
 	run.Sources[0].Upload = BackupUploadOutcome{}
 	run.Sources[0].Object = BackupObjectIdentity{}
@@ -453,6 +454,7 @@ func TestBackupRunValidationEnforcesFailFastCheckpointTable(t *testing.T) {
 	run.Sources[0].State = BackupSourceAttemptPointCommitted
 	run.Sources[0].Phase = BackupSourcePhaseRetention
 	run.Sources[0].Evidence = completedSource.Evidence
+	run.Sources[0].PostgresArchive = completedSource.PostgresArchive
 	run.Sources[0].Upload = completedSource.Upload
 	run.Sources[0].Object = completedSource.Object
 	run.Sources[0].FailureCode = BackupFailureRetention

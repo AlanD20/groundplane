@@ -36,6 +36,8 @@ func NewBackupRunRetryRecord(source BackupRunRecord, taskID string, createdAt ti
 		attempt.Evidence = BackupArtifactEvidence{}
 		attempt.ConfigArchive = BackupConfigArchiveEvidence{}
 		attempt.VolumeArchive = BackupVolumeArchiveEvidence{}
+		attempt.PostgresArchive = BackupPostgresArchiveEvidence{}
+		attempt.MySQLArchive = BackupMySQLArchiveEvidence{}
 		attempt.Upload = BackupUploadOutcome{}
 		attempt.Object = BackupObjectIdentity{}
 		attempt.FailureCode = ""

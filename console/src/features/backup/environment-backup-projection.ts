@@ -25,7 +25,7 @@ export function backupSourceStrategy(
   store: ReturnType<typeof useStore>,
   env: Environment,
   source: BackupPolicySourceRecord,
-): "postgres:16" | "config" | "volume" | "unsupported" {
+): "postgres" | "mysql" | "config" | "volume" | "unsupported" {
   if (source.kind !== "attach") return source.kind;
   const attach = store
     .getBackupPolicyState(env.id)
@@ -35,7 +35,7 @@ export function backupSourceStrategy(
     ?.environments?.[0]?.services.find(
       (service) => service.id === attach?.backingServiceId,
     )?.adapter;
-  return adapter === "postgres:16" ? adapter : "unsupported";
+  return adapter === "postgres" || adapter === "mysql" ? adapter : "unsupported";
 }
 
 export function backupSourceLabel(
@@ -77,7 +77,8 @@ export function backupPolicyConfigured(
 }
 
 export function adapterLabel(kind: string) {
-  if (kind === "postgres:16") return "PostgreSQL 16";
+  if (kind === "postgres") return "PostgreSQL";
+  if (kind === "mysql") return "MySQL";
   if (kind === "config") return "Environment config";
   if (kind === "unsupported") return "Attach · unsupported for MVP backups";
   return "Volume archive";
@@ -93,12 +94,20 @@ export function adapterSteps(kind: string) {
       { op: "verify", detail: "HeadObject" },
       { op: "prune", detail: "past retention" },
     ];
-  if (kind === "postgres:16")
+  if (kind === "postgres")
     return [
       { op: "dump", detail: "pg_dump --format=custom" },
       { op: "encrypt", detail: "age-encrypt with recipient" },
       { op: "upload", detail: "r2://backups/…" },
       { op: "verify", detail: "HeadObject" },
+      { op: "prune", detail: "past retention" },
+    ];
+  if (kind === "mysql")
+    return [
+      { op: "dump", detail: "mysqldump · consistent logical backup" },
+      { op: "encrypt", detail: "age-encrypt with recipient" },
+      { op: "upload", detail: "upload to the selected destination" },
+      { op: "verify", detail: "verify object identity and metadata" },
       { op: "prune", detail: "past retention" },
     ];
   return [

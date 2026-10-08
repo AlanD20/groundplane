@@ -1,11 +1,11 @@
-package valkey9
+package valkey
 
 import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
-func (a *adapter) CreationSpec(authentication core.BackingAuthentication) adapters.CreationSpec {
+func (a *adapter) CreationSpec(_ string, authentication core.BackingAuthentication) adapters.CreationSpec {
 	return adapters.CreationSpec{
 		ServiceName: "valkey",
 		VolumeSlug:  "data",

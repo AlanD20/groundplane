@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (service *BackupCheckpointService) checkpointPostgresRestore(ctx context.Context,
+func (service *BackupCheckpointService) checkpointDatabaseRestore(ctx context.Context,
 	input backupruntime.BackupCheckpointInput,
 	claim etcdstore.Versioned[taskassignments.TaskAssignmentRecord], plan *agentpb.ExecutionPlan,
 ) (*agentpb.BackupCheckpointAck, error) {
@@ -18,7 +18,7 @@ func (service *BackupCheckpointService) checkpointPostgresRestore(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	if err := service.validatePostgresCheckpointAdvance(ctx, claim, plan,
+	if err := service.validateDatabaseCheckpointAdvance(ctx, claim, plan,
 		current.Record.OperationID, current.ReadRevision, input.Request); err != nil {
 		return nil, err
 	}
@@ -26,7 +26,7 @@ func (service *BackupCheckpointService) checkpointPostgresRestore(ctx context.Co
 	if !at.After(current.Record.UpdatedAt) {
 		at = current.Record.UpdatedAt.Add(time.Nanosecond)
 	}
-	revision, err := service.repository.CheckpointPostgresRestore(ctx, input, current, at)
+	revision, err := service.repository.CheckpointDatabaseRestore(ctx, input, current, at)
 	if err != nil {
 		return nil, err
 	}

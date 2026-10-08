@@ -74,7 +74,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		!lock.CreatedAt.Equal(run.CreatedAt) || !lock.UpdatedAt.Equal(lock.CreatedAt) {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	backingEnvironmentIDs, err := backupruntime.PostgresBackingEnvironmentIDs(run)
+	backingEnvironmentIDs, err := backupruntime.DatabaseBackingEnvironmentIDs(run)
 	if err != nil {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}

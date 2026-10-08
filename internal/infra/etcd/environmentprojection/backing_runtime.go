@@ -21,6 +21,7 @@ type BackingRuntimeReceipt struct {
 	ArtifactSHA256       string    `json:"artifact_sha256"`
 	LocalImageID         string    `json:"local_image_id"`
 	ManagedReleaseSHA256 string    `json:"managed_release_sha256"`
+	Adapter              string    `json:"adapter"`
 	TaskID               string    `json:"task_id"`
 	PlanID               string    `json:"plan_id"`
 	PlanHash             string    `json:"plan_hash"`
@@ -50,7 +51,9 @@ func SelectBackingRuntime(
 		ids.Validate(ids.KindTask, source.TaskID) != nil || ids.Validate(ids.KindAgent, source.AgentID) != nil ||
 		ids.Validate(ids.KindAssignment, source.AssignmentID) != nil || source.ExecutionEpoch == 0 ||
 		!recordcodec.ValidSHA256(source.PlanHash) || !recordcodec.ValidSHA256(source.ArtifactSHA256) ||
-		!recordcodec.ValidSHA256(source.ManagedReleaseSHA256) ||
+		(source.Adapter != "postgres" && source.Adapter != "mysql") ||
+		(source.Adapter == "postgres" && !recordcodec.ValidSHA256(source.ManagedReleaseSHA256)) ||
+		(source.Adapter == "mysql" && source.ManagedReleaseSHA256 != "") ||
 		!workloadimage.LocalIDValid(source.LocalImageID) || source.RenderGeneration > projection.RenderGeneration ||
 		source.AcknowledgedAt.IsZero() || source.AcknowledgedAt.Location() != time.UTC {
 		return nil, nil, invalidBackingRuntime()
@@ -58,7 +61,7 @@ func SelectBackingRuntime(
 	member := false
 	for _, desired := range projection.DesiredServices {
 		if desired.Desired.ID == serviceID && desired.EnvironmentID == projection.EnvironmentID &&
-			desired.Desired.Adapter == "postgres:16" && desired.BackingNetworkID != "" {
+			desired.Desired.Adapter == source.Adapter && desired.BackingNetworkID != "" {
 			member = true
 		}
 	}

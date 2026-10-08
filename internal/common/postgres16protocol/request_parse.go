@@ -30,9 +30,9 @@ func parseRunArguments(arguments []string) (Request, error) {
 		if len(suffix) != 1 || suffix[0] != strconv.FormatUint(uint64(PostgreSQLMajor), 10) {
 			return Request{}, invalid("postgres helper probe version is invalid")
 		}
-	case OperationServerMajor:
+	case OperationServerVersion:
 		if len(suffix) != 2 || suffix[0] != strconv.FormatUint(uint64(PostgreSQLMajor), 10) {
-			return Request{}, invalid("postgres helper server-major suffix is invalid")
+			return Request{}, invalid("postgres helper server-version suffix is invalid")
 		}
 		request.Database = suffix[1]
 	case OperationDump:

@@ -1,10 +1,10 @@
-// Package valkey9 is the "valkey:9" adapter — cache/queue backing kind.
-// See postgres16's package comment for why Register() is an explicit
-// function rather than an init().
-package valkey9
+// Package valkey provisions shared cache and queue access. Supported versions
+// come from backingcatalog; application composition registers it explicitly.
+package valkey
 
 import (
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
@@ -16,10 +16,15 @@ func Register() {
 
 type adapter struct{}
 
-func (a *adapter) Key() string                       { return "valkey:9" }
-func (a *adapter) Label() string                     { return "Valkey 9" }
-func (a *adapter) DefaultImage() (string, error)     { return "valkey/valkey:9-alpine", nil }
-func (a *adapter) FactsPrefix() string               { return "valkey9_" }
+func (a *adapter) CredentialIdentityLimit() int { return 63 }
+
+func (a *adapter) Key() string   { return "valkey" }
+func (a *adapter) Label() string { return "Valkey" }
+func (a *adapter) DefaultImage(version string) (string, error) {
+	selected, err := backingcatalog.Resolve(a.Key(), version)
+	return selected.Image, err
+}
+func (a *adapter) FactsPrefix() string               { return "valkey_" }
 func (a *adapter) URLScheme() string                 { return "redis://" }
 func (a *adapter) Port() string                      { return "6379" }
 func (a *adapter) SupportsAuthenticationModes() bool { return true }

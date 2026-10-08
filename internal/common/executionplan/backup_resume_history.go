@@ -44,9 +44,13 @@ type BackupStepResumeReplay struct {
 	postgresDumpStart    *agentpb.BackupPostgresDumpStart
 	postgresApplyStart   *agentpb.BackupPostgresRestoreApplyStartCheckpoint
 	postgresVerified     *agentpb.BackupPostgresRestoreVerified
-	postgresStopped      uint32
-	postgresRecovered    uint32
-	postgresServicePhase agentpb.BackupServicePhase
+	mysqlObserved        *agentpb.BackupMySQLContainerObserved
+	mysqlDumpStart       *agentpb.BackupMySQLDumpStart
+	mysqlApplyStart      *agentpb.BackupMySQLRestoreApplyStartCheckpoint
+	mysqlVerified        *agentpb.BackupMySQLRestoreVerified
+	databaseStopped      uint32
+	databaseRecovered    uint32
+	databaseServicePhase agentpb.BackupServicePhase
 	records              uint64
 	sequence             uint64
 	failure              error
@@ -191,13 +195,19 @@ func (replay *BackupStepResumeReplay) Accept(entry BackupCheckpointReplayEntry) 
 			if err := replay.postgresCaptureCheckpoint(request); err != nil {
 				return err
 			}
+		case request.GetMysqlContainerObserved() != nil || request.GetMysqlDumpStart() != nil:
+			if err := replay.mysqlCaptureCheckpoint(request); err != nil {
+				return err
+			}
 		case request.GetArtifactPrepared() != nil:
 			value := request.GetArtifactPrepared()
 			if prepared != nil || value.PointId != step.GetCapture().PointId ||
 				!backupResumePreparedSourceMatches(value, step.GetCapture()) ||
 				(configProgress != nil && transfer == nil) ||
 				(step.GetCapture().GetPostgres() != nil && (replay.postgresDumpStart == nil ||
-					value.Evidence.SourceSizeBytes > replay.postgresDumpStart.MaxPlaintextBytes)) {
+					value.Evidence.SourceSizeBytes > replay.postgresDumpStart.MaxPlaintextBytes)) ||
+				(step.GetCapture().GetMysql() != nil && (replay.mysqlDumpStart == nil ||
+					value.Evidence.SourceSizeBytes > replay.mysqlDumpStart.MaxPlaintextBytes)) {
 				return backupResumeHistoryInvalid()
 			}
 			prepared = value
@@ -251,6 +261,10 @@ func (replay *BackupStepResumeReplay) Accept(entry BackupCheckpointReplayEntry) 
 		}
 	case step.GetRestore().GetPostgres() != nil:
 		if err := replay.postgresRestoreCheckpoint(request); err != nil {
+			return err
+		}
+	case step.GetRestore().GetMysql() != nil:
+		if err := replay.mysqlRestoreCheckpoint(request); err != nil {
 			return err
 		}
 	case step.GetRestore().GetConfig() != nil && request.GetSourceCleanupCompleted() != nil:

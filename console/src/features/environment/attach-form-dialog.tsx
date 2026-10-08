@@ -79,7 +79,7 @@ function AttachForm({
     svc?.authentication,
   );
   const authenticationUnavailable =
-    svc?.adapter === "valkey:9" && !authenticationDetails;
+    svc?.adapter === "valkey" && !authenticationDetails;
   const needsDatabase = adapter?.requires.database ?? true;
   const attachName = name
     .trim()

@@ -130,7 +130,7 @@ func TestEntryGenerationServiceEnforcesFactSecrecy(t *testing.T) {
 	entry := testEnvEntry(now, 1)
 	entry.Source = core.EntrySource{
 		Kind: core.SourceFact,
-		Fact: &core.FactRef{Attach: "api-db", Key: "pg16_URL"},
+		Fact: &core.FactRef{Attach: "api-db", Key: "pg_URL"},
 	}
 	_, err := service.Generate(
 		context.Background(),

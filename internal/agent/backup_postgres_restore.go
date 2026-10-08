@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/common/databaseversion"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/infra/agentpostgresjournal"
 	"github.com/AlanD20/groundplane/internal/infra/docker/postgres16execution"
@@ -29,7 +30,7 @@ func (pool *WorkerPool) executeBackupPostgresRestore(ctx context.Context,
 	}
 	ctx, cancel := context.WithDeadline(ctx, time.Unix(0, int64(step.StepDeadlineUnixNano)))
 	defer cancel()
-	if err := agentpostgresjournal.Mark(ctx, postgresExecutionIDs(assignment.TaskID, step)); err != nil {
+	if err := agentpostgresjournal.Mark(ctx, databaseExecutionIDs(assignment.TaskID, step)); err != nil {
 		return false, err
 	}
 	if resume.GetSourceCleanupCompleted() != nil {
@@ -52,20 +53,20 @@ func (pool *WorkerPool) executeBackupPostgresRestore(ctx context.Context,
 	if err != nil {
 		return mutationAttempted, err
 	}
-	var artifact *postgresRestoreArtifact
+	var artifact *databaseRestoreArtifact
 	stageAbsent, err := pool.backupStaging.volumeStageAbsent(assignment.TaskID, step)
 	if err != nil {
 		return mutationAttempted, err
 	}
 	if resume.Phase == agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_SERVICE_RECOVERY && stageAbsent {
-		if !postgresRecoveryComplete(resume, len(step.ConsumerServiceIds)) {
+		if !databaseRecoveryComplete(resume, len(step.ConsumerServiceIds)) {
 			return true, errs.New(
 				errs.KindStateConflict,
 				"PostgreSQL Restore source disappeared before Service recovery",
 			)
 		}
 	} else {
-		artifact, err = pool.downloadPostgresRestore(ctx, assignment, step)
+		artifact, err = pool.downloadDatabaseRestore(ctx, assignment, step)
 		if err != nil {
 			return mutationAttempted, err
 		}
@@ -90,6 +91,14 @@ func (pool *WorkerPool) executeBackupPostgresRestore(ctx context.Context,
 	if err != nil {
 		return mutationAttempted, err
 	}
+	observed, err := observePostgresTarget(ctx, executor, container, step, authority.database)
+	expected, expectedErr := databaseversion.FromWire(step.GetRestore().GetPostgres().ExpectedTargetVersions)
+	if err != nil || expectedErr != nil || observed != expected {
+		return mutationAttempted, errs.New(
+			errs.KindStateConflict,
+			"Restore target identity or version changed; obtain a new preview",
+		)
+	}
 	if resume.Phase == agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_TARGET_MUTATION {
 		// Inspect the original Exec and its durable terminal/reap/source proof.
 		// No code in this branch can execute a second RestoreApply.
@@ -107,10 +116,10 @@ func (pool *WorkerPool) executeBackupPostgresRestore(ctx context.Context,
 		if _, err := postgresVerifyRestore(ctx, executor, container, step, authority); err != nil {
 			return true, err
 		}
-		if err := pool.postgresRecoverConsumers(ctx, assignment, execution, resume, publisher); err != nil {
+		if err := pool.databaseRecoverConsumers(ctx, assignment, execution, resume, publisher); err != nil {
 			return true, err
 		}
-		if err := pool.postgresRestoreCleanup(ctx, assignment, step, artifact, publisher); err != nil {
+		if err := pool.databaseRestoreCleanup(ctx, assignment, step, artifact, publisher); err != nil {
 			return true, err
 		}
 		return true, pool.retirePostgresExecution(ctx, assignment, step, nil, resume.ApplyStart)
@@ -131,7 +140,7 @@ func (pool *WorkerPool) executeBackupPostgresRestore(ctx context.Context,
 			return mutationAttempted, err
 		}
 	}
-	if err := pool.postgresStopConsumers(ctx, assignment, execution, resume, publisher, &mutationAttempted); err != nil {
+	if err := pool.databaseStopConsumers(ctx, assignment, execution, resume, publisher, &mutationAttempted); err != nil {
 		return mutationAttempted, err
 	}
 	for _, operation := range []postgres16protocol.Operation{
@@ -169,7 +178,7 @@ func (pool *WorkerPool) executeBackupPostgresRestore(ctx context.Context,
 
 func (pool *WorkerPool) finishPostgresRestore(ctx context.Context, assignment taskassignment.Assignment,
 	execution *agentpb.ExecutionStep, authority postgresStepAuthority, executor *postgres16execution.Executor,
-	container postgres16execution.Container, artifact *postgresRestoreArtifact, publisher *backupStepCheckpoint,
+	container postgres16execution.Container, artifact *databaseRestoreArtifact, publisher *backupStepCheckpoint,
 	start *agentpb.BackupPostgresRestoreApplyStartCheckpoint,
 ) (bool, error) {
 	step := execution.GetBackupStep()
@@ -183,10 +192,10 @@ func (pool *WorkerPool) finishPostgresRestore(ctx context.Context, assignment ta
 	}}}); err != nil {
 		return true, err
 	}
-	if err := pool.postgresRecoverConsumers(ctx, assignment, execution, nil, publisher); err != nil {
+	if err := pool.databaseRecoverConsumers(ctx, assignment, execution, nil, publisher); err != nil {
 		return true, err
 	}
-	if err := pool.postgresRestoreCleanup(ctx, assignment, step, artifact, publisher); err != nil {
+	if err := pool.databaseRestoreCleanup(ctx, assignment, step, artifact, publisher); err != nil {
 		return true, err
 	}
 	return true, pool.retirePostgresExecution(ctx, assignment, step, nil, start)
@@ -208,15 +217,15 @@ func postgresVerifyRestore(ctx context.Context, executor *postgres16execution.Ex
 	return sha256.Sum256(result.Proof), nil
 }
 
-func (pool *WorkerPool) postgresRestoreCleanup(ctx context.Context, assignment taskassignment.Assignment,
-	step *agentpb.BackupStepAuthority, artifact *postgresRestoreArtifact,
+func (pool *WorkerPool) databaseRestoreCleanup(ctx context.Context, assignment taskassignment.Assignment,
+	step *agentpb.BackupStepAuthority, artifact *databaseRestoreArtifact,
 	publisher *backupStepCheckpoint,
 ) error {
 	if artifact != nil {
 		if err := artifact.stage.Cleanup(ctx); err != nil {
 			return err
 		}
-		pool.backupStaging.retirePostgresStage(assignment.TaskID, step, artifact.stage)
+		pool.backupStaging.retireDatabaseStage(assignment.TaskID, step, artifact.stage)
 	} else {
 		absent, err := pool.backupStaging.volumeStageAbsent(assignment.TaskID, step)
 		if err != nil || !absent {
@@ -235,14 +244,14 @@ func (pool *WorkerPool) postgresRestoreCleanup(ctx context.Context, assignment t
 	)
 }
 
-func postgresRecoveryComplete(resume *agentpb.BackupRestoreResume, consumers int) bool {
+func databaseRecoveryComplete(resume *agentpb.BackupRestoreResume, consumers int) bool {
 	if resume == nil || resume.Phase != agentpb.BackupRestorePhase_BACKUP_RESTORE_PHASE_SERVICE_RECOVERY {
 		return false
 	}
 	if consumers == 0 {
-		return resume.GetPostgresRestoreVerified() != nil
+		return resume.GetPostgresRestoreVerified() != nil || resume.GetMysqlRestoreVerified() != nil
 	}
-	progress := resume.GetPostgresServiceProgress()
+	progress := databaseServiceProgress(resume)
 	return progress != nil && progress.ServiceCursor == 0 &&
 		(progress.Phase == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_HEALTHY ||
 			progress.Phase == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_NOT_RUNNING)

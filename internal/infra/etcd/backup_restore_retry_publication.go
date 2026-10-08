@@ -59,7 +59,7 @@ func (publication *PreparedVolumeRestorePublication) BindRetry(source PreparedRe
 	return nil
 }
 
-func (publication *PreparedPostgresRestorePublication) BindRetry(source PreparedRestoreRetrySource) error {
+func (publication *PreparedDatabaseRestorePublication) BindRetry(source PreparedRestoreRetrySource) error {
 	if publication == nil || publication.state == nil {
 		return errs.New(errs.KindInternal, "PostgreSQL Restore retry publication is not prepared")
 	}

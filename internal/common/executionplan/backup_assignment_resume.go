@@ -70,6 +70,17 @@ func validBackupCaptureResume(state *agentpb.BackupCaptureResume, step *agentpb.
 	} else if !postgresDumpMatches(state.DumpStart, step) {
 		return false
 	}
+	if step.GetCapture().GetMysql() == nil {
+		if state.MysqlDumpStart != nil {
+			return false
+		}
+	} else if state.CheckpointSequence < 2 {
+		if state.MysqlDumpStart != nil {
+			return false
+		}
+	} else if !mysqlDumpMatches(state.MysqlDumpStart, step) {
+		return false
+	}
 	if state.Phase == agentpb.BackupCapturePhase_BACKUP_CAPTURE_PHASE_CAPTURING {
 		if prepared != nil {
 			return false
@@ -105,6 +116,13 @@ func validBackupCaptureResume(state *agentpb.BackupCaptureResume, step *agentpb.
 	case *agentpb.BackupCaptureResume_PostgresDumpStart:
 		return checkpoint != nil && postgresDumpMatches(checkpoint.PostgresDumpStart, step) &&
 			proto.Equal(checkpoint.PostgresDumpStart, state.DumpStart) &&
+			state.CheckpointSequence == 2 && state.Phase == agentpb.BackupCapturePhase_BACKUP_CAPTURE_PHASE_CAPTURING
+	case *agentpb.BackupCaptureResume_MysqlContainerObserved:
+		return checkpoint != nil && mysqlObservationMatches(checkpoint.MysqlContainerObserved, step) &&
+			state.CheckpointSequence == 1 && state.Phase == agentpb.BackupCapturePhase_BACKUP_CAPTURE_PHASE_CAPTURING
+	case *agentpb.BackupCaptureResume_MysqlDumpStartCheckpoint:
+		return checkpoint != nil && mysqlDumpMatches(checkpoint.MysqlDumpStartCheckpoint, step) &&
+			proto.Equal(checkpoint.MysqlDumpStartCheckpoint, state.MysqlDumpStart) &&
 			state.CheckpointSequence == 2 && state.Phase == agentpb.BackupCapturePhase_BACKUP_CAPTURE_PHASE_CAPTURING
 	case *agentpb.BackupCaptureResume_ConfigProgress:
 		return checkpoint != nil && step.GetCapture().GetConfig() != nil && state.Phase == agentpb.BackupCapturePhase_BACKUP_CAPTURE_PHASE_CAPTURING &&

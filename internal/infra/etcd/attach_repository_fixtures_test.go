@@ -115,6 +115,14 @@ func seedDesiredServiceFixture(
 			clear(headValue)
 			t.Fatalf("encodeEnvironmentComposeProjectionStorage() error = %v", encodeErr)
 		}
+		identities, encodeErr := testenvironmentprojection.OwnedIdentitiesFromProjection(projection)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
+		ownedValue, encodeErr := testenvironmentprojection.EncodeEnvironmentOwnedIdentities(identities)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
 		mutations = append(
 			mutations,
 			testkeyvalue.Mutation{
@@ -124,6 +132,11 @@ func seedDesiredServiceFixture(
 				Type:  testkeyvalue.MutationPut,
 				Key:   testblueprints.EnvironmentBlueprintEffectiveProjectionKey(environmentID, revisionID),
 				Value: effectiveValue,
+			},
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(environmentID, revisionID),
+				Value: ownedValue,
 			},
 		)
 	} else {
@@ -258,6 +271,12 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
 	}
+	environmentRecord, err = testhierarchy.CompleteEnvironmentProvisioning(
+		environmentRecord, environmentRecord.CreateTaskID, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	environment, err := hierarchy.CreateEnvironment(ctx, environmentRecord)
 	if err != nil {
 		t.Fatalf("CreateEnvironment() error = %v", err)
@@ -273,6 +292,12 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	)
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment(backing) error = %v", err)
+	}
+	backingEnvironmentRecord, err = testhierarchy.CompleteEnvironmentProvisioning(
+		backingEnvironmentRecord, backingEnvironmentRecord.CreateTaskID, true,
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
 	backingEnvironmentValue, err := testhierarchy.EncodeEnvironment(backingEnvironmentRecord)
 	if err != nil {
@@ -296,7 +321,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	service := serviceFixture.Service
 	backingServiceFixture := seedDesiredServiceFixture(t, ctx, store, backingEnvironment.Record.ID, core.Service{
 		ID: ids.NewAt(ids.KindService, testAttachTime, 9), Name: "postgres", Image: "postgres:16-alpine",
-		Adapter: "postgres:16",
+		Adapter: "postgres", AdapterVersion: "16",
 	}, ids.NewAt(ids.KindNetwork, testAttachTime, 200), 11, true, true)
 	backingService := backingServiceFixture.Service
 	environment, err = hierarchy.GetEnvironment(ctx, environment.Record.ID)
@@ -332,18 +357,18 @@ func testPendingAttach(
 	t.Helper()
 	grantIDs := make([]string, 0, len(grants))
 	factSets := []testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{
-		{Key: "pg16_DATABASE"},
-		{Key: "pg16_PASSWORD", Secret: true},
-		{Key: "pg16_URL", Secret: true},
+		{Key: "pg_DATABASE"},
+		{Key: "pg_PASSWORD", Secret: true},
+		{Key: "pg_URL", Secret: true},
 	}}}
 	for _, grant := range grants {
 		grantIDs = append(grantIDs, grant.Record.ID)
 		factSets = append(factSets, testattachments.FactSetMetadata{
 			GrantAttachID: grant.Record.ID,
 			Facts: []testattachments.FactDefinition{
-				{Key: "pg16_DATABASE"},
-				{Key: "pg16_PASSWORD", Secret: true},
-				{Key: "pg16_URL", Secret: true},
+				{Key: "pg_DATABASE"},
+				{Key: "pg_PASSWORD", Secret: true},
+				{Key: "pg_URL", Secret: true},
 			},
 		})
 	}

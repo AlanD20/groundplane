@@ -14,6 +14,17 @@ type BackupRestorer interface {
 	Restore(context.Context, string, string, apiTypes.RestoreRequest) (idempotency.IdempotencyResponse, error)
 }
 
+type BackupRestorePreviewer interface {
+	PreviewRestore(context.Context, string, apiTypes.RestoreRequest) (apiTypes.RestorePreview, error)
+}
+
+type backupRestorePreviewInput struct {
+	ID   string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Body apiTypes.RestoreRequest
+}
+
+type backupRestorePreviewOutput struct{ Body apiTypes.RestorePreview }
+
 type backupRestoreInput struct {
 	ID   string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
 	Key  string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
@@ -21,6 +32,9 @@ type backupRestoreInput struct {
 }
 
 func (s *Server) registerBackupRestore() {
+	s.setRoutePolicy("POST /api/v1/environments/{id}/restore/preview", routePolicy{body: jsonBody})
+	huma.Register(s.API, huma.Operation{OperationID: "backup.restore.preview", Method: http.MethodPost,
+		Path: "/environments/{id}/restore/preview", Summary: "Review actual database versions before Restore", Tags: []string{"Backup"}}, s.previewBackupRestore)
 	s.setRoutePolicy("POST /api/v1/environments/{id}/restore", routePolicy{body: jsonBody})
 	accepted := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
@@ -29,6 +43,21 @@ func (s *Server) registerBackupRestore() {
 		DefaultStatus: http.StatusAccepted, Middlewares: huma.Middlewares{s.rejectTaskMutationQuery},
 		Responses: attachMutationResponses(accepted),
 	}, s.restoreBackup)
+}
+
+func (s *Server) previewBackupRestore(
+	ctx context.Context,
+	request *backupRestorePreviewInput,
+) (*backupRestorePreviewOutput, error) {
+	if s.backupRestorePreviews == nil {
+		return nil, errs.New(errs.KindInternal, "Restore preview is not configured")
+	}
+	preview, err := s.backupRestorePreviews.PreviewRestore(ctx, request.ID, request.Body)
+	request.Body.AgeIdentity = ""
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &backupRestorePreviewOutput{Body: preview}, nil
 }
 
 func (s *Server) restoreBackup(ctx context.Context, request *backupRestoreInput) (*taskMutationOutput, error) {

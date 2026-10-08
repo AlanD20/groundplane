@@ -330,7 +330,8 @@ func seedBackupCheckpointAssignmentForTask(
 			Finals: &agentpb.BackupStagingFinals{SameInode: &sameInode,
 				SourceRelativeName: executionplan.BackupSourceStagingFinal, StoredRelativeName: executionplan.BackupStoredStagingFinal},
 			Archive: &agentpb.BackupArtifactPrepared_Postgres{
-				Postgres: &agentpb.BackupPostgresArchiveEvidence{PgDumpMajor: 16, AdapterContractVersion: 1},
+				Postgres: &agentpb.BackupPostgresArchiveEvidence{PgDumpMajor: 16, AdapterContractVersion: 1,
+					SourceServerVersion: "16.9", BackupToolVersion: "16.9"},
 			},
 		}},
 	}

@@ -25,9 +25,10 @@ type Input struct {
 	CreatedAt time.Time
 }
 
-func IsManagedPostgres(projection projectionrecord.EnvironmentComposeProjection, serviceID string) bool {
+func IsManagedDatabase(projection projectionrecord.EnvironmentComposeProjection, serviceID string) bool {
 	for _, service := range projection.DesiredServices {
-		if service.Desired.ID == serviceID && service.Desired.Adapter == "postgres:16" &&
+		if service.Desired.ID == serviceID &&
+			(service.Desired.Adapter == "postgres" || service.Desired.Adapter == "mysql") &&
 			service.BackingNetworkID != "" {
 			return true
 		}
@@ -105,30 +106,52 @@ func Prepare(ctx context.Context, storage CatalogReader, input Input,
 	if observed == nil {
 		return nil, invalidBackingAcknowledgement()
 	}
-	key := backingpostgresrelease.Key(projection.EnvironmentID, serviceID)
-	read, err := storage.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
-	if err != nil {
-		return nil, err
+	adapter := ""
+	for _, desired := range projection.DesiredServices {
+		if desired.Desired.ID == serviceID && desired.EnvironmentID == projection.EnvironmentID {
+			adapter = desired.Desired.Adapter
+			break
+		}
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
+	if adapter != "postgres" && adapter != "mysql" {
 		return nil, invalidBackingAcknowledgement()
 	}
-	defer etcdstore.ClearValues(read.Values)
-	release, err := backingpostgresrelease.Decode(read.Values[0].Value)
-	if err != nil || release.EnvironmentID != projection.EnvironmentID || release.ServiceID != serviceID ||
-		release.Release.Image != workload.PostgresToolsImage {
-		return nil, invalidBackingAcknowledgement()
-	}
-	artifactSHA, releaseSHA := sha256.Sum256(projection.ComposeArtifact), sha256.Sum256(read.Values[0].Value)
+	artifactSHA := sha256.Sum256(projection.ComposeArtifact)
 	source := input.Source
 	source.ArtifactSHA256 = hex.EncodeToString(artifactSHA[:])
 	source.LocalImageID = observed.LocalImageID
-	source.ManagedReleaseSHA256 = hex.EncodeToString(releaseSHA[:])
+	source.Adapter = adapter
+	conditions := []etcdstore.Condition{}
+	if adapter == "postgres" {
+		key := backingpostgresrelease.Key(projection.EnvironmentID, serviceID)
+		read, err := storage.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
+		if err != nil {
+			return nil, err
+		}
+		if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
+			if read != nil {
+				etcdstore.ClearValues(read.Values)
+			}
+			return nil, invalidBackingAcknowledgement()
+		}
+		release, releaseErr := backingpostgresrelease.Decode(read.Values[0].Value)
+		if releaseErr != nil || release.EnvironmentID != projection.EnvironmentID || release.ServiceID != serviceID ||
+			release.Release.Image != workload.PostgresToolsImage {
+			etcdstore.ClearValues(read.Values)
+			return nil, invalidBackingAcknowledgement()
+		}
+		releaseSHA := sha256.Sum256(read.Values[0].Value)
+		source.ManagedReleaseSHA256 = hex.EncodeToString(releaseSHA[:])
+		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+		etcdstore.ClearValues(read.Values)
+	} else if workload.PostgresToolsImage != "" {
+		return nil, invalidBackingAcknowledgement()
+	}
 	projection.BackingRuntime = &source
 	if err := projectionrecord.ValidateBackingRuntimeReceipt(*projection); err != nil {
 		return nil, err
 	}
-	return []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, nil
+	return conditions, nil
 }
 
 func invalidBackingAcknowledgement() error {

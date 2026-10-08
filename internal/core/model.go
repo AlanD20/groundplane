@@ -186,7 +186,8 @@ type Service struct {
 	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"` // native Compose deploy.replicas
 
 	// For a backing project's single service only — see x-gp-adapter:
-	Adapter        string                     `yaml:"adapter,omitempty"        json:"adapter,omitempty"` // e.g. "postgres:16" — looks up internal/adapters
+	Adapter        string                     `yaml:"adapter,omitempty"        json:"adapter,omitempty"` // e.g. "postgres" — looks up internal/adapters
+	AdapterVersion string                     `yaml:"adapter_version,omitempty" json:"adapter_version,omitempty"`
 	Authentication BackingAuthentication      `yaml:"authentication,omitempty" json:"authentication,omitempty"`
 	FactsPrefix    string                     `yaml:"facts_prefix,omitempty"   json:"facts_prefix,omitempty"` // optional override; adapter supplies a default
 	Label          string                     `yaml:"label,omitempty"          json:"label,omitempty"`        // display only
@@ -237,7 +238,7 @@ type EntrySource struct {
 type FactRef struct {
 	Attach string `yaml:"attach"          json:"attach"`          // the attach name (or id)
 	Grant  string `yaml:"grant,omitempty" json:"grant,omitempty"` // optional granted attach name (or id)
-	Key    string `yaml:"key"             json:"key"`             // e.g. "pg16_URL"
+	Key    string `yaml:"key"             json:"key"`             // e.g. "pg_URL"
 }
 
 // EnvEntry is one destination — reusing a fact under a different env

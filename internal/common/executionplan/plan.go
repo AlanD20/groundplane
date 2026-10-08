@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	SchemaVersion                        = 1
+	SchemaVersion                        = 2
 	MaximumArtifacts                     = 16
 	MaximumArtifactYAMLBytes             = 1024 * 1024
 	MaximumPlanBytes                     = 4 * 1024 * 1024

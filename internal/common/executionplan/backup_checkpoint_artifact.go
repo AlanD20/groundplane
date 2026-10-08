@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/backupconfig"
 	"github.com/AlanD20/groundplane/internal/common/backupformat"
+	"github.com/AlanD20/groundplane/internal/common/backupmysql"
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
 	"github.com/AlanD20/groundplane/internal/common/backuppostgres"
 	"github.com/AlanD20/groundplane/internal/common/backupvolume"
@@ -49,8 +50,8 @@ func backupCheckpointFinalName(value string) bool {
 }
 
 func validBackupCheckpointMetadata(count uint32, digest []byte) bool {
-	// The complete immutable object metadata has ten keys, plus key-era for age.
-	return (count == 10 || count == 11) && backupCheckpointDigest(digest)
+	// MySQL adds exact observed server and tool versions to the complete set.
+	return (count >= 10 && count <= 13) && backupCheckpointDigest(digest)
 }
 
 func backupCheckpointRevision(value *agentpb.RevisionDigest) bool {
@@ -130,6 +131,8 @@ func validBackupArtifactPrepared(value *agentpb.BackupArtifactPrepared) bool {
 	switch archive := value.Archive.(type) {
 	case *agentpb.BackupArtifactPrepared_Postgres:
 		return archive != nil && validBackupCheckpointPostgresArchive(archive.Postgres)
+	case *agentpb.BackupArtifactPrepared_Mysql:
+		return archive != nil && validBackupCheckpointMySQLArchive(archive.Mysql)
 	case *agentpb.BackupArtifactPrepared_Config:
 		return archive != nil && validBackupCheckpointConfigArchive(archive.Config, value.Evidence)
 	case *agentpb.BackupArtifactPrepared_Volume:
@@ -148,6 +151,8 @@ func validBackupRestoreArtifact(value *agentpb.BackupRestoreArtifactValidated) b
 	switch archive := value.Archive.(type) {
 	case *agentpb.BackupRestoreArtifactValidated_Postgres:
 		return archive != nil && validBackupCheckpointPostgresArchive(archive.Postgres)
+	case *agentpb.BackupRestoreArtifactValidated_Mysql:
+		return archive != nil && validBackupCheckpointMySQLArchive(archive.Mysql)
 	case *agentpb.BackupRestoreArtifactValidated_Config:
 		return archive != nil && validBackupCheckpointConfigArchive(archive.Config, value.Evidence)
 	case *agentpb.BackupRestoreArtifactValidated_Volume:
@@ -157,10 +162,14 @@ func validBackupRestoreArtifact(value *agentpb.BackupRestoreArtifactValidated) b
 	}
 }
 
+func validBackupCheckpointMySQLArchive(value *agentpb.BackupMySQLArchiveEvidence) bool {
+	_, err := backupmysql.FromWire(value)
+	return err == nil
+}
+
 func validBackupCheckpointPostgresArchive(value *agentpb.BackupPostgresArchiveEvidence) bool {
-	return value != nil && (backuppostgres.ArchiveEvidence{
-		PGDumpMajor: value.PgDumpMajor, AdapterContractVersion: value.AdapterContractVersion,
-	}).Validate() == nil
+	_, err := backuppostgres.FromWire(value)
+	return err == nil
 }
 
 func validBackupCheckpointConfigContent(value *agentpb.BackupConfigContentAuthority) bool {

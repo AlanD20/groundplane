@@ -16,21 +16,28 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type postgresRestoreConsumerIdentity struct {
+type databaseRestoreConsumerIdentity struct {
 	ServiceID     string
 	EnvironmentID string
+}
+
+type databaseRestoreConsumerSource struct {
+	AttachID              string
+	BackingServiceID      string
+	ConsumerEnvironmentID string
+	ConsumerServiceID     string
 }
 
 // A selected Attach's own Service is not the entire database consumer set.
 // Granted and credential-reusing Attaches can reach the same database; their
 // ready Services must be sealed and stopped as part of the Restore boundary.
-func selectPostgresRestoreConsumers(ctx context.Context, snapshot *restoreSnapshot,
-	current backupruntime.BackupPostgresSourceSnapshot, revision int64,
-) ([]postgresRestoreConsumerIdentity, []backupruntime.BackupRestorePostgresDependentIndex, error) {
-	owner := postgresRestoreConsumerIdentity{ServiceID: current.ConsumerServiceID,
+func selectDatabaseRestoreConsumers(ctx context.Context, snapshot *restoreSnapshot,
+	current databaseRestoreConsumerSource, revision int64,
+) ([]databaseRestoreConsumerIdentity, []backupruntime.BackupRestoreDatabaseDependentIndex, error) {
+	owner := databaseRestoreConsumerIdentity{ServiceID: current.ConsumerServiceID,
 		EnvironmentID: current.ConsumerEnvironmentID}
-	selected := map[string]postgresRestoreConsumerIdentity{owner.ServiceID: owner}
-	indexes := make([]backupruntime.BackupRestorePostgresDependentIndex, 0)
+	selected := map[string]databaseRestoreConsumerIdentity{owner.ServiceID: owner}
+	indexes := make([]backupruntime.BackupRestoreDatabaseDependentIndex, 0)
 	// A credential child inherits its parent's grant facts. Walk credential
 	// descendants of every discovered Attach, including grant consumers, while
 	// the grant edge itself is selected only from the original database owner.
@@ -51,12 +58,12 @@ func selectPostgresRestoreConsumers(ctx context.Context, snapshot *restoreSnapsh
 		}
 		for _, index := range prefixes {
 			read, err := snapshot.fixedSnapshotStore.Range(ctx, etcdstore.RangeRequest{
-				Prefix: index.prefix, Limit: backupruntime.MaxPostgresRestoreConsumers + 1,
+				Prefix: index.prefix, Limit: backupruntime.MaxDatabaseRestoreConsumers + 1,
 				Revision: revision})
 			if err != nil {
 				return nil, nil, err
 			}
-			if read.More || len(read.Values) > backupruntime.MaxPostgresRestoreConsumers {
+			if read.More || len(read.Values) > backupruntime.MaxDatabaseRestoreConsumers {
 				etcdstore.ClearRangeValues(read.Values)
 				return nil, nil, errs.New(
 					errs.KindValidationFailed,
@@ -104,10 +111,10 @@ func selectPostgresRestoreConsumers(ctx context.Context, snapshot *restoreSnapsh
 					etcdstore.ClearRangeValues(read.Values)
 					return nil, nil, errs.New(errs.KindStateConflict, "PostgreSQL Restore dependent Attach changed")
 				}
-				indexes = append(indexes, backupruntime.BackupRestorePostgresDependentIndex{
+				indexes = append(indexes, backupruntime.BackupRestoreDatabaseDependentIndex{
 					Key: row.Key, Revision: row.ModRevision, AttachID: id,
 					AttachRevision: childRevision, AttachSHA256: hex.EncodeToString(childSHA[:])})
-				identity := postgresRestoreConsumerIdentity{ServiceID: child.ServiceID,
+				identity := databaseRestoreConsumerIdentity{ServiceID: child.ServiceID,
 					EnvironmentID: child.EnvironmentID}
 				if previous, exists := selected[identity.ServiceID]; exists && previous != identity {
 					etcdstore.ClearRangeValues(read.Values)
@@ -121,7 +128,7 @@ func selectPostgresRestoreConsumers(ctx context.Context, snapshot *restoreSnapsh
 					seen[id] = true
 					queue = append(queue, id)
 				}
-				if len(seen) > backupruntime.MaxPostgresRestoreConsumers {
+				if len(seen) > backupruntime.MaxDatabaseRestoreConsumers {
 					etcdstore.ClearRangeValues(read.Values)
 					return nil, nil, errs.New(
 						errs.KindValidationFailed,
@@ -132,10 +139,10 @@ func selectPostgresRestoreConsumers(ctx context.Context, snapshot *restoreSnapsh
 			etcdstore.ClearRangeValues(read.Values)
 		}
 	}
-	if len(selected) > backupruntime.MaxPostgresRestoreConsumers {
+	if len(selected) > backupruntime.MaxDatabaseRestoreConsumers {
 		return nil, nil, errs.New(errs.KindValidationFailed, "PostgreSQL Restore consumer closure exceeds its bound")
 	}
-	result := make([]postgresRestoreConsumerIdentity, 0, len(selected))
+	result := make([]databaseRestoreConsumerIdentity, 0, len(selected))
 	for _, identity := range selected {
 		result = append(result, identity)
 	}

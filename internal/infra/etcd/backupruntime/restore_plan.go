@@ -20,7 +20,7 @@ func ValidateRestoreExecutionPlan(record BackupRestoreRecord, plan *agentpb.Exec
 	case BackupRuntimeSourceVolume:
 		return ValidateVolumeRestoreExecutionPlan(record, plan)
 	case BackupRuntimeSourceAttach:
-		return ValidatePostgresRestoreExecutionPlan(record, plan)
+		return ValidateDatabaseRestoreExecutionPlan(record, plan)
 	default:
 		return CorruptBackupRuntimeRecord()
 	}

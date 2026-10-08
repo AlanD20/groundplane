@@ -113,7 +113,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		return errs.New(errs.KindValidationFailed, "Backing-service adapter Service is invalid")
 	}
 	customCreation := creation.Service.Desired.Adapter == "custom"
-	if creation.Service.Desired.Adapter == "postgres:16" {
+	if creation.Service.Desired.Adapter == "postgres" {
 		if creation.PostgresRelease == nil ||
 			backingpostgresrelease.Validate(*creation.PostgresRelease) != nil ||
 			creation.PostgresRelease.EnvironmentID != creation.Environment.ID ||

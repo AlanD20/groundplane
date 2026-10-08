@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type PostgresRestorePlanInput struct {
+type DatabaseRestorePlanInput struct {
 	Task      etcd.TaskRecord
 	Restore   backupruntime.BackupRestoreRecord
 	Scope     *agentpb.BackupPlanScope
@@ -23,7 +23,7 @@ type PostgresRestorePlanInput struct {
 	Artifacts []*agentpb.ComposeArtifact
 }
 
-func BuildPostgresRestorePlan(input PostgresRestorePlanInput) (*agentpb.ExecutionPlan, error) {
+func BuildDatabaseRestorePlan(input DatabaseRestorePlanInput) (*agentpb.ExecutionPlan, error) {
 	task, restore := input.Task, input.Restore
 	if backupruntime.ValidateBackupRestoreRecord(restore) != nil ||
 		restore.Point.SourceKind != backupruntime.BackupRuntimeSourceAttach ||
@@ -38,18 +38,19 @@ func BuildPostgresRestorePlan(input PostgresRestorePlanInput) (*agentpb.Executio
 		len(task.Params) != 0 || len(task.Materializations) != 0 || len(task.Steps) != 1 ||
 		!task.CreatedAt.Equal(restore.CreatedAt) || input.Scope == nil || input.Authority == nil ||
 		len(input.Artifacts) == 0 {
-		return nil, errs.New(errs.KindValidationFailed, "PostgreSQL Restore Task authority is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "database Restore Task authority is invalid")
 	}
 	if task.Status != taskjournal.TaskStatusPending && task.Status != taskjournal.TaskStatusRunning ||
 		task.Status == taskjournal.TaskStatusPending && restore.State != backupruntime.BackupRestoreQueued {
-		return nil, errs.New(errs.KindValidationFailed, "PostgreSQL Restore Task state is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "database Restore Task state is invalid")
 	}
 	step := task.Steps[0]
 	if step.Kind != taskjournal.TaskStepOperation || ids.Validate(ids.KindStep, step.ID) != nil ||
-		step.ID != input.Authority.StepId || input.Authority.GetRestore().GetPostgres() == nil ||
+		step.ID != input.Authority.StepId ||
+		(input.Authority.GetRestore().GetPostgres() == nil && input.Authority.GetRestore().GetMysql() == nil) ||
 		input.Authority.ExecutionId != restore.RestoreGenerationID ||
 		input.Authority.StepDeadlineUnixNano != uint64(task.CreatedAt.Add(6*time.Hour).UnixNano()) {
-		return nil, errs.New(errs.KindValidationFailed, "PostgreSQL Restore Step authority is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "database Restore Step authority is invalid")
 	}
 	authority := input.Authority
 	var err error
@@ -73,13 +74,13 @@ func BuildPostgresRestorePlan(input PostgresRestorePlanInput) (*agentpb.Executio
 	if err != nil {
 		return nil, err
 	}
-	if err := backupruntime.ValidatePostgresRestoreExecutionPlan(restore, sealed); err != nil {
+	if err := backupruntime.ValidateDatabaseRestoreExecutionPlan(restore, sealed); err != nil {
 		return nil, err
 	}
 	if task.PlanHash != "" {
 		digest, err := hex.DecodeString(task.PlanHash)
 		if err != nil || !bytes.Equal(digest, sealed.PlanHash) {
-			return nil, errs.New(errs.KindStateConflict, "PostgreSQL Restore sealed plan changed")
+			return nil, errs.New(errs.KindStateConflict, "database Restore sealed plan changed")
 		}
 	}
 	return sealed, nil

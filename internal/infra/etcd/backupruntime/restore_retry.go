@@ -113,7 +113,7 @@ func RestoreRetryConditions(source RestoreRetrySnapshot, candidate BackupRestore
 	comparison.MutationStarted, comparison.Artifact = source.Restore.MutationStarted, source.Restore.Artifact
 	comparison.StagedTreeManifestSHA256 = source.Restore.StagedTreeManifestSHA256
 	comparison.ConfigProgress, comparison.VolumeProgress = source.Restore.ConfigProgress, source.Restore.VolumeProgress
-	comparison.PostgresProgress = source.Restore.PostgresProgress
+	comparison.DatabaseProgress = source.Restore.DatabaseProgress
 	if !BackupRestoreRecordsEqual(comparison, source.Restore) {
 		return nil, 0, errs.New(errs.KindStateConflict, "Restore retry selected authority changed")
 	}

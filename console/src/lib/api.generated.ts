@@ -161,6 +161,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/backing-service-adapters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List supported backing adapter families and versions */
+        get: operations["backing-service.adapters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/backing-services": {
         parameters: {
             query?: never;
@@ -696,6 +713,23 @@ export interface paths {
         put?: never;
         /** Restore the selected Recovery Point to its original target */
         post: operations["backup.restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/restore/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review actual database versions before Restore */
+        post: operations["backup.restore.preview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1352,6 +1386,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/software/activations/{task}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect component activation outcomes */
+        get: operations["software.activation.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/software/preparations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List durable software preparations */
+        get: operations["software.preparations"];
+        put?: never;
+        /** Prepare immutable software without activating it */
+        post: operations["software.prepare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/software/preparations/{task}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect preparation provenance and verified artifacts */
+        get: operations["software.preparation.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/software/preparations/{task}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a verified software preparation */
+        post: operations["software.apply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/software/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List recent published component releases */
+        get: operations["software.releases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks": {
         parameters: {
             query?: never;
@@ -1729,6 +1849,27 @@ export interface components {
             name?: string;
             service_id: string;
         };
+        BackingAdapter: {
+            custom: boolean;
+            key: string;
+            label: string;
+            requires_authentication_mode: boolean;
+            versions: components["schemas"]["BackingAdapterVersion"][] | null;
+        };
+        BackingAdapterCatalog: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/BackingAdapterCatalog.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["BackingAdapter"][] | null;
+        };
+        BackingAdapterVersion: {
+            /** @description Accepted upstream image references for this server version. */
+            image_pattern: string;
+            version: string;
+        };
         BackingHookConfiguration: {
             after_start?: components["schemas"]["BackingHookDefinition"];
             attach?: components["schemas"]["BackingHookDefinition"];
@@ -1774,6 +1915,8 @@ export interface components {
              */
             readonly $schema?: string;
             adapter: string;
+            /** @description Required supported server version for a managed database adapter; omitted for Custom. */
+            adapter_version?: string;
             /**
              * @description Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
              * @enum {string}
@@ -1789,7 +1932,9 @@ export interface components {
             zone: components["schemas"]["BackingServiceZoneCreate"];
         } & ({
             /** @enum {string} */
-            adapter: "valkey:9";
+            adapter: "valkey";
+            /** @description Required supported server version for a managed database adapter; omitted for Custom. */
+            adapter_version: string;
             /**
              * @description Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
              * @enum {string}
@@ -1797,7 +1942,9 @@ export interface components {
             authentication: "username_password" | "password" | "none";
         } | {
             /** @enum {string} */
-            adapter: "postgres:16";
+            adapter: "postgres" | "mysql";
+            /** @description Required supported server version for a managed database adapter; omitted for Custom. */
+            adapter_version: string;
         } | {
             /** @enum {string} */
             adapter: "custom";
@@ -2741,6 +2888,14 @@ export interface components {
             /** Format: int64 */
             revision?: number;
         };
+        PreparedSoftwareArtifact: {
+            architecture: string;
+            /** @enum {string} */
+            component: "controller" | "agent";
+            manifest_digest: string;
+            os: string;
+            reference: string;
+        };
         Progress: {
             /** Format: int64 */
             downloaded_bytes?: number;
@@ -2813,6 +2968,7 @@ export interface components {
             connector_prefix: string;
             /** Format: date-time */
             created_at: string;
+            database?: components["schemas"]["RecoveryPointDatabase"];
             encrypted: boolean;
             id: string;
             /** Format: int64 */
@@ -2832,6 +2988,13 @@ export interface components {
             /** Format: int64 */
             source_count: number;
             task_id: string;
+        };
+        RecoveryPointDatabase: {
+            artifact_format: string;
+            backup_tool_version: string;
+            /** @enum {string} */
+            family: "postgres" | "mysql";
+            source_server_version: string;
         };
         RecoveryPointPage: {
             items: components["schemas"]["RecoveryPoint"][] | null;
@@ -3017,6 +3180,29 @@ export interface components {
             release_id: string;
             task_id: string;
         };
+        RestoreDatabaseReview: {
+            artifact_format: string;
+            backup_tool_version: string;
+            /** @enum {string} */
+            compatibility: "same-version" | "unverified";
+            /** @enum {string} */
+            family: "postgres" | "mysql";
+            restore_tool_version: string;
+            review_sha256: string;
+            source_server_version: string;
+            target_server_version: string;
+            version_difference: boolean;
+        };
+        RestorePreview: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RestorePreview.json
+             */
+            readonly $schema?: string;
+            database?: components["schemas"]["RestoreDatabaseReview"];
+            recovery_point_id: string;
+        };
         RestoreRequest: {
             /**
              * Format: uri
@@ -3024,9 +3210,11 @@ export interface components {
              * @example /api/v1/RestoreRequest.json
              */
             readonly $schema?: string;
+            acknowledge_version_difference?: boolean;
             age_identity?: string;
             recovery_point_id?: string;
             source_id: string;
+            version_review_sha256?: string;
         };
         RollbackRequest: {
             /**
@@ -3280,6 +3468,7 @@ export interface components {
              */
             readonly $schema?: string;
             adapter?: string;
+            adapter_version?: string;
             aliases?: {
                 [key: string]: string[] | null;
             };
@@ -3358,6 +3547,7 @@ export interface components {
              */
             readonly $schema?: string;
             adapter?: string;
+            adapter_version?: string;
             aliases?: {
                 [key: string]: string[] | null;
             };
@@ -3498,6 +3688,93 @@ export interface components {
             ro?: boolean;
             /** @description Stable Volume id in this Environment */
             volume: string;
+        };
+        SoftwareActivation: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/SoftwareActivation.json
+             */
+            readonly $schema?: string;
+            agent_applied: boolean;
+            agent_task_id?: string;
+            controller_applied: boolean;
+            controller_task_id?: string;
+            error_code?: string;
+            error_detail?: string;
+            phase: string;
+            preparation_task_id: string;
+            /** @enum {string} */
+            selection: "controller" | "agent" | "both";
+            task_id: string;
+        };
+        SoftwarePreparation: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/SoftwarePreparation.json
+             */
+            readonly $schema?: string;
+            artifacts: components["schemas"]["PreparedSoftwareArtifact"][];
+            /** Format: date-time */
+            created_at: string;
+            error_code?: string;
+            error_detail?: string;
+            /** @enum {string} */
+            phase: "accepted" | "preparing" | "agent_published" | "controller_published" | "verified" | "failed";
+            provenance: components["schemas"]["SoftwareProvenance"][];
+            ref: string;
+            /** @enum {string} */
+            selection: "controller" | "agent" | "both";
+            /** @enum {string} */
+            source_kind: "source_ref" | "release";
+            task_id: string;
+        };
+        SoftwarePreparationPage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/SoftwarePreparationPage.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["SoftwarePreparation"][];
+            next_cursor?: string;
+        };
+        SoftwarePreparationRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/SoftwarePreparationRequest.json
+             */
+            readonly $schema?: string;
+            ref: string;
+            /** @enum {string} */
+            selection: "controller" | "agent" | "both";
+            /** @enum {string} */
+            source_kind: "source_ref" | "release";
+        };
+        SoftwareProvenance: {
+            commit: string;
+            /** @enum {string} */
+            component: "controller" | "agent";
+            ref: string;
+        };
+        SoftwareReleaseCatalog: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/SoftwareReleaseCatalog.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["SoftwareReleaseChoice"][];
+        };
+        SoftwareReleaseChoice: {
+            name: string;
+            /** Format: date-time */
+            published_at: string;
+            ref: string;
+            /** @enum {string} */
+            selection: "controller" | "agent" | "both";
         };
         Task: {
             /**
@@ -4223,6 +4500,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Attach"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backing-service.adapters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackingAdapterCatalog"];
                 };
             };
             /** @description Error */
@@ -5784,6 +6090,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backup.restore.preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestorePreview"];
                 };
             };
             /** @description Error */
@@ -7782,6 +8123,199 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "software.activation.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwareActivation"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "software.preparations": {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwarePreparationPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "software.prepare": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoftwarePreparationRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "software.preparation.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwarePreparation"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "software.apply": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                task: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "software.releases": {
+        parameters: {
+            query: {
+                selection: "controller" | "agent" | "both";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwareReleaseCatalog"];
                 };
             };
             /** @description Error */

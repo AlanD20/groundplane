@@ -6,16 +6,16 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/databaserestoreauthority"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresbackingguard"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresrestoreauthority"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *TaskRepository) preparePostgresRestoreSuccessfulTerminal(ctx context.Context,
+func (repository *TaskRepository) prepareDatabaseRestoreSuccessfulTerminal(ctx context.Context,
 	runtime *BackupRuntimeRepository, current TaskAssignment, result taskjournal.TaskResultRecord, at time.Time,
 	restored etcdstore.Versioned[backupruntime.BackupRestoreRecord],
 ) (TaskRecord, []etcdstore.Condition, []etcdstore.Mutation, error) {
@@ -25,14 +25,14 @@ func (repository *TaskRepository) preparePostgresRestoreSuccessfulTerminal(ctx c
 		return TaskRecord{}, nil, nil, err
 	}
 	defer taskPlan.clear()
-	next, err := backupruntime.CompletePostgresRestore(restored.Record, *taskPlan.record.FinishedAt)
+	next, err := backupruntime.CompleteDatabaseRestore(restored.Record, *taskPlan.record.FinishedAt)
 	if err != nil {
 		return TaskRecord{}, nil, nil, err
 	}
-	return repository.composePostgresRestoreTerminal(ctx, runtime, current.Task, restored, next, taskPlan)
+	return repository.composeDatabaseRestoreTerminal(ctx, runtime, current.Task, restored, next, taskPlan)
 }
 
-func (repository *TaskRepository) preparePendingPostgresRestoreTerminal(ctx context.Context,
+func (repository *TaskRepository) preparePendingDatabaseRestoreTerminal(ctx context.Context,
 	runtime *BackupRuntimeRepository, current etcdstore.Versioned[TaskRecord],
 	status taskjournal.TaskStatus, at time.Time,
 	restored etcdstore.Versioned[backupruntime.BackupRestoreRecord],
@@ -40,7 +40,7 @@ func (repository *TaskRepository) preparePendingPostgresRestoreTerminal(ctx cont
 	if restored.Record.State != backupruntime.BackupRestoreQueued {
 		return TaskRecord{}, nil, nil, errs.New(
 			errs.KindStateConflict,
-			"pending PostgreSQL Restore has execution progress",
+			"pending database Restore has execution progress",
 		)
 	}
 	at = backupTerminalTimestamp(at, restored.Record.UpdatedAt)
@@ -49,14 +49,14 @@ func (repository *TaskRepository) preparePendingPostgresRestoreTerminal(ctx cont
 		return TaskRecord{}, nil, nil, err
 	}
 	defer taskPlan.clear()
-	next, err := backupruntime.FailPostgresRestoreBeforeMutation(restored.Record, *taskPlan.record.FinishedAt)
+	next, err := backupruntime.FailDatabaseRestoreBeforeMutation(restored.Record, *taskPlan.record.FinishedAt)
 	if err != nil {
 		return TaskRecord{}, nil, nil, err
 	}
-	return repository.composePostgresRestoreTerminal(ctx, runtime, current, restored, next, taskPlan)
+	return repository.composeDatabaseRestoreTerminal(ctx, runtime, current, restored, next, taskPlan)
 }
 
-func (repository *TaskRepository) preparePostgresRestoreFailure(ctx context.Context,
+func (repository *TaskRepository) prepareDatabaseRestoreFailure(ctx context.Context,
 	runtime *BackupRuntimeRepository, current TaskAssignment, status taskjournal.TaskStatus,
 	result taskjournal.TaskResultRecord, at time.Time,
 	restored etcdstore.Versioned[backupruntime.BackupRestoreRecord],
@@ -70,17 +70,17 @@ func (repository *TaskRepository) preparePostgresRestoreFailure(ctx context.Cont
 	defer taskPlan.clear()
 	var next backupruntime.BackupRestoreRecord
 	if restored.Record.MutationStarted {
-		next, err = backupruntime.RequirePostgresRestoreRecovery(restored.Record, *taskPlan.record.FinishedAt)
+		next, err = backupruntime.RequireDatabaseRestoreRecovery(restored.Record, *taskPlan.record.FinishedAt)
 	} else {
-		next, err = backupruntime.FailPostgresRestoreBeforeMutation(restored.Record, *taskPlan.record.FinishedAt)
+		next, err = backupruntime.FailDatabaseRestoreBeforeMutation(restored.Record, *taskPlan.record.FinishedAt)
 	}
 	if err != nil {
 		return TaskRecord{}, nil, nil, err
 	}
-	return repository.composePostgresRestoreTerminal(ctx, runtime, current.Task, restored, next, taskPlan)
+	return repository.composeDatabaseRestoreTerminal(ctx, runtime, current.Task, restored, next, taskPlan)
 }
 
-func (repository *TaskRepository) composePostgresRestoreTerminal(ctx context.Context,
+func (repository *TaskRepository) composeDatabaseRestoreTerminal(ctx context.Context,
 	runtime *BackupRuntimeRepository, current etcdstore.Versioned[TaskRecord],
 	restored etcdstore.Versioned[backupruntime.BackupRestoreRecord], next backupruntime.BackupRestoreRecord,
 	taskPlan backupTaskTerminalPlan,
@@ -99,28 +99,29 @@ func (repository *TaskRepository) composePostgresRestoreTerminal(ctx context.Con
 	if len(read.Values) != len(keys) {
 		return TaskRecord{}, nil, nil, errs.New(
 			errs.KindStateConflict,
-			"PostgreSQL Restore terminal authority is incomplete",
+			"database Restore terminal authority is incomplete",
 		)
 	}
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 {
 			return TaskRecord{}, nil, nil, errs.New(
 				errs.KindStateConflict,
-				"PostgreSQL Restore terminal authority is incomplete",
+				"database Restore terminal authority is incomplete",
 			)
 		}
 	}
 	plan, err := backupruntime.DecodeBackupExecutionPlan(read.Values[2].Value)
-	if err != nil || next.CurrentTarget.Postgres == nil || read.Values[0].ModRevision != restored.Revision ||
+	if err != nil || next.CurrentTarget.Postgres == nil && next.CurrentTarget.MySQL == nil ||
+		read.Values[0].ModRevision != restored.Revision ||
 		read.Values[1].Version != 1 || string(read.Values[1].Value) != next.TaskID ||
-		read.Values[2].Version != 1 || backupruntime.ValidatePostgresRestoreExecutionPlan(next, plan) != nil ||
+		read.Values[2].Version != 1 || backupruntime.ValidateDatabaseRestoreExecutionPlan(next, plan) != nil ||
 		current.Record.ID != next.TaskID || current.Record.OperationID != next.OperationID ||
 		current.Record.Owner.EnvironmentID != next.EnvironmentID || !current.Record.CreatedAt.Equal(next.CreatedAt) ||
 		current.Record.PlanID != plan.PlanId || current.Record.PlanHash != hex.EncodeToString(plan.PlanHash) ||
 		read.Values[1].ModRevision > restored.Revision {
-		return TaskRecord{}, nil, nil, errs.New(errs.KindStateConflict, "PostgreSQL Restore terminal authority changed")
+		return TaskRecord{}, nil, nil, errs.New(errs.KindStateConflict, "database Restore terminal authority changed")
 	}
-	authority, err := postgresrestoreauthority.Read(ctx, repository.store, next, restored.ReadRevision)
+	authority, err := databaserestoreauthority.Read(ctx, repository.store, next, restored.ReadRevision)
 	if err != nil {
 		return TaskRecord{}, nil, nil, err
 	}
@@ -130,11 +131,11 @@ func (repository *TaskRepository) composePostgresRestoreTerminal(ctx context.Con
 	if err != nil {
 		return TaskRecord{}, nil, nil, err
 	}
-	backingEnvironmentID, found, err := backupruntime.PostgresRestoreBackingEnvironmentID(restored.Record)
+	backingEnvironmentID, found, err := backupruntime.DatabaseRestoreBackingEnvironmentID(restored.Record)
 	if err != nil || !found {
 		return TaskRecord{}, nil, nil, errs.New(
 			errs.KindStateConflict,
-			"PostgreSQL Restore backing guard authority is invalid",
+			"database Restore backing guard authority is invalid",
 		)
 	}
 	releaseBackingGuard := next.State == backupruntime.BackupRestoreCompleted ||

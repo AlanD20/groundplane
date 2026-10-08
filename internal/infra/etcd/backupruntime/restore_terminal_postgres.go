@@ -2,13 +2,13 @@ package backupruntime
 
 import "time"
 
-func CompletePostgresRestore(current BackupRestoreRecord, at time.Time) (BackupRestoreRecord, error) {
+func CompleteDatabaseRestore(current BackupRestoreRecord, at time.Time) (BackupRestoreRecord, error) {
 	if ValidateBackupRestoreRecord(current) != nil || current.Point.SourceKind != BackupRuntimeSourceAttach ||
 		current.State != BackupRestoreVerified || current.Verification != BackupVerificationPassed ||
-		current.PostgresProgress == nil || !current.PostgresProgress.ApplyStarted ||
-		current.PostgresProgress.RestoreVerificationSHA256 == "" ||
-		current.PostgresProgress.RecoveryCursor != current.ServiceCount ||
-		!current.PostgresProgress.SourceCleanupCompleted ||
+		current.DatabaseProgress == nil || !current.DatabaseProgress.ApplyStarted ||
+		current.DatabaseProgress.RestoreVerificationSHA256 == "" ||
+		current.DatabaseProgress.RecoveryCursor != current.ServiceCount ||
+		!current.DatabaseProgress.SourceCleanupCompleted ||
 		!ValidBackupRuntimeInstant(at) || !at.After(current.UpdatedAt) {
 		return BackupRestoreRecord{}, invalidBackupRuntimeRecord(
 			"PostgreSQL Restore completion lacks apply proof, consumer recovery, or physical source cleanup")
@@ -21,7 +21,7 @@ func CompletePostgresRestore(current BackupRestoreRecord, at time.Time) (BackupR
 	return next, nil
 }
 
-func FailPostgresRestoreBeforeMutation(current BackupRestoreRecord, at time.Time) (BackupRestoreRecord, error) {
+func FailDatabaseRestoreBeforeMutation(current BackupRestoreRecord, at time.Time) (BackupRestoreRecord, error) {
 	if ValidateBackupRestoreRecord(current) != nil || current.Point.SourceKind != BackupRuntimeSourceAttach ||
 		current.MutationStarted || current.State == BackupRestoreFailedSafe ||
 		!ValidBackupRuntimeInstant(at) || !at.After(current.UpdatedAt) {
@@ -35,7 +35,7 @@ func FailPostgresRestoreBeforeMutation(current BackupRestoreRecord, at time.Time
 	return next, nil
 }
 
-func RequirePostgresRestoreRecovery(current BackupRestoreRecord, at time.Time) (BackupRestoreRecord, error) {
+func RequireDatabaseRestoreRecovery(current BackupRestoreRecord, at time.Time) (BackupRestoreRecord, error) {
 	if ValidateBackupRestoreRecord(current) != nil || current.Point.SourceKind != BackupRuntimeSourceAttach ||
 		!current.MutationStarted || current.State == BackupRestoreCompleted ||
 		!ValidBackupRuntimeInstant(at) || !at.After(current.UpdatedAt) {

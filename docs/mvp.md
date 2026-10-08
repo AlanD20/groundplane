@@ -176,7 +176,7 @@ an incompatible disruptive change is rejected, never silently recreated.
 Release Groups must preserve declared order, hook selection and failure behavior.
 
 Gate B adds source-specific Backup, verified Restore to original surviving targets,
-retention and recovery. PostgreSQL Attach, Environment config and Volume are the
+retention and recovery. PostgreSQL or MySQL Attach, Environment config and Volume are the
 accepted source kinds. Valkey recovery still needs a safe source/artifact decision;
 reject unsupported sources before Task publication. Backup/Restore requires
 separate qualification; hosting evidence does not declare it complete.

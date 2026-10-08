@@ -8,7 +8,7 @@ type EntrySource struct {
 	SecretRef     string `json:"secret_ref,omitempty"`
 	AttachID      string `json:"attach_id,omitempty"`
 	GrantAttachID string `json:"grant_attach_id,omitempty"`
-	Fact          string `json:"fact,omitempty"` // e.g. "pg16_URL"
+	Fact          string `json:"fact,omitempty"` // e.g. "pg_URL"
 }
 
 type Entry struct {

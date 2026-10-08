@@ -252,7 +252,7 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 			Record: testservices.ServiceRecord{
 				EnvironmentID: fixture.backingEnvID, BackingNetworkID: fixture.networkA,
 				Desired: core.Service{
-					ID: fixture.backingServiceID, Name: "valkey", Adapter: "valkey:9",
+					ID: fixture.backingServiceID, Name: "valkey", Adapter: "valkey", AdapterVersion: "9",
 					Authentication: core.BackingAuthenticationPassword,
 				},
 			},

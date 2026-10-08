@@ -199,12 +199,12 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	repository.records[ownerID] = repository.records["api-db"]
 	// Rationale: Backup preparation may reveal only the exact private database
 	// and role captured by this ready Attach at the repository revision.
-	var backupIdentity testbackupplanning.BackupPostgresIdentity
+	var backupIdentity testbackupplanning.BackupDatabaseIdentity
 	err = service.ResolveBackupIdentity(
 		ctx,
 		repository.records[ownerID],
 		repository.facts,
-		func(identity testbackupplanning.BackupPostgresIdentity) error {
+		func(identity testbackupplanning.BackupDatabaseIdentity) error {
 			backupIdentity = identity
 			return nil
 		},
@@ -339,15 +339,16 @@ func (attachFactTestCrypt) Open(_ context.Context, ciphertext []byte) ([]byte, e
 
 type attachFactTestAdapter struct{}
 
-func (attachFactTestAdapter) Key() string                       { return "test:1" }
-func (attachFactTestAdapter) Label() string                     { return "Test" }
-func (attachFactTestAdapter) DefaultImage() (string, error)     { return "test:1", nil }
-func (attachFactTestAdapter) FactsPrefix() string               { return "test_" }
-func (attachFactTestAdapter) URLScheme() string                 { return "pgsql://" }
-func (attachFactTestAdapter) Port() string                      { return "5432" }
-func (attachFactTestAdapter) Custom() bool                      { return false }
-func (attachFactTestAdapter) SupportsGrants() bool              { return true }
-func (attachFactTestAdapter) SupportsAuthenticationModes() bool { return false }
+func (attachFactTestAdapter) Key() string                         { return "test:1" }
+func (attachFactTestAdapter) Label() string                       { return "Test" }
+func (attachFactTestAdapter) DefaultImage(string) (string, error) { return "test:1", nil }
+func (attachFactTestAdapter) CredentialIdentityLimit() int        { return 63 }
+func (attachFactTestAdapter) FactsPrefix() string                 { return "test_" }
+func (attachFactTestAdapter) URLScheme() string                   { return "pgsql://" }
+func (attachFactTestAdapter) Port() string                        { return "5432" }
+func (attachFactTestAdapter) Custom() bool                        { return false }
+func (attachFactTestAdapter) SupportsGrants() bool                { return true }
+func (attachFactTestAdapter) SupportsAuthenticationModes() bool   { return false }
 func (attachFactTestAdapter) FactSchema(core.BackingAuthentication) []adapters.FactDefinition {
 	return []adapters.FactDefinition{
 		{Field: adapters.FactDatabase},

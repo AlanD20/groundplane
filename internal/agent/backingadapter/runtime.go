@@ -111,6 +111,16 @@ func (runtime *Runtime) BackingContainer(ctx context.Context, runtimeServiceID s
 
 func adapterCommand(step Step) (string, []string, []byte, error) {
 	switch step.Op {
+	case "mysql_sql":
+		if step.Database != "mysql" || step.Program != "" || len(step.Args) != 0 || len(step.Stdin) == 0 {
+			return "", nil, nil, errs.New(errs.KindValidationFailed, "agent: compiled MySQL operation is invalid")
+		}
+		// This is a closed client invocation, never operator-authored shell.
+		// The image's root credential stays in the child environment, not argv.
+		return "sh", []string{
+			"-ec",
+			`MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --no-defaults --protocol=socket --user=root --database=mysql --batch --skip-column-names`,
+		}, step.Stdin, nil
 	case "sql":
 		if step.Database == "" || step.Program != "" || len(step.Args) != 0 || len(step.Stdin) == 0 {
 			return "", nil, nil, errs.New(errs.KindValidationFailed, "agent: compiled SQL operation is invalid")

@@ -74,12 +74,12 @@ func TestEntryFileOwnershipRequiresBothExplicitValues(t *testing.T) {
 // the discriminated human-API source; a nested Blueprint shape is not wire-compatible.
 func TestBuildEntrySourceUsesFlatHumanAPIFactShape(t *testing.T) {
 	source, err := buildEntrySource(entrySourceOptions{
-		factAttach: "att_01J", factKey: "pg16_URL", factSet: true,
+		factAttach: "att_01J", factKey: "pg_URL", factSet: true,
 	})
 	if err != nil {
 		t.Fatalf("buildEntrySource() error = %v", err)
 	}
-	if source.AttachID != "att_01J" || source.Fact != "pg16_URL" {
+	if source.AttachID != "att_01J" || source.Fact != "pg_URL" {
 		t.Fatalf("buildEntrySource() = %#v", source)
 	}
 	if source.Kind != "fact" {

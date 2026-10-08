@@ -56,8 +56,9 @@ func BackupOrphanRecordFromRun(run BackupRunRecord, ordinal uint32) BackupOrphan
 	source := run.Sources[ordinal]
 	orphan := BackupOrphanRecord{
 		Target: backupSourceTarget(run, source), Evidence: source.Evidence, ConfigArchive: source.ConfigArchive,
-		VolumeArchive: source.VolumeArchive,
-		Upload:        source.Upload, Object: source.Object, Phase: source.Phase, TaskID: run.TaskID,
+		VolumeArchive: source.VolumeArchive, PostgresArchive: source.PostgresArchive,
+		MySQLArchive: source.MySQLArchive,
+		Upload:       source.Upload, Object: source.Object, Phase: source.Phase, TaskID: run.TaskID,
 		Reconciliation: BackupOrphanReconciliationAuthority{
 			OperationID: run.OperationID, PolicyRevision: run.PolicyRevision, PolicySHA256: run.PolicySHA256, RetentionKeep: run.RetentionKeep,
 		},
@@ -68,6 +69,12 @@ func BackupOrphanRecordFromRun(run BackupRunRecord, ordinal uint32) BackupOrphan
 		orphan.Postgres = BackupPostgresPointIdentity{Database: postgres.Database, Role: postgres.Role,
 			BackingEnvironmentID: postgres.BackingEnvironmentID,
 			BackingServiceID:     postgres.BackingServiceID, ConsumerServiceID: postgres.ConsumerServiceID}
+	}
+	if source.Snapshot.MySQL != nil {
+		mysql := source.Snapshot.MySQL
+		orphan.MySQL = BackupMySQLPointIdentity{Database: mysql.Database, Role: mysql.Role,
+			BackingEnvironmentID: mysql.BackingEnvironmentID,
+			BackingServiceID:     mysql.BackingServiceID, ConsumerServiceID: mysql.ConsumerServiceID}
 	}
 	return orphan
 }

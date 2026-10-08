@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/adapters/custom"
-	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
+	"github.com/AlanD20/groundplane/internal/adapters/postgres"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
@@ -37,8 +37,8 @@ var (
 // Rationale: a durable Attach task must rebuild its pinned external-network artifact and typed identity
 // procedure without persisting the plaintext password or consulting mutable environment topology.
 func TestTaskPlanResolverBuildsAttachNetworkAndAdapterProcedure(t *testing.T) {
-	registerAttachPlanPostgres.Do(postgres16.Register)
-	fixture := newAttachPlanFixture(t, "postgres:16", true)
+	registerAttachPlanPostgres.Do(postgres.Register)
+	fixture := newAttachPlanFixture(t, "postgres", true)
 	plan, err := fixture.resolver.ResolveExecutionPlan(context.Background(), fixture.task)
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)
@@ -230,8 +230,8 @@ func TestTaskPlanResolverReconcilesInactiveAttachWithoutActivatingProfile(t *tes
 // Rationale: detach must revoke grants, reconcile the pinned artifact without the removed membership, and
 // only then deprovision the backing identity.
 func TestTaskPlanResolverOrdersDetachNetworkRemoval(t *testing.T) {
-	registerAttachPlanPostgres.Do(postgres16.Register)
-	fixture := newAttachPlanFixture(t, "postgres:16", true)
+	registerAttachPlanPostgres.Do(postgres.Register)
+	fixture := newAttachPlanFixture(t, "postgres", true)
 	makeNativeAttachRuntime(t, &fixture)
 	fixture.record.Status = core.AttachDetaching
 	fixture.record.Operation = testattachments.AttachOperationDetach
@@ -296,8 +296,8 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 	if withGrant {
 		grantIDs = []string{grantID}
 		factSets = []testattachments.FactSetMetadata{
-			{Facts: []testattachments.FactDefinition{{Key: "pg16_DATABASE"}}},
-			{GrantAttachID: grantID, Facts: []testattachments.FactDefinition{{Key: "pg16_DATABASE"}}},
+			{Facts: []testattachments.FactDefinition{{Key: "pg_DATABASE"}}},
+			{GrantAttachID: grantID, Facts: []testattachments.FactDefinition{{Key: "pg_DATABASE"}}},
 		}
 	}
 	record, err := testattachments.NewPendingAttachRecord(

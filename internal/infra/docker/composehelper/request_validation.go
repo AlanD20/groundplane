@@ -42,8 +42,8 @@ func validateRequest(
 	if request.GetBackupVolumeConsumer() != nil {
 		return validateBackupVolumeConsumerRequest(request, plan, selected)
 	}
-	if request.GetBackupPostgresConsumer() != nil {
-		return validateBackupPostgresConsumerRequest(request, plan, selected)
+	if request.GetBackupPostgresConsumer() != nil || request.GetBackupMysqlConsumer() != nil {
+		return validateBackupDatabaseConsumerRequest(request, plan, selected)
 	}
 	artifactID := ""
 	var artifact *agentpb.ComposeArtifact

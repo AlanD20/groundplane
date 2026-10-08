@@ -56,11 +56,11 @@ func TestAttachFactReadUsesDurableEnvironmentScope(t *testing.T) {
 		context.Background(),
 		"att_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		"att_01ARZ3NDEKTSV4RRFFQ69G5FAW",
-		"pg16_URL",
+		"pg_URL",
 	)
 	if err != nil || value != "postgres://ready" ||
 		resolver.environmentID != "env_01ARZ3NDEKTSV4RRFFQ69G5FAV" ||
-		resolver.reference.Grant != "att_01ARZ3NDEKTSV4RRFFQ69G5FAW" || resolver.reference.Key != "pg16_URL" {
+		resolver.reference.Grant != "att_01ARZ3NDEKTSV4RRFFQ69G5FAW" || resolver.reference.Key != "pg_URL" {
 		t.Fatalf("RevealAttachFact() = %q, %v / %#v", value, err, resolver)
 	}
 }

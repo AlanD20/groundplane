@@ -15,6 +15,32 @@ func newBackingServiceCmd() *cobra.Command {
 		Aliases: []string{"bs"},
 		Short:   "Backing services — shared datastores/caches/queues",
 	}
+	cmd.AddCommand(
+		&cobra.Command{
+			Use:   "adapters",
+			Short: "List supported backing adapter families and server versions",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				catalog, err := fromContext(cmd).Client.BackingAdapters(cmd.Context())
+				if err != nil {
+					return err
+				}
+				rows := make([]map[string]any, 0, len(catalog.Items))
+				for _, adapter := range catalog.Items {
+					versions := []string{}
+					for _, version := range adapter.Versions {
+						versions = append(versions, version.Version)
+					}
+					rows = append(
+						rows,
+						map[string]any{"adapter": adapter.Key, "label": adapter.Label, "versions": versions},
+					)
+				}
+				headers, values := tabulateVia(fromContext(cmd), rows)
+				return fromContext(cmd).Out.Render(headers, values, catalog)
+			},
+		},
+	)
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -51,7 +77,7 @@ func newBackingServiceCmd() *cobra.Command {
 		},
 	})
 
-	var adapter, image, authentication, name, description, networkPool, zoneName, zoneSubnet, hooksFile string
+	var adapter, adapterVersion, image, authentication, name, description, networkPool, zoneName, zoneSubnet, hooksFile string
 	var zoneInternal bool
 	create := &cobra.Command{
 		Use:   "create <slug>",
@@ -61,11 +87,14 @@ func newBackingServiceCmd() *cobra.Command {
 			if adapter == "custom" && image == "" {
 				return errs.New(errs.KindValidationFailed, "--image is required for custom")
 			}
+			if adapter != "custom" && adapterVersion == "" {
+				return errs.New(errs.KindValidationFailed, "--adapter-version is required for a managed database")
+			}
 			if adapter != "custom" && image != "" {
 				return errs.New(errs.KindValidationFailed, "--image is accepted only for custom")
 			}
-			if adapter == "valkey:9" && authentication == "" {
-				return errs.New(errs.KindValidationFailed, "--authentication is required for valkey:9")
+			if adapter == "valkey" && authentication == "" {
+				return errs.New(errs.KindValidationFailed, "--authentication is required for valkey")
 			}
 			var hooks *apiTypes.BackingHookConfiguration
 			if cmd.Flags().Changed("hooks-file") {
@@ -80,6 +109,7 @@ func newBackingServiceCmd() *cobra.Command {
 			}
 			created, err := fromContext(cmd).Client.CreateBackingService(cmd.Context(), apiTypes.BackingServiceCreate{
 				Slug: args[0], Name: name, Description: description, Adapter: adapter, Image: image,
+				AdapterVersion: adapterVersion,
 				Authentication: authentication,
 				Hooks:          hooks,
 				NetworkPool:    networkPool,
@@ -99,7 +129,9 @@ func newBackingServiceCmd() *cobra.Command {
 		},
 	}
 	create.Flags().
-		StringVar(&adapter, "adapter", "", "adapter key: postgres:16, valkey:9, or custom")
+		StringVar(&adapter, "adapter", "", "adapter family: postgres, valkey, mysql, or custom")
+	create.Flags().
+		StringVar(&adapterVersion, "adapter-version", "", "supported server version (required for managed databases)")
 	create.Flags().StringVar(&image, "image", "", "container image (required only for custom)")
 	create.Flags().StringVar(&hooksFile, "hooks-file", "", "custom hook configuration JSON file; - reads stdin")
 	create.Flags().StringVar(

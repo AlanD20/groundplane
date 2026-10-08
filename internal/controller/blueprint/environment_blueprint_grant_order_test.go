@@ -53,7 +53,12 @@ func TestEnvironmentBlueprintNewGrantTargetSurvivesPreparationOrder(t *testing.T
 				backingService: testkeyvalue.Versioned[testservices.ServiceRecord]{
 					Record: testservices.ServiceRecord{EnvironmentID: backingID,
 						BackingNetworkID: ids.NewAt(ids.KindNetwork, now, 6),
-						Desired:          core.Service{ID: serviceID, Name: "postgres", Adapter: "postgres:16"},
+						Desired: core.Service{
+							ID:             serviceID,
+							Name:           "postgres",
+							Adapter:        "postgres",
+							AdapterVersion: "16",
+						},
 						Runtime: core.ServiceRuntime{
 							ServiceID:     serviceID,
 							RuntimeIntent: core.ServiceRuntimeIntentRunning,

@@ -18,7 +18,10 @@ func (repository *Writer) TransitionReconciledBackupOrphan(
 		next.State != BackupOrphanDelete || current.Record.Target != next.Target || current.Record.Evidence != next.Evidence ||
 		current.Record.ConfigArchive != next.ConfigArchive ||
 		current.Record.VolumeArchive != next.VolumeArchive ||
+		current.Record.PostgresArchive != next.PostgresArchive ||
+		current.Record.MySQLArchive != next.MySQLArchive ||
 		current.Record.Postgres != next.Postgres ||
+		current.Record.MySQL != next.MySQL ||
 		current.Record.CleanupProof != next.CleanupProof ||
 		current.Record.UnknownResolvedByReconciler != next.UnknownResolvedByReconciler ||
 		current.Record.Upload != next.Upload || current.Record.Object != next.Object || current.Record.Phase != next.Phase ||

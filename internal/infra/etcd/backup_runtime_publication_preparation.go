@@ -162,7 +162,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
-	backingEnvironmentIDs, err := backupruntime.PostgresBackingEnvironmentIDs(record)
+	backingEnvironmentIDs, err := backupruntime.DatabaseBackingEnvironmentIDs(record)
 	if err != nil {
 		etcdstore.ClearMutationValues(mutations)
 		clear(lockValue)

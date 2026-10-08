@@ -2,6 +2,7 @@ package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/mysql84protocol"
 	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -13,9 +14,12 @@ type BackupOrphanRecord struct {
 	Evidence                    BackupArtifactEvidence              `json:"evidence"`
 	ConfigArchive               BackupConfigArchiveEvidence         `json:"config_archive"`
 	VolumeArchive               BackupVolumeArchiveEvidence         `json:"volume_archive"`
+	PostgresArchive             BackupPostgresArchiveEvidence       `json:"postgres_archive"`
+	MySQLArchive                BackupMySQLArchiveEvidence          `json:"mysql_archive"`
 	Upload                      BackupUploadOutcome                 `json:"upload"`
 	Object                      BackupObjectIdentity                `json:"object"`
 	Postgres                    BackupPostgresPointIdentity         `json:"postgres"`
+	MySQL                       BackupMySQLPointIdentity            `json:"mysql"`
 	CleanupProof                BackupOrphanCleanupProof            `json:"cleanup_proof"`
 	UnknownResolvedByReconciler bool                                `json:"unknown_resolved_by_reconciler"`
 	Phase                       BackupSourceAttemptPhase            `json:"phase"`
@@ -94,7 +98,13 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 	if err := validateSelectedVolumeArchive(record.Target.SourceKind, record.VolumeArchive, record.Evidence); err != nil {
 		return err
 	}
-	if !validBackupArtifactForTarget(record.Evidence, record.Target) ||
+	if err := validateSelectedMySQLArchive(record.Target.SourceKind, record.Target.SourceFormat, record.MySQLArchive); err != nil {
+		return err
+	}
+	if err := validateSelectedPostgresArchive(record.Target.SourceKind, record.Target.SourceFormat, record.PostgresArchive); err != nil {
+		return err
+	}
+	if !validBackupArtifactForTarget(record.Evidence, record.Target, record.PostgresArchive, record.MySQLArchive) ||
 		record.Upload.Target != record.Target.ObjectTarget() ||
 		!validBackupSourceArtifactState(
 			BackupSourceAttemptOrphaned,
@@ -105,7 +115,8 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 		) {
 		return invalidBackupRuntimeRecord("backup orphan upload evidence or identity is invalid")
 	}
-	if record.Target.SourceKind == BackupRuntimeSourceAttach {
+	if record.Target.SourceKind == BackupRuntimeSourceAttach &&
+		record.Target.SourceFormat == BackupRuntimeFormatPostgres {
 		if !postgresidentity.ValidGenerated(record.Postgres.Database) ||
 			!postgresidentity.ValidGenerated(record.Postgres.Role) ||
 			recordcodec.ValidateID(ids.KindEnvironment, record.Postgres.BackingEnvironmentID) != nil ||
@@ -115,6 +126,17 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 		}
 	} else if record.Postgres != (BackupPostgresPointIdentity{}) {
 		return invalidBackupRuntimeRecord("non-postgres backup orphan carries database identity")
+	}
+	if record.Target.SourceKind == BackupRuntimeSourceAttach && record.Target.SourceFormat == BackupRuntimeFormatMySQL {
+		if !mysql84protocol.ValidGeneratedIdentity(record.MySQL.Database) ||
+			!mysql84protocol.ValidGeneratedIdentity(record.MySQL.Role) ||
+			recordcodec.ValidateID(ids.KindEnvironment, record.MySQL.BackingEnvironmentID) != nil ||
+			recordcodec.ValidateID(ids.KindService, record.MySQL.BackingServiceID) != nil ||
+			recordcodec.ValidateID(ids.KindService, record.MySQL.ConsumerServiceID) != nil {
+			return invalidBackupRuntimeRecord("MySQL backup orphan target identity is incomplete")
+		}
+	} else if record.MySQL != (BackupMySQLPointIdentity{}) {
+		return invalidBackupRuntimeRecord("non-MySQL backup orphan carries database identity")
 	}
 	if proof := record.CleanupProof; proof != (BackupOrphanCleanupProof{}) {
 		if proof.TaskID != record.TaskID || proof.TaskRevision <= 0 ||

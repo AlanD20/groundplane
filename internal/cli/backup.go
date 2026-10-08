@@ -198,6 +198,8 @@ func newBackupCmd() *cobra.Command {
 	cmd.AddCommand(removePoint)
 
 	var point, ageIdentityPath, restoreKey string
+	var versionReview string
+	var acknowledgeVersionDifference bool
 	restore := &cobra.Command{
 		Use:   "restore <source>",
 		Short: "Restore a source from a recovery point (defaults to the latest)",
@@ -217,7 +219,8 @@ func newBackupCmd() *cobra.Command {
 				}
 			}
 			accepted, err := app.Client.RestoreBackup(cmd.Context(), environmentID, restoreKey,
-				apiTypes.RestoreRequest{SourceID: args[0], RecoveryPointID: point, AgeIdentity: ageIdentity})
+				apiTypes.RestoreRequest{SourceID: args[0], RecoveryPointID: point, AgeIdentity: ageIdentity,
+					VersionReviewSHA256: versionReview, AcknowledgeVersionDifference: acknowledgeVersionDifference})
 			if err != nil {
 				return err
 			}
@@ -225,6 +228,10 @@ func newBackupCmd() *cobra.Command {
 		},
 	}
 	restore.Flags().StringVar(&point, "point", "", "recovery point id (default: latest)")
+	restore.Flags().
+		StringVar(&versionReview, "version-review", "", "exact digest from backup preview-restore (required for database Restore)")
+	restore.Flags().
+		BoolVar(&acknowledgeVersionDifference, "acknowledge-version-difference", false, "accept unverified compatibility for the reviewed source/target versions")
 	restore.Flags().
 		StringVar(&restoreKey, "idempotency-key", "", "reuse for an uncertain request with exactly the same inputs")
 	restore.Flags().StringVar(
@@ -234,6 +241,7 @@ func newBackupCmd() *cobra.Command {
 		"exported age identity file (needed if the recovery point's key era was rotated away)",
 	)
 	cmd.AddCommand(restore)
+	cmd.AddCommand(newBackupRestorePreviewCmd())
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "rotate-key",

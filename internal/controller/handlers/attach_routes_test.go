@@ -127,7 +127,7 @@ func TestAttachFactRevealPreservesExactReference(t *testing.T) {
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{AttachFacts: reader})
 	request := httptest.NewRequest(
 		http.MethodGet,
-		"/api/v1/attaches/"+testAttachRouteID+"/facts/pg16_URL?grant_attach_id=att_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		"/api/v1/attaches/"+testAttachRouteID+"/facts/pg_URL?grant_attach_id=att_01ARZ3NDEKTSV4RRFFQ69G5FAW",
 		nil,
 	)
 	response := httptest.NewRecorder()
@@ -135,7 +135,7 @@ func TestAttachFactRevealPreservesExactReference(t *testing.T) {
 	if response.Code != http.StatusOK ||
 		response.Body.String() != "{\"$schema\":\"https://example.com/api/v1/AttachFactValue.json\",\"value\":\"postgres://ready\"}\n" ||
 		reader.attachID != testAttachRouteID || reader.grantID != "att_01ARZ3NDEKTSV4RRFFQ69G5FAW" ||
-		reader.key != "pg16_URL" {
+		reader.key != "pg_URL" {
 		t.Fatalf("GET Attach fact = %d %s / %#v", response.Code, response.Body.Bytes(), reader)
 	}
 }

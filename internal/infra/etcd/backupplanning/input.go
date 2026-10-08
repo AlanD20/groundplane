@@ -31,18 +31,18 @@ type ManualBackupRunInput struct {
 	ResolveServiceFact BackupServiceFactResolver
 }
 
-type BackupPostgresIdentity struct {
+type BackupDatabaseIdentity struct {
 	Database string
 	Role     string
 }
 
-// BackupPostgresIdentityResolver opens only the fixed-revision encrypted facts
+// BackupDatabaseIdentityResolver opens only the fixed-revision encrypted facts
 // supplied by the repository.
-type BackupPostgresIdentityResolver func(
+type BackupDatabaseIdentityResolver func(
 	context.Context,
 	etcdstore.Versioned[attachrecord.Record],
 	attachrecord.EncryptedFacts,
-	func(BackupPostgresIdentity) error,
+	func(BackupDatabaseIdentity) error,
 ) error
 
 // BackupConfigSnapshotInput selects the complete Entry/value set at the run's

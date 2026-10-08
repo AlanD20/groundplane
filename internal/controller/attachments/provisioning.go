@@ -32,7 +32,7 @@ func (service *MutationService) prepareAttachFacts(
 		return nil, metadata, encrypted, hookInputs, err
 	}
 	authentication := scope.BackingService.Record.Desired.Authentication
-	identityName, err := ProvisionIdentity(attachID, consumer.Record.Desired.Name)
+	identityName, err := ProvisionIdentity(attachID, consumer.Record.Desired.Name, adapter.CredentialIdentityLimit())
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

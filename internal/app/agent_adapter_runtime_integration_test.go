@@ -31,7 +31,7 @@ const (
 func TestAdapterRuntimeRejectsUnsetValkeyAuthenticationBeforeEffects(t *testing.T) {
 	fake := &adapterRuntimeRunner{}
 	result := runAdapterProcedure(t, fake, &agentpb.AdapterProcedure{
-		AdapterKey:       "valkey:9",
+		AdapterKey:       "valkey",
 		Phase:            agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
 		AttachId:         adapterRuntimeAttachID,
 		BackingServiceId: adapterRuntimeServiceID,
@@ -53,7 +53,7 @@ func TestAdapterCommandAllowsArgumentOnlyCompiledExec(t *testing.T) {
 		{},
 	}}
 	result := runAdapterProcedure(t, fake, &agentpb.AdapterProcedure{
-		AdapterKey:       "valkey:9",
+		AdapterKey:       "valkey",
 		Phase:            agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
 		AttachId:         adapterRuntimeAttachID,
 		BackingServiceId: adapterRuntimeServiceID,
@@ -84,7 +84,7 @@ func TestAdapterRuntimeExecutesCompiledPostgresProcedure(t *testing.T) {
 		{},
 	}}
 	procedure := &agentpb.AdapterProcedure{
-		AdapterKey:       "postgres:16",
+		AdapterKey:       "postgres",
 		Phase:            agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
 		AttachId:         adapterRuntimeAttachID,
 		BackingServiceId: adapterRuntimeServiceID,

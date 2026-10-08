@@ -192,7 +192,7 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 		}
 	}
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: 1, PlanId: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
+		Schema: executionplan.SchemaVersion, PlanId: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE, TargetId: task.Target,
 		Steps: []*agentpb.ExecutionStep{{
 			StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),

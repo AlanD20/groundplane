@@ -152,7 +152,7 @@ func (repository *TaskRepository) ReadBackupStagingSource(
 			validPlan = backupruntime.ValidateVolumeRestoreExecutionPlan(restored, sealed) == nil
 		}
 		if restored.Point.SourceKind == backupruntime.BackupRuntimeSourceAttach {
-			validPlan = backupruntime.ValidatePostgresRestoreExecutionPlan(restored, sealed) == nil
+			validPlan = backupruntime.ValidateDatabaseRestoreExecutionPlan(restored, sealed) == nil
 		}
 		if restored.TaskID != task.ID || restored.OperationID != task.OperationID ||
 			restored.EnvironmentID != task.Owner.EnvironmentID || !validPlan {
@@ -183,7 +183,7 @@ func (repository *TaskRepository) ReadBackupStagingSource(
 		}
 		validPlan := backupruntime.ValidateVolumeRestoreExecutionPlan(restored, sealed) == nil
 		if result.Step.GetRestore().GetPostgres() != nil {
-			validPlan = backupruntime.ValidatePostgresRestoreExecutionPlan(restored, sealed) == nil
+			validPlan = backupruntime.ValidateDatabaseRestoreExecutionPlan(restored, sealed) == nil
 		}
 		if restored.TaskID != task.ID || restored.OperationID != task.OperationID ||
 			restored.EnvironmentID != task.Owner.EnvironmentID || !validPlan {

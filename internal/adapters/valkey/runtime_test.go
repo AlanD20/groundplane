@@ -1,6 +1,6 @@
 //go:build valkey_auth_integration
 
-package valkey9
+package valkey
 
 import (
 	"context"
@@ -60,12 +60,16 @@ func testAuthenticationLifecycle(t *testing.T, mode core.BackingAuthentication) 
 			t.Errorf("test network cleanup: %v", cleanupErr)
 		}
 	})
-	spec := (&adapter{}).CreationSpec(mode)
+	spec := (&adapter{}).CreationSpec("9", mode)
+	image, err := (&adapter{}).DefaultImage("9")
+	if err != nil {
+		t.Fatal(err)
+	}
 	args := []string{"run", "--detach", "--pull=never", "--network", networkID, "--network-alias", "backing",
 		"--label", "groundplane.test=valkey-auth", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 		"--mount", "type=bind,src=" + data + ",dst=/data", "--entrypoint", spec.Command[0],
 		"--env", "VALKEY_PASSWORD=fixture-admin-only", "--env", "REDISCLI_AUTH=fixture-admin-only",
-		"--env", "VALKEY_AUTHENTICATION=" + string(mode), (&adapter{}).DefaultImage()}
+		"--env", "VALKEY_AUTHENTICATION=" + string(mode), image}
 	args = append(args, spec.Command[1:]...)
 	started, err := executor.Run(ctx, runner.RunCmdOpts{Name: "docker", Args: args})
 	if err != nil || started.ExitCode != 0 {
@@ -169,7 +173,7 @@ func testAuthenticationLifecycle(t *testing.T, mode core.BackingAuthentication) 
 	if mode != core.BackingAuthenticationNone {
 		remoteArgs = append(remoteArgs, "--env", "REDISCLI_AUTH")
 	}
-	remoteArgs = append(remoteArgs, (&adapter{}).DefaultImage(), "-h", "backing", "-e", "--raw")
+	remoteArgs = append(remoteArgs, image, "-h", "backing", "-e", "--raw")
 	if mode == core.BackingAuthenticationUsernamePassword {
 		remoteArgs = append(remoteArgs, "--user", owners[1].Role)
 	}

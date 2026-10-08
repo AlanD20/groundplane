@@ -268,13 +268,17 @@ func validOperationProof(request postgres16protocol.Request, output []byte) bool
 	value := strings.TrimSpace(string(output))
 	switch request.Operation {
 	case postgres16protocol.OperationProbePGDump:
-		return strings.HasPrefix(value, "pg_dump (PostgreSQL) 16")
+		_, err := postgres16protocol.ParseToolVersion("pg_dump", value)
+		return err == nil
 	case postgres16protocol.OperationProbePGRestore:
-		return strings.HasPrefix(value, "pg_restore (PostgreSQL) 16")
+		_, err := postgres16protocol.ParseToolVersion("pg_restore", value)
+		return err == nil
 	case postgres16protocol.OperationProbePSQL:
-		return strings.HasPrefix(value, "psql (PostgreSQL) 16")
-	case postgres16protocol.OperationServerMajor:
-		return value == "16"
+		_, err := postgres16protocol.ParseToolVersion("psql", value)
+		return err == nil
+	case postgres16protocol.OperationServerVersion:
+		_, err := postgres16protocol.ParseServerVersion(value)
+		return err == nil
 	case postgres16protocol.OperationTerminateDBConnections:
 		return value == "t"
 	case postgres16protocol.OperationAssertZeroDBConnections:

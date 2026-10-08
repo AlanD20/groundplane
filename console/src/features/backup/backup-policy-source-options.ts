@@ -12,11 +12,12 @@ export function backupPolicySourceOptions(
   // must not offer the same database as another source.
   const attachOptions = policyState.attaches.filter((attach) => {
     const backing = store.getBackingProject(attach.backingProjectId);
+    const adapter = backing?.environments?.[0]?.services.find(
+      (service) => service.id === attach.backingServiceId,
+    )?.adapter;
     return (
       attach.credential.mode === "new" &&
-      backing?.environments?.[0]?.services.find(
-        (service) => service.id === attach.backingServiceId,
-      )?.adapter === "postgres:16"
+      (adapter === "postgres" || adapter === "mysql")
     );
   });
   const selectedRetainedAttachSources = backup.sources.filter(

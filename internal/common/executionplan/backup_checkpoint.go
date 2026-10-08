@@ -162,6 +162,21 @@ func validateBackupCheckpointPayload(request *agentpb.BackupCheckpointRequest) e
 			validBackupCheckpointEvidence(value.Evidence) && backupCheckpointDigest(value.VerificationSha256)
 	case *agentpb.BackupCheckpointRequest_PostgresServiceProgress:
 		valid = checkpoint != nil && validBackupPostgresService(checkpoint.PostgresServiceProgress)
+	case *agentpb.BackupCheckpointRequest_MysqlContainerObserved:
+		valid = checkpoint != nil && validBackupMySQLObservation(checkpoint.MysqlContainerObserved)
+	case *agentpb.BackupCheckpointRequest_MysqlDumpStart:
+		valid = checkpoint != nil && validBackupMySQLDump(checkpoint.MysqlDumpStart)
+	case *agentpb.BackupCheckpointRequest_MysqlRestoreApplyStart:
+		valid = checkpoint != nil && validBackupMySQLApply(checkpoint.MysqlRestoreApplyStart)
+	case *agentpb.BackupCheckpointRequest_MysqlRestoreVerified:
+		if checkpoint == nil {
+			break
+		}
+		value := checkpoint.MysqlRestoreVerified
+		valid = value != nil && backupCheckpointPoint(value.PointId) && backupCheckpointHexID(value.ContainerId) &&
+			validBackupCheckpointEvidence(value.Evidence) && backupCheckpointDigest(value.VerificationSha256)
+	case *agentpb.BackupCheckpointRequest_MysqlServiceProgress:
+		valid = checkpoint != nil && validBackupMySQLService(checkpoint.MysqlServiceProgress)
 	case *agentpb.BackupCheckpointRequest_Config:
 		valid = checkpoint != nil && validBackupConfigCheckpoint(checkpoint.Config)
 	case *agentpb.BackupCheckpointRequest_Volume:

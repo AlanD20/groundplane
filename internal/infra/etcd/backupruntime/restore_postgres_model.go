@@ -6,7 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-const MaxPostgresRestoreConsumers = 12
+const MaxDatabaseRestoreConsumers = 12
 
 // The target is selected once, from the surviving Attach and acknowledged
 // Compose workloads at one revision. The Point supplies the captured database
@@ -15,12 +15,21 @@ type BackupRestorePostgresTarget struct {
 	Source                      BackupPostgresSourceSnapshot           `json:"source"`
 	ConsumerEnvironmentRevision int64                                  `json:"consumer_environment_revision"`
 	AttachSHA256                string                                 `json:"attach_sha256"`
-	DatabaseService             BackupRestorePostgresServiceSnapshot   `json:"database_service"`
-	Consumers                   []BackupRestorePostgresServiceSnapshot `json:"consumers"`
-	DependentIndexes            []BackupRestorePostgresDependentIndex  `json:"dependent_indexes"`
+	DatabaseService             BackupRestoreDatabaseServiceSnapshot   `json:"database_service"`
+	Consumers                   []BackupRestoreDatabaseServiceSnapshot `json:"consumers"`
+	DependentIndexes            []BackupRestoreDatabaseDependentIndex  `json:"dependent_indexes"`
 }
 
-type BackupRestorePostgresDependentIndex struct {
+type BackupRestoreMySQLTarget struct {
+	Source                      BackupMySQLSourceSnapshot              `json:"source"`
+	ConsumerEnvironmentRevision int64                                  `json:"consumer_environment_revision"`
+	AttachSHA256                string                                 `json:"attach_sha256"`
+	DatabaseService             BackupRestoreDatabaseServiceSnapshot   `json:"database_service"`
+	Consumers                   []BackupRestoreDatabaseServiceSnapshot `json:"consumers"`
+	DependentIndexes            []BackupRestoreDatabaseDependentIndex  `json:"dependent_indexes"`
+}
+
+type BackupRestoreDatabaseDependentIndex struct {
 	Key            string `json:"key"`
 	Revision       int64  `json:"revision"`
 	AttachID       string `json:"attach_id"`
@@ -28,7 +37,7 @@ type BackupRestorePostgresDependentIndex struct {
 	AttachSHA256   string `json:"attach_sha256"`
 }
 
-type BackupRestorePostgresServiceSnapshot struct {
+type BackupRestoreDatabaseServiceSnapshot struct {
 	ServiceID       string                     `json:"service_id"`
 	EnvironmentID   string                     `json:"environment_id"`
 	ServiceRevision int64                      `json:"service_revision"`
@@ -43,7 +52,7 @@ type BackupRestorePostgresServiceSnapshot struct {
 	ArtifactSHA256  string                     `json:"artifact_sha256"`
 }
 
-type BackupRestorePostgresProgress struct {
+type BackupRestoreDatabaseProgress struct {
 	ContainerID               string                     `json:"container_id,omitempty"`
 	ObservationSHA256         string                     `json:"observation_sha256,omitempty"`
 	ObservedRepositoryDigest  string                     `json:"observed_repository_digest,omitempty"`
@@ -68,56 +77,83 @@ func validateBackupRestorePostgresTarget(target BackupRestorePostgresTarget,
 	point BackupRecoveryPointSnapshot,
 ) error {
 	if point.Postgres == (BackupPostgresPointIdentity{}) || validateBackupPostgresSnapshot(target.Source) != nil ||
-		target.ConsumerEnvironmentRevision <= 0 ||
-		!recordcodec.ValidSHA256(target.AttachSHA256) ||
 		target.Source.ConsumerEnvironmentID != point.EnvironmentID ||
 		target.Source.AttachID != point.TargetID ||
 		target.Source.Database != point.Postgres.Database || target.Source.Role != point.Postgres.Role ||
 		target.Source.BackingEnvironmentID != point.Postgres.BackingEnvironmentID ||
 		target.Source.BackingServiceID != point.Postgres.BackingServiceID ||
-		target.Source.ConsumerServiceID != point.Postgres.ConsumerServiceID ||
-		validateBackupRestorePostgresService(target.DatabaseService) != nil ||
-		target.DatabaseService.ServiceID != target.Source.BackingServiceID ||
-		target.DatabaseService.EnvironmentID != target.Source.BackingEnvironmentID ||
-		target.DatabaseService.ServiceRevision != target.Source.BackingServiceRevision ||
-		target.DatabaseService.PriorIntent != BackupServiceIntentRunning ||
-		len(target.Consumers) == 0 || len(target.Consumers) > MaxPostgresRestoreConsumers {
+		target.Source.ConsumerServiceID != point.Postgres.ConsumerServiceID {
 		return invalidBackupRuntimeRecord("postgres Restore target differs from the captured Attach")
+	}
+	return validateBackupRestoreDatabaseTarget(target.ConsumerEnvironmentRevision, target.AttachSHA256,
+		target.Source.ConsumerEnvironmentID, target.Source.BackingEnvironmentID,
+		target.Source.BackingServiceID, target.Source.BackingServiceRevision,
+		target.Source.ConsumerServiceID, point.EnvironmentID, target.DatabaseService,
+		target.Consumers, target.DependentIndexes)
+}
+
+func validateBackupRestoreMySQLTarget(target BackupRestoreMySQLTarget, point BackupRecoveryPointSnapshot) error {
+	if point.MySQL == (BackupMySQLPointIdentity{}) || validateBackupMySQLSnapshot(target.Source) != nil ||
+		target.Source.ConsumerEnvironmentID != point.EnvironmentID || target.Source.AttachID != point.TargetID ||
+		target.Source.Database != point.MySQL.Database || target.Source.Role != point.MySQL.Role ||
+		target.Source.BackingEnvironmentID != point.MySQL.BackingEnvironmentID ||
+		target.Source.BackingServiceID != point.MySQL.BackingServiceID ||
+		target.Source.ConsumerServiceID != point.MySQL.ConsumerServiceID {
+		return invalidBackupRuntimeRecord("MySQL Restore target differs from the captured Attach")
+	}
+	return validateBackupRestoreDatabaseTarget(target.ConsumerEnvironmentRevision, target.AttachSHA256,
+		target.Source.ConsumerEnvironmentID, target.Source.BackingEnvironmentID,
+		target.Source.BackingServiceID, target.Source.BackingServiceRevision,
+		target.Source.ConsumerServiceID, point.EnvironmentID, target.DatabaseService,
+		target.Consumers, target.DependentIndexes)
+}
+
+func validateBackupRestoreDatabaseTarget(consumerEnvironmentRevision int64, attachSHA,
+	consumerEnvironmentID, backingEnvironmentID, backingServiceID string, backingServiceRevision int64,
+	consumerServiceID, pointEnvironmentID string, databaseService BackupRestoreDatabaseServiceSnapshot,
+	consumers []BackupRestoreDatabaseServiceSnapshot, dependentIndexes []BackupRestoreDatabaseDependentIndex,
+) error {
+	if consumerEnvironmentRevision <= 0 || !recordcodec.ValidSHA256(attachSHA) ||
+		validateBackupRestoreDatabaseService(databaseService) != nil ||
+		databaseService.ServiceID != backingServiceID || databaseService.EnvironmentID != backingEnvironmentID ||
+		databaseService.ServiceRevision != backingServiceRevision ||
+		databaseService.PriorIntent != BackupServiceIntentRunning || len(consumers) == 0 ||
+		len(consumers) > MaxDatabaseRestoreConsumers {
+		return invalidBackupRuntimeRecord("database Restore target evidence is invalid")
 	}
 	ownerFound := false
 	previous := ""
-	for _, consumer := range target.Consumers {
-		if validateBackupRestorePostgresService(consumer) != nil ||
+	for _, consumer := range consumers {
+		if validateBackupRestoreDatabaseService(consumer) != nil ||
 			previous != "" && consumer.ServiceID <= previous ||
-			consumer.EnvironmentID != target.Source.ConsumerEnvironmentID ||
-			consumer.ServiceID == target.DatabaseService.ServiceID {
-			return invalidBackupRuntimeRecord("postgres Restore consumers are invalid")
+			consumer.EnvironmentID != consumerEnvironmentID || consumer.ServiceID == databaseService.ServiceID {
+			return invalidBackupRuntimeRecord("database Restore consumers are invalid")
 		}
-		if consumer.ServiceID == target.Source.ConsumerServiceID {
-			ownerFound = consumer.EnvironmentID == point.EnvironmentID
+		if consumer.ServiceID == consumerServiceID {
+			ownerFound = consumer.EnvironmentID == pointEnvironmentID
 		}
 		previous = consumer.ServiceID
 	}
 	if !ownerFound {
-		return invalidBackupRuntimeRecord("postgres Restore lost its owning consumer")
+		return invalidBackupRuntimeRecord("database Restore lost its owning consumer")
 	}
-	if len(target.DependentIndexes) > 2*MaxPostgresRestoreConsumers {
-		return invalidBackupRuntimeRecord("postgres Restore dependent index set exceeds its bound")
+	if len(dependentIndexes) > 2*MaxDatabaseRestoreConsumers {
+		return invalidBackupRuntimeRecord("database Restore dependent index set exceeds its bound")
 	}
 	previous = ""
-	for _, index := range target.DependentIndexes {
+	for _, index := range dependentIndexes {
 		if index.Key == "" || index.Revision <= 0 ||
 			recordcodec.ValidateID(ids.KindAttach, index.AttachID) != nil ||
 			index.AttachRevision <= 0 || !recordcodec.ValidSHA256(index.AttachSHA256) ||
 			previous != "" && index.Key <= previous {
-			return invalidBackupRuntimeRecord("postgres Restore dependent index is invalid")
+			return invalidBackupRuntimeRecord("database Restore dependent index is invalid")
 		}
 		previous = index.Key
 	}
 	return nil
 }
 
-func validateBackupRestorePostgresService(service BackupRestorePostgresServiceSnapshot) error {
+func validateBackupRestoreDatabaseService(service BackupRestoreDatabaseServiceSnapshot) error {
 	if recordcodec.ValidateID(ids.KindService, service.ServiceID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvironment, service.EnvironmentID) != nil ||
 		service.ServiceRevision <= 0 || !recordcodec.ValidSHA256(service.ServiceSHA256) ||
@@ -127,17 +163,16 @@ func validateBackupRestorePostgresService(service BackupRestorePostgresServiceSn
 		!recordcodec.ValidSHA256(service.FactSHA256) ||
 		recordcodec.ValidateID(ids.KindConfig, service.ArtifactID) != nil ||
 		!recordcodec.ValidSHA256(service.ArtifactSHA256) {
-		return invalidBackupRuntimeRecord("postgres Restore Service fact is invalid")
+		return invalidBackupRuntimeRecord("database Restore Service fact is invalid")
 	}
 	return nil
 }
 
-func validateBackupRestorePostgresProgress(record BackupRestoreRecord) error {
-	if record.PostgresProgress == nil || record.CurrentTarget.Postgres == nil ||
-		record.ServiceCount != uint32(len(record.CurrentTarget.Postgres.Consumers)) {
-		return invalidBackupRuntimeRecord("postgres Restore progress is incomplete")
+func validateBackupRestoreDatabaseProgress(record BackupRestoreRecord, consumerCount int) error {
+	if record.DatabaseProgress == nil || record.ServiceCount != uint32(consumerCount) || consumerCount <= 0 {
+		return invalidBackupRuntimeRecord("database Restore progress is incomplete")
 	}
-	progress := record.PostgresProgress
+	progress := record.DatabaseProgress
 	if progress.StopCursor > record.ServiceCount || progress.RecoveryCursor > record.ServiceCount ||
 		(progress.ContainerID == "") != (progress.ObservationSHA256 == "") ||
 		progress.ContainerID != "" && (!validBackupHexID(progress.ContainerID) ||
@@ -147,13 +182,13 @@ func validateBackupRestorePostgresProgress(record BackupRestoreRecord) error {
 		progress.ContainerID == "" &&
 			(progress.ObservedRepositoryDigest != "" || progress.ObservedLabelsSHA256 != "") ||
 		record.MutationStarted != (progress.ServiceMutationStarted || progress.ApplyStarted) {
-		return invalidBackupRuntimeRecord("postgres Restore observation or cursor is invalid")
+		return invalidBackupRuntimeRecord("database Restore observation or cursor is invalid")
 	}
 	if (progress.StopPhase == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_UNSPECIFIED) !=
 		(progress.StopServiceID == "") ||
 		(progress.RecoveryPhase == agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_UNSPECIFIED) !=
 			(progress.RecoveryServiceID == "") {
-		return invalidBackupRuntimeRecord("postgres Restore Service progress is incomplete")
+		return invalidBackupRuntimeRecord("database Restore Service progress is incomplete")
 	}
 	if progress.ApplyStarted {
 		if progress.ContainerID == "" || progress.StopCursor != record.ServiceCount ||
@@ -161,59 +196,59 @@ func validateBackupRestorePostgresProgress(record BackupRestoreRecord) error {
 			!validBackupHexID(progress.ApplyExecID) ||
 			!recordcodec.ValidSHA256(progress.ApplyRepositoryDigest) ||
 			!recordcodec.ValidSHA256(progress.ApplyLabelsSHA256) {
-			return invalidBackupRuntimeRecord("postgres Restore apply start is incomplete")
+			return invalidBackupRuntimeRecord("database Restore apply start is incomplete")
 		}
 	} else if progress.ApplyExecutionNonce != "" || progress.ApplyExecID != "" ||
 		progress.ApplyRepositoryDigest != "" || progress.ApplyLabelsSHA256 != "" ||
 		progress.RestoreVerificationSHA256 != "" || progress.RecoveryCursor != 0 ||
 		progress.RecoveryPhase != agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_UNSPECIFIED ||
 		progress.SourceCleanupCompleted {
-		return invalidBackupRuntimeRecord("postgres Restore advanced before apply start")
+		return invalidBackupRuntimeRecord("database Restore advanced before apply start")
 	}
 	if progress.RestoreVerificationSHA256 != "" &&
 		!recordcodec.ValidSHA256(progress.RestoreVerificationSHA256) ||
 		progress.RecoveryCursor != 0 && progress.RestoreVerificationSHA256 == "" ||
 		progress.SourceCleanupCompleted && (progress.RestoreVerificationSHA256 == "" ||
 			progress.RecoveryCursor != record.ServiceCount) {
-		return invalidBackupRuntimeRecord("postgres Restore verification or cleanup is out of order")
+		return invalidBackupRuntimeRecord("database Restore verification or cleanup is out of order")
 	}
 	switch record.State {
 	case BackupRestoreQueued, BackupRestoreDownloading:
-		if *progress != (BackupRestorePostgresProgress{}) {
-			return invalidBackupRuntimeRecord("postgres Restore progressed before artifact validation")
+		if *progress != (BackupRestoreDatabaseProgress{}) {
+			return invalidBackupRuntimeRecord("database Restore progressed before artifact validation")
 		}
 	case BackupRestoreArtifactVerified:
 		if record.MutationStarted || progress.StopCursor != 0 || progress.StopPhase != 0 || progress.ApplyStarted {
-			return invalidBackupRuntimeRecord("postgres Restore artifact state has mutation progress")
+			return invalidBackupRuntimeRecord("database Restore artifact state has mutation progress")
 		}
 	case BackupRestoreConsumersStopped:
 		if progress.ApplyStarted {
-			return invalidBackupRuntimeRecord("postgres Restore stop progress is invalid")
+			return invalidBackupRuntimeRecord("database Restore stop progress is invalid")
 		}
 	case BackupRestoreRestoring:
 		if !record.MutationStarted || !progress.ApplyStarted || progress.SourceCleanupCompleted {
-			return invalidBackupRuntimeRecord("postgres Restore apply state is invalid")
+			return invalidBackupRuntimeRecord("database Restore apply state is invalid")
 		}
 	case BackupRestoreConsumersRestored:
 		if progress.RestoreVerificationSHA256 == "" || progress.RecoveryCursor != record.ServiceCount ||
 			progress.SourceCleanupCompleted {
-			return invalidBackupRuntimeRecord("postgres Restore consumers have not recovered")
+			return invalidBackupRuntimeRecord("database Restore consumers have not recovered")
 		}
 	case BackupRestoreVerified, BackupRestoreCompleted:
 		if !progress.SourceCleanupCompleted || progress.RestoreVerificationSHA256 == "" ||
 			progress.RecoveryCursor != record.ServiceCount {
-			return invalidBackupRuntimeRecord("postgres Restore lacks verification and physical source cleanup")
+			return invalidBackupRuntimeRecord("database Restore lacks verification and physical source cleanup")
 		}
 	case BackupRestoreFailedSafe:
 		if record.MutationStarted || progress.ApplyStarted || progress.StopCursor != 0 {
-			return invalidBackupRuntimeRecord("failed-safe postgres Restore has mutation progress")
+			return invalidBackupRuntimeRecord("failed-safe database Restore has mutation progress")
 		}
 	case BackupRestoreRecoveryRequired:
 		if !record.MutationStarted {
-			return invalidBackupRuntimeRecord("postgres Restore recovery requires a mutation intent")
+			return invalidBackupRuntimeRecord("database Restore recovery requires a mutation intent")
 		}
 	default:
-		return invalidBackupRuntimeRecord("postgres Restore state is invalid")
+		return invalidBackupRuntimeRecord("database Restore state is invalid")
 	}
 	return nil
 }

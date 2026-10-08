@@ -17,7 +17,9 @@ func BackupPointMatchesRunSource(
 	source := run.Sources[ordinal]
 	return point.BackupRecoveryPointTargetSnapshot == backupSourceTarget(run, source) &&
 		point.Evidence == source.Evidence && point.ConfigArchive == source.ConfigArchive &&
-		point.VolumeArchive == source.VolumeArchive && point.Object == source.Object
+		point.VolumeArchive == source.VolumeArchive && point.PostgresArchive == source.PostgresArchive &&
+		point.MySQLArchive == source.MySQLArchive &&
+		point.Object == source.Object
 }
 
 func RunContainsOrphanedPoint(run BackupRunRecord, orphan BackupOrphanRecord) bool {
@@ -35,10 +37,14 @@ func RunContainsOrphanedPoint(run BackupRunRecord, orphan BackupOrphanRecord) bo
 func BackupOrphanMatchesRecoveryPoint(orphan BackupOrphanRecord, point BackupRecoveryPointSnapshot) bool {
 	if validateBackupOrphanRecord(orphan) != nil || ValidateBackupRecoveryPointSnapshot(point) != nil ||
 		orphan.Target != point.BackupRecoveryPointTargetSnapshot || orphan.Evidence != point.Evidence ||
-		orphan.ConfigArchive != point.ConfigArchive || orphan.VolumeArchive != point.VolumeArchive {
+		orphan.ConfigArchive != point.ConfigArchive || orphan.VolumeArchive != point.VolumeArchive ||
+		orphan.PostgresArchive != point.PostgresArchive {
 		return false
 	}
 	if orphan.Postgres != point.Postgres {
+		return false
+	}
+	if orphan.MySQL != point.MySQL || orphan.MySQLArchive != point.MySQLArchive {
 		return false
 	}
 	if orphan.Object != (BackupObjectIdentity{}) {
@@ -68,8 +74,19 @@ func BackupOrphanMatchesRunSource(
 		}) &&
 		orphan.Target == backupSourceTarget(run, source) && orphan.Evidence == source.Evidence &&
 		orphan.ConfigArchive == source.ConfigArchive && orphan.VolumeArchive == source.VolumeArchive &&
+		orphan.PostgresArchive == source.PostgresArchive && orphan.MySQLArchive == source.MySQLArchive &&
 		orphan.Upload == source.Upload && orphan.Object == source.Object && orphan.Phase == source.Phase &&
-		backupOrphanPostgresMatchesSource(orphan.Postgres, source.Snapshot.Postgres)
+		backupOrphanPostgresMatchesSource(orphan.Postgres, source.Snapshot.Postgres) &&
+		backupOrphanMySQLMatchesSource(orphan.MySQL, source.Snapshot.MySQL)
+}
+
+func backupOrphanMySQLMatchesSource(point BackupMySQLPointIdentity, source *BackupMySQLSourceSnapshot) bool {
+	if source == nil {
+		return point == (BackupMySQLPointIdentity{})
+	}
+	return point == (BackupMySQLPointIdentity{Database: source.Database, Role: source.Role,
+		BackingEnvironmentID: source.BackingEnvironmentID, BackingServiceID: source.BackingServiceID,
+		ConsumerServiceID: source.ConsumerServiceID})
 }
 
 func backupOrphanPostgresMatchesSource(point BackupPostgresPointIdentity, source *BackupPostgresSourceSnapshot) bool {

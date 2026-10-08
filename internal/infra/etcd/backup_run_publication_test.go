@@ -88,9 +88,9 @@ func TestPrepareManualBackupRunDerivesFixedRevisionCandidate(t *testing.T) {
 			_ context.Context,
 			_ testkeyvalue.Versioned[testattachments.Record],
 			_ testattachments.EncryptedFacts,
-			consume func(testbackupplanning.BackupPostgresIdentity) error,
+			consume func(testbackupplanning.BackupDatabaseIdentity) error,
 		) error {
-			return consume(testbackupplanning.BackupPostgresIdentity{
+			return consume(testbackupplanning.BackupDatabaseIdentity{
 				Database: seeded.Sources[0].Snapshot.Postgres.Database,
 				Role:     seeded.Sources[0].Snapshot.Postgres.Role,
 			})

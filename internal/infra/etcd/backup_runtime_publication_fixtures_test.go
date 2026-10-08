@@ -299,6 +299,7 @@ func newBackupRuntimeBareFixture(
 	run.ConnectorHasDirectCredentials = true
 	run.ConnectorCredentialsRevision = createdConnector.Revision
 	run.Sources[0].Evidence = testbackupruntime.BackupArtifactEvidence{}
+	run.Sources[0].PostgresArchive = testbackupruntime.BackupPostgresArchiveEvidence{}
 	run.Sources[0].Upload = testbackupruntime.BackupUploadOutcome{}
 	run.Sources[0].Object = testbackupruntime.BackupObjectIdentity{}
 	run.Sources[0].ObjectKey = run.ConnectorPrefix + environment.Record.ID + "/" + run.Sources[0].SourceID + "/" +
@@ -347,7 +348,7 @@ func seedBackupRuntimePublicationEvidence(
 				EnvironmentID:    backingEnvironment.ID,
 				BackingNetworkID: backingNetworkID,
 				Desired: core.Service{
-					ID: backingServiceID, Name: "postgres", Image: release.DatabaseImage, Adapter: "postgres:16",
+					ID: backingServiceID, Name: "postgres", Image: release.DatabaseImage, Adapter: "postgres", AdapterVersion: "16",
 				},
 			}},
 		},
@@ -390,7 +391,7 @@ func seedBackupRuntimePublicationEvidence(
 		newBackupRuntimeID(ids.KindService, run.CreatedAt, 912),
 		source.TargetID,
 		nil,
-		[]testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg16_URL", Secret: true}}}},
+		[]testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg_URL", Secret: true}}}},
 		newBackupRuntimeID(ids.KindTask, run.CreatedAt, 913),
 		run.CreatedAt,
 	)

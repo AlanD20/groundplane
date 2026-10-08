@@ -47,6 +47,7 @@ func newControllerBackupComposition(
 	controllerKey *ageinfra.ControllerKey,
 	backupSecrets *backupcapability.BackupSecretResolver,
 	volumeRoot string,
+	versionObserver backupcapability.DatabaseVersionObserver,
 ) (*controllerBackupComposition, error) {
 	foundation, err := controllerbackup.NewFoundation(
 		store,
@@ -86,6 +87,7 @@ func newControllerBackupComposition(
 		attachFactValues.ResolveBackupIdentity,
 		backupcapability.NewBackupServiceFactResolver(store),
 		volumeRoot,
+		versionObserver,
 	)
 	if err != nil {
 		_ = store.Close()

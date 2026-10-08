@@ -24,7 +24,7 @@ func TestBuildFactsRendersTypedOwnAndGrantInputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFacts() error = %v", err)
 	}
-	if len(facts) != 6 || facts[0].Key != "pg16_URL" ||
+	if len(facts) != 6 || facts[0].Key != "pg_URL" ||
 		string(facts[0].Value) != "pgsql://api_5d3f9a:URL_safe-1@postgres:5432/api_5d3f9a" ||
 		!facts[0].Secret || facts[1].Secret || !facts[5].Secret {
 		t.Fatalf("BuildFacts() = %#v", facts)
@@ -66,14 +66,15 @@ type factTestAdapter struct {
 	scheme string
 }
 
-func (adapter factTestAdapter) Key() string                   { return "test" }
-func (adapter factTestAdapter) Label() string                 { return "Test" }
-func (adapter factTestAdapter) DefaultImage() (string, error) { return "test:latest", nil }
+func (adapter factTestAdapter) Key() string                         { return "test" }
+func (adapter factTestAdapter) Label() string                       { return "Test" }
+func (adapter factTestAdapter) DefaultImage(string) (string, error) { return "test:latest", nil }
+func (adapter factTestAdapter) CredentialIdentityLimit() int        { return 63 }
 func (adapter factTestAdapter) FactsPrefix() string {
 	if adapter.prefix != "" || adapter.custom {
 		return adapter.prefix
 	}
-	return "pg16_"
+	return "pg_"
 }
 func (adapter factTestAdapter) URLScheme() string {
 	if adapter.scheme != "" || adapter.custom {

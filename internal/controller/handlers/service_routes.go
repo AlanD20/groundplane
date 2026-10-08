@@ -329,6 +329,7 @@ func serviceResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 			MaxFile: record.Desired.Logging.MaxFile,
 		},
 		Adapter:          record.Desired.Adapter,
+		AdapterVersion:   record.Desired.AdapterVersion,
 		FactsPrefix:      record.Desired.FactsPrefix,
 		Label:            record.Desired.Label,
 		BackingNetworkID: record.BackingNetworkID,

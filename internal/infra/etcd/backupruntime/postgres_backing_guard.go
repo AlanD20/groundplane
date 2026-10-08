@@ -2,10 +2,10 @@ package backupruntime
 
 import "slices"
 
-// PostgresBackingEnvironmentIDs returns the unique Backing Environments whose
-// managed PostgreSQL workloads participate in this Run. The stable order keeps
+// DatabaseBackingEnvironmentIDs returns the unique Backing Environments whose
+// managed database workloads participate in this Run. The stable order keeps
 // transaction construction and replay evidence deterministic.
-func PostgresBackingEnvironmentIDs(record BackupRunRecord) ([]string, error) {
+func DatabaseBackingEnvironmentIDs(record BackupRunRecord) ([]string, error) {
 	if ValidateBackupRunRecord(record) != nil {
 		return nil, invalidBackupRuntimeRecord("backup run PostgreSQL backing guard authority is invalid")
 	}
@@ -14,15 +14,16 @@ func PostgresBackingEnvironmentIDs(record BackupRunRecord) ([]string, error) {
 		if source.Kind != BackupRuntimeSourceAttach {
 			continue
 		}
-		if source.Snapshot.Postgres == nil {
-			return nil, invalidBackupRuntimeRecord("backup run PostgreSQL backing guard target is missing")
+		environmentID, ok := backupDatabaseBackingEnvironmentID(source)
+		if !ok {
+			return nil, invalidBackupRuntimeRecord("backup run database backing guard target is missing")
 		}
-		if source.Snapshot.Postgres.BackingEnvironmentID == record.EnvironmentID {
+		if environmentID == record.EnvironmentID {
 			return nil, invalidBackupRuntimeRecord(
 				"backup run PostgreSQL backing guard must be separate from its consumer Environment",
 			)
 		}
-		unique[source.Snapshot.Postgres.BackingEnvironmentID] = struct{}{}
+		unique[environmentID] = struct{}{}
 	}
 	result := make([]string, 0, len(unique))
 	for environmentID := range unique {
@@ -32,18 +33,18 @@ func PostgresBackingEnvironmentIDs(record BackupRunRecord) ([]string, error) {
 	return result, nil
 }
 
-// PostgresBackingEnvironmentTerminalGuards splits backing Environments into
+// DatabaseBackingEnvironmentTerminalGuards splits backing Environments into
 // guards that terminalization can safely release and guards that must survive
 // for startup inventory reconciliation. Only a completed Task proves every
 // source helper retired; on an unsuccessful Task every started PostgreSQL
 // source remains guarded, including a source whose cleanup checkpoint already
 // reached Succeeded. An unstarted source never invoked a helper, and a queued
 // Task is known never to have executed.
-func PostgresBackingEnvironmentTerminalGuards(
+func DatabaseBackingEnvironmentTerminalGuards(
 	record BackupRunRecord,
 	neverExecuted bool,
 ) (release []string, retain []string, err error) {
-	environmentIDs, err := PostgresBackingEnvironmentIDs(record)
+	environmentIDs, err := DatabaseBackingEnvironmentIDs(record)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -54,7 +55,11 @@ func PostgresBackingEnvironmentTerminalGuards(
 				source.State == BackupSourceAttemptUnstarted {
 				continue
 			}
-			unsafe[source.Snapshot.Postgres.BackingEnvironmentID] = struct{}{}
+			environmentID, ok := backupDatabaseBackingEnvironmentID(source)
+			if !ok {
+				return nil, nil, invalidBackupRuntimeRecord("backup run database backing guard target is missing")
+			}
+			unsafe[environmentID] = struct{}{}
 		}
 	}
 	for _, environmentID := range environmentIDs {
@@ -67,23 +72,38 @@ func PostgresBackingEnvironmentTerminalGuards(
 	return release, retain, nil
 }
 
-// PostgresRestoreBackingEnvironmentID returns the managed database Environment
-// selected by a PostgreSQL Restore. Other Restore strategies have no such
+// DatabaseRestoreBackingEnvironmentID returns the managed database Environment
+// selected by a database Restore. Other Restore strategies have no such
 // guard.
-func PostgresRestoreBackingEnvironmentID(record BackupRestoreRecord) (string, bool, error) {
+func DatabaseRestoreBackingEnvironmentID(record BackupRestoreRecord) (string, bool, error) {
 	if ValidateBackupRestoreRecord(record) != nil {
 		return "", false, invalidBackupRuntimeRecord("Restore PostgreSQL backing guard authority is invalid")
 	}
 	if record.Point.SourceKind != BackupRuntimeSourceAttach {
 		return "", false, nil
 	}
-	if record.CurrentTarget.Postgres == nil {
-		return "", false, invalidBackupRuntimeRecord("Restore PostgreSQL backing guard target is missing")
+	var environmentID string
+	if record.CurrentTarget.Postgres != nil {
+		environmentID = record.CurrentTarget.Postgres.Source.BackingEnvironmentID
+	} else if record.CurrentTarget.MySQL != nil {
+		environmentID = record.CurrentTarget.MySQL.Source.BackingEnvironmentID
+	} else {
+		return "", false, invalidBackupRuntimeRecord("Restore database backing guard target is missing")
 	}
-	if record.CurrentTarget.Postgres.Source.BackingEnvironmentID == record.EnvironmentID {
+	if environmentID == record.EnvironmentID {
 		return "", false, invalidBackupRuntimeRecord(
 			"Restore PostgreSQL backing guard must be separate from its consumer Environment",
 		)
 	}
-	return record.CurrentTarget.Postgres.Source.BackingEnvironmentID, true, nil
+	return environmentID, true, nil
+}
+
+func backupDatabaseBackingEnvironmentID(source BackupRunSourceAttemptRecord) (string, bool) {
+	if source.Snapshot.Postgres != nil && source.Snapshot.MySQL == nil {
+		return source.Snapshot.Postgres.BackingEnvironmentID, true
+	}
+	if source.Snapshot.MySQL != nil && source.Snapshot.Postgres == nil {
+		return source.Snapshot.MySQL.BackingEnvironmentID, true
+	}
+	return "", false
 }

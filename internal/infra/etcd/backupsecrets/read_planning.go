@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -167,9 +168,9 @@ func (reader *Reader) planDynamicKeys(
 		source := evidence.Run.Sources[stepIndex]
 		switch source.Kind {
 		case backupruntime.BackupRuntimeSourceAttach:
-			snapshot := source.Snapshot.Postgres
-			if snapshot == nil {
-				return "", nil, nil, errs.New(errs.KindInternal, "postgres backup source snapshot is corrupt")
+			snapshot, snapshotErr := backupplanning.SelectBackupDatabasePublicationSnapshot(source)
+			if snapshotErr != nil {
+				return "", nil, nil, snapshotErr
 			}
 			dynamic.add(attachrecord.AttachKey(source.TargetID))
 			dynamic.add(attachrecord.AttachFactsKey(source.TargetID))

@@ -95,7 +95,7 @@ func TestBackingServiceCreationValidatesDesiredTopology(t *testing.T) {
 	}
 	service := core.Service{
 		ID: serviceID, Name: "postgres", Image: "postgres:16-alpine",
-		Strategy: core.StrategyRecreate, Adapter: "postgres:16", Command: []string{"postgres"},
+		Strategy: core.StrategyRecreate, Adapter: "postgres", AdapterVersion: "16", Command: []string{"postgres"},
 		Mounts: []core.Mount{{Volume: volumeID, Mount: "/var/lib/postgresql/data"}},
 	}
 	creation := BackingServiceCreation{

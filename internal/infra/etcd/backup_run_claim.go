@@ -42,7 +42,7 @@ func (repository *TaskRepository) prepareBackupRunClaim(ctx context.Context, tas
 	if err != nil {
 		return nil, nil, err
 	}
-	backingEnvironmentIDs, err := backupruntime.PostgresBackingEnvironmentIDs(run)
+	backingEnvironmentIDs, err := backupruntime.DatabaseBackingEnvironmentIDs(run)
 	if err != nil {
 		return nil, nil, err
 	}

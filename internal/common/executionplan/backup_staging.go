@@ -49,7 +49,7 @@ func ValidateBackupStagingInventory(inventory *agentpb.BackupStagingInventory) e
 	for _, entry := range inventory.Entries {
 		if entry == nil || len(entry.RecoveryKeySha256) != sha256.Size ||
 			(preceding != nil && bytes.Compare(preceding, entry.RecoveryKeySha256) >= 0) ||
-			!validBackupRecoveredFiles(entry.Files) && !(entry.PostgresExecution && len(entry.Files) == 0) {
+			!validBackupRecoveredFiles(entry.Files) && !(entry.DatabaseExecution && len(entry.Files) == 0) {
 			return invalidBackupStaging()
 		}
 		preceding = entry.RecoveryKeySha256
@@ -156,7 +156,7 @@ func ValidateBackupStagingRecoveryPlan(
 		if !bytes.Equal(entry.RecoveryKeySha256, disposition.RecoveryKeySha256) {
 			return invalidBackupStaging()
 		}
-		if entry.PostgresExecution && disposition.PostgresGuard == nil {
+		if entry.DatabaseExecution && disposition.DatabaseGuard == nil {
 			return invalidBackupStaging()
 		}
 		if resume := disposition.GetResumePrepared(); resume != nil {
@@ -205,7 +205,7 @@ func validateBackupStagingPlan(plan *agentpb.BackupStagingRecoveryPlan) error {
 			return invalidBackupStaging()
 		}
 		preceding = disposition.RecoveryKeySha256
-		if err := validatePostgresStagingGuard(disposition); err != nil {
+		if err := validateDatabaseStagingGuard(disposition); err != nil {
 			return err
 		}
 		switch value := disposition.Disposition.(type) {
@@ -213,8 +213,9 @@ func validateBackupStagingPlan(plan *agentpb.BackupStagingRecoveryPlan) error {
 			required := value.RecoveryRequired
 			if required == nil || required.NativeRestoreModRevision <= 0 ||
 				len(required.NativeRestoreSha256) != sha256.Size ||
-				!validBackupRecoveredFiles(required.ExpectedFiles) && !(disposition.PostgresGuard != nil &&
-					disposition.PostgresGuard.RecoveryApply == nil && len(required.ExpectedFiles) == 0) {
+				!validBackupRecoveredFiles(required.ExpectedFiles) && !(disposition.DatabaseGuard != nil &&
+					disposition.DatabaseGuard.GetPostgresRecoveryApply() == nil &&
+					disposition.DatabaseGuard.GetMysqlRecoveryApply() == nil && len(required.ExpectedFiles) == 0) {
 				return invalidBackupStaging()
 			}
 		case *agentpb.BackupStagingDisposition_DiscardRecovered:
@@ -226,10 +227,10 @@ func validateBackupStagingPlan(plan *agentpb.BackupStagingRecoveryPlan) error {
 			if resume == nil || len(resume.AssignmentResumeSha256) != sha256.Size || !validBackupRecoveredFiles(resume.ExpectedFiles) {
 				return invalidBackupStaging()
 			}
-			if resume.RestartConfigEncryption != nil && resume.RestartPostgresEncryption != nil {
+			if resume.RestartConfigEncryption != nil && resume.RestartDatabaseEncryption != nil {
 				return invalidBackupStaging()
 			}
-			if (resume.RestartConfigEncryption != nil || resume.RestartPostgresEncryption != nil) && (len(resume.ExpectedFiles) != 2 ||
+			if (resume.RestartConfigEncryption != nil || resume.RestartDatabaseEncryption != nil) && (len(resume.ExpectedFiles) != 2 ||
 				resume.RemainingGrowth != agentpb.BackupRemainingGrowth_BACKUP_REMAINING_GROWTH_BOUNDED) {
 				return invalidBackupStaging()
 			}

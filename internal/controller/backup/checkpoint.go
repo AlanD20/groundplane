@@ -61,7 +61,7 @@ type BackupCheckpointRepository interface {
 		etcdstore.Versioned[backupruntime.BackupRestoreRecord], *etcd.ConfigRestoreCheckpointPublication, time.Time) (int64, error)
 	CheckpointVolumeRestore(context.Context, backupruntime.BackupCheckpointInput,
 		etcdstore.Versioned[backupruntime.BackupRestoreRecord], *backupruntime.BackupVolumeOldManifestProof, time.Time) (int64, error)
-	CheckpointPostgresRestore(context.Context, backupruntime.BackupCheckpointInput,
+	CheckpointDatabaseRestore(context.Context, backupruntime.BackupCheckpointInput,
 		etcdstore.Versioned[backupruntime.BackupRestoreRecord], time.Time) (int64, error)
 	PublishConfigRestore(context.Context, etcdstore.Versioned[backupconfiguration.ConfigRestoreGenerationRecord],
 		environmentprojection.EnvironmentComposeProjection, environmentprojection.EnvironmentOwnedIdentities) error
@@ -212,8 +212,9 @@ func (service *BackupCheckpointService) CheckpointBackup(ctx context.Context, ag
 	if sealed.Record.Operation == agentpb.PlanOperation_PLAN_OPERATION_RESTORE {
 		for _, step := range sealed.Record.Steps {
 			if step.StepId == owned.StepId && step.GetBackupStep().ExecutionId == owned.ExecutionId {
-				if step.GetBackupStep().GetRestore().GetPostgres() != nil {
-					return service.checkpointPostgresRestore(ctx, input, claim, sealed.Record)
+				restore := step.GetBackupStep().GetRestore()
+				if restore.GetPostgres() != nil || restore.GetMysql() != nil {
+					return service.checkpointDatabaseRestore(ctx, input, claim, sealed.Record)
 				}
 				if step.GetBackupStep().GetRestore().GetVolume() != nil {
 					return service.checkpointVolumeRestore(ctx, input, step.GetBackupStep(), 0)
@@ -238,7 +239,7 @@ func (service *BackupCheckpointService) CheckpointBackup(ctx context.Context, ag
 		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint source binding is invalid")
 	}
 	if current.Record.Sources[ordinal].Kind == backupruntime.BackupRuntimeSourceAttach {
-		if err := service.validatePostgresCheckpointAdvance(ctx, claim, sealed.Record,
+		if err := service.validateDatabaseCheckpointAdvance(ctx, claim, sealed.Record,
 			current.Record.OperationID, current.ReadRevision, owned); err != nil {
 			return nil, err
 		}
@@ -327,10 +328,33 @@ func applyBackupCheckpointTransition(source *backupruntime.BackupRunSourceAttemp
 			return errs.New(errs.KindStateConflict, "PostgreSQL capture observation is out of order")
 		}
 		source.State = backupruntime.BackupSourceAttemptCapturing
+	case *agentpb.BackupCheckpointRequest_MysqlContainerObserved:
+		if source.Kind != backupruntime.BackupRuntimeSourceAttach || source.Format != backupruntime.BackupRuntimeFormatMySQL ||
+			source.State != backupruntime.BackupSourceAttemptPending {
+			return errs.New(errs.KindStateConflict, "MySQL capture observation is out of order")
+		}
+		source.State = backupruntime.BackupSourceAttemptCapturing
 	case *agentpb.BackupCheckpointRequest_PostgresDumpStart:
-		if source.Kind != backupruntime.BackupRuntimeSourceAttach || source.State != backupruntime.BackupSourceAttemptCapturing {
+		if source.Kind != backupruntime.BackupRuntimeSourceAttach || source.Format != backupruntime.BackupRuntimeFormatPostgres ||
+			source.State != backupruntime.BackupSourceAttemptCapturing {
 			return errs.New(errs.KindStateConflict, "PostgreSQL dump start is out of order")
 		}
+		archive, err := backupruntime.PostgresArchiveEvidenceFromWire(checkpoint.PostgresDumpStart.Archive)
+		if err != nil {
+			return err
+		}
+		source.PostgresArchive = archive
+		source.State, source.Phase = backupruntime.BackupSourceAttemptReady, backupruntime.BackupSourcePhaseStaging
+	case *agentpb.BackupCheckpointRequest_MysqlDumpStart:
+		if source.Kind != backupruntime.BackupRuntimeSourceAttach || source.Format != backupruntime.BackupRuntimeFormatMySQL ||
+			source.State != backupruntime.BackupSourceAttemptCapturing {
+			return errs.New(errs.KindStateConflict, "MySQL dump start is out of order")
+		}
+		archive, err := backupruntime.MySQLArchiveEvidenceFromWire(checkpoint.MysqlDumpStart.Archive)
+		if err != nil {
+			return err
+		}
+		source.MySQLArchive = archive
 		source.State, source.Phase = backupruntime.BackupSourceAttemptReady, backupruntime.BackupSourcePhaseStaging
 	case *agentpb.BackupCheckpointRequest_ArtifactPrepared:
 		if checkpoint.ArtifactPrepared.GetVolume() != nil {
@@ -339,6 +363,18 @@ func applyBackupCheckpointTransition(source *backupruntime.BackupRunSourceAttemp
 				return err
 			}
 			source.VolumeArchive = archive
+		}
+		if checkpoint.ArtifactPrepared.GetPostgres() != nil {
+			archive, err := backupruntime.PostgresArchiveEvidenceFromWire(checkpoint.ArtifactPrepared.GetPostgres())
+			if err != nil || archive != source.PostgresArchive {
+				return errs.New(errs.KindStateConflict, "PostgreSQL artifact differs from its dump-start metadata")
+			}
+		}
+		if checkpoint.ArtifactPrepared.GetMysql() != nil {
+			archive, err := backupruntime.MySQLArchiveEvidenceFromWire(checkpoint.ArtifactPrepared.GetMysql())
+			if err != nil || archive != source.MySQLArchive {
+				return errs.New(errs.KindStateConflict, "MySQL artifact differs from its dump-start metadata")
+			}
 		}
 		source.Evidence = checkpointEvidence(checkpoint.ArtifactPrepared.Evidence)
 		source.Upload = backupruntime.BackupUploadOutcome{Kind: backupruntime.BackupUploadPrepared,

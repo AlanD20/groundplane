@@ -121,7 +121,9 @@ func (service *BackupOrphanReconciliationService) Tick(ctx context.Context, afte
 					BackupRecoveryPointSnapshot: backupruntime.BackupRecoveryPointSnapshot{
 						BackupRecoveryPointTargetSnapshot: current.Record.Target,
 						Evidence:                          current.Record.Evidence, Object: identity, Postgres: current.Record.Postgres,
-						ConfigArchive: current.Record.ConfigArchive, VolumeArchive: current.Record.VolumeArchive,
+						MySQL: current.Record.MySQL, ConfigArchive: current.Record.ConfigArchive,
+						VolumeArchive:   current.Record.VolumeArchive,
+						PostgresArchive: current.Record.PostgresArchive, MySQLArchive: current.Record.MySQLArchive,
 					}, VerifiedAt: at,
 				}
 				sweep := backupruntime.BackupRetentionSweepRecord{
@@ -181,6 +183,8 @@ func backupOrphanSnapshot(orphan backupruntime.BackupOrphanRecord) backupruntime
 	return backupruntime.BackupRecoveryPointSnapshot{
 		BackupRecoveryPointTargetSnapshot: orphan.Target,
 		Evidence:                          orphan.Evidence, Object: orphan.Object, Postgres: orphan.Postgres,
-		ConfigArchive: orphan.ConfigArchive, VolumeArchive: orphan.VolumeArchive,
+		MySQL: orphan.MySQL, ConfigArchive: orphan.ConfigArchive,
+		VolumeArchive: orphan.VolumeArchive, PostgresArchive: orphan.PostgresArchive,
+		MySQLArchive: orphan.MySQLArchive,
 	}
 }

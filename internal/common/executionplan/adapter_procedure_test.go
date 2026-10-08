@@ -66,7 +66,7 @@ func validAdapterProcedurePlan() *agentpb.ExecutionPlan {
 	plan.Steps = []*agentpb.ExecutionStep{{
 		StepId: testStepID, TimeoutSeconds: 30,
 		Payload: &agentpb.ExecutionStep_AdapterProcedure{AdapterProcedure: &agentpb.AdapterProcedure{
-			AdapterKey: "postgres:16", Phase: agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
+			AdapterKey: "postgres", Phase: agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
 			AttachId: testAttachID, BackingServiceId: testBackingServiceID,
 			Role: "api_5d3f9a", Password: []byte("URL_safe-1"), Database: "api_5d3f9a",
 		}},

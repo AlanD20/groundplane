@@ -94,7 +94,8 @@ export type Service = {
   activeSlot?: Slot; // for blue-green services
   group?: "app" | "workers" | "identity" | "web" | "edge";
   // backing services only:
-  adapter?: string; // adapter registry key, e.g. "postgres:16"
+  adapter?: string; // adapter registry key, e.g. "postgres"
+  adapterVersion?: string;
   hooks?: BackingHooks;
   serviceName?: string; // unique DNS name consumers connect to, e.g. "postgres"
   prefix?: string; // fact prefix override (defaults to the adapter's)
@@ -285,7 +286,7 @@ export type ProvisionOp = {
 };
 
 export type Adapter = {
-  key: string; // "postgres:16" / "valkey:9" / "custom"
+  key: string; // "postgres" / "valkey" / "custom"
   label: string; // "PostgreSQL" / "Valkey" / "Custom"
   prefix: string;
   urlScheme: string; // "pgsql" / "redis"

@@ -182,7 +182,7 @@ because it can exit successfully after a server error. Typed procedure and
 encrypted identity state carry the explicit mode across execution; no runtime
 configuration inspection invents it.
 
-Current source: [Valkey adapter](../../internal/adapters/valkey9) and
+Current source: [Valkey adapter](../../internal/adapters/valkey) and
 [Agent backing authentication](../../internal/agent/backingadapter/authentication.go).
 
 Valkey implementation is authorized, but all three modes still require

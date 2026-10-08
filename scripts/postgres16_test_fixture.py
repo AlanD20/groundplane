@@ -27,7 +27,7 @@ def postgres16_catalog(*, published: bool = True) -> bytes:
                 "pg_restore_sha256": manifest_fill * 64,
                 "psql_sha256": manifest_fill * 64,
                 # Fixed production launch profile; all image-file digests are synthetic.
-                "launch_profile_sha256": "40161e06b32ea073fcec892434b191598277dd16029866f5b013b9cfbc8da275",
+                "launch_profile_sha256": "4153ba343b88a72a22c67ffc9f811bc7a6b83c667536a2dd8ef321f584ee6882",
                 "gate_seccomp_sha256": manifest_fill * 64,
             },
         })

@@ -58,6 +58,7 @@ type backingServiceOutput struct {
 }
 
 func (s *Server) registerBackingServices() {
+	s.registerBackingAdapterCatalog()
 	backingServiceCreateSchema(s.API.OpenAPI().Components.Schemas)
 	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	createdSchema := openAPISchema[apiTypes.BackingServiceCreated](

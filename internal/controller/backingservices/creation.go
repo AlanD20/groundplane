@@ -142,6 +142,12 @@ func (service *CreationService) CreateBackingService(
 	}
 	var spec adapters.CreationSpec
 	if adapter.Custom() {
+		if input.AdapterVersion != "" {
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindValidationFailed,
+				"Custom backing services do not select a managed server version",
+			)
+		}
 		spec, err = adapters.CustomBackingCreationSpec(input.Slug, input.Image)
 	} else {
 		if input.Image != "" {
@@ -150,7 +156,7 @@ func (service *CreationService) CreateBackingService(
 				"managed backing-service adapters do not accept an image",
 			)
 		}
-		spec, err = adapters.BackingCreationSpec(input.Adapter, authentication)
+		spec, err = adapters.BackingCreationSpec(input.Adapter, input.AdapterVersion, authentication)
 	}
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -292,7 +298,7 @@ func (service *CreationService) createBackingServiceFromStage(
 	}
 	serviceID := allocator.New(ids.KindService)
 	var postgresRelease *backingpostgresrelease.Record
-	if input.Adapter == "postgres:16" {
+	if input.Adapter == "postgres" {
 		release, releaseErr := postgres16protocol.CompiledManagedRelease()
 		if releaseErr != nil {
 			return idempotencyrecord.IdempotencyResponse{}, releaseErr
@@ -318,7 +324,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		Command: append([]string(nil), spec.Command...),
 		Mounts:  mounts,
 		Expose:  append([]string(nil), spec.Expose...), Restart: "unless-stopped",
-		Adapter: input.Adapter, Authentication: authentication,
+		Adapter: input.Adapter, AdapterVersion: input.AdapterVersion, Authentication: authentication,
 		FactsPrefix: adapter.FactsPrefix(), Label: input.Name,
 		Hooks: taskplanning.BackingHookConfigurationFromAPI(input.Hooks),
 	}

@@ -21,6 +21,7 @@ type BackupRuntimeFormat string
 
 const (
 	BackupRuntimeFormatPostgres BackupRuntimeFormat = "postgres-custom-v1"
+	BackupRuntimeFormatMySQL    BackupRuntimeFormat = "mysql-logical-v1"
 	BackupRuntimeFormatConfig   BackupRuntimeFormat = "environment-config-v1"
 	BackupRuntimeFormatVolume   BackupRuntimeFormat = "volume-tar-v1"
 )

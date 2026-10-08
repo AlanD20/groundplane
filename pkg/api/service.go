@@ -74,6 +74,7 @@ type Service struct {
 	Logging                    ServiceLogging               `json:"logging,omitempty"`
 	Replicas                   int                          `json:"replicas,omitempty"`
 	Adapter                    string                       `json:"adapter,omitempty"`
+	AdapterVersion             string                       `json:"adapter_version,omitempty"`
 	FactsPrefix                string                       `json:"facts_prefix,omitempty"`
 	Label                      string                       `json:"label,omitempty"`
 	BackingNetworkID           string                       `json:"backing_network_id,omitempty"`

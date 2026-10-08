@@ -50,7 +50,8 @@ the same-revision binding. A missing companion means unrecorded provenance;
 timestamps are never used as a substitute identity.
 
 The accepted source formats are the canonical Environment Config archive, the
-canonical managed-Volume archive, and PostgreSQL 16 `pg_dump` custom format.
+canonical managed-Volume archive, PostgreSQL 16 `pg_dump` custom format and
+MySQL 8.4 logical SQL format.
 Optional age encryption wraps the source stream without adding another
 compression layer. Object metadata and Recovery Point evidence bind both the
 plaintext and stored representations. The current format owners are linked
@@ -117,6 +118,22 @@ input, terminal, reap, Exec inspection, and post-restore proof are required;
 missing or contradictory proof is recovery-required and never authorizes a
 second apply.
 
+MySQL uses the upstream container's fixed `mysqldump`/`mysql` protocol rather
+than a GP database image or operator-supplied shell command. Its schema changes
+are not one atomic transaction. Recovery must inspect the original Exec and
+its retained terminal/input evidence; an unknown outcome never permits another
+restore-apply. [The execution owner](../../internal/infra/docker/mysql84execution)
+attests image, labels and the exact data Volume around each operation.
+
+Database archive evidence records actual server and backup-tool versions before
+dump-start acknowledgement. Recovery uses those pinned versions, not fresh
+probes that could relabel retained bytes. Restore preflight uses an authenticated
+Agent read with the same runtime attestation. The review digest binds the Point,
+Attach, consumers, exact runtime revisions, container and observed restore tools.
+Version differences require explicit operator acknowledgement; execution rechecks
+that target before effects. This separates operator-owned compatibility risk from
+GP's non-negotiable identity, format and integrity checks.
+
 Capture resume retains the original prepared archive alongside later upload
 progress. Otherwise an acknowledged upload would erase the metadata needed to
 authenticate the retained source. Unknown-size capture reserves storage as it
@@ -130,7 +147,7 @@ ciphertext may be discarded and regenerated; after preparation it is fixed.
 
 ## Agent restart and delivery fail closed
 
-Backup work uses schema-one assignments with stable ids, revisions, authority
+Backup work uses closed versioned assignments with stable ids, revisions, authority
 digests, assignment generations, absolute deadlines, contiguous checkpoint
 sequences, and a preceding-checkpoint fence. Stable ids, not names, identify
 resources. Capture and restore have a six-hour absolute budget; prune has a

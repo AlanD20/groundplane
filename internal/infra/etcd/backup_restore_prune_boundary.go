@@ -42,7 +42,7 @@ func (repository *TaskRepository) backupRestoreTaskPruneHeld(ctx context.Context
 			!backupruntime.TerminalBackupRunState(run.State) {
 			return false, errs.New(errs.KindStateConflict, "Backup retention authority changed")
 		}
-		_, environmentIDs, err = backupruntime.PostgresBackingEnvironmentTerminalGuards(
+		_, environmentIDs, err = backupruntime.DatabaseBackingEnvironmentTerminalGuards(
 			run,
 			task.TerminalAssignment == nil,
 		)
@@ -62,7 +62,7 @@ func (repository *TaskRepository) backupRestoreTaskPruneHeld(ctx context.Context
 		if restored.State != backupruntime.BackupRestoreFailedSafe || task.TerminalAssignment == nil {
 			return false, nil
 		}
-		environmentID, postgres, err := backupruntime.PostgresRestoreBackingEnvironmentID(restored)
+		environmentID, postgres, err := backupruntime.DatabaseRestoreBackingEnvironmentID(restored)
 		if err != nil {
 			return false, err
 		}

@@ -18,11 +18,11 @@ func TestBuildEntrySourceIncludesGrantedAttach(t *testing.T) {
 	source, err := buildEntrySource(entrySourceOptions{
 		factAttach: ownerAttachID,
 		factGrant:  grantAttachID,
-		factKey:    "pg16_URL",
+		factKey:    "pg_URL",
 		factSet:    true,
 	})
 	if err != nil || source.Kind != "fact" || source.AttachID != ownerAttachID ||
-		source.GrantAttachID != grantAttachID || source.Fact != "pg16_URL" {
+		source.GrantAttachID != grantAttachID || source.Fact != "pg_URL" {
 		t.Fatalf("buildEntrySource() = %#v, %v", source, err)
 	}
 }

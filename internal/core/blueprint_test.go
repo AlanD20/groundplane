@@ -82,7 +82,7 @@ func TestEnvEntryValidate_SourceIsExactlyOneKind(t *testing.T) {
 	// renderer with an ambiguous source.
 	e := EnvEntry{
 		ID: "ev_x", Kind: EntryKindEnv, Key: "DATABASE_URL",
-		Source:   EntrySource{Kind: SourceFact, Literal: "also-set", Fact: &FactRef{Attach: "api-db", Key: "pg16_URL"}},
+		Source:   EntrySource{Kind: SourceFact, Literal: "also-set", Fact: &FactRef{Attach: "api-db", Key: "pg_URL"}},
 		Exposure: []string{"api"},
 	}
 	if err := e.Validate(); err == nil {

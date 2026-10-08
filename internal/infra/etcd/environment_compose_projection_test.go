@@ -114,7 +114,8 @@ func desiredTopologyProjectionFixture(t *testing.T) testenvironmentprojection.En
 		}
 		backingNetworkID := ""
 		if index == 0 {
-			service.Adapter = "postgres:16"
+			service.Adapter = "postgres"
+			service.AdapterVersion = "16"
 			service.Image = "postgres:16-alpine"
 			backingNetworkID = projection.DesiredZones[0].Desired.ID
 		}

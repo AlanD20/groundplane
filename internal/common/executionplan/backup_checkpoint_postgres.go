@@ -39,6 +39,7 @@ func validBackupPostgresDump(value *agentpb.BackupPostgresDumpStart) bool {
 		backupCheckpointDigest(value.RepositoryDigest) && backupCheckpointDigest(value.ExpectedLabelsSha256) &&
 		value.AdapterContractVersion == postgres16protocol.AdapterContractVersion &&
 		postgresidentity.ValidGenerated(value.DatabaseName) && postgresidentity.ValidGenerated(value.RoleName) &&
+		validBackupCheckpointPostgresArchive(value.Archive) &&
 		(value.MaxPlaintextBytes == backupformat.MaxStoredBytes || value.MaxPlaintextBytes == backupformat.MaxAgeSourceBytes)
 }
 

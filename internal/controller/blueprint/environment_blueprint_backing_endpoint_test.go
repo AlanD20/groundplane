@@ -57,7 +57,7 @@ func TestEnvironmentBlueprintAttachFactsUseStableBackingEndpoint(t *testing.T) {
 				EnvironmentID:    backingEnvironmentID,
 				BackingNetworkID: ids.NewAt(ids.KindNetwork, now, 6),
 				Desired: core.Service{
-					ID: backingServiceID, Name: "postgres", Adapter: "postgres:16",
+					ID: backingServiceID, Name: "postgres", Adapter: "postgres", AdapterVersion: "16",
 				},
 				Runtime: core.ServiceRuntime{
 					ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
@@ -103,10 +103,10 @@ func TestEnvironmentBlueprintAttachFactsUseStableBackingEndpoint(t *testing.T) {
 	wantHost := "gp-svc-01m2fwkng0smhx4kvh89teeh1m"
 	for _, grant := range []string{"", "target"} {
 		host := resolvePreparedBlueprintFact(t, prepared.facts, environmentID, core.FactRef{
-			Attach: "reader", Grant: grant, Key: "pg16_HOST",
+			Attach: "reader", Grant: grant, Key: "pg_HOST",
 		}, false)
 		url := resolvePreparedBlueprintFact(t, prepared.facts, environmentID, core.FactRef{
-			Attach: "reader", Grant: grant, Key: "pg16_URL",
+			Attach: "reader", Grant: grant, Key: "pg_URL",
 		}, true)
 		if host != wantHost {
 			t.Fatalf("grant %q HOST = %q, want endpoint %q", grant, host, wantHost)

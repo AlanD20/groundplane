@@ -181,6 +181,13 @@ func validateBackupTaskAuthority(authority *agentpb.BackupTaskAuthority) error {
 		if postgresID != "" && !slices.Contains(serviceIDs, postgresID) {
 			return errs.New(errs.KindValidationFailed, "backup database has no sealed Service fact")
 		}
+		mysqlID := step.GetCapture().GetMysql().GetDatabaseServiceId()
+		if step.GetRestore().GetMysql() != nil {
+			mysqlID = step.GetRestore().GetMysql().GetDatabaseServiceId()
+		}
+		if mysqlID != "" && !slices.Contains(serviceIDs, mysqlID) {
+			return errs.New(errs.KindValidationFailed, "backup database has no sealed Service fact")
+		}
 	}
 	return nil
 }

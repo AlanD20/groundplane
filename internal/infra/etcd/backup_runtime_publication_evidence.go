@@ -144,7 +144,11 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		}
 		switch source.Kind {
 		case backupruntime.BackupRuntimeSourceAttach:
-			snapshot := source.Snapshot.Postgres
+			snapshot, snapshotErr := backupplanning.SelectBackupDatabasePublicationSnapshot(source)
+			if snapshotErr != nil {
+				etcdstore.ClearMutationValues(mutations)
+				return nil, nil, snapshotErr
+			}
 			read, readErr := repository.ReadFixedKeys(ctx, []string{
 				attachrecord.AttachKey(source.TargetID),
 				attachrecord.AttachFactsKey(source.TargetID),
@@ -158,10 +162,10 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, readErr
 			}
-			if err := backupplanning.ValidateBackupPostgresPublicationEvidence(
+			if err := backupplanning.ValidateBackupDatabasePublicationEvidence(
 				read.Values,
 				source,
-				*snapshot,
+				snapshot,
 			); err != nil {
 				etcdstore.ClearValues(read.Values)
 				etcdstore.ClearMutationValues(mutations)

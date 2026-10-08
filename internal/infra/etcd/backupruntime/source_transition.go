@@ -1,7 +1,5 @@
 package backupruntime
 
-import ()
-
 func ChangedBackupSourceOrdinal(current BackupRunRecord, next BackupRunRecord) (uint32, bool) {
 	if len(current.Sources) != len(next.Sources) {
 		return 0, false
@@ -18,6 +16,8 @@ func ChangedBackupSourceOrdinal(current BackupRunRecord, next BackupRunRecord) (
 				current.Sources[index].Evidence == next.Sources[index].Evidence &&
 				current.Sources[index].ConfigArchive == next.Sources[index].ConfigArchive &&
 				current.Sources[index].VolumeArchive == next.Sources[index].VolumeArchive &&
+				current.Sources[index].PostgresArchive == next.Sources[index].PostgresArchive &&
+				current.Sources[index].MySQLArchive == next.Sources[index].MySQLArchive &&
 				current.Sources[index].Upload == next.Sources[index].Upload &&
 				current.Sources[index].Object == next.Sources[index].Object &&
 				current.Sources[index].FailureCode == "" && next.Sources[index].FailureCode == "" {

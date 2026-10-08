@@ -31,7 +31,7 @@ type BuildInput struct {
 // and closed-shape validation for every Controller-produced execution plan.
 func Build(input BuildInput) (*agentpb.ExecutionPlan, error) {
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: 1, PlanId: input.PlanID, RenderGeneration: input.RenderGeneration,
+		Schema: executionplan.SchemaVersion, PlanId: input.PlanID, RenderGeneration: input.RenderGeneration,
 		Operation:                    input.Operation,
 		TargetId:                     input.TargetID,
 		Artifacts:                    input.Artifacts,

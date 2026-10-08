@@ -36,7 +36,7 @@ func KindForService(service services.EnvironmentServiceProjection) (Kind, error)
 	if service.BackingNetworkID == "" && service.Desired.Adapter == "" {
 		return ReleaseRuntime, nil
 	}
-	if service.BackingNetworkID != "" && service.Desired.Adapter == "postgres:16" {
+	if service.BackingNetworkID != "" && service.Desired.Adapter == "postgres" {
 		return BackingRuntime, nil
 	}
 	return 0, errs.New(errs.KindStrategyNotImplemented, "backup Service runtime kind is unsupported")

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/app/controllerbackup"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/attachplanning"
@@ -166,6 +167,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		authority.intentProtector,
 		authority.controllerKey,
 		execution.backupSecrets, cfg.Storage.VolumeRoot,
+		controllerbackup.NewDatabaseVersionObserver(authority.agents, agentRuntime.Registry),
 	)
 	if err != nil {
 		return nil, err

@@ -16,7 +16,7 @@ func serviceAPIResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 		OnFailure: apiTypes.OnFailure(record.Desired.OnFailure),
 		Resources: apiTypes.ServiceResources{Mem: record.Desired.Resources.Mem, CPUs: record.Desired.Resources.CPUs},
 		Expose:    append([]string(nil), record.Desired.Expose...), Restart: record.Desired.Restart,
-		Replicas: record.Desired.Replicas, Adapter: record.Desired.Adapter,
+		Replicas: record.Desired.Replicas, Adapter: record.Desired.Adapter, AdapterVersion: record.Desired.AdapterVersion,
 		FactsPrefix: record.Desired.FactsPrefix, Label: record.Desired.Label, BackingNetworkID: record.BackingNetworkID,
 		Hooks: taskplanning.BackingHookConfigurationToAPI(record.Desired.Hooks),
 	}

@@ -248,7 +248,8 @@ func seedTaskPruneBackupCheckpoints(
 						SameInode:          func() *bool { value := false; return &value }(),
 					},
 					Archive: &agentpb.BackupArtifactPrepared_Postgres{
-						Postgres: &agentpb.BackupPostgresArchiveEvidence{PgDumpMajor: 16, AdapterContractVersion: 1},
+						Postgres: &agentpb.BackupPostgresArchiveEvidence{PgDumpMajor: 16, AdapterContractVersion: 1,
+							SourceServerVersion: "16.9", BackupToolVersion: "16.9"},
 					},
 				},
 			},

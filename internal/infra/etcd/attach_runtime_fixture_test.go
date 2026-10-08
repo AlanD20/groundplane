@@ -96,7 +96,7 @@ func nativeAttachFixturePlan(t *testing.T, record serviceruntimerecord.Record, t
 	if running {
 		selected = []string{record.Runtime.ServiceID}
 	}
-	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{Schema: 1, PlanId: task.PlanID,
+	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{Schema: executionplan.SchemaVersion, PlanId: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration), Operation: operation, TargetId: task.Target,
 		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: []*agentpb.ExecutionStep{{StepId: task.Steps[0].ID,
 			TimeoutSeconds: 120, Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{

@@ -237,6 +237,7 @@ func backupRuntimeTestPoint(
 			},
 			Evidence: source.Evidence, Object: source.Object,
 			ConfigArchive: source.ConfigArchive, VolumeArchive: source.VolumeArchive,
+			PostgresArchive: source.PostgresArchive, MySQLArchive: source.MySQLArchive,
 		},
 		VerifiedAt: verifiedAt,
 	}
@@ -256,6 +257,11 @@ func backupRuntimeCompleteSourceArtifact(
 	source *testbackupruntime.BackupRunSourceAttemptRecord,
 ) {
 	source.Evidence = testBackupArtifact()
+	if source.Format == testbackupruntime.BackupRuntimeFormatPostgres {
+		source.PostgresArchive = testbackupruntime.BackupPostgresArchiveEvidence{
+			PGDumpMajor: 16, AdapterContractVersion: 1, SourceServerVersion: "16.9", BackupToolVersion: "16.9",
+		}
+	}
 	source.Object = testbackupruntime.BackupObjectIdentity{
 		Target: testbackupruntime.BackupObjectTarget{
 			ConnectorID: run.ConnectorID, ConnectorPrefix: run.ConnectorPrefix,
@@ -293,6 +299,7 @@ func backupRuntimeOrphanPoint(
 	return testbackupruntime.BackupRecoveryPointSnapshot{
 		BackupRecoveryPointTargetSnapshot: orphan.Target,
 		Evidence:                          orphan.Evidence, Object: orphan.Object, Postgres: orphan.Postgres,
+		PostgresArchive: orphan.PostgresArchive, MySQL: orphan.MySQL, MySQLArchive: orphan.MySQLArchive,
 		ConfigArchive: orphan.ConfigArchive, VolumeArchive: orphan.VolumeArchive,
 	}
 }

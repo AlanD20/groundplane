@@ -18,17 +18,19 @@ func backingServiceCreateSchema(registry huma.Registry) {
 	}
 	schema.OneOf = []*huma.Schema{
 		{Type: huma.TypeObject, Properties: map[string]*huma.Schema{
-			"adapter":        {Type: huma.TypeString, Enum: []any{"valkey:9"}},
-			"authentication": schema.Properties["authentication"],
-		}, Required: []string{"adapter", "authentication"}, Not: &huma.Schema{
+			"adapter":         {Type: huma.TypeString, Enum: []any{"valkey"}},
+			"adapter_version": schema.Properties["adapter_version"],
+			"authentication":  schema.Properties["authentication"],
+		}, Required: []string{"adapter", "adapter_version", "authentication"}, Not: &huma.Schema{
 			AnyOf: []*huma.Schema{
 				present("image"),
 				present("hooks"),
 			},
 		}},
 		{Type: huma.TypeObject, Properties: map[string]*huma.Schema{
-			"adapter": {Type: huma.TypeString, Enum: []any{"postgres:16"}},
-		}, Required: []string{"adapter"}, Not: &huma.Schema{AnyOf: []*huma.Schema{
+			"adapter":         {Type: huma.TypeString, Enum: []any{"postgres", "mysql"}},
+			"adapter_version": schema.Properties["adapter_version"],
+		}, Required: []string{"adapter", "adapter_version"}, Not: &huma.Schema{AnyOf: []*huma.Schema{
 			present("authentication"),
 			present("image"),
 			present("hooks"),
@@ -36,7 +38,7 @@ func backingServiceCreateSchema(registry huma.Registry) {
 		{Type: huma.TypeObject, Properties: map[string]*huma.Schema{
 			"adapter": {Type: huma.TypeString, Enum: []any{"custom"}},
 			"image":   {Type: huma.TypeString, MinLength: &one},
-		}, Required: []string{"adapter", "image"}, Not: present("authentication")},
+		}, Required: []string{"adapter", "image"}, Not: &huma.Schema{AnyOf: []*huma.Schema{present("authentication"), present("adapter_version")}}},
 	}
 	schema.PrecomputeMessages()
 }

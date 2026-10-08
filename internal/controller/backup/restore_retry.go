@@ -26,9 +26,10 @@ func (service *RestoreService) RetryRestoreTask(ctx context.Context,
 		return etcd.IdempotencyTransactionResult{}, err
 	}
 	request := apiTypes.RestoreRequest{SourceID: source.Restore.Point.SourceID,
-		RecoveryPointID: source.Restore.Point.ID}
+		RecoveryPointID: source.Restore.Point.ID, VersionReviewSHA256: source.Restore.VersionReviewSHA256,
+		AcknowledgeVersionDifference: source.Restore.VersionDifferenceAcknowledged}
 	prepared, err := service.prepareRestore(ctx, source.Restore.EnvironmentID, retryTaskID,
-		source.Restore.OperationID, request, marker.CreatedAt, false)
+		source.Restore.OperationID, request, marker.CreatedAt, false, false)
 	if err != nil {
 		return etcd.IdempotencyTransactionResult{}, err
 	}

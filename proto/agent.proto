@@ -135,6 +135,21 @@ message ServiceObservationTarget {
   string proxy_plan_id = 10;
   uint64 proxy_render_generation = 11;
   bytes proxy_config_sha256 = 12; // exact acknowledged active Caddy configuration
+  DatabaseVersionProbe database_probe = 13; // closed read-only Restore preflight
+}
+
+message DatabaseVersionProbe {
+  BackupStepAuthority authority = 1;
+  repeated BackupServiceFact services = 2;
+  repeated ComposeArtifact artifacts = 3;
+}
+
+message DatabaseVersionObservation {
+  string family = 1;
+  string server_version = 2;
+  string restore_tool_version = 3;
+  string container_id = 4;
+  string image_id = 5;
 }
 
 message ObserveServices {
@@ -166,6 +181,7 @@ message ServiceObservationRow {
   }
   ServiceProxyObservationState proxy_state = 5;
   repeated ServiceContainerObservation containers = 6;
+  DatabaseVersionObservation database_versions = 7;
 }
 
 // Selected workload metadata only; no environment, commands or healthcheck output.
@@ -1603,6 +1619,7 @@ message BackupCaptureResume {
   // Absent before Prepared; immutable for the remainder of this capture.
   BackupArtifactPrepared prepared_artifact = 5;
   BackupPostgresDumpStart dump_start = 6;
+  BackupMySQLDumpStart mysql_dump_start = 7;
   oneof checkpoint {
     BackupArtifactPrepared artifact_prepared = 10;
     BackupUploadVerified upload_verified = 11;
@@ -1612,6 +1629,8 @@ message BackupCaptureResume {
     BackupVolumeProgress volume_progress = 15;
     BackupConfigProgress config_progress = 16;
     BackupUploadCompleted upload_completed = 17;
+    BackupMySQLContainerObserved mysql_container_observed = 18;
+    BackupMySQLDumpStart mysql_dump_start_checkpoint = 19;
   }
 }
 
@@ -1630,6 +1649,7 @@ message BackupRestoreResume {
   BackupRestorePhase phase = 3;
   BackupRestoreCursor cursor = 4;
   BackupPostgresRestoreApplyStartCheckpoint apply_start = 5;
+  BackupMySQLRestoreApplyStartCheckpoint mysql_apply_start = 6;
   oneof checkpoint {
     BackupRestoreArtifactValidated artifact_validated = 10;
     BackupPostgresContainerObserved postgres_container_observed = 11;
@@ -1639,6 +1659,10 @@ message BackupRestoreResume {
     BackupPostgresRestoreVerified postgres_restore_verified = 15;
     BackupPostgresServiceProgress postgres_service_progress = 16;
     BackupSourceCleanupCompleted source_cleanup_completed = 17;
+    BackupMySQLContainerObserved mysql_container_observed = 18;
+    BackupMySQLRestoreApplyStartCheckpoint mysql_restore_apply_start = 19;
+    BackupMySQLRestoreVerified mysql_restore_verified = 20;
+    BackupMySQLServiceProgress mysql_service_progress = 21;
   }
 }
 
@@ -1682,6 +1706,11 @@ message BackupCheckpointRequest {
     BackupPostgresRestoreVerified postgres_restore_verified = 30;
     BackupPostgresServiceProgress postgres_service_progress = 31;
     BackupUploadCompleted upload_completed = 32;
+    BackupMySQLContainerObserved mysql_container_observed = 33;
+    BackupMySQLDumpStart mysql_dump_start = 34;
+    BackupMySQLRestoreApplyStartCheckpoint mysql_restore_apply_start = 35;
+    BackupMySQLRestoreVerified mysql_restore_verified = 36;
+    BackupMySQLServiceProgress mysql_service_progress = 37;
   }
 }
 
@@ -1706,6 +1735,7 @@ message BackupCaptureAuthority {
     BackupPostgresCaptureAuthority postgres = 10;
     BackupConfigCaptureAuthority config = 11;
     BackupVolumeCaptureAuthority volume = 12;
+    BackupMySQLCaptureAuthority mysql = 13;
   }
 }
 
@@ -1721,6 +1751,7 @@ message BackupRestoreAuthority {
     BackupPostgresRestoreAuthority postgres = 10;
     BackupConfigRestoreAuthority config = 11;
     BackupVolumeRestoreAuthority volume = 12;
+    BackupMySQLRestoreAuthority mysql = 13;
   }
   oneof identity {
     BackupOriginalIdentity original_identity = 20;
@@ -1811,7 +1842,7 @@ message BackupRecoveredStage {
   repeated BackupRecoveredFile files = 2;
   // Durable execution marker survives source-file cleanup until helper state
   // is classified under a Controller disposition. It may have no files.
-  bool postgres_execution = 3;
+  bool database_execution = 3;
 }
 
 enum BackupRecoveredFileRole {
@@ -1867,18 +1898,21 @@ message BackupStagingDisposition {
     BackupDiscardRecovered discard_recovered = 3;
     BackupRecoveryRequired recovery_required = 4;
   }
-  BackupPostgresStagingGuard postgres_guard = 5;
+  BackupDatabaseStagingGuard database_guard = 5;
 }
 
 // Exact retained release and runtime selection, never current desired state.
 // Inspection grants no client execution or file cleanup authority by itself.
-message BackupPostgresStagingGuard {
+message BackupDatabaseStagingGuard {
   string task_id = 1;
   BackupStepAuthority step = 2;
   BackupServiceFact database_service = 3;
   ComposeArtifact database_artifact = 4;
   // Present only for the exact terminal native RecoveryRequired apply attempt.
-  BackupPostgresRestoreApplyStartCheckpoint recovery_apply = 5;
+  oneof recovery_apply {
+    BackupPostgresRestoreApplyStartCheckpoint postgres_recovery_apply = 5;
+    BackupMySQLRestoreApplyStartCheckpoint mysql_recovery_apply = 8;
+  }
   // Only a terminal safe/completed Task permits namespace retirement and
   // removal of its execution marker. Live resume and recovery holds do not.
   bool terminal_cleanup = 6;
@@ -1902,13 +1936,13 @@ message BackupResumePrepared {
   // Config capture only, before ArtifactPrepared selected ciphertext. Preserve
   // the independently verified complete source; retire only derived ciphertext.
   BackupRestartConfigEncryption restart_config_encryption = 5;
-  // PostgreSQL capture only, before ArtifactPrepared. Preserve the inventoried
+  // Database capture only, before ArtifactPrepared. Preserve the inventoried
   // source for original-Exec verification; retire only unselected ciphertext.
-  BackupRestartPostgresEncryption restart_postgres_encryption = 6;
+  BackupRestartDatabaseEncryption restart_database_encryption = 6;
 }
 
 message BackupRestartConfigEncryption {}
-message BackupRestartPostgresEncryption {}
+message BackupRestartDatabaseEncryption {}
 
 message BackupDiscardRecovered {}
 
@@ -2095,6 +2129,7 @@ message BackupArtifactPrepared {
     BackupPostgresArchiveEvidence postgres = 10;
     BackupConfigArchiveEvidence config = 11;
     BackupVolumeArchiveEvidence volume = 12;
+    BackupMySQLArchiveEvidence mysql = 13;
   }
 }
 
@@ -2134,6 +2169,7 @@ message BackupRestoreArtifactValidated {
     BackupPostgresArchiveEvidence postgres = 10;
     BackupConfigArchiveEvidence config = 11;
     BackupVolumeArchiveEvidence volume = 12;
+    BackupMySQLArchiveEvidence mysql = 13;
   }
 }
 
@@ -2425,6 +2461,8 @@ message BackupPostgresRestoreAuthority {
   string database_name = 5;
   string role_name = 6;
   bytes managed_release_index = 7;
+  BackupPostgresArchiveEvidence expected_archive = 8;
+  DatabaseVersionObservation expected_target_versions = 9;
 }
 
 message BackupPostgresContainerObserved {
@@ -2448,6 +2486,7 @@ message BackupPostgresDumpStart {
   string database_name = 8;
   string role_name = 9;
   uint64 max_plaintext_bytes = 10;
+  BackupPostgresArchiveEvidence archive = 11;
 }
 
 message BackupPostgresRestoreApplyStartCheckpoint {
@@ -2489,6 +2528,92 @@ message BackupPostgresServiceProgress {
 message BackupPostgresArchiveEvidence {
   uint32 pg_dump_major = 1; // exactly 16
   uint32 adapter_contract_version = 2; // exactly one
+  string source_server_version = 3; // exact observed server version
+  string backup_tool_version = 4; // exact observed pg_dump version
+}
+
+// MySQL authority is intentionally separate from PostgreSQL authority. The
+// Agent accepts only the closed MySQL 8.4 logical-backup operation set and the
+// exact applied singleton selected in the sealed Compose artifact.
+message BackupMySQLCaptureAuthority {
+  uint32 adapter_contract_version = 1;
+  string database_service_id = 2;
+  string database_name = 3;
+  string role_name = 4;
+  uint64 max_plaintext_bytes = 5;
+  uint32 required_server_major = 6;
+  uint32 required_server_minor = 7;
+  bytes database_image_reference_sha256 = 8;
+}
+
+message BackupMySQLRestoreAuthority {
+  uint32 adapter_contract_version = 1;
+  string database_service_id = 2;
+  string database_name = 3;
+  string role_name = 4;
+  uint32 required_server_major = 5;
+  uint32 required_server_minor = 6;
+  BackupMySQLArchiveEvidence expected_archive = 7;
+  bytes database_image_reference_sha256 = 8;
+  DatabaseVersionObservation expected_target_versions = 9;
+}
+
+message BackupMySQLContainerObserved {
+  string service_id = 1;
+  string container_id = 2;
+  bytes image_reference_sha256 = 3;
+  uint32 observed_label_count = 4;
+  bytes observed_labels_sha256 = 5;
+  bytes observation_sha256 = 6;
+  bytes database_image_id_sha256 = 7;
+}
+
+message BackupMySQLDumpStart {
+  string point_id = 1;
+  bytes execution_nonce = 2;
+  string container_id = 3;
+  string exec_id = 4;
+  bytes image_reference_sha256 = 5;
+  bytes expected_labels_sha256 = 6;
+  uint32 adapter_contract_version = 7;
+  string database_name = 8;
+  string role_name = 9;
+  uint64 max_plaintext_bytes = 10;
+  BackupMySQLArchiveEvidence archive = 11;
+}
+
+message BackupMySQLRestoreApplyStartCheckpoint {
+  string point_id = 1;
+  bytes execution_nonce = 2;
+  string container_id = 3;
+  string exec_id = 4;
+  bytes image_reference_sha256 = 5;
+  bytes expected_labels_sha256 = 6;
+  uint64 source_size_bytes = 7;
+  bytes source_sha256 = 8;
+}
+
+message BackupMySQLRestoreVerified {
+  string point_id = 1;
+  string container_id = 2;
+  BackupArtifactEvidence evidence = 3;
+  bytes verification_sha256 = 4;
+}
+
+message BackupMySQLServiceProgress {
+  uint32 service_cursor = 1;
+  string service_id = 2;
+  BackupServicePhase phase = 3;
+  bytes observation_sha256 = 4;
+}
+
+// These exact observed values are carried into the Recovery Point and the
+// authenticated object metadata digest. They are never inferred from a tag.
+message BackupMySQLArchiveEvidence {
+  string source_server_version = 1;
+  string backup_tool_version = 2;
+  string artifact_format = 3; // exactly mysql-logical-v1
+  uint32 adapter_contract_version = 4;
 }
 
 enum BackupVolumeEntryKind {
@@ -3090,6 +3215,7 @@ message ComposeHelperRequest {
   ReleaseRestorationAuthority restoration_authority = 9;
   BackupVolumeConsumerAction backup_volume_consumer = 10;
   BackupPostgresConsumerAction backup_postgres_consumer = 11;
+  BackupMySQLConsumerAction backup_mysql_consumer = 12;
 }
 
 enum BackupVolumeConsumerOperation {
@@ -3112,6 +3238,17 @@ enum BackupPostgresConsumerOperation {
 message BackupPostgresConsumerAction {
   string service_id = 1;
   BackupPostgresConsumerOperation operation = 2;
+}
+
+enum BackupMySQLConsumerOperation {
+  BACKUP_MYSQL_CONSUMER_OPERATION_UNSPECIFIED = 0;
+  BACKUP_MYSQL_CONSUMER_OPERATION_STOP = 1;
+  BACKUP_MYSQL_CONSUMER_OPERATION_RECOVER = 2;
+}
+
+message BackupMySQLConsumerAction {
+  string service_id = 1;
+  BackupMySQLConsumerOperation operation = 2;
 }
 
 message ComposeHelperResponse {

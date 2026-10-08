@@ -7,8 +7,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/adapters/custom"
-	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
-	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
+	"github.com/AlanD20/groundplane/internal/adapters/postgres"
+	"github.com/AlanD20/groundplane/internal/adapters/valkey"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
@@ -17,11 +17,11 @@ import (
 )
 
 func registerAdapters() {
-	if _, registered := adapters.Get("postgres:16"); !registered {
-		postgres16.Register()
+	if _, registered := adapters.Get("postgres"); !registered {
+		postgres.Register()
 	}
-	if _, registered := adapters.Get("valkey:9"); !registered {
-		valkey9.Register()
+	if _, registered := adapters.Get("valkey"); !registered {
+		valkey.Register()
 	}
 	if _, registered := adapters.Get("custom"); !registered {
 		custom.Register()
@@ -80,15 +80,16 @@ func (repository *blueprintAttachFactRepository) GetAttachFacts(
 
 type attachFactTestAdapter struct{}
 
-func (attachFactTestAdapter) Key() string                       { return "test:1" }
-func (attachFactTestAdapter) Label() string                     { return "Test" }
-func (attachFactTestAdapter) DefaultImage() (string, error)     { return "test:1", nil }
-func (attachFactTestAdapter) FactsPrefix() string               { return "test_" }
-func (attachFactTestAdapter) URLScheme() string                 { return "pgsql://" }
-func (attachFactTestAdapter) Port() string                      { return "5432" }
-func (attachFactTestAdapter) Custom() bool                      { return false }
-func (attachFactTestAdapter) SupportsGrants() bool              { return true }
-func (attachFactTestAdapter) SupportsAuthenticationModes() bool { return false }
+func (attachFactTestAdapter) Key() string                         { return "test:1" }
+func (attachFactTestAdapter) Label() string                       { return "Test" }
+func (attachFactTestAdapter) DefaultImage(string) (string, error) { return "test:1", nil }
+func (attachFactTestAdapter) CredentialIdentityLimit() int        { return 63 }
+func (attachFactTestAdapter) FactsPrefix() string                 { return "test_" }
+func (attachFactTestAdapter) URLScheme() string                   { return "pgsql://" }
+func (attachFactTestAdapter) Port() string                        { return "5432" }
+func (attachFactTestAdapter) Custom() bool                        { return false }
+func (attachFactTestAdapter) SupportsGrants() bool                { return true }
+func (attachFactTestAdapter) SupportsAuthenticationModes() bool   { return false }
 func (attachFactTestAdapter) FactSchema(core.BackingAuthentication) []adapters.FactDefinition {
 	return []adapters.FactDefinition{
 		{Field: adapters.FactDatabase},

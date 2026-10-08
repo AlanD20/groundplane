@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/databaseversion"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -55,6 +56,20 @@ func ValidateTarget(target *agentpb.ServiceObservationTarget) error {
 			target.PlanId,
 		) != nil || target.RenderGeneration == 0 || !composeNameValid(target.ComposeName) {
 		return invalid()
+	}
+	if probe := target.DatabaseProbe; probe != nil {
+		if len(probe.ProtoReflect().GetUnknown()) != 0 || probe.Authority == nil ||
+			len(probe.Authority.ProtoReflect().GetUnknown()) != 0 || probe.Authority.GetRestore() == nil ||
+			len(probe.Services) == 0 || len(probe.Artifacts) == 0 || target.ProxyComposeName != "" {
+			return invalid()
+		}
+		serviceID := probe.Authority.GetRestore().GetPostgres().GetDatabaseServiceId()
+		if mysql := probe.Authority.GetRestore().GetMysql(); mysql != nil {
+			serviceID = mysql.DatabaseServiceId
+		}
+		if serviceID != target.ServiceId {
+			return invalid()
+		}
 	}
 	if target.RuntimeRole == "backing" {
 		if target.ReleaseId != "" || target.Slot != "" || target.ProxyComposeName != "" {
@@ -113,8 +128,16 @@ func ValidateResult(request *agentpb.ObserveServices, result *agentpb.ServiceObs
 			if !validProxyState(target, row.ProxyState, false) {
 				return invalid()
 			}
+			if target.DatabaseProbe != nil {
+				versions, err := databaseversion.FromWire(row.DatabaseVersions)
+				if err != nil || len(row.Containers) != 1 || versions.ContainerID != row.Containers[0].Id {
+					return invalid()
+				}
+			} else if row.DatabaseVersions != nil {
+				return invalid()
+			}
 		case *agentpb.ServiceObservationRow_Unavailable:
-			if outcome == nil || !outcome.Unavailable || len(row.Containers) != 0 || !validProxyState(target, row.ProxyState, true) {
+			if outcome == nil || !outcome.Unavailable || len(row.Containers) != 0 || row.DatabaseVersions != nil || !validProxyState(target, row.ProxyState, true) {
 				return invalid()
 			}
 		default:

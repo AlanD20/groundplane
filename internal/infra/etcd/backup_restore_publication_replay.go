@@ -91,7 +91,7 @@ func (repository *BackupRuntimeRepository) validateExistingRestorePublication(ct
 	if err != nil {
 		return err
 	}
-	backingEnvironmentID, postgres, err := backupruntime.PostgresRestoreBackingEnvironmentID(native)
+	backingEnvironmentID, postgres, err := backupruntime.DatabaseRestoreBackingEnvironmentID(native)
 	if err != nil {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}

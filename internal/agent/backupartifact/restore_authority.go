@@ -49,7 +49,21 @@ func NewRestoreAuthority(task *agentpb.BackupTaskAuthority, step *agentpb.Backup
 	case restore.GetVolume() != nil:
 		artifact.SourceFormat = backupobject.SourceFormatVolumeTar
 	case restore.GetPostgres() != nil:
+		archive := restore.GetPostgres().GetExpectedArchive()
+		if archive == nil {
+			return nil, invalidRestore()
+		}
 		artifact.SourceFormat = backupobject.SourceFormatPostgresCustom
+		artifact.SourceServerVersion = archive.SourceServerVersion
+		artifact.BackupToolVersion = archive.BackupToolVersion
+	case restore.GetMysql() != nil:
+		archive := restore.GetMysql().GetExpectedArchive()
+		if archive == nil {
+			return nil, invalidRestore()
+		}
+		artifact.SourceFormat = backupobject.SourceFormatMySQLLogical
+		artifact.SourceServerVersion = archive.SourceServerVersion
+		artifact.BackupToolVersion = archive.BackupToolVersion
 	default:
 		return nil, invalidRestore()
 	}

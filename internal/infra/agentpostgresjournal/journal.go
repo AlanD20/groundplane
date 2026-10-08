@@ -1,5 +1,5 @@
 // Package agentpostgresjournal owns the Agent's private crash-durable record
-// that a PostgreSQL helper execution still requires authoritative retirement.
+// that a managed database helper execution still requires authoritative retirement.
 package agentpostgresjournal
 
 import (
@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	rootPath       = agentprotocol.StatePath + "/postgres-executions"
+	rootPath       = agentprotocol.StatePath + "/database-executions"
 	maximumMarkers = 32
 )
 
@@ -25,7 +25,7 @@ func (value IDs) validate() error {
 	if ids.Validate(ids.KindTask, value.Task) != nil ||
 		ids.Validate(ids.KindStep, value.Step) != nil ||
 		ids.Validate(ids.KindRecoveryPoint, value.Point) != nil {
-		return invalid("PostgreSQL execution journal IDs are invalid")
+		return invalid("database execution journal IDs are invalid")
 	}
 	return nil
 }
@@ -37,11 +37,11 @@ func (value IDs) name() string {
 func parseName(name string) (IDs, error) {
 	parts := strings.Split(name, ".")
 	if len(parts) != 3 {
-		return IDs{}, invalid("PostgreSQL execution journal marker name is invalid")
+		return IDs{}, invalid("database execution journal marker name is invalid")
 	}
 	value := IDs{Task: parts[0], Step: parts[1], Point: parts[2]}
 	if value.validate() != nil || value.name() != name {
-		return IDs{}, invalid("PostgreSQL execution journal marker name is invalid")
+		return IDs{}, invalid("database execution journal marker name is invalid")
 	}
 	return value, nil
 }

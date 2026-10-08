@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backupformat"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/mysql84protocol"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -100,13 +101,19 @@ func (repository *Planner) manualBackupSourceAuthority(
 		}
 		capture.Source = &agentpb.BackupCaptureAuthority_Config{Config: proto.CloneOf(config)}
 	case backupruntime.BackupRuntimeSourceAttach:
-		postgres := attempt.Snapshot.Postgres
+		serviceID, environmentID := "", ""
+		if postgres := attempt.Snapshot.Postgres; postgres != nil {
+			serviceID, environmentID = postgres.BackingServiceID, postgres.BackingEnvironmentID
+		}
+		if mysql := attempt.Snapshot.MySQL; mysql != nil {
+			serviceID, environmentID = mysql.BackingServiceID, mysql.BackingEnvironmentID
+		}
 		artifact, err := addBackupServiceFact(
 			ctx,
 			input.ResolveServiceFact,
 			scope,
-			postgres.BackingServiceID,
-			postgres.BackingEnvironmentID,
+			serviceID,
+			environmentID,
 			fixedRevision,
 		)
 		if err != nil {
@@ -115,28 +122,53 @@ func (repository *Planner) manualBackupSourceAuthority(
 		if err := appendBackupArtifact(artifacts, artifact); err != nil {
 			return nil, err
 		}
-		release, err := postgres16protocol.DecodeManagedReleaseIndex([]byte(postgres.ManagedReleaseIndex))
-		if err != nil {
-			return nil, err
-		}
-		fact := backupScopeService(scope, postgres.BackingServiceID)
-		var boundTools bool
-		for _, workload := range artifact.Services {
-			if workload.ServiceId == fact.GetServiceId() && workload.PostgresToolsImage == release.Image {
-				boundTools = true
-			}
-		}
-		if !boundTools {
-			return nil, errs.New(errs.KindStateConflict, "PostgreSQL workload is not the managed backup release")
-		}
 		maximum := backupformat.MaxStoredBytes
 		if encryption.Kind == agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
 			maximum = backupformat.MaxAgeSourceBytes
 		}
-		capture.Source = &agentpb.BackupCaptureAuthority_Postgres{Postgres: &agentpb.BackupPostgresCaptureAuthority{
-			AdapterContractVersion: postgres16protocol.AdapterContractVersion, DatabaseServiceId: postgres.BackingServiceID,
-			DatabaseName: postgres.Database, RoleName: postgres.Role, MaxPlaintextBytes: maximum,
-			ManagedReleaseIndex: []byte(postgres.ManagedReleaseIndex)}}
+		fact := backupScopeService(scope, serviceID)
+		if postgres := attempt.Snapshot.Postgres; postgres != nil {
+			release, err := postgres16protocol.DecodeManagedReleaseIndex([]byte(postgres.ManagedReleaseIndex))
+			if err != nil {
+				return nil, err
+			}
+			var boundTools bool
+			for _, workload := range artifact.Services {
+				if workload.ServiceId == fact.GetServiceId() && workload.PostgresToolsImage == release.Image {
+					boundTools = true
+				}
+			}
+			if !boundTools {
+				return nil, errs.New(errs.KindStateConflict, "PostgreSQL workload is not the managed backup release")
+			}
+			capture.Source = &agentpb.BackupCaptureAuthority_Postgres{Postgres: &agentpb.BackupPostgresCaptureAuthority{
+				AdapterContractVersion: postgres16protocol.AdapterContractVersion, DatabaseServiceId: postgres.BackingServiceID,
+				DatabaseName: postgres.Database, RoleName: postgres.Role, MaxPlaintextBytes: maximum,
+				ManagedReleaseIndex: []byte(postgres.ManagedReleaseIndex)}}
+		} else if mysql := attempt.Snapshot.MySQL; mysql != nil {
+			var selected *agentpb.ComposeService
+			for _, workload := range artifact.Services {
+				if workload.ServiceId == fact.GetServiceId() && workload.ComposeName == fact.CurrentName &&
+					workload.PostgresToolsImage == "" {
+					if selected != nil {
+						return nil, errs.New(errs.KindStateConflict, "MySQL applied workload is not unique")
+					}
+					selected = workload
+				}
+			}
+			if selected == nil || selected.ImageReference == "" {
+				return nil, errs.New(errs.KindStateConflict, "MySQL applied workload is unavailable")
+			}
+			imageReference := sha256.Sum256([]byte(selected.ImageReference))
+			capture.Source = &agentpb.BackupCaptureAuthority_Mysql{Mysql: &agentpb.BackupMySQLCaptureAuthority{
+				AdapterContractVersion: mysql84protocol.AdapterContractVersion, DatabaseServiceId: mysql.BackingServiceID,
+				DatabaseName: mysql.Database, RoleName: mysql.Role, MaxPlaintextBytes: maximum,
+				RequiredServerMajor: mysql84protocol.ServerMajor, RequiredServerMinor: mysql84protocol.ServerMinor,
+				DatabaseImageReferenceSha256: imageReference[:],
+			}}
+		} else {
+			return nil, errs.New(errs.KindStateConflict, "database source snapshot is unavailable")
+		}
 	case backupruntime.BackupRuntimeSourceVolume:
 		projection, artifact, err := repository.manualBackupVolumeArtifact(ctx, attempt.Snapshot.Volume, fixedRevision)
 		if err != nil {

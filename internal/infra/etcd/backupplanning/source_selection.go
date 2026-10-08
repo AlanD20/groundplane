@@ -17,7 +17,7 @@ func (repository *Planner) prepareManualBackupSource(
 	sourceRevision int64,
 	ordinal uint32,
 	fixedRevision int64,
-	resolvePostgres BackupPostgresIdentityResolver,
+	resolveDatabase BackupDatabaseIdentityResolver,
 ) (backupruntime.BackupRunSourceAttemptRecord, error) {
 	pointID := ids.New(ids.KindRecoveryPoint)
 	pointCreatedAt, err := ids.Timestamp(ids.KindRecoveryPoint, pointID)
@@ -38,12 +38,12 @@ func (repository *Planner) prepareManualBackupSource(
 	}
 	switch attempt.Kind {
 	case backupruntime.BackupRuntimeSourceAttach:
-		return repository.prepareManualPostgresSource(
+		return repository.prepareManualDatabaseSource(
 			ctx,
 			attempt,
 			run.EnvironmentID,
 			fixedRevision,
-			resolvePostgres,
+			resolveDatabase,
 		)
 	case backupruntime.BackupRuntimeSourceVolume:
 		return repository.prepareManualVolumeSource(ctx, attempt, run.EnvironmentID, fixedRevision)

@@ -744,7 +744,7 @@ func TestBackupTerminalReceiptReplaySurvivesLaterOrphanReconciliationAndEnvironm
 	point := backupRuntimeTestPoint(run, run.Sources[0], run.UpdatedAt)
 	orphan := testbackupruntime.BackupOrphanRecord{
 		Target: point.BackupRecoveryPointTargetSnapshot, Evidence: point.Evidence,
-		Object: point.Object, Postgres: point.Postgres,
+		Object: point.Object, Postgres: point.Postgres, PostgresArchive: point.PostgresArchive,
 		Upload: testbackupruntime.BackupUploadOutcome{
 			Kind:   testbackupruntime.BackupUploadReturned,
 			Target: point.Object.Target, ReturnedObject: point.Object,

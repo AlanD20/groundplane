@@ -161,7 +161,7 @@ type EntrySpec struct {
 // literal source — a nested object per kind, e.g.:
 //
 //	source:
-//	  fact: {attach: api-db, key: pg16_URL}
+//	  fact: {attach: api-db, key: pg_URL}
 //
 // or `source: {secret_ref: sec_01J...}`, or a bare literal value.
 type EntrySourceSpec struct {

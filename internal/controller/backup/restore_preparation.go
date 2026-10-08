@@ -39,6 +39,7 @@ type preparedRestore struct {
 
 func (service *RestoreService) prepareRestore(ctx context.Context, environmentID, taskID, operationID string,
 	request apiTypes.RestoreRequest, createdAt time.Time, usesOldIdentity bool,
+	preview bool,
 ) (preparedRestore, error) {
 	// Choose the source variant at the same fixed view used by its complete
 	// selector. Publication then compares the selected source and target records.
@@ -85,11 +86,13 @@ func (service *RestoreService) prepareRestore(ctx context.Context, environmentID
 		return preparedRestore{Restore: selected.Restore, Scope: selected.Scope, Authority: selected.Authority,
 			Artifacts: selected.Artifacts, Owner: selected.Owner, Publication: selected.Publication}, nil
 	case backupruntime.BackupRuntimeSourceAttach:
-		selected, err := service.runtime.PreparePostgresRestore(ctx, backupplanning.PostgresRestoreSelectionInput{
+		selected, err := service.runtime.PrepareDatabaseRestore(ctx, backupplanning.DatabaseRestoreSelectionInput{
 			EnvironmentID: environmentID, SourceID: request.SourceID, RecoveryPointID: request.RecoveryPointID,
 			TaskID: taskID, OperationID: operationID, CreatedAt: createdAt, UsesOldIdentity: usesOldIdentity,
-			FixedRevision: read.ReadRevision, ResolvePostgres: service.resolvePostgres,
+			FixedRevision: read.ReadRevision, ResolveDatabase: service.resolveDatabase,
 			ResolveServiceFact: service.serviceFacts,
+			ResolveVersions:    service.versionObserver, Preview: preview,
+			VersionReviewSHA256: request.VersionReviewSHA256, AcknowledgeVersionDifference: request.AcknowledgeVersionDifference,
 		})
 		if err != nil {
 			return preparedRestore{}, err
@@ -110,7 +113,7 @@ func (prepared preparedRestore) buildPlan(task etcd.TaskRecord) (*agentpb.Execut
 		return BuildVolumeRestorePlan(VolumeRestorePlanInput{Task: task, Restore: prepared.Restore,
 			Scope: prepared.Scope, Authority: prepared.Authority, Artifacts: prepared.Artifacts})
 	case backupruntime.BackupRuntimeSourceAttach:
-		return BuildPostgresRestorePlan(PostgresRestorePlanInput{Task: task, Restore: prepared.Restore,
+		return BuildDatabaseRestorePlan(DatabaseRestorePlanInput{Task: task, Restore: prepared.Restore,
 			Scope: prepared.Scope, Authority: prepared.Authority, Artifacts: prepared.Artifacts})
 	default:
 		return nil, errs.New(errs.KindStrategyNotImplemented, "Restore source execution is not available")

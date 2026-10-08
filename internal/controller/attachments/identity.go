@@ -26,7 +26,10 @@ type attachNameLabels struct {
 	service     string
 }
 
-func ProvisionIdentity(attachID string, serviceName string) (string, error) {
+func ProvisionIdentity(attachID string, serviceName string, limit int) (string, error) {
+	if limit <= attachIdentitySuffixBytes+1 || limit > maximumAttachIdentityBytes {
+		return "", errs.New(errs.KindValidationFailed, "adapter credential identity limit is invalid")
+	}
 	if err := ids.Validate(ids.KindAttach, attachID); err != nil {
 		return "", errs.New(errs.KindValidationFailed, "Attach identity requires a canonical Attach id")
 	}
@@ -39,7 +42,10 @@ func ProvisionIdentity(attachID string, serviceName string) (string, error) {
 		)
 	}
 	body := strings.TrimPrefix(attachID, string(ids.KindAttach)+"_")
-	identity := serviceName + "_" + strings.ToLower(body[10:10+attachIdentitySuffixBytes])
+	// The stable suffix is retained when a database family has a shorter account
+	// limit; labels may be longer without causing server-side truncation.
+	label := serviceName[:min(len(serviceName), limit-1-attachIdentitySuffixBytes)]
+	identity := label + "_" + strings.ToLower(body[10:10+attachIdentitySuffixBytes])
 	if len(identity) > maximumAttachIdentityBytes {
 		return "", errs.New(errs.KindInternal, "generated Attach identity exceeds its adapter bound")
 	}

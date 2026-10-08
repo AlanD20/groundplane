@@ -6,7 +6,7 @@ import { ResourcePanel } from "@/components/common/resource-panel";
 import { ServiceSettings } from "@/features/service/service-settings";
 import { CopyButton } from "@/components/common/copy-button";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
-import { PostgresImageUpdate } from "./postgres-image-update";
+import { ManagedImageUpdate } from "./managed-image-update";
 import { Button } from "@/components/ui/button";
 import { backingDestinations } from "@/features/service/workspace-navigation";
 import { LogStream } from "@/features/logs/log-viewer";
@@ -277,8 +277,8 @@ export default function BackingServiceDetailPage() {
               service={svc}
               workspace="platform"
               imageAction={
-                svc.adapter === "postgres:16" ? (
-                  <PostgresImageUpdate env={env} service={svc} />
+                svc.adapter && svc.adapter !== "custom" ? (
+                  <ManagedImageUpdate env={env} service={svc} />
                 ) : undefined
               }
             />

@@ -1,8 +1,6 @@
-// Package custom is the "custom" adapter — no auto-provisioning.
-// Attaching only joins the network: no database/role, no facts, no
-// grants, no Groundplane-managed backups. See mvp.md, "The `custom`
-// adapter (locked)". See postgres16's package comment for why Register()
-// is an explicit function rather than an init().
+// Package custom attaches consumers to a shared Service without built-in
+// provisioning or database backups. Optional operator hooks are handled by
+// the hook pipeline, not this adapter.
 package custom
 
 import (
@@ -18,9 +16,11 @@ func Register() {
 
 type adapter struct{}
 
+func (a *adapter) CredentialIdentityLimit() int { return 0 }
+
 func (a *adapter) Key() string                                                     { return "custom" }
 func (a *adapter) Label() string                                                   { return "Custom" }
-func (a *adapter) DefaultImage() (string, error)                                   { return "", nil }
+func (a *adapter) DefaultImage(string) (string, error)                             { return "", nil }
 func (a *adapter) FactsPrefix() string                                             { return "" }
 func (a *adapter) URLScheme() string                                               { return "" }
 func (a *adapter) Port() string                                                    { return "" }

@@ -24,27 +24,29 @@ const restoreRoute = "/environments/{id}/restore"
 // RestoreService selects an immutable target before publishing one
 // native Restore and Task atomically. Identity bytes never enter that write.
 type RestoreService struct {
+	versionObserver DatabaseVersionObserver
 	runtime         *etcd.BackupRuntimeRepository
 	coordinator     *requestidempotency.Coordinator
 	idempotency     *etcd.IdempotencyRepository
 	secrets         *BackupSecretResolver
 	volumeRoot      string
-	resolvePostgres backupplanning.BackupPostgresIdentityResolver
+	resolveDatabase backupplanning.BackupDatabaseIdentityResolver
 	serviceFacts    backupplanning.BackupServiceFactResolver
 }
 
 func NewRestoreService(runtime *etcd.BackupRuntimeRepository,
 	coordinator *requestidempotency.Coordinator, idempotencyRepository *etcd.IdempotencyRepository,
-	secrets *BackupSecretResolver, resolvePostgres backupplanning.BackupPostgresIdentityResolver,
+	secrets *BackupSecretResolver, resolveDatabase backupplanning.BackupDatabaseIdentityResolver,
 	serviceFacts backupplanning.BackupServiceFactResolver, volumeRoot string,
+	versionObserver DatabaseVersionObserver,
 ) (*RestoreService, error) {
 	if runtime == nil || coordinator == nil || idempotencyRepository == nil || secrets == nil ||
-		resolvePostgres == nil || serviceFacts == nil ||
+		resolveDatabase == nil || serviceFacts == nil || versionObserver == nil ||
 		!filepath.IsAbs(volumeRoot) || filepath.Clean(volumeRoot) != volumeRoot {
 		return nil, errs.New(errs.KindInternal, "Restore dependencies are required")
 	}
 	return &RestoreService{runtime: runtime, coordinator: coordinator, idempotency: idempotencyRepository,
-		secrets: secrets, resolvePostgres: resolvePostgres, serviceFacts: serviceFacts, volumeRoot: volumeRoot}, nil
+		secrets: secrets, resolveDatabase: resolveDatabase, serviceFacts: serviceFacts, volumeRoot: volumeRoot, versionObserver: versionObserver}, nil
 }
 
 func (service *RestoreService) Restore(ctx context.Context, environmentID, idempotencyKey string,
@@ -75,6 +77,7 @@ func (service *RestoreService) Restore(ctx context.Context, environmentID, idemp
 		request,
 		createdAt,
 		len(identity) != 0,
+		false,
 	)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err

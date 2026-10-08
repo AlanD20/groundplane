@@ -10,12 +10,15 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (state *backupStagingState) postgresCaptureStage(ctx context.Context, taskID string,
+func (state *backupStagingState) databaseCaptureStage(ctx context.Context, taskID string,
 	step *agentpb.BackupStepAuthority, requireRetained bool,
 ) (*backupstage.Stage, *backupstage.Artifact, backupstage.ArtifactEvidence, *backupstage.Artifact, error) {
-	postgres := step.GetCapture().GetPostgres()
-	if state == nil || !state.ready || state.stager == nil || postgres == nil ||
-		postgres.MaxPlaintextBytes == 0 || postgres.MaxPlaintextBytes > backupformat.MaxStoredBytes {
+	maximum := step.GetCapture().GetPostgres().GetMaxPlaintextBytes()
+	if mysql := step.GetCapture().GetMysql(); mysql != nil {
+		maximum = mysql.MaxPlaintextBytes
+	}
+	if state == nil || !state.ready || state.stager == nil || maximum == 0 ||
+		maximum > backupformat.MaxStoredBytes {
 		return nil, nil, backupstage.ArtifactEvidence{}, nil, invalidAgentStaging()
 	}
 	ids := backupstage.IDs{Task: taskID, Step: step.StepId, Point: step.GetCapture().PointId}
@@ -57,10 +60,11 @@ func (state *backupStagingState) postgresCaptureStage(ctx context.Context, taskI
 	return stage, source, backupstage.ArtifactEvidence{}, nil, err
 }
 
-func (state *backupStagingState) postgresRestoreStage(ctx context.Context, taskID string,
+func (state *backupStagingState) databaseRestoreStage(ctx context.Context, taskID string,
 	step *agentpb.BackupStepAuthority,
 ) (*backupstage.Stage, *backupstage.Artifact, *backupstage.Artifact, error) {
-	if state == nil || !state.ready || state.stager == nil || step.GetRestore().GetPostgres() == nil {
+	if state == nil || !state.ready || state.stager == nil ||
+		step.GetRestore().GetPostgres() == nil && step.GetRestore().GetMysql() == nil {
 		return nil, nil, nil, invalidAgentStaging()
 	}
 	ids := backupstage.IDs{Task: taskID, Step: step.StepId, Point: step.GetRestore().PointId}
@@ -109,7 +113,7 @@ func (state *backupStagingState) postgresRestoreStage(ctx context.Context, taskI
 	return stage, nil, nil, nil
 }
 
-func (state *backupStagingState) retirePostgresStage(taskID string, step *agentpb.BackupStepAuthority,
+func (state *backupStagingState) retireDatabaseStage(taskID string, step *agentpb.BackupStepAuthority,
 	stage *backupstage.Stage,
 ) {
 	pointID := step.GetCapture().GetPointId()

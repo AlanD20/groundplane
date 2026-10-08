@@ -185,7 +185,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		return backupRunPublicationPlan{}, err
 	}
 	releaseBackingEnvironmentIDs, retainBackingEnvironmentIDs, err :=
-		backupruntime.PostgresBackingEnvironmentTerminalGuards(
+		backupruntime.DatabaseBackingEnvironmentTerminalGuards(
 			next,
 			current.Record.State == backupruntime.BackupRunQueued,
 		)

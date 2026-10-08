@@ -17,16 +17,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type PreparedPostgresRestore struct {
+type PreparedDatabaseRestore struct {
 	Restore     backupruntime.BackupRestoreRecord
 	Scope       *agentpb.BackupPlanScope
 	Authority   *agentpb.BackupStepAuthority
 	Artifacts   []*agentpb.ComposeArtifact
 	Owner       taskjournal.TaskOwner
-	Publication *PreparedPostgresRestorePublication
+	Publication *PreparedDatabaseRestorePublication
 }
 
-type postgresRestoreAdmissionState struct {
+type databaseRestoreAdmissionState struct {
 	mu         sync.Mutex
 	repository *BackupRuntimeRepository
 	restore    backupruntime.BackupRestoreRecord
@@ -39,22 +39,22 @@ type postgresRestoreAdmissionState struct {
 	retryOf    string
 }
 
-type PreparedPostgresRestorePublication struct {
-	state *postgresRestoreAdmissionState
+type PreparedDatabaseRestorePublication struct {
+	state *databaseRestoreAdmissionState
 }
 
-func (repository *BackupRuntimeRepository) PreparePostgresRestore(ctx context.Context,
-	input backupplanning.PostgresRestoreSelectionInput,
-) (PreparedPostgresRestore, error) {
-	var zero PreparedPostgresRestore
+func (repository *BackupRuntimeRepository) PrepareDatabaseRestore(ctx context.Context,
+	input backupplanning.DatabaseRestoreSelectionInput,
+) (PreparedDatabaseRestore, error) {
+	var zero PreparedDatabaseRestore
 	if repository == nil || repository.Planner == nil || repository.store == nil {
-		return zero, errs.New(errs.KindInternal, "PostgreSQL Restore admission is not configured")
+		return zero, errs.New(errs.KindInternal, "database Restore admission is not configured")
 	}
-	selected, err := repository.PreparePostgresRestoreSelection(ctx, input)
+	selected, err := repository.PrepareDatabaseRestoreSelection(ctx, input)
 	if err != nil {
 		return zero, err
 	}
-	authority, err := backupplanning.BuildPostgresRestoreAuthority(selected)
+	authority, err := backupplanning.BuildDatabaseRestoreAuthority(selected)
 	if err != nil {
 		return zero, err
 	}
@@ -68,12 +68,12 @@ func (repository *BackupRuntimeRepository) PreparePostgresRestore(ctx context.Co
 		return zero, err
 	}
 	restore := selected.Restore
-	backingEnvironmentID, postgres, err := backupruntime.PostgresRestoreBackingEnvironmentID(restore)
-	if err != nil || !postgres {
+	backingEnvironmentID, found, err := backupruntime.DatabaseRestoreBackingEnvironmentID(restore)
+	if err != nil || !found {
 		if err != nil {
 			return zero, err
 		}
-		return zero, errs.New(errs.KindInternal, "PostgreSQL Restore backing Environment is missing")
+		return zero, errs.New(errs.KindInternal, "database Restore backing Environment is missing")
 	}
 	backingGuards, err := postgresbackingguard.PrepareAcquisition(
 		ctx,
@@ -137,13 +137,13 @@ func (repository *BackupRuntimeRepository) PreparePostgresRestore(ctx context.Co
 		return zero, err
 	}
 	artifacts := cloneRestoreArtifacts(selected.Artifacts)
-	publication := &PreparedPostgresRestorePublication{state: &postgresRestoreAdmissionState{
+	publication := &PreparedDatabaseRestorePublication{state: &databaseRestoreAdmissionState{
 		repository: repository, restore: backupruntime.CloneBackupRestoreRecord(restore), owner: selected.Owner,
 		scope: proto.CloneOf(
 			selected.Scope,
 		), authority: proto.CloneOf(authority), artifacts: cloneRestoreArtifacts(artifacts),
 		conditions: conditions, mutations: mutations}}
-	return PreparedPostgresRestore{
+	return PreparedDatabaseRestore{
 		Restore:     backupruntime.CloneBackupRestoreRecord(restore),
 		Scope:       proto.CloneOf(selected.Scope),
 		Authority:   proto.CloneOf(authority),
@@ -153,13 +153,13 @@ func (repository *BackupRuntimeRepository) PreparePostgresRestore(ctx context.Co
 	}, nil
 }
 
-func (publication *PreparedPostgresRestorePublication) Publish(ctx context.Context, task TaskRecord,
+func (publication *PreparedDatabaseRestorePublication) Publish(ctx context.Context, task TaskRecord,
 	sealed *agentpb.ExecutionPlan, marker idempotency.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if publication == nil || publication.state == nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
-			"PostgreSQL Restore publication is not prepared",
+			"database Restore publication is not prepared",
 		)
 	}
 	state := publication.state
@@ -168,7 +168,7 @@ func (publication *PreparedPostgresRestorePublication) Publish(ctx context.Conte
 		state.mu.Unlock()
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
-			"PostgreSQL Restore publication was already consumed",
+			"database Restore publication was already consumed",
 		)
 	}
 	repository, restore, scope, authority, artifacts := state.repository, state.restore, state.scope, state.authority, state.artifacts
@@ -183,7 +183,7 @@ func (publication *PreparedPostgresRestorePublication) Publish(ctx context.Conte
 		!equalRestoreArtifacts(sealed.Artifacts, artifacts) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
-			"PostgreSQL Restore publication authority changed",
+			"database Restore publication authority changed",
 		)
 	}
 	initiation, err := newTaskInitiation(task.Owner, task.Actor)
@@ -194,7 +194,7 @@ func (publication *PreparedPostgresRestorePublication) Publish(ctx context.Conte
 		taskID: restore.TaskID, operationID: restore.OperationID, environmentID: restore.EnvironmentID,
 		taskType: taskjournal.TaskRestore, retryOf: state.retryOf, createdAt: restore.CreatedAt,
 		validatePlan: func(value *agentpb.ExecutionPlan) error {
-			return backupruntime.ValidatePostgresRestoreExecutionPlan(restore, value)
+			return backupruntime.ValidateDatabaseRestoreExecutionPlan(restore, value)
 		}}, conditions, mutations, task, sealed, marker, initiation)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -209,7 +209,7 @@ func (publication *PreparedPostgresRestorePublication) Publish(ctx context.Conte
 	return idempotencyRepository.Apply(ctx, marker, plan)
 }
 
-func (publication *PreparedPostgresRestorePublication) Clear() {
+func (publication *PreparedDatabaseRestorePublication) Clear() {
 	if publication == nil || publication.state == nil {
 		return
 	}

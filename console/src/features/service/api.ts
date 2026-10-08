@@ -155,9 +155,10 @@ export function serviceFromAPI(service: ServiceDocument): Service {
     runtimeIntent: service.runtime_intent,
     observation: serviceObservationFromAPI(service.observation),
     adapter: service.adapter,
+    adapterVersion: service.adapter_version,
     hooks: service.hooks,
     serviceName: service.name,
-    prefix: service.facts_prefix,
+    prefix: service.facts_prefix?.replace(/_$/, ""),
     nativeCompose:
       "native_compose" in service ? service.native_compose : undefined,
     releaseLedger:

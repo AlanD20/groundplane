@@ -34,4 +34,4 @@ docker build --platform "linux/$arch" --file Dockerfile.postgres16-tools \
   --build-arg "BUILDARCH=$arch" --build-arg "TARGETARCH=$arch" \
   --build-arg "POSTGRES16_BASE=$base_image" --tag "$image" .
 printf 'Built native linux/%s image %s. Not published or qualified.\n' "$arch" "$image"
-printf 'Backup tools and metadata are embedded at /opt/groundplane/postgres16.\n'
+printf 'Backup tools and metadata are embedded at /opt/groundplane/postgres.\n'

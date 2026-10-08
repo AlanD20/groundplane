@@ -22,6 +22,10 @@ func CloneBackupRunSourceSnapshot(snapshot BackupRunSourceSnapshot) BackupRunSou
 		postgres := *snapshot.Postgres
 		clone.Postgres = &postgres
 	}
+	if snapshot.MySQL != nil {
+		mysql := *snapshot.MySQL
+		clone.MySQL = &mysql
+	}
 	if snapshot.Volume != nil {
 		volume := *snapshot.Volume
 		volume.Services = slices.Clone(snapshot.Volume.Services)

@@ -75,13 +75,13 @@ func (e BackingServiceCreateAuthentication) Valid() bool {
 
 // Defines values for BackingServiceCreate0Adapter.
 const (
-	Valkey9 BackingServiceCreate0Adapter = "valkey:9"
+	Valkey BackingServiceCreate0Adapter = "valkey"
 )
 
 // Valid indicates whether the value is a known member of the BackingServiceCreate0Adapter enum.
 func (e BackingServiceCreate0Adapter) Valid() bool {
 	switch e {
-	case Valkey9:
+	case Valkey:
 		return true
 	default:
 		return false
@@ -111,13 +111,16 @@ func (e BackingServiceCreate0Authentication) Valid() bool {
 
 // Defines values for BackingServiceCreate1Adapter.
 const (
-	Postgres16 BackingServiceCreate1Adapter = "postgres:16"
+	BackingServiceCreate1AdapterMysql    BackingServiceCreate1Adapter = "mysql"
+	BackingServiceCreate1AdapterPostgres BackingServiceCreate1Adapter = "postgres"
 )
 
 // Valid indicates whether the value is a known member of the BackingServiceCreate1Adapter enum.
 func (e BackingServiceCreate1Adapter) Valid() bool {
 	switch e {
-	case Postgres16:
+	case BackingServiceCreate1AdapterMysql:
+		return true
+	case BackingServiceCreate1AdapterPostgres:
 		return true
 	default:
 		return false
@@ -433,6 +436,24 @@ func (e LogEventStream) Valid() bool {
 	}
 }
 
+// Defines values for PreparedSoftwareArtifactComponent.
+const (
+	PreparedSoftwareArtifactComponentAgent      PreparedSoftwareArtifactComponent = "agent"
+	PreparedSoftwareArtifactComponentController PreparedSoftwareArtifactComponent = "controller"
+)
+
+// Valid indicates whether the value is a known member of the PreparedSoftwareArtifactComponent enum.
+func (e PreparedSoftwareArtifactComponent) Valid() bool {
+	switch e {
+	case PreparedSoftwareArtifactComponentAgent:
+		return true
+	case PreparedSoftwareArtifactComponentController:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RecoveryPointSourceKind.
 const (
 	RecoveryPointSourceKindAttach RecoveryPointSourceKind = "attach"
@@ -456,13 +477,67 @@ func (e RecoveryPointSourceKind) Valid() bool {
 
 // Defines values for RecoveryPointStatus.
 const (
-	Verified RecoveryPointStatus = "verified"
+	RecoveryPointStatusVerified RecoveryPointStatus = "verified"
 )
 
 // Valid indicates whether the value is a known member of the RecoveryPointStatus enum.
 func (e RecoveryPointStatus) Valid() bool {
 	switch e {
-	case Verified:
+	case RecoveryPointStatusVerified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RecoveryPointDatabaseFamily.
+const (
+	RecoveryPointDatabaseFamilyMysql    RecoveryPointDatabaseFamily = "mysql"
+	RecoveryPointDatabaseFamilyPostgres RecoveryPointDatabaseFamily = "postgres"
+)
+
+// Valid indicates whether the value is a known member of the RecoveryPointDatabaseFamily enum.
+func (e RecoveryPointDatabaseFamily) Valid() bool {
+	switch e {
+	case RecoveryPointDatabaseFamilyMysql:
+		return true
+	case RecoveryPointDatabaseFamilyPostgres:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RestoreDatabaseReviewCompatibility.
+const (
+	SameVersion RestoreDatabaseReviewCompatibility = "same-version"
+	Unverified  RestoreDatabaseReviewCompatibility = "unverified"
+)
+
+// Valid indicates whether the value is a known member of the RestoreDatabaseReviewCompatibility enum.
+func (e RestoreDatabaseReviewCompatibility) Valid() bool {
+	switch e {
+	case SameVersion:
+		return true
+	case Unverified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RestoreDatabaseReviewFamily.
+const (
+	RestoreDatabaseReviewFamilyMysql    RestoreDatabaseReviewFamily = "mysql"
+	RestoreDatabaseReviewFamilyPostgres RestoreDatabaseReviewFamily = "postgres"
+)
+
+// Valid indicates whether the value is a known member of the RestoreDatabaseReviewFamily enum.
+func (e RestoreDatabaseReviewFamily) Valid() bool {
+	switch e {
+	case RestoreDatabaseReviewFamilyMysql:
+		return true
+	case RestoreDatabaseReviewFamilyPostgres:
 		return true
 	default:
 		return false
@@ -775,6 +850,174 @@ func (e ServiceObservationState) Valid() bool {
 	}
 }
 
+// Defines values for SoftwareActivationSelection.
+const (
+	SoftwareActivationSelectionAgent      SoftwareActivationSelection = "agent"
+	SoftwareActivationSelectionBoth       SoftwareActivationSelection = "both"
+	SoftwareActivationSelectionController SoftwareActivationSelection = "controller"
+)
+
+// Valid indicates whether the value is a known member of the SoftwareActivationSelection enum.
+func (e SoftwareActivationSelection) Valid() bool {
+	switch e {
+	case SoftwareActivationSelectionAgent:
+		return true
+	case SoftwareActivationSelectionBoth:
+		return true
+	case SoftwareActivationSelectionController:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwarePreparationPhase.
+const (
+	SoftwarePreparationPhaseAccepted            SoftwarePreparationPhase = "accepted"
+	SoftwarePreparationPhaseAgentPublished      SoftwarePreparationPhase = "agent_published"
+	SoftwarePreparationPhaseControllerPublished SoftwarePreparationPhase = "controller_published"
+	SoftwarePreparationPhaseFailed              SoftwarePreparationPhase = "failed"
+	SoftwarePreparationPhasePreparing           SoftwarePreparationPhase = "preparing"
+	SoftwarePreparationPhaseVerified            SoftwarePreparationPhase = "verified"
+)
+
+// Valid indicates whether the value is a known member of the SoftwarePreparationPhase enum.
+func (e SoftwarePreparationPhase) Valid() bool {
+	switch e {
+	case SoftwarePreparationPhaseAccepted:
+		return true
+	case SoftwarePreparationPhaseAgentPublished:
+		return true
+	case SoftwarePreparationPhaseControllerPublished:
+		return true
+	case SoftwarePreparationPhaseFailed:
+		return true
+	case SoftwarePreparationPhasePreparing:
+		return true
+	case SoftwarePreparationPhaseVerified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwarePreparationSelection.
+const (
+	SoftwarePreparationSelectionAgent      SoftwarePreparationSelection = "agent"
+	SoftwarePreparationSelectionBoth       SoftwarePreparationSelection = "both"
+	SoftwarePreparationSelectionController SoftwarePreparationSelection = "controller"
+)
+
+// Valid indicates whether the value is a known member of the SoftwarePreparationSelection enum.
+func (e SoftwarePreparationSelection) Valid() bool {
+	switch e {
+	case SoftwarePreparationSelectionAgent:
+		return true
+	case SoftwarePreparationSelectionBoth:
+		return true
+	case SoftwarePreparationSelectionController:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwarePreparationSourceKind.
+const (
+	SoftwarePreparationSourceKindRelease   SoftwarePreparationSourceKind = "release"
+	SoftwarePreparationSourceKindSourceRef SoftwarePreparationSourceKind = "source_ref"
+)
+
+// Valid indicates whether the value is a known member of the SoftwarePreparationSourceKind enum.
+func (e SoftwarePreparationSourceKind) Valid() bool {
+	switch e {
+	case SoftwarePreparationSourceKindRelease:
+		return true
+	case SoftwarePreparationSourceKindSourceRef:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwarePreparationRequestSelection.
+const (
+	SoftwarePreparationRequestSelectionAgent      SoftwarePreparationRequestSelection = "agent"
+	SoftwarePreparationRequestSelectionBoth       SoftwarePreparationRequestSelection = "both"
+	SoftwarePreparationRequestSelectionController SoftwarePreparationRequestSelection = "controller"
+)
+
+// Valid indicates whether the value is a known member of the SoftwarePreparationRequestSelection enum.
+func (e SoftwarePreparationRequestSelection) Valid() bool {
+	switch e {
+	case SoftwarePreparationRequestSelectionAgent:
+		return true
+	case SoftwarePreparationRequestSelectionBoth:
+		return true
+	case SoftwarePreparationRequestSelectionController:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwarePreparationRequestSourceKind.
+const (
+	SoftwarePreparationRequestSourceKindRelease   SoftwarePreparationRequestSourceKind = "release"
+	SoftwarePreparationRequestSourceKindSourceRef SoftwarePreparationRequestSourceKind = "source_ref"
+)
+
+// Valid indicates whether the value is a known member of the SoftwarePreparationRequestSourceKind enum.
+func (e SoftwarePreparationRequestSourceKind) Valid() bool {
+	switch e {
+	case SoftwarePreparationRequestSourceKindRelease:
+		return true
+	case SoftwarePreparationRequestSourceKindSourceRef:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwareProvenanceComponent.
+const (
+	SoftwareProvenanceComponentAgent      SoftwareProvenanceComponent = "agent"
+	SoftwareProvenanceComponentController SoftwareProvenanceComponent = "controller"
+)
+
+// Valid indicates whether the value is a known member of the SoftwareProvenanceComponent enum.
+func (e SoftwareProvenanceComponent) Valid() bool {
+	switch e {
+	case SoftwareProvenanceComponentAgent:
+		return true
+	case SoftwareProvenanceComponentController:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SoftwareReleaseChoiceSelection.
+const (
+	SoftwareReleaseChoiceSelectionAgent      SoftwareReleaseChoiceSelection = "agent"
+	SoftwareReleaseChoiceSelectionBoth       SoftwareReleaseChoiceSelection = "both"
+	SoftwareReleaseChoiceSelectionController SoftwareReleaseChoiceSelection = "controller"
+)
+
+// Valid indicates whether the value is a known member of the SoftwareReleaseChoiceSelection enum.
+func (e SoftwareReleaseChoiceSelection) Valid() bool {
+	switch e {
+	case SoftwareReleaseChoiceSelectionAgent:
+		return true
+	case SoftwareReleaseChoiceSelectionBoth:
+		return true
+	case SoftwareReleaseChoiceSelectionController:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskActor.
 const (
 	Operator TaskActor = "operator"
@@ -1012,6 +1255,27 @@ func (e ActivityListParamsStatus) Valid() bool {
 	}
 }
 
+// Defines values for SoftwareReleasesParamsSelection.
+const (
+	SoftwareReleasesParamsSelectionAgent      SoftwareReleasesParamsSelection = "agent"
+	SoftwareReleasesParamsSelectionBoth       SoftwareReleasesParamsSelection = "both"
+	SoftwareReleasesParamsSelectionController SoftwareReleasesParamsSelection = "controller"
+)
+
+// Valid indicates whether the value is a known member of the SoftwareReleasesParamsSelection enum.
+func (e SoftwareReleasesParamsSelection) Valid() bool {
+	switch e {
+	case SoftwareReleasesParamsSelectionAgent:
+		return true
+	case SoftwareReleasesParamsSelectionBoth:
+		return true
+	case SoftwareReleasesParamsSelectionController:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskListParamsStatus.
 const (
 	TaskListParamsStatusAborted   TaskListParamsStatus = "aborted"
@@ -1161,6 +1425,31 @@ type AttachRequest struct {
 	ServiceId        string           `json:"service_id"`
 }
 
+// BackingAdapter defines model for BackingAdapter.
+type BackingAdapter struct {
+	Custom                     bool                     `json:"custom"`
+	Key                        string                   `json:"key"`
+	Label                      string                   `json:"label"`
+	RequiresAuthenticationMode bool                     `json:"requires_authentication_mode"`
+	Versions                   *[]BackingAdapterVersion `json:"versions"`
+}
+
+// BackingAdapterCatalog defines model for BackingAdapterCatalog.
+type BackingAdapterCatalog struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/BackingAdapterCatalog.json
+	Schema *string           `json:"$schema,omitempty"`
+	Items  *[]BackingAdapter `json:"items"`
+}
+
+// BackingAdapterVersion defines model for BackingAdapterVersion.
+type BackingAdapterVersion struct {
+	// ImagePattern Accepted upstream image references for this server version.
+	ImagePattern string `json:"image_pattern"`
+	Version      string `json:"version"`
+}
+
 // BackingHookConfiguration defines model for BackingHookConfiguration.
 type BackingHookConfiguration struct {
 	AfterStart *BackingHookDefinition       `json:"after_start,omitempty"`
@@ -1215,6 +1504,9 @@ type BackingServiceCreate struct {
 	Schema  *string `json:"$schema,omitempty"`
 	Adapter string  `json:"adapter"`
 
+	// AdapterVersion Required supported server version for a managed database adapter; omitted for Custom.
+	AdapterVersion *string `json:"adapter_version,omitempty"`
+
 	// Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
 	Authentication *BackingServiceCreateAuthentication `json:"authentication,omitempty"`
 	Description    *string                             `json:"description,omitempty"`
@@ -1236,6 +1528,9 @@ type BackingServiceCreateAuthentication string
 type BackingServiceCreate0 struct {
 	Adapter BackingServiceCreate0Adapter `json:"adapter"`
 
+	// AdapterVersion Required supported server version for a managed database adapter; omitted for Custom.
+	AdapterVersion string `json:"adapter_version"`
+
 	// Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
 	Authentication BackingServiceCreate0Authentication `json:"authentication"`
 }
@@ -1249,6 +1544,9 @@ type BackingServiceCreate0Authentication string
 // BackingServiceCreate1 defines model for BackingServiceCreate.1.
 type BackingServiceCreate1 struct {
 	Adapter BackingServiceCreate1Adapter `json:"adapter"`
+
+	// AdapterVersion Required supported server version for a managed database adapter; omitted for Custom.
+	AdapterVersion string `json:"adapter_version"`
 }
 
 // BackingServiceCreate1Adapter defines model for BackingServiceCreate.1.Adapter.
@@ -2343,6 +2641,18 @@ type PageZone struct {
 	Revision   *int64  `json:"revision,omitempty"`
 }
 
+// PreparedSoftwareArtifact defines model for PreparedSoftwareArtifact.
+type PreparedSoftwareArtifact struct {
+	Architecture   string                            `json:"architecture"`
+	Component      PreparedSoftwareArtifactComponent `json:"component"`
+	ManifestDigest string                            `json:"manifest_digest"`
+	Os             string                            `json:"os"`
+	Reference      string                            `json:"reference"`
+}
+
+// PreparedSoftwareArtifactComponent defines model for PreparedSoftwareArtifact.Component.
+type PreparedSoftwareArtifactComponent string
+
 // Progress defines model for Progress.
 type Progress struct {
 	DownloadedBytes *int64  `json:"downloaded_bytes,omitempty"`
@@ -2415,6 +2725,7 @@ type RecoveryPoint struct {
 	ConnectorId       string                  `json:"connector_id"`
 	ConnectorPrefix   string                  `json:"connector_prefix"`
 	CreatedAt         time.Time               `json:"created_at"`
+	Database          *RecoveryPointDatabase  `json:"database,omitempty"`
 	Encrypted         bool                    `json:"encrypted"`
 	Id                string                  `json:"id"`
 	KeyEra            *int64                  `json:"key_era,omitempty"`
@@ -2437,6 +2748,17 @@ type RecoveryPointCapture struct {
 	SourceCount int64     `json:"source_count"`
 	TaskId      string    `json:"task_id"`
 }
+
+// RecoveryPointDatabase defines model for RecoveryPointDatabase.
+type RecoveryPointDatabase struct {
+	ArtifactFormat      string                      `json:"artifact_format"`
+	BackupToolVersion   string                      `json:"backup_tool_version"`
+	Family              RecoveryPointDatabaseFamily `json:"family"`
+	SourceServerVersion string                      `json:"source_server_version"`
+}
+
+// RecoveryPointDatabaseFamily defines model for RecoveryPointDatabase.Family.
+type RecoveryPointDatabaseFamily string
 
 // RecoveryPointPage defines model for RecoveryPointPage.
 type RecoveryPointPage struct {
@@ -2631,15 +2953,46 @@ type ReleaseTaskAccepted struct {
 	TaskId      string  `json:"task_id"`
 }
 
+// RestoreDatabaseReview defines model for RestoreDatabaseReview.
+type RestoreDatabaseReview struct {
+	ArtifactFormat      string                             `json:"artifact_format"`
+	BackupToolVersion   string                             `json:"backup_tool_version"`
+	Compatibility       RestoreDatabaseReviewCompatibility `json:"compatibility"`
+	Family              RestoreDatabaseReviewFamily        `json:"family"`
+	RestoreToolVersion  string                             `json:"restore_tool_version"`
+	ReviewSha256        string                             `json:"review_sha256"`
+	SourceServerVersion string                             `json:"source_server_version"`
+	TargetServerVersion string                             `json:"target_server_version"`
+	VersionDifference   bool                               `json:"version_difference"`
+}
+
+// RestoreDatabaseReviewCompatibility defines model for RestoreDatabaseReview.Compatibility.
+type RestoreDatabaseReviewCompatibility string
+
+// RestoreDatabaseReviewFamily defines model for RestoreDatabaseReview.Family.
+type RestoreDatabaseReviewFamily string
+
+// RestorePreview defines model for RestorePreview.
+type RestorePreview struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RestorePreview.json
+	Schema          *string                `json:"$schema,omitempty"`
+	Database        *RestoreDatabaseReview `json:"database,omitempty"`
+	RecoveryPointId string                 `json:"recovery_point_id"`
+}
+
 // RestoreRequest defines model for RestoreRequest.
 type RestoreRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/RestoreRequest.json
-	Schema          *string `json:"$schema,omitempty"`
-	AgeIdentity     *string `json:"age_identity,omitempty"`
-	RecoveryPointId *string `json:"recovery_point_id,omitempty"`
-	SourceId        string  `json:"source_id"`
+	Schema                       *string `json:"$schema,omitempty"`
+	AcknowledgeVersionDifference *bool   `json:"acknowledge_version_difference,omitempty"`
+	AgeIdentity                  *string `json:"age_identity,omitempty"`
+	RecoveryPointId              *string `json:"recovery_point_id,omitempty"`
+	SourceId                     string  `json:"source_id"`
+	VersionReviewSha256          *string `json:"version_review_sha256,omitempty"`
 }
 
 // RollbackRequest defines model for RollbackRequest.
@@ -2916,6 +3269,7 @@ type Service struct {
 	// Examples: /api/v1/Service.json
 	Schema                     *string                       `json:"$schema,omitempty"`
 	Adapter                    *string                       `json:"adapter,omitempty"`
+	AdapterVersion             *string                       `json:"adapter_version,omitempty"`
 	Aliases                    *map[string]*[]string         `json:"aliases,omitempty"`
 	BackingNetworkId           *string                       `json:"backing_network_id,omitempty"`
 	Command                    *[]string                     `json:"command,omitempty"`
@@ -3000,6 +3354,7 @@ type ServiceDetail struct {
 	// Examples: /api/v1/ServiceDetail.json
 	Schema                     *string                       `json:"$schema,omitempty"`
 	Adapter                    *string                       `json:"adapter,omitempty"`
+	AdapterVersion             *string                       `json:"adapter_version,omitempty"`
 	Aliases                    *map[string]*[]string         `json:"aliases,omitempty"`
 	BackingNetworkId           *string                       `json:"backing_network_id,omitempty"`
 	Command                    *[]string                     `json:"command,omitempty"`
@@ -3142,6 +3497,111 @@ type ServiceVolumeMount struct {
 	// Volume Stable Volume id in this Environment
 	Volume string `json:"volume"`
 }
+
+// SoftwareActivation defines model for SoftwareActivation.
+type SoftwareActivation struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/SoftwareActivation.json
+	Schema            *string                     `json:"$schema,omitempty"`
+	AgentApplied      bool                        `json:"agent_applied"`
+	AgentTaskId       *string                     `json:"agent_task_id,omitempty"`
+	ControllerApplied bool                        `json:"controller_applied"`
+	ControllerTaskId  *string                     `json:"controller_task_id,omitempty"`
+	ErrorCode         *string                     `json:"error_code,omitempty"`
+	ErrorDetail       *string                     `json:"error_detail,omitempty"`
+	Phase             string                      `json:"phase"`
+	PreparationTaskId string                      `json:"preparation_task_id"`
+	Selection         SoftwareActivationSelection `json:"selection"`
+	TaskId            string                      `json:"task_id"`
+}
+
+// SoftwareActivationSelection defines model for SoftwareActivation.Selection.
+type SoftwareActivationSelection string
+
+// SoftwarePreparation defines model for SoftwarePreparation.
+type SoftwarePreparation struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/SoftwarePreparation.json
+	Schema      *string                       `json:"$schema,omitempty"`
+	Artifacts   []PreparedSoftwareArtifact    `json:"artifacts"`
+	CreatedAt   time.Time                     `json:"created_at"`
+	ErrorCode   *string                       `json:"error_code,omitempty"`
+	ErrorDetail *string                       `json:"error_detail,omitempty"`
+	Phase       SoftwarePreparationPhase      `json:"phase"`
+	Provenance  []SoftwareProvenance          `json:"provenance"`
+	Ref         string                        `json:"ref"`
+	Selection   SoftwarePreparationSelection  `json:"selection"`
+	SourceKind  SoftwarePreparationSourceKind `json:"source_kind"`
+	TaskId      string                        `json:"task_id"`
+}
+
+// SoftwarePreparationPhase defines model for SoftwarePreparation.Phase.
+type SoftwarePreparationPhase string
+
+// SoftwarePreparationSelection defines model for SoftwarePreparation.Selection.
+type SoftwarePreparationSelection string
+
+// SoftwarePreparationSourceKind defines model for SoftwarePreparation.SourceKind.
+type SoftwarePreparationSourceKind string
+
+// SoftwarePreparationPage defines model for SoftwarePreparationPage.
+type SoftwarePreparationPage struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/SoftwarePreparationPage.json
+	Schema     *string               `json:"$schema,omitempty"`
+	Items      []SoftwarePreparation `json:"items"`
+	NextCursor *string               `json:"next_cursor,omitempty"`
+}
+
+// SoftwarePreparationRequest defines model for SoftwarePreparationRequest.
+type SoftwarePreparationRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/SoftwarePreparationRequest.json
+	Schema     *string                              `json:"$schema,omitempty"`
+	Ref        string                               `json:"ref"`
+	Selection  SoftwarePreparationRequestSelection  `json:"selection"`
+	SourceKind SoftwarePreparationRequestSourceKind `json:"source_kind"`
+}
+
+// SoftwarePreparationRequestSelection defines model for SoftwarePreparationRequest.Selection.
+type SoftwarePreparationRequestSelection string
+
+// SoftwarePreparationRequestSourceKind defines model for SoftwarePreparationRequest.SourceKind.
+type SoftwarePreparationRequestSourceKind string
+
+// SoftwareProvenance defines model for SoftwareProvenance.
+type SoftwareProvenance struct {
+	Commit    string                      `json:"commit"`
+	Component SoftwareProvenanceComponent `json:"component"`
+	Ref       string                      `json:"ref"`
+}
+
+// SoftwareProvenanceComponent defines model for SoftwareProvenance.Component.
+type SoftwareProvenanceComponent string
+
+// SoftwareReleaseCatalog defines model for SoftwareReleaseCatalog.
+type SoftwareReleaseCatalog struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/SoftwareReleaseCatalog.json
+	Schema *string                 `json:"$schema,omitempty"`
+	Items  []SoftwareReleaseChoice `json:"items"`
+}
+
+// SoftwareReleaseChoice defines model for SoftwareReleaseChoice.
+type SoftwareReleaseChoice struct {
+	Name        string                         `json:"name"`
+	PublishedAt time.Time                      `json:"published_at"`
+	Ref         string                         `json:"ref"`
+	Selection   SoftwareReleaseChoiceSelection `json:"selection"`
+}
+
+// SoftwareReleaseChoiceSelection defines model for SoftwareReleaseChoice.Selection.
+type SoftwareReleaseChoiceSelection string
 
 // Task defines model for Task.
 type Task struct {
@@ -3948,6 +4408,30 @@ type ServiceStopParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// SoftwarePreparationsParams defines parameters for SoftwarePreparations.
+type SoftwarePreparationsParams struct {
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// SoftwarePrepareParams defines parameters for SoftwarePrepare.
+type SoftwarePrepareParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// SoftwareApplyParams defines parameters for SoftwareApply.
+type SoftwareApplyParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// SoftwareReleasesParams defines parameters for SoftwareReleases.
+type SoftwareReleasesParams struct {
+	Selection SoftwareReleasesParamsSelection `form:"selection" json:"selection"`
+}
+
+// SoftwareReleasesParamsSelection defines parameters for SoftwareReleases.
+type SoftwareReleasesParamsSelection string
+
 // TaskListParams defines parameters for TaskList.
 type TaskListParams struct {
 	Limit        *int64                `form:"limit,omitempty" json:"limit,omitempty"`
@@ -4116,6 +4600,9 @@ type EnvironmentRenameJSONRequestBody = EnvironmentRename
 // BackupRestoreJSONRequestBody defines body for BackupRestore for application/json ContentType.
 type BackupRestoreJSONRequestBody = RestoreRequest
 
+// BackupRestorePreviewJSONRequestBody defines body for BackupRestorePreview for application/json ContentType.
+type BackupRestorePreviewJSONRequestBody = RestoreRequest
+
 // EtcdConfigSetJSONRequestBody defines body for EtcdConfigSet for application/json ContentType.
 type EtcdConfigSetJSONRequestBody = EtcdConfigReplacement
 
@@ -4181,6 +4668,9 @@ type ServiceDeployJSONRequestBody = DeployRequest
 
 // ServiceRollbackJSONRequestBody defines body for ServiceRollback for application/json ContentType.
 type ServiceRollbackJSONRequestBody = RollbackRequest
+
+// SoftwarePrepareJSONRequestBody defines body for SoftwarePrepare for application/json ContentType.
+type SoftwarePrepareJSONRequestBody = SoftwarePreparationRequest
 
 // TenantCreateJSONRequestBody defines body for TenantCreate for application/json ContentType.
 type TenantCreateJSONRequestBody = TenantCreate
@@ -4303,6 +4793,13 @@ func (t BackingServiceCreate) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error marshaling 'adapter': %w", err)
 	}
 
+	if t.AdapterVersion != nil {
+		object["adapter_version"], err = json.Marshal(t.AdapterVersion)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'adapter_version': %w", err)
+		}
+	}
+
 	if t.Authentication != nil {
 		object["authentication"], err = json.Marshal(t.Authentication)
 		if err != nil {
@@ -4377,6 +4874,13 @@ func (t *BackingServiceCreate) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Adapter)
 		if err != nil {
 			return fmt.Errorf("error reading 'adapter': %w", err)
+		}
+	}
+
+	if raw, found := object["adapter_version"]; found {
+		err = json.Unmarshal(raw, &t.AdapterVersion)
+		if err != nil {
+			return fmt.Errorf("error reading 'adapter_version': %w", err)
 		}
 	}
 
@@ -5560,6 +6064,11 @@ type ClientInterface interface {
 	// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
 	AttachRename(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// BackingServiceAdapters List supported backing adapter families and versions
+	//
+	// Corresponds with GET /backing-service-adapters (the `BackingServiceAdapters` operationId).
+	BackingServiceAdapters(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// BackingServiceList List backing services
 	//
 	// Corresponds with GET /backing-services (the `BackingServiceList` operationId).
@@ -5923,6 +6432,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
 	BackupRestore(ctx context.Context, id string, params *BackupRestoreParams, body BackupRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupRestorePreviewWithBody Review actual database versions before Restore
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
+	BackupRestorePreviewWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupRestorePreview Review actual database versions before Restore
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
+	BackupRestorePreview(ctx context.Context, id string, body BackupRestorePreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackupKeyRotate Rotate the Environment backup age key
 	//
@@ -6412,6 +6935,45 @@ type ClientInterface interface {
 	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
 	ServiceStop(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// SoftwareActivationShow Inspect component activation outcomes
+	//
+	// Corresponds with GET /software/activations/{task} (the `SoftwareActivationShow` operationId).
+	SoftwareActivationShow(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SoftwarePreparations List durable software preparations
+	//
+	// Corresponds with GET /software/preparations (the `SoftwarePreparations` operationId).
+	SoftwarePreparations(ctx context.Context, params *SoftwarePreparationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SoftwarePrepareWithBody Prepare immutable software without activating it
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /software/preparations (the `SoftwarePrepare` operationId).
+	SoftwarePrepareWithBody(ctx context.Context, params *SoftwarePrepareParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SoftwarePrepare Prepare immutable software without activating it
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /software/preparations (the `SoftwarePrepare` operationId).
+	SoftwarePrepare(ctx context.Context, params *SoftwarePrepareParams, body SoftwarePrepareJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SoftwarePreparationShow Inspect preparation provenance and verified artifacts
+	//
+	// Corresponds with GET /software/preparations/{task} (the `SoftwarePreparationShow` operationId).
+	SoftwarePreparationShow(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SoftwareApply Apply a verified software preparation
+	//
+	// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
+	SoftwareApply(ctx context.Context, task string, params *SoftwareApplyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SoftwareReleases List recent published component releases
+	//
+	// Corresponds with GET /software/releases (the `SoftwareReleases` operationId).
+	SoftwareReleases(ctx context.Context, params *SoftwareReleasesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// TaskList List tasks
 	//
 	// Corresponds with GET /tasks (the `TaskList` operationId).
@@ -6840,6 +7402,21 @@ func (c *Client) AttachRenameWithBody(ctx context.Context, id string, params *At
 // Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
 func (c *Client) AttachRename(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAttachRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceAdapters List supported backing adapter families and versions
+//
+// Corresponds with GET /backing-service-adapters (the `BackingServiceAdapters` operationId).
+func (c *Client) BackingServiceAdapters(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceAdaptersRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -7804,6 +8381,40 @@ func (c *Client) BackupRestoreWithBody(ctx context.Context, id string, params *B
 // Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
 func (c *Client) BackupRestore(ctx context.Context, id string, params *BackupRestoreParams, body BackupRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackupRestoreRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupRestorePreviewWithBody Review actual database versions before Restore
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
+func (c *Client) BackupRestorePreviewWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupRestorePreviewRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupRestorePreview Review actual database versions before Restore
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
+func (c *Client) BackupRestorePreview(ctx context.Context, id string, body BackupRestorePreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupRestorePreviewRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9102,6 +9713,115 @@ func (c *Client) ServiceStop(ctx context.Context, id string, params *ServiceStop
 	return c.Client.Do(req)
 }
 
+// SoftwareActivationShow Inspect component activation outcomes
+//
+// Corresponds with GET /software/activations/{task} (the `SoftwareActivationShow` operationId).
+func (c *Client) SoftwareActivationShow(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwareActivationShowRequest(c.Server, task)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SoftwarePreparations List durable software preparations
+//
+// Corresponds with GET /software/preparations (the `SoftwarePreparations` operationId).
+func (c *Client) SoftwarePreparations(ctx context.Context, params *SoftwarePreparationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwarePreparationsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SoftwarePrepareWithBody Prepare immutable software without activating it
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /software/preparations (the `SoftwarePrepare` operationId).
+func (c *Client) SoftwarePrepareWithBody(ctx context.Context, params *SoftwarePrepareParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwarePrepareRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SoftwarePrepare Prepare immutable software without activating it
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /software/preparations (the `SoftwarePrepare` operationId).
+func (c *Client) SoftwarePrepare(ctx context.Context, params *SoftwarePrepareParams, body SoftwarePrepareJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwarePrepareRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SoftwarePreparationShow Inspect preparation provenance and verified artifacts
+//
+// Corresponds with GET /software/preparations/{task} (the `SoftwarePreparationShow` operationId).
+func (c *Client) SoftwarePreparationShow(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwarePreparationShowRequest(c.Server, task)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SoftwareApply Apply a verified software preparation
+//
+// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
+func (c *Client) SoftwareApply(ctx context.Context, task string, params *SoftwareApplyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwareApplyRequest(c.Server, task, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SoftwareReleases List recent published component releases
+//
+// Corresponds with GET /software/releases (the `SoftwareReleases` operationId).
+func (c *Client) SoftwareReleases(ctx context.Context, params *SoftwareReleasesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwareReleasesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // TaskList List tasks
 //
 // Corresponds with GET /tasks (the `TaskList` operationId).
@@ -10324,6 +11044,33 @@ func NewAttachRenameRequestWithBody(server string, id string, params *AttachRena
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewBackingServiceAdaptersRequest constructs an http.Request for the BackingServiceAdapters method
+func NewBackingServiceAdaptersRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backing-service-adapters")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -12683,6 +13430,53 @@ func NewBackupRestoreRequestWithBody(server string, id string, params *BackupRes
 		req.Header.Set("Idempotency-Key", headerParam0)
 
 	}
+
+	return req, nil
+}
+
+// NewBackupRestorePreviewRequest calls the generic BackupRestorePreview builder with application/json body
+func NewBackupRestorePreviewRequest(server string, id string, body BackupRestorePreviewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackupRestorePreviewRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewBackupRestorePreviewRequestWithBody constructs an http.Request for the BackupRestorePreview method, with any body, and a specified content type
+func NewBackupRestorePreviewRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/restore/preview", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -15767,6 +16561,290 @@ func NewServiceStopRequest(server string, id string, params *ServiceStopParams) 
 	return req, nil
 }
 
+// NewSoftwareActivationShowRequest constructs an http.Request for the SoftwareActivationShow method
+func NewSoftwareActivationShowRequest(server string, task string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "task", task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/software/activations/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSoftwarePreparationsRequest constructs an http.Request for the SoftwarePreparations method
+func NewSoftwarePreparationsRequest(server string, params *SoftwarePreparationsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/software/preparations")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSoftwarePrepareRequest calls the generic SoftwarePrepare builder with application/json body
+func NewSoftwarePrepareRequest(server string, params *SoftwarePrepareParams, body SoftwarePrepareJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSoftwarePrepareRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewSoftwarePrepareRequestWithBody constructs an http.Request for the SoftwarePrepare method, with any body, and a specified content type
+func NewSoftwarePrepareRequestWithBody(server string, params *SoftwarePrepareParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/software/preparations")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewSoftwarePreparationShowRequest constructs an http.Request for the SoftwarePreparationShow method
+func NewSoftwarePreparationShowRequest(server string, task string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "task", task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/software/preparations/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSoftwareApplyRequest constructs an http.Request for the SoftwareApply method
+func NewSoftwareApplyRequest(server string, task string, params *SoftwareApplyParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "task", task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/software/preparations/%s/apply", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewSoftwareReleasesRequest constructs an http.Request for the SoftwareReleases method
+func NewSoftwareReleasesRequest(server string, params *SoftwareReleasesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/software/releases")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "selection", params.Selection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewTaskListRequest constructs an http.Request for the TaskList method
 func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, error) {
 	var err error
@@ -17206,6 +18284,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
 	AttachRenameWithResponse(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachRenameResponse, error)
 
+	// BackingServiceAdaptersWithResponse List supported backing adapter families and versions
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /backing-service-adapters (the `BackingServiceAdapters` operationId).
+	BackingServiceAdaptersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*BackingServiceAdaptersResponse, error)
+
 	// BackingServiceListWithResponse List backing services
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -17625,6 +18710,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/restore (the `BackupRestore` operationId).
 	BackupRestoreWithResponse(ctx context.Context, id string, params *BackupRestoreParams, body BackupRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupRestoreResponse, error)
+
+	// BackupRestorePreviewWithBodyWithResponse Review actual database versions before Restore
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
+	BackupRestorePreviewWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupRestorePreviewResponse, error)
+
+	// BackupRestorePreviewWithResponse Review actual database versions before Restore
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
+	BackupRestorePreviewWithResponse(ctx context.Context, id string, body BackupRestorePreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupRestorePreviewResponse, error)
 
 	// BackupKeyRotateWithResponse Rotate the Environment backup age key
 	//
@@ -18185,6 +19284,55 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
 	ServiceStopWithResponse(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error)
+
+	// SoftwareActivationShowWithResponse Inspect component activation outcomes
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /software/activations/{task} (the `SoftwareActivationShow` operationId).
+	SoftwareActivationShowWithResponse(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*SoftwareActivationShowResponse, error)
+
+	// SoftwarePreparationsWithResponse List durable software preparations
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /software/preparations (the `SoftwarePreparations` operationId).
+	SoftwarePreparationsWithResponse(ctx context.Context, params *SoftwarePreparationsParams, reqEditors ...RequestEditorFn) (*SoftwarePreparationsResponse, error)
+
+	// SoftwarePrepareWithBodyWithResponse Prepare immutable software without activating it
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /software/preparations (the `SoftwarePrepare` operationId).
+	SoftwarePrepareWithBodyWithResponse(ctx context.Context, params *SoftwarePrepareParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SoftwarePrepareResponse, error)
+
+	// SoftwarePrepareWithResponse Prepare immutable software without activating it
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /software/preparations (the `SoftwarePrepare` operationId).
+	SoftwarePrepareWithResponse(ctx context.Context, params *SoftwarePrepareParams, body SoftwarePrepareJSONRequestBody, reqEditors ...RequestEditorFn) (*SoftwarePrepareResponse, error)
+
+	// SoftwarePreparationShowWithResponse Inspect preparation provenance and verified artifacts
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /software/preparations/{task} (the `SoftwarePreparationShow` operationId).
+	SoftwarePreparationShowWithResponse(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*SoftwarePreparationShowResponse, error)
+
+	// SoftwareApplyWithResponse Apply a verified software preparation
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
+	SoftwareApplyWithResponse(ctx context.Context, task string, params *SoftwareApplyParams, reqEditors ...RequestEditorFn) (*SoftwareApplyResponse, error)
+
+	// SoftwareReleasesWithResponse List recent published component releases
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /software/releases (the `SoftwareReleases` operationId).
+	SoftwareReleasesWithResponse(ctx context.Context, params *SoftwareReleasesParams, reqEditors ...RequestEditorFn) (*SoftwareReleasesResponse, error)
 
 	// TaskListWithResponse List tasks
 	//
@@ -19052,6 +20200,54 @@ func (r AttachRenameResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AttachRenameResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type BackingServiceAdaptersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BackingAdapterCatalog
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BackingServiceAdaptersResponse) GetJSON200() *BackingAdapterCatalog {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackingServiceAdaptersResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackingServiceAdaptersResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackingServiceAdaptersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackingServiceAdaptersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackingServiceAdaptersResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -21382,6 +22578,54 @@ func (r BackupRestoreResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackupRestoreResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type BackupRestorePreviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RestorePreview
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BackupRestorePreviewResponse) GetJSON200() *RestorePreview {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupRestorePreviewResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupRestorePreviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupRestorePreviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupRestorePreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupRestorePreviewResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -24396,6 +25640,294 @@ func (r ServiceStopResponse) ContentType() string {
 	return ""
 }
 
+type SoftwareActivationShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SoftwareActivation
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SoftwareActivationShowResponse) GetJSON200() *SoftwareActivation {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SoftwareActivationShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SoftwareActivationShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SoftwareActivationShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SoftwareActivationShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SoftwareActivationShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SoftwarePreparationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SoftwarePreparationPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SoftwarePreparationsResponse) GetJSON200() *SoftwarePreparationPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SoftwarePreparationsResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SoftwarePreparationsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SoftwarePreparationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SoftwarePreparationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SoftwarePreparationsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SoftwarePrepareResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r SoftwarePrepareResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SoftwarePrepareResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SoftwarePrepareResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SoftwarePrepareResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SoftwarePrepareResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SoftwarePrepareResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SoftwarePreparationShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SoftwarePreparation
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SoftwarePreparationShowResponse) GetJSON200() *SoftwarePreparation {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SoftwarePreparationShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SoftwarePreparationShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SoftwarePreparationShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SoftwarePreparationShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SoftwarePreparationShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SoftwareApplyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r SoftwareApplyResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SoftwareApplyResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SoftwareApplyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SoftwareApplyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SoftwareApplyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SoftwareApplyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SoftwareReleasesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SoftwareReleaseCatalog
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SoftwareReleasesResponse) GetJSON200() *SoftwareReleaseCatalog {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SoftwareReleasesResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SoftwareReleasesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SoftwareReleasesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SoftwareReleasesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SoftwareReleasesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TaskListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -25752,6 +27284,19 @@ func (c *ClientWithResponses) AttachRenameWithResponse(ctx context.Context, id s
 	return ParseAttachRenameResponse(rsp)
 }
 
+// BackingServiceAdaptersWithResponse List supported backing adapter families and versions
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /backing-service-adapters (the `BackingServiceAdapters` operationId).
+func (c *ClientWithResponses) BackingServiceAdaptersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*BackingServiceAdaptersResponse, error) {
+	rsp, err := c.BackingServiceAdapters(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceAdaptersResponse(rsp)
+}
+
 // BackingServiceListWithResponse List backing services
 //
 // Returns a wrapper object for the known response body format(s).
@@ -26530,6 +28075,32 @@ func (c *ClientWithResponses) BackupRestoreWithResponse(ctx context.Context, id 
 		return nil, err
 	}
 	return ParseBackupRestoreResponse(rsp)
+}
+
+// BackupRestorePreviewWithBodyWithResponse Review actual database versions before Restore
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
+func (c *ClientWithResponses) BackupRestorePreviewWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupRestorePreviewResponse, error) {
+	rsp, err := c.BackupRestorePreviewWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupRestorePreviewResponse(rsp)
+}
+
+// BackupRestorePreviewWithResponse Review actual database versions before Restore
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
+func (c *ClientWithResponses) BackupRestorePreviewWithResponse(ctx context.Context, id string, body BackupRestorePreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupRestorePreviewResponse, error) {
+	rsp, err := c.BackupRestorePreview(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupRestorePreviewResponse(rsp)
 }
 
 // BackupKeyRotateWithResponse Rotate the Environment backup age key
@@ -27572,6 +29143,97 @@ func (c *ClientWithResponses) ServiceStopWithResponse(ctx context.Context, id st
 	return ParseServiceStopResponse(rsp)
 }
 
+// SoftwareActivationShowWithResponse Inspect component activation outcomes
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /software/activations/{task} (the `SoftwareActivationShow` operationId).
+func (c *ClientWithResponses) SoftwareActivationShowWithResponse(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*SoftwareActivationShowResponse, error) {
+	rsp, err := c.SoftwareActivationShow(ctx, task, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSoftwareActivationShowResponse(rsp)
+}
+
+// SoftwarePreparationsWithResponse List durable software preparations
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /software/preparations (the `SoftwarePreparations` operationId).
+func (c *ClientWithResponses) SoftwarePreparationsWithResponse(ctx context.Context, params *SoftwarePreparationsParams, reqEditors ...RequestEditorFn) (*SoftwarePreparationsResponse, error) {
+	rsp, err := c.SoftwarePreparations(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSoftwarePreparationsResponse(rsp)
+}
+
+// SoftwarePrepareWithBodyWithResponse Prepare immutable software without activating it
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /software/preparations (the `SoftwarePrepare` operationId).
+func (c *ClientWithResponses) SoftwarePrepareWithBodyWithResponse(ctx context.Context, params *SoftwarePrepareParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SoftwarePrepareResponse, error) {
+	rsp, err := c.SoftwarePrepareWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSoftwarePrepareResponse(rsp)
+}
+
+// SoftwarePrepareWithResponse Prepare immutable software without activating it
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /software/preparations (the `SoftwarePrepare` operationId).
+func (c *ClientWithResponses) SoftwarePrepareWithResponse(ctx context.Context, params *SoftwarePrepareParams, body SoftwarePrepareJSONRequestBody, reqEditors ...RequestEditorFn) (*SoftwarePrepareResponse, error) {
+	rsp, err := c.SoftwarePrepare(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSoftwarePrepareResponse(rsp)
+}
+
+// SoftwarePreparationShowWithResponse Inspect preparation provenance and verified artifacts
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /software/preparations/{task} (the `SoftwarePreparationShow` operationId).
+func (c *ClientWithResponses) SoftwarePreparationShowWithResponse(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*SoftwarePreparationShowResponse, error) {
+	rsp, err := c.SoftwarePreparationShow(ctx, task, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSoftwarePreparationShowResponse(rsp)
+}
+
+// SoftwareApplyWithResponse Apply a verified software preparation
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
+func (c *ClientWithResponses) SoftwareApplyWithResponse(ctx context.Context, task string, params *SoftwareApplyParams, reqEditors ...RequestEditorFn) (*SoftwareApplyResponse, error) {
+	rsp, err := c.SoftwareApply(ctx, task, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSoftwareApplyResponse(rsp)
+}
+
+// SoftwareReleasesWithResponse List recent published component releases
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /software/releases (the `SoftwareReleases` operationId).
+func (c *ClientWithResponses) SoftwareReleasesWithResponse(ctx context.Context, params *SoftwareReleasesParams, reqEditors ...RequestEditorFn) (*SoftwareReleasesResponse, error) {
+	rsp, err := c.SoftwareReleases(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSoftwareReleasesResponse(rsp)
+}
+
 // TaskListWithResponse List tasks
 //
 // Returns a wrapper object for the known response body format(s).
@@ -28453,6 +30115,39 @@ func ParseAttachRenameResponse(rsp *http.Response) (*AttachRenameResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackingServiceAdaptersResponse parses an HTTP response from a BackingServiceAdaptersWithResponse call
+func ParseBackingServiceAdaptersResponse(rsp *http.Response) (*BackingServiceAdaptersResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackingServiceAdaptersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BackingAdapterCatalog
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -30276,6 +31971,39 @@ func ParseBackupRestoreResponse(rsp *http.Response) (*BackupRestoreResponse, err
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackupRestorePreviewResponse parses an HTTP response from a BackupRestorePreviewWithResponse call
+func ParseBackupRestorePreviewResponse(rsp *http.Response) (*BackupRestorePreviewResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupRestorePreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RestorePreview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -32612,6 +34340,204 @@ func ParseServiceStopResponse(rsp *http.Response) (*ServiceStopResponse, error) 
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseSoftwareActivationShowResponse parses an HTTP response from a SoftwareActivationShowWithResponse call
+func ParseSoftwareActivationShowResponse(rsp *http.Response) (*SoftwareActivationShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SoftwareActivationShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SoftwareActivation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSoftwarePreparationsResponse parses an HTTP response from a SoftwarePreparationsWithResponse call
+func ParseSoftwarePreparationsResponse(rsp *http.Response) (*SoftwarePreparationsResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SoftwarePreparationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SoftwarePreparationPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSoftwarePrepareResponse parses an HTTP response from a SoftwarePrepareWithResponse call
+func ParseSoftwarePrepareResponse(rsp *http.Response) (*SoftwarePrepareResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SoftwarePrepareResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSoftwarePreparationShowResponse parses an HTTP response from a SoftwarePreparationShowWithResponse call
+func ParseSoftwarePreparationShowResponse(rsp *http.Response) (*SoftwarePreparationShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SoftwarePreparationShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SoftwarePreparation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSoftwareApplyResponse parses an HTTP response from a SoftwareApplyWithResponse call
+func ParseSoftwareApplyResponse(rsp *http.Response) (*SoftwareApplyResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SoftwareApplyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSoftwareReleasesResponse parses an HTTP response from a SoftwareReleasesWithResponse call
+func ParseSoftwareReleasesResponse(rsp *http.Response) (*SoftwareReleasesResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SoftwareReleasesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SoftwareReleaseCatalog
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

@@ -4,6 +4,7 @@ import { NetworkRange } from "@/components/common/network-range";
 import { FormSection } from "@/components/ui/form-section";
 import type { BackingHooks } from "@/features/backing-service/api";
 import { BackingHookFields } from "@/features/backing-service/hook-fields";
+import { useAdapterCatalog } from "@/features/backing-service/use-adapter-catalog";
 
 import { Select } from "@/components/ui/select";
 
@@ -55,9 +56,17 @@ export default function PlatformBackingServicesPage() {
     reset: resetBackingIdentity,
   } = useLinkedSlug();
   const [description, setDescription] = useState("");
-  const [adapter, setAdapter] = useState<"postgres:16" | "valkey:9" | "custom">(
-    "postgres:16",
+  const [adapter, setAdapter] = useState<
+    "postgres" | "valkey" | "mysql" | "custom"
+  >("postgres");
+  const [version, setVersion] = useState("");
+  const adapterCatalog = useAdapterCatalog(createOpen);
+  const catalogAdapter = adapterCatalog.catalog?.items?.find(
+    (item) => item.key === adapter,
   );
+  const versions = catalogAdapter?.versions ?? [];
+  const selectedVersion =
+    version || (versions.length === 1 ? versions[0].version : "");
   const [image, setImage] = useState("");
   const [hooks, setHooks] = useState<BackingHooks>({});
   const [hookError, setHookError] = useState<string | null>(null);
@@ -71,20 +80,36 @@ export default function PlatformBackingServicesPage() {
   const [creating, setCreating] = useState(false);
 
   const openCreate = () => setCreateOpen(true);
+  const authenticationFields =
+    adapter === "custom"
+      ? undefined
+      : backingAuthenticationCreateFields(adapter, authentication);
   const createFields =
     adapter === "custom"
       ? image.trim()
         ? { adapter: "custom" as const, image: image.trim(), hooks }
         : undefined
-      : backingAuthenticationCreateFields(adapter, authentication);
+      : authenticationFields &&
+          selectedVersion &&
+          versions.some((item) => item.version === selectedVersion)
+        ? { ...authenticationFields, adapter_version: selectedVersion }
+        : undefined;
 
   const createBackingService = async () => {
+    if (!catalogAdapter) {
+      setCreateError(
+        "Load the supported adapter catalog before creating a backing service.",
+      );
+      return;
+    }
     if (adapter === "custom" && hookError) return;
     if (!createFields) {
       setCreateError(
         adapter === "custom"
           ? "Enter the container image for this custom backing service."
-          : "Select an authentication mode for this Valkey backing service.",
+          : !selectedVersion
+            ? "Select a supported database version."
+            : "Select an authentication mode for this Valkey backing service.",
       );
       return;
     }
@@ -249,6 +274,21 @@ export default function PlatformBackingServicesPage() {
               title="Service type"
               description="Select a managed engine or run a custom container on its dedicated network."
             >
+              {adapterCatalog.error && (
+                <div
+                  role="alert"
+                  className="text-sm text-destructive sm:col-span-2"
+                >
+                  {adapterCatalog.error}{" "}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={adapterCatalog.retry}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="backing-adapter">Adapter</Label>
                 <Select
@@ -256,25 +296,44 @@ export default function PlatformBackingServicesPage() {
                   value={adapter}
                   onValueChange={(value) => {
                     if (
-                      value !== "postgres:16" &&
-                      value !== "valkey:9" &&
+                      value !== "postgres" &&
+                      value !== "valkey" &&
+                      value !== "mysql" &&
                       value !== "custom"
                     )
                       return;
                     setAdapter(value);
+                    setVersion("");
                     setImage("");
                     setHooks({});
                     setHookError(null);
                     setAuthentication("");
                   }}
-                  options={[
-                    { value: "postgres:16", label: "PostgreSQL 16" },
-                    { value: "valkey:9", label: "Valkey 9" },
-                    { value: "custom", label: "Custom container" },
-                  ]}
+                  options={(adapterCatalog.catalog?.items ?? []).map(
+                    (item) => ({ value: item.key, label: item.label }),
+                  )}
                 />
               </div>
-              {adapter === "valkey:9" && (
+              {adapter !== "custom" && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="backing-version">Server version</Label>
+                  <Select
+                    id="backing-version"
+                    value={selectedVersion}
+                    onValueChange={setVersion}
+                    placeholder={
+                      adapterCatalog.catalog
+                        ? "Select version"
+                        : "Loading versions"
+                    }
+                    options={versions.map((item) => ({
+                      value: item.version,
+                      label: item.version,
+                    }))}
+                  />
+                </div>
+              )}
+              {adapter === "valkey" && (
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="backing-authentication">Authentication</Label>
                   <Select
@@ -379,7 +438,7 @@ export default function PlatformBackingServicesPage() {
                 {hookError}
               </p>
             )}
-            {adapter === "valkey:9" && authentication === "none" && (
+            {adapter === "valkey" && authentication === "none" && (
               <p
                 role="status"
                 className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning sm:col-span-2"
@@ -404,6 +463,7 @@ export default function PlatformBackingServicesPage() {
             <Button
               disabled={
                 creating ||
+                !catalogAdapter ||
                 (adapter === "custom" && !!hookError) ||
                 !createFields ||
                 !slug.trim() ||

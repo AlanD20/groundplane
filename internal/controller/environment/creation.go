@@ -365,7 +365,7 @@ func newEnvironmentCreationTask(
 	planID := ids.New(ids.KindPlan)
 	stepID := ids.New(ids.KindStep)
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: 1, PlanId: planID, RenderGeneration: 1,
+		Schema: executionplan.SchemaVersion, PlanId: planID, RenderGeneration: 1,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
 		TargetId:  environment.ID,
 		Steps: []*agentpb.ExecutionStep{{
@@ -392,7 +392,10 @@ func newEnvironmentCreationTask(
 		Params: map[string]string{
 			taskcontract.EnvironmentCreateVolumeDirectoryParam: environment.VolumeDir,
 		},
-		Steps:          taskjournal.CaptureStepDescriptions([]taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}, plan.Steps),
+		Steps: taskjournal.CaptureStepDescriptions(
+			[]taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}},
+			plan.Steps,
+		),
 		TimeoutSeconds: environmentCreationTimeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil

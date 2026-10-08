@@ -7,8 +7,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backupconfig"
 	"github.com/AlanD20/groundplane/internal/common/backupconfigmaterialization"
 	"github.com/AlanD20/groundplane/internal/common/backupformat"
+	"github.com/AlanD20/groundplane/internal/common/backupmysql"
+	"github.com/AlanD20/groundplane/internal/common/backuppostgres"
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
+	"github.com/AlanD20/groundplane/internal/common/databaseversion"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/mysql84protocol"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -79,6 +83,20 @@ func validBackupCaptureAuthority(value *agentpb.BackupCaptureAuthority) bool {
 		return releaseErr == nil && postgres.AdapterContractVersion == postgres16protocol.AdapterContractVersion &&
 			backupCheckpointServiceID(postgres.DatabaseServiceId) && postgresidentity.ValidGenerated(postgres.DatabaseName) &&
 			postgresidentity.ValidGenerated(postgres.RoleName) && postgres.MaxPlaintextBytes == maximum
+	case *agentpb.BackupCaptureAuthority_Mysql:
+		if source == nil || source.Mysql == nil || value.Resource.Kind != agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ATTACH {
+			return false
+		}
+		mysql := source.Mysql
+		maximum := backupformat.MaxStoredBytes
+		if value.Encryption.Kind == agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
+			maximum = backupformat.MaxAgeSourceBytes
+		}
+		return mysql.AdapterContractVersion == mysql84protocol.AdapterContractVersion &&
+			mysql.RequiredServerMajor == mysql84protocol.ServerMajor && mysql.RequiredServerMinor == mysql84protocol.ServerMinor &&
+			backupCheckpointServiceID(mysql.DatabaseServiceId) && mysql84protocol.ValidGeneratedIdentity(mysql.DatabaseName) &&
+			mysql84protocol.ValidGeneratedIdentity(mysql.RoleName) && mysql.MaxPlaintextBytes == maximum &&
+			backupCheckpointDigest(mysql.DatabaseImageReferenceSha256)
 	case *agentpb.BackupCaptureAuthority_Config:
 		if source == nil || source.Config == nil || value.Resource.Kind != agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ENVIRONMENT ||
 			value.Encryption.Kind != agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
@@ -155,8 +173,22 @@ func validBackupRestoreAuthority(value *agentpb.BackupRestoreAuthority) bool {
 		}
 		postgres := source.Postgres
 		_, releaseErr := postgres16protocol.DecodeManagedReleaseIndex(postgres.ManagedReleaseIndex)
-		return releaseErr == nil && postgres.AdapterContractVersion == postgres16protocol.AdapterContractVersion &&
+		_, archiveErr := backuppostgres.FromWire(postgres.ExpectedArchive)
+		versions, versionErr := databaseversion.FromWire(postgres.ExpectedTargetVersions)
+		return releaseErr == nil && archiveErr == nil && versionErr == nil && versions.Family == "postgres" &&
+			postgres.AdapterContractVersion == postgres16protocol.AdapterContractVersion &&
 			backupCheckpointServiceID(postgres.DatabaseServiceId) && postgresidentity.ValidGenerated(postgres.DatabaseName) && postgresidentity.ValidGenerated(postgres.RoleName)
+	case *agentpb.BackupRestoreAuthority_Mysql:
+		if source == nil || source.Mysql == nil || value.Destination.Kind != agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ATTACH {
+			return false
+		}
+		mysql := source.Mysql
+		_, archiveErr := backupmysql.FromWire(mysql.ExpectedArchive)
+		versions, versionErr := databaseversion.FromWire(mysql.ExpectedTargetVersions)
+		return archiveErr == nil && versionErr == nil && versions.Family == "mysql" && mysql.AdapterContractVersion == mysql84protocol.AdapterContractVersion &&
+			mysql.RequiredServerMajor == mysql84protocol.ServerMajor && mysql.RequiredServerMinor == mysql84protocol.ServerMinor &&
+			backupCheckpointServiceID(mysql.DatabaseServiceId) && mysql84protocol.ValidGeneratedIdentity(mysql.DatabaseName) &&
+			mysql84protocol.ValidGeneratedIdentity(mysql.RoleName) && backupCheckpointDigest(mysql.DatabaseImageReferenceSha256)
 	case *agentpb.BackupRestoreAuthority_Config:
 		if source == nil || source.Config == nil || value.Destination.Kind != agentpb.BackupResourceKind_BACKUP_RESOURCE_KIND_ENVIRONMENT ||
 			value.Encryption.Kind != agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {

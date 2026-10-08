@@ -60,6 +60,14 @@ func (service *RestoreService) prepareRestoreIntent(ctx context.Context, environ
 				Value: requestidempotency.String(request.RecoveryPointID),
 			},
 			requestidempotency.Field{Name: "identity_digest", Value: requestidempotency.String(identityDigest)},
+			requestidempotency.Field{
+				Name:  "version_review_sha256",
+				Value: requestidempotency.String(request.VersionReviewSHA256),
+			},
+			requestidempotency.Field{
+				Name:  "acknowledge_version_difference",
+				Value: requestidempotency.Bool(request.AcknowledgeVersionDifference),
+			},
 		)),
 	})
 	if err != nil {

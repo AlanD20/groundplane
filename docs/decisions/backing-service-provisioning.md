@@ -15,8 +15,10 @@ Creation is one atomic aggregate publication followed by one Agent Task. The
 operator selects only the closed public choices, including adapter and explicit
 network pool/subnet decisions. For built-in adapters, the image, Service
 definition, health check, Volume, bootstrap Entries, fact schema, Attach
-procedures and Backup strategy come from the compiled versioned adapter catalog
-and are frozen at publication; the operator cannot override them.
+procedures come from one compiled adapter per family. The separate server-version
+catalog selects supported images and tools. The complete creation input is frozen
+at publication; the operator cannot override adapter-owned procedures. Backup
+support is qualified separately from provisioning.
 
 Custom is the accepted, bounded exception: the operator selects its image and
 may declare typed Attach, Detach, before-stop and after-start hooks. Custom does

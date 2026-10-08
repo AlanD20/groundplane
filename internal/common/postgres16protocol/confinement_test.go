@@ -121,8 +121,8 @@ func TestConfinementClientArgumentsAreExact(t *testing.T) {
 		{OperationProbePGRestore, []string{"pg_restore", "--version"}},
 		{OperationProbePSQL, []string{"psql", "--version"}},
 		{
-			OperationServerMajor,
-			testPSQLArguments("SELECT pg_catalog.current_setting('server_version_num')::integer / 10000;"),
+			OperationServerVersion,
+			testPSQLArguments("SELECT pg_catalog.current_setting('server_version');"),
 		},
 		{
 			OperationDump,
@@ -608,7 +608,7 @@ func TestConfinementOperationPathsFDsAndStreamsAreExact(t *testing.T) {
 		{OperationProbePGDump, PGDumpPath, proofFD, probePolicy},
 		{OperationProbePGRestore, PGRestorePath, proofFD, probePolicy},
 		{OperationProbePSQL, PSQLPath, proofFD, probePolicy},
-		{OperationServerMajor, PSQLPath, proofFD, proofPolicy},
+		{OperationServerVersion, PSQLPath, proofFD, proofPolicy},
 		{
 			OperationDump, PGDumpPath, artifactFD,
 			StreamPolicy{Input: InputNone, Output: OutputArtifact, StderrLimit: DiagnosticLimitBytes},

@@ -29,6 +29,9 @@ func (c *Client) CreateBackingService(
 	if input.Description != "" {
 		body.Description = &input.Description
 	}
+	if input.AdapterVersion != "" {
+		body.AdapterVersion = &input.AdapterVersion
+	}
 	if input.Image != "" {
 		body.Image = &input.Image
 	}

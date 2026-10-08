@@ -17,7 +17,7 @@ import (
 func (repository *Planner) PrepareManualRunSources(
 	ctx context.Context,
 	input ManualBackupRunInput,
-	resolvePostgres BackupPostgresIdentityResolver,
+	resolveDatabase BackupDatabaseIdentityResolver,
 ) (ManualRunSources, error) {
 	if repository == nil || repository.store == nil {
 		return ManualRunSources{}, errs.New(
@@ -178,14 +178,14 @@ func (repository *Planner) PrepareManualRunSources(
 			return ManualRunSources{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		if backupruntime.BackupRuntimeSourceKind(source.Kind) == backupruntime.BackupRuntimeSourceAttach &&
-			resolvePostgres == nil {
+			resolveDatabase == nil {
 			return ManualRunSources{}, errs.New(
 				errs.KindStrategyNotImplemented,
 				"backup PostgreSQL requires its fixed-revision encrypted identity resolver",
 			)
 		}
 		attempt, prepareErr := repository.prepareManualBackupSource(
-			ctx, run, source, value.ModRevision, uint32(index), fixedRevision, resolvePostgres,
+			ctx, run, source, value.ModRevision, uint32(index), fixedRevision, resolveDatabase,
 		)
 		if prepareErr != nil {
 			return ManualRunSources{}, prepareErr

@@ -100,14 +100,14 @@ func (repository *durableBackupRunRepository) PrepareBackupRunRetry(
 
 type durableBackupRunRepository struct {
 	runtime         *etcd.BackupRuntimeRepository
-	resolvePostgres backupplanning.BackupPostgresIdentityResolver
+	resolveDatabase backupplanning.BackupDatabaseIdentityResolver
 	serviceFacts    backupplanning.BackupServiceFactResolver
 	configSnapshots *ConfigSnapshotProducer
 }
 
 func NewDurableBackupRunRepository(
 	runtime *etcd.BackupRuntimeRepository,
-	facts backupplanning.BackupPostgresIdentityResolver,
+	facts backupplanning.BackupDatabaseIdentityResolver,
 	store etcdstore.Store, protector *secretvalue.Protector,
 ) (*durableBackupRunRepository, error) {
 	if runtime == nil || facts == nil {
@@ -118,7 +118,7 @@ func NewDurableBackupRunRepository(
 		return nil, err
 	}
 	return &durableBackupRunRepository{
-		runtime: runtime, resolvePostgres: facts,
+		runtime: runtime, resolveDatabase: facts,
 		serviceFacts: NewBackupServiceFactResolver(store), configSnapshots: configSnapshots,
 	}, nil
 }
@@ -134,7 +134,7 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 		Initiator: input.Initiator, ScheduledAt: input.ScheduledAt,
 		ResolveConfig:      repository.configSnapshots.ResolveConfigSnapshot,
 		ResolveServiceFact: repository.serviceFacts,
-	}, repository.resolvePostgres)
+	}, repository.resolveDatabase)
 	if err != nil {
 		return BackupRunPrepared{}, err
 	}

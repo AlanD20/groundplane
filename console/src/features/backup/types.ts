@@ -96,6 +96,7 @@ export type RecoveryPointState = {
 };
 
 type RecoveryPointBase = {
+	 database?: components["schemas"]["RecoveryPointDatabase"];
   capture?: { taskId: string; createdAt: string; sourceCount: number };
   id: string;
   connectorId: string;

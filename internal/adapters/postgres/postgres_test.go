@@ -1,4 +1,4 @@
-package postgres16
+package postgres
 
 import (
 	"bytes"

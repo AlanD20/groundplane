@@ -118,11 +118,11 @@ func seedEnvironmentBlueprintBackingScope(
 		fixture.store,
 		environment.Record.ID,
 		core.Service{
-			ID:          ids.NewAt(ids.KindService, fixture.now, seed+3),
-			Name:        "postgres",
-			Image:       "postgres:16-alpine",
-			Adapter:     "postgres:16",
-			FactsPrefix: "pg16_",
+			ID:      ids.NewAt(ids.KindService, fixture.now, seed+3),
+			Name:    "postgres",
+			Image:   "postgres:16-alpine",
+			Adapter: "postgres", AdapterVersion: "16",
+			FactsPrefix: "pg_",
 		},
 		ids.NewAt(ids.KindNetwork, fixture.now, seed+4),
 		seed+5,
@@ -147,7 +147,7 @@ func environmentBlueprintMaximumAttachCandidate(
 	t.Helper()
 	grants := make([]string, testattachments.MaximumAttachGrants)
 	retained := make([]testkeyvalue.Versioned[testattachments.Record], testattachments.MaximumAttachGrants)
-	factSets := []testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg16_DATABASE"}}}}
+	factSets := []testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg_DATABASE"}}}}
 	for index := range grants {
 		retained[index] = environmentBlueprintRetainedGrantTarget(
 			t, fixture, scope, consumerServiceID, seed+int64(index)+10,
@@ -155,7 +155,7 @@ func environmentBlueprintMaximumAttachCandidate(
 		grants[index] = retained[index].Record.ID
 		factSets = append(factSets, testattachments.FactSetMetadata{
 			GrantAttachID: grants[index],
-			Facts:         []testattachments.FactDefinition{{Key: "pg16_DATABASE"}},
+			Facts:         []testattachments.FactDefinition{{Key: "pg_DATABASE"}},
 		})
 	}
 	attachID := ids.NewAt(ids.KindAttach, fixture.now, seed)
@@ -207,7 +207,7 @@ func environmentBlueprintRetainedGrantTarget(
 		consumerServiceID,
 		attachID,
 		nil,
-		[]testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg16_DATABASE"}}}},
+		[]testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg_DATABASE"}}}},
 		taskID,
 		fixture.now,
 	)

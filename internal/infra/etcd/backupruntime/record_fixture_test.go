@@ -116,6 +116,9 @@ func testBackupLaterSource(
 		Phase:                  phase,
 	}
 	if state == BackupSourceAttemptSucceeded {
+		record.PostgresArchive = BackupPostgresArchiveEvidence{
+			PGDumpMajor: 16, AdapterContractVersion: 1, SourceServerVersion: "16.9", BackupToolVersion: "16.9",
+		}
 		record.Evidence = testBackupArtifact()
 		record.Object = testBackupObject(record.ObjectKey)
 		record.Upload = BackupUploadOutcome{Kind: BackupUploadReturned,

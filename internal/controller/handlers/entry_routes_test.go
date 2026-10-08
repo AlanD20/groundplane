@@ -124,7 +124,7 @@ func TestEntryRoutesFlattenMetadataAndRevealExplicitly(t *testing.T) {
 		Entry: core.EnvEntry{
 			ID: entryID, Kind: core.EntryKindEnv, Key: "DATABASE_URL",
 			Source: core.EntrySource{Kind: core.SourceFact, Fact: &core.FactRef{
-				Attach: "att_primary", Grant: "att_reporting", Key: "pg16_URL",
+				Attach: "att_primary", Grant: "att_reporting", Key: "pg_URL",
 			}},
 			Exposure: []string{"api"}, Secret: true,
 		},
@@ -150,7 +150,7 @@ func TestEntryRoutesFlattenMetadataAndRevealExplicitly(t *testing.T) {
 	if list.Code != http.StatusOK || json.Unmarshal(list.Body.Bytes(), &page) != nil ||
 		reader.listCalls != 1 || len(page.Items) != 1 || page.NextCursor != "next" ||
 		page.Items[0].Source.AttachID != "att_primary" || page.Items[0].Source.GrantAttachID != "att_reporting" ||
-		page.Items[0].Source.Fact != "pg16_URL" || !page.Items[0].EmptySecretValue ||
+		page.Items[0].Source.Fact != "pg_URL" || !page.Items[0].EmptySecretValue ||
 		strings.Contains(list.Body.String(), "postgres://credential") {
 		t.Fatalf("list response = %d/%s, calls %d, page %#v", list.Code, list.Body.String(), reader.listCalls, page)
 	}

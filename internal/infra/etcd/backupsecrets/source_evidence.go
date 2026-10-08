@@ -84,9 +84,9 @@ func (reader *Reader) validateCaptureTargetEvidence(
 ) error {
 	switch source.Kind {
 	case backupruntime.BackupRuntimeSourceAttach:
-		snapshot := source.Snapshot.Postgres
-		if snapshot == nil {
-			return errs.New(errs.KindInternal, "postgres backup source snapshot is corrupt")
+		snapshot, snapshotErr := backupplanning.SelectBackupDatabasePublicationSnapshot(source)
+		if snapshotErr != nil {
+			return snapshotErr
 		}
 		keys := []*etcdstore.KeyValue{
 			result.Values[dynamic.index[attachrecord.AttachKey(source.TargetID)]],
@@ -98,7 +98,7 @@ func (reader *Reader) validateCaptureTargetEvidence(
 		if !backupSecretRecordMatches(keys[0], step.GetResource().GetResource()) {
 			return errs.New(errs.KindStateConflict, "postgres backup sealed resource changed")
 		}
-		return backupplanning.ValidateBackupPostgresPublicationEvidence(keys, source, *snapshot)
+		return backupplanning.ValidateBackupDatabasePublicationEvidence(keys, source, snapshot)
 	case backupruntime.BackupRuntimeSourceVolume:
 		snapshot := source.Snapshot.Volume
 		if snapshot == nil {

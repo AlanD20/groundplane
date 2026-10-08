@@ -25,8 +25,9 @@ func (repository *TaskRepository) prepareConfigRestoreClaim(ctx context.Context,
 	if plan.GetSteps()[0].GetBackupStep().GetRestore().GetVolume() != nil {
 		return repository.prepareVolumeRestoreClaim(ctx, task, plan, assignment, revision)
 	}
-	if plan.GetSteps()[0].GetBackupStep().GetRestore().GetPostgres() != nil {
-		return repository.preparePostgresRestoreClaim(ctx, task, plan, assignment, revision)
+	selectedRestore := plan.GetSteps()[0].GetBackupStep().GetRestore()
+	if selectedRestore.GetPostgres() != nil || selectedRestore.GetMysql() != nil {
+		return repository.prepareDatabaseRestoreClaim(ctx, task, plan, assignment, revision)
 	}
 	membership, err := backupruntime.BackupRestoreEnvironmentIndexKey(task.Owner.EnvironmentID, task.ID)
 	if err != nil {

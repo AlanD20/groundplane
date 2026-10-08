@@ -25,6 +25,23 @@ type BackupPostgresSourceSnapshot struct {
 	ManagedReleaseIndex        string `json:"managed_release_index"`
 }
 
+type BackupMySQLSourceSnapshot struct {
+	ConsumerEnvironmentID      string `json:"consumer_environment_id"`
+	AttachID                   string `json:"attach_id"`
+	AttachRevision             int64  `json:"attach_revision"`
+	BackingProjectID           string `json:"backing_project_id"`
+	BackingProjectRevision     int64  `json:"backing_project_revision"`
+	BackingEnvironmentID       string `json:"backing_environment_id"`
+	BackingEnvironmentRevision int64  `json:"backing_environment_revision"`
+	BackingServiceID           string `json:"backing_service_id"`
+	BackingServiceRevision     int64  `json:"backing_service_revision"`
+	ConsumerServiceID          string `json:"consumer_service_id"`
+	AttachFactsRevision        int64  `json:"attach_facts_revision"`
+	Database                   string `json:"database"`
+	Role                       string `json:"role"`
+	AdapterVersion             string `json:"adapter_version"`
+}
+
 type BackupVolumeServiceSnapshot struct {
 	ServiceID       string                     `json:"service_id"`
 	ServiceRevision int64                      `json:"service_revision"`
@@ -59,30 +76,33 @@ type BackupConfigSourceSnapshot struct {
 
 type BackupRunSourceSnapshot struct {
 	Postgres *BackupPostgresSourceSnapshot `json:"postgres,omitempty"`
+	MySQL    *BackupMySQLSourceSnapshot    `json:"mysql,omitempty"`
 	Volume   *BackupVolumeSourceSnapshot   `json:"volume,omitempty"`
 	Config   *BackupConfigSourceSnapshot   `json:"config,omitempty"`
 }
 
 type BackupRunSourceAttemptRecord struct {
-	Ordinal                uint32                      `json:"ordinal"`
-	SourceID               string                      `json:"source_id"`
-	Kind                   BackupRuntimeSourceKind     `json:"kind"`
-	TargetID               string                      `json:"target_id"`
-	SourceRevision         int64                       `json:"source_revision"`
-	TargetRevision         int64                       `json:"target_revision"`
-	Snapshot               BackupRunSourceSnapshot     `json:"snapshot"`
-	Format                 BackupRuntimeFormat         `json:"format"`
-	RecoveryPointID        string                      `json:"recovery_point_id"`
-	RecoveryPointCreatedAt time.Time                   `json:"recovery_point_created_at"`
-	ObjectKey              string                      `json:"object_key"`
-	State                  BackupSourceAttemptState    `json:"state"`
-	Phase                  BackupSourceAttemptPhase    `json:"phase"`
-	Evidence               BackupArtifactEvidence      `json:"evidence"`
-	ConfigArchive          BackupConfigArchiveEvidence `json:"config_archive"`
-	VolumeArchive          BackupVolumeArchiveEvidence `json:"volume_archive"`
-	Upload                 BackupUploadOutcome         `json:"upload"`
-	Object                 BackupObjectIdentity        `json:"object"`
-	FailureCode            BackupFailureCode           `json:"failure_code,omitempty"`
+	Ordinal                uint32                        `json:"ordinal"`
+	SourceID               string                        `json:"source_id"`
+	Kind                   BackupRuntimeSourceKind       `json:"kind"`
+	TargetID               string                        `json:"target_id"`
+	SourceRevision         int64                         `json:"source_revision"`
+	TargetRevision         int64                         `json:"target_revision"`
+	Snapshot               BackupRunSourceSnapshot       `json:"snapshot"`
+	Format                 BackupRuntimeFormat           `json:"format"`
+	RecoveryPointID        string                        `json:"recovery_point_id"`
+	RecoveryPointCreatedAt time.Time                     `json:"recovery_point_created_at"`
+	ObjectKey              string                        `json:"object_key"`
+	State                  BackupSourceAttemptState      `json:"state"`
+	Phase                  BackupSourceAttemptPhase      `json:"phase"`
+	Evidence               BackupArtifactEvidence        `json:"evidence"`
+	ConfigArchive          BackupConfigArchiveEvidence   `json:"config_archive"`
+	VolumeArchive          BackupVolumeArchiveEvidence   `json:"volume_archive"`
+	PostgresArchive        BackupPostgresArchiveEvidence `json:"postgres_archive"`
+	MySQLArchive           BackupMySQLArchiveEvidence    `json:"mysql_archive"`
+	Upload                 BackupUploadOutcome           `json:"upload"`
+	Object                 BackupObjectIdentity          `json:"object"`
+	FailureCode            BackupFailureCode             `json:"failure_code,omitempty"`
 }
 
 type BackupRunRecord struct {
@@ -177,7 +197,8 @@ func ValidateBackupRunRecord(record BackupRunRecord) error {
 		}
 		if source.Evidence != (BackupArtifactEvidence{}) {
 			target := backupSourceTarget(record, source)
-			if !validBackupArtifactForTarget(source.Evidence, target) || source.Upload.Target != target.ObjectTarget() {
+			if !validBackupArtifactForTarget(source.Evidence, target, source.PostgresArchive, source.MySQLArchive) ||
+				source.Upload.Target != target.ObjectTarget() {
 				return invalidBackupRuntimeRecord("backup source evidence does not match its frozen target")
 			}
 		}
@@ -351,6 +372,20 @@ func validateBackupRunSourceAttempt(
 	} else if err := validateSelectedVolumeArchive(record.Kind, record.VolumeArchive, record.Evidence); err != nil {
 		return err
 	}
+	if record.Format == BackupRuntimeFormatMySQL && record.Phase == BackupSourcePhaseCapture {
+		if record.MySQLArchive != (BackupMySQLArchiveEvidence{}) {
+			return invalidBackupRuntimeRecord("MySQL source has archive evidence before capture completion")
+		}
+	} else if err := validateSelectedMySQLArchive(record.Kind, record.Format, record.MySQLArchive); err != nil {
+		return err
+	}
+	if record.Format == BackupRuntimeFormatPostgres && record.Phase == BackupSourcePhaseCapture {
+		if record.PostgresArchive != (BackupPostgresArchiveEvidence{}) {
+			return invalidBackupRuntimeRecord("PostgreSQL source has archive evidence before capture completion")
+		}
+	} else if err := validateSelectedPostgresArchive(record.Kind, record.Format, record.PostgresArchive); err != nil {
+		return err
+	}
 	if SourceAttemptRequiresArtifact(record.State, record.Phase) &&
 		!validBackupArtifact(record.Evidence) {
 		return invalidBackupRuntimeRecord("backup run source state requires artifact evidence")
@@ -374,16 +409,31 @@ func validateBackupRunSourceSnapshot(
 	targetRevision int64,
 	snapshot BackupRunSourceSnapshot,
 ) error {
-	count := pointerCount(snapshot.Postgres != nil, snapshot.Volume != nil, snapshot.Config != nil)
+	count := pointerCount(
+		snapshot.Postgres != nil,
+		snapshot.MySQL != nil,
+		snapshot.Volume != nil,
+		snapshot.Config != nil,
+	)
 	if count != 1 {
 		return invalidBackupRuntimeRecord("backup source snapshot must contain exactly one kind")
 	}
 	switch kind {
 	case BackupRuntimeSourceAttach:
-		if snapshot.Postgres == nil || validateBackupPostgresSnapshot(*snapshot.Postgres) != nil ||
-			snapshot.Postgres.ConsumerEnvironmentID != environmentID || snapshot.Postgres.AttachID != targetID ||
-			snapshot.Postgres.AttachRevision != targetRevision {
-			return invalidBackupRuntimeRecord("postgres backup source snapshot is invalid")
+		if snapshot.Postgres != nil {
+			if validateBackupPostgresSnapshot(*snapshot.Postgres) != nil ||
+				snapshot.Postgres.ConsumerEnvironmentID != environmentID ||
+				snapshot.Postgres.AttachID != targetID ||
+				snapshot.Postgres.AttachRevision != targetRevision {
+				return invalidBackupRuntimeRecord("postgres backup source snapshot is invalid")
+			}
+		} else if snapshot.MySQL != nil {
+			if validateBackupMySQLSnapshot(*snapshot.MySQL) != nil || snapshot.MySQL.ConsumerEnvironmentID != environmentID ||
+				snapshot.MySQL.AttachID != targetID || snapshot.MySQL.AttachRevision != targetRevision {
+				return invalidBackupRuntimeRecord("MySQL backup source snapshot is invalid")
+			}
+		} else {
+			return invalidBackupRuntimeRecord("database backup source snapshot is invalid")
 		}
 	case BackupRuntimeSourceVolume:
 		if snapshot.Volume == nil || validateBackupVolumeSnapshot(*snapshot.Volume) != nil ||

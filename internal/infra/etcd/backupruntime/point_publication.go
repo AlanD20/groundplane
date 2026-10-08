@@ -26,18 +26,25 @@ func PrepareBackupPointPublication(
 				run,
 				source,
 			), Evidence: source.Evidence, Object: source.Object, ConfigArchive: source.ConfigArchive,
-			VolumeArchive: source.VolumeArchive,
+			VolumeArchive: source.VolumeArchive, PostgresArchive: source.PostgresArchive,
+			MySQLArchive: source.MySQLArchive,
 		}, VerifiedAt: at,
 	}
 	if source.Kind == BackupRuntimeSourceAttach {
-		if source.Snapshot.Postgres == nil {
+		if source.Snapshot.Postgres == nil && source.Snapshot.MySQL == nil {
 			return BackupRecoveryPointRecord{}, BackupRetentionSweepRecord{}, invalidBackupRuntimeRecord(
-				"postgres point publication lacks captured target identity")
+				"database point publication lacks captured target identity")
 		}
-		postgres := source.Snapshot.Postgres
-		point.Postgres = BackupPostgresPointIdentity{Database: postgres.Database, Role: postgres.Role,
-			BackingEnvironmentID: postgres.BackingEnvironmentID,
-			BackingServiceID:     postgres.BackingServiceID, ConsumerServiceID: postgres.ConsumerServiceID}
+		if postgres := source.Snapshot.Postgres; postgres != nil {
+			point.Postgres = BackupPostgresPointIdentity{Database: postgres.Database, Role: postgres.Role,
+				BackingEnvironmentID: postgres.BackingEnvironmentID,
+				BackingServiceID:     postgres.BackingServiceID, ConsumerServiceID: postgres.ConsumerServiceID}
+		}
+		if mysql := source.Snapshot.MySQL; mysql != nil {
+			point.MySQL = BackupMySQLPointIdentity{Database: mysql.Database, Role: mysql.Role,
+				BackingEnvironmentID: mysql.BackingEnvironmentID,
+				BackingServiceID:     mysql.BackingServiceID, ConsumerServiceID: mysql.ConsumerServiceID}
+		}
 	}
 	sweep := BackupRetentionSweepRecord{SourceID: source.SourceID, TriggerRecoveryPointID: source.RecoveryPointID,
 		Keep: run.RetentionKeep, Revision: run.PolicyRevision, PolicySHA256: run.PolicySHA256,

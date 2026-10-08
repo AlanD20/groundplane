@@ -4,14 +4,24 @@ import "bytes"
 
 func CloneBackupRestoreRecord(record BackupRestoreRecord) BackupRestoreRecord {
 	clone := record
+	if record.TargetVersions != nil {
+		versions := *record.TargetVersions
+		clone.TargetVersions = &versions
+	}
 	target := CloneBackupRunSourceSnapshot(BackupRunSourceSnapshot{
 		Volume: record.CurrentTarget.Volume})
 	clone.CurrentTarget.Volume = target.Volume
 	if record.CurrentTarget.Postgres != nil {
 		postgres := *record.CurrentTarget.Postgres
-		postgres.Consumers = append([]BackupRestorePostgresServiceSnapshot(nil), postgres.Consumers...)
-		postgres.DependentIndexes = append([]BackupRestorePostgresDependentIndex(nil), postgres.DependentIndexes...)
+		postgres.Consumers = append([]BackupRestoreDatabaseServiceSnapshot(nil), postgres.Consumers...)
+		postgres.DependentIndexes = append([]BackupRestoreDatabaseDependentIndex(nil), postgres.DependentIndexes...)
 		clone.CurrentTarget.Postgres = &postgres
+	}
+	if record.CurrentTarget.MySQL != nil {
+		mysql := *record.CurrentTarget.MySQL
+		mysql.Consumers = append([]BackupRestoreDatabaseServiceSnapshot(nil), mysql.Consumers...)
+		mysql.DependentIndexes = append([]BackupRestoreDatabaseDependentIndex(nil), mysql.DependentIndexes...)
+		clone.CurrentTarget.MySQL = &mysql
 	}
 	if record.CurrentTarget.Config != nil {
 		config := *record.CurrentTarget.Config
@@ -29,9 +39,9 @@ func CloneBackupRestoreRecord(record BackupRestoreRecord) BackupRestoreRecord {
 		progress := *record.VolumeProgress
 		clone.VolumeProgress = &progress
 	}
-	if record.PostgresProgress != nil {
-		progress := *record.PostgresProgress
-		clone.PostgresProgress = &progress
+	if record.DatabaseProgress != nil {
+		progress := *record.DatabaseProgress
+		clone.DatabaseProgress = &progress
 	}
 	return clone
 }

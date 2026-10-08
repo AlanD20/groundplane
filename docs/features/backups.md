@@ -1,6 +1,6 @@
 # Backups
 
-Config, Volume and PostgreSQL capture and Restore are available through the
+Config, Volume, PostgreSQL and MySQL capture and Restore are implemented through the
 Console, CLI and API. **Full recovery qualification remains incomplete.** Selected
 capture, restore, key-era, retention, scheduling and interruption cases passed on
 disposable Ubuntu amd64. Other provider, archive, checkpoint, shared/granted Attach
@@ -15,7 +15,7 @@ One tenant Environment owns one Backup Policy and selects an S3-compatible
 [Connector](secrets-and-connectors.md) from that same Environment. Backing
 Environments cannot own a policy or backup key.
 
-The accepted source kinds are a consumer-owned PostgreSQL 16 Attach, the
+The accepted source kinds are a credential-owning PostgreSQL 16 or MySQL 8.4 Attach, the
 Environment's complete Entry configuration and selected values, or one owned
 Volume. A policy holds at most 12 sources in explicit order. A run is fail-fast,
 with a separate consistency boundary per source—not a cross-source snapshot.
@@ -98,6 +98,12 @@ is independent of database patches; both identities are verified against the
 acknowledged current runtime. It dumps the credential owner's selected database,
 not the
 whole Backing instance or a filesystem copy of its live database directory.
+
+MySQL uses the upstream 8.4 container's `mysqldump` and `mysql` tools. Capture
+selects one credential owner's database, excluding accounts and grants. MySQL
+Restore is not transactional across all schema changes: interrupted execution
+requires proof from the original execution, never a blind second Restore.
+MySQL data and interruption qualification have not yet been recorded.
 
 Volume capture supports regular files and directories on one filesystem, with
 at most 2,048 entries including the root and relative paths up to 4,095 bytes.
@@ -186,6 +192,11 @@ API and CLI Point listings include optional `capture` metadata: the producing
 `task_id`, run `created_at` and original `source_count`. Its absence means that
 provenance was not recorded, not that the Point is unusable.
 
+Database Points also include `database` metadata: family, observed source server
+version, backup-tool version and artifact format. These values are captured
+from the attested source container and authenticated with the archive; an image
+tag is not version evidence.
+
 ## Restore and downtime
 
 Restore overwrites the point's original surviving target. Omission selects the
@@ -198,6 +209,9 @@ and fully format-validated before live mutation.
 - PostgreSQL restore stops consumers, restores the selected database within its
   destructive transaction boundary, verifies it and restarts previously running
   consumers. It does not mutate other databases.
+- MySQL restore stops consumers, restores only the selected database, verifies
+  it and resumes previously running consumers. It does not recreate credentials
+  or overwrite another consumer's database.
 - Config restore replaces the complete captured Entry set and values. It does
   not reread today's Secret or Attach fact values. It republishes desired Entry
   configuration and updates managed files without restarting Services. A running
@@ -207,9 +221,25 @@ and fully format-validated before live mutation.
   before restarting previously running consumers.
 
 Every confirmation must identify the exact target and warn about overwrite;
-PostgreSQL and Volume restore also require a downtime warning. A restore outcome
+Database and Volume restore also require a downtime warning. A restore outcome
 does not change its source Recovery Point. An uncertain destructive step cannot
 be blindly replayed.
+
+Database Restore first reads the target server and restore-tool versions from
+the exact live container. The Console displays that review separately from the
+overwrite warning. Version differences are unverified compatibility: operators
+must explicitly accept that risk. Unsupported server/tool families and failed
+integrity or ownership checks remain blocked regardless of acknowledgement.
+
+Use `groundplane backup preview-restore SOURCE --point POINT` to obtain the
+exact Point and `database.review_sha256`. Pass that digest to Restore with
+`--version-review DIGEST`; add `--acknowledge-version-difference` only after
+reviewing a reported difference. The API preview is
+`POST /api/v1/environments/{id}/restore/preview`; Restore accepts
+`version_review_sha256` and `acknowledge_version_difference`. A changed Point,
+Attach, runtime, container or observed version requires a new review. The Agent
+checks the sealed target again before effects. Acknowledgement does not prove
+that the restored application will work, nor authorize a database major upgrade.
 
 In the Console, choose **Restore** on a verified Point and review its exact
 target, capture time and overwrite warning. In the CLI, pass the source id

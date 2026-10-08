@@ -90,7 +90,7 @@ func TestAttachRepositoryPublishesNoAuthenticationMode(t *testing.T) {
 		core.Service{
 			ID:   ids.NewAt(ids.KindService, testAttachTime, 301),
 			Name: "valkey", Image: "valkey/valkey:9-alpine",
-			Adapter: "valkey:9", Authentication: core.BackingAuthenticationNone,
+			Adapter: "valkey", AdapterVersion: "9", Authentication: core.BackingAuthenticationNone,
 		},
 		ids.NewAt(ids.KindNetwork, testAttachTime, 302),
 		303,

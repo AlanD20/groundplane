@@ -2,6 +2,7 @@ package backupruntime
 
 import (
 	"bytes"
+
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -106,29 +107,62 @@ func BackupRunCheckpointMatchesTransition(
 	if current.VolumeArchive != next.VolumeArchive {
 		return false
 	}
+	if current.MySQLArchive != next.MySQLArchive && request.GetMysqlDumpStart() == nil {
+		return false
+	}
+	if current.PostgresArchive != next.PostgresArchive && request.GetPostgresDumpStart() == nil {
+		return false
+	}
 	if current.Kind == BackupRuntimeSourceAttach && next.Kind == current.Kind &&
 		current.Evidence == next.Evidence && current.Upload == next.Upload && current.Object == next.Object &&
 		current.FailureCode == next.FailureCode && current.Phase == BackupSourcePhaseCapture {
 		if current.State == BackupSourceAttemptPending && next.State == BackupSourceAttemptCapturing &&
 			next.Phase == BackupSourcePhaseCapture {
 			observed := request.GetPostgresContainerObserved()
-			return observed != nil && current.Snapshot.Postgres != nil &&
-				observed.ServiceId == current.Snapshot.Postgres.BackingServiceID
+			if current.Snapshot.Postgres != nil {
+				return observed != nil && observed.ServiceId == current.Snapshot.Postgres.BackingServiceID
+			}
+			mysqlObserved := request.GetMysqlContainerObserved()
+			return mysqlObserved != nil && current.Snapshot.MySQL != nil &&
+				mysqlObserved.ServiceId == current.Snapshot.MySQL.BackingServiceID
 		}
 		if current.State == BackupSourceAttemptCapturing && next.State == BackupSourceAttemptReady &&
 			next.Phase == BackupSourcePhaseStaging {
-			started := request.GetPostgresDumpStart()
-			return started != nil && started.PointId == next.RecoveryPointID && current.Snapshot.Postgres != nil &&
-				started.DatabaseName == current.Snapshot.Postgres.Database && started.RoleName == current.Snapshot.Postgres.Role
+			if current.Snapshot.Postgres != nil {
+				started := request.GetPostgresDumpStart()
+				archive, err := PostgresArchiveEvidenceFromWire(started.GetArchive())
+				return started != nil && started.PointId == next.RecoveryPointID &&
+					err == nil && current.PostgresArchive == (BackupPostgresArchiveEvidence{}) && next.PostgresArchive == archive &&
+					started.DatabaseName == current.Snapshot.Postgres.Database && started.RoleName == current.Snapshot.Postgres.Role
+			}
+			started := request.GetMysqlDumpStart()
+			archive, err := MySQLArchiveEvidenceFromWire(started.GetArchive())
+			return started != nil && started.PointId == next.RecoveryPointID && current.Snapshot.MySQL != nil &&
+				err == nil && current.MySQLArchive == (BackupMySQLArchiveEvidence{}) && next.MySQLArchive == archive &&
+				started.DatabaseName == current.Snapshot.MySQL.Database && started.RoleName == current.Snapshot.MySQL.Role
 		}
 	}
 	if current.State == BackupSourceAttemptReady && next.State == BackupSourceAttemptStaged {
 		prepared := request.GetArtifactPrepared()
-		return prepared != nil && prepared.PointId == next.RecoveryPointID &&
-			BackupArtifactEvidenceMatchesWire(
-				next.Evidence,
-				prepared.Evidence,
-			) && next.Upload.Kind == BackupUploadPrepared
+		if prepared == nil || prepared.PointId != next.RecoveryPointID ||
+			!BackupArtifactEvidenceMatchesWire(next.Evidence, prepared.Evidence) ||
+			next.Upload.Kind != BackupUploadPrepared {
+			return false
+		}
+		if current.Format == BackupRuntimeFormatMySQL {
+			archive, err := MySQLArchiveEvidenceFromWire(prepared.GetMysql())
+			if err != nil || current.MySQLArchive != archive || next.MySQLArchive != archive {
+				return false
+			}
+		}
+		if current.Format == BackupRuntimeFormatPostgres {
+			archive, err := PostgresArchiveEvidenceFromWire(prepared.GetPostgres())
+			if err != nil || current.PostgresArchive != archive ||
+				next.PostgresArchive != archive {
+				return false
+			}
+		}
+		return true
 	}
 	if (current.State == BackupSourceAttemptStaged || current.State == BackupSourceAttemptOrphaned) &&
 		next.State == current.State && current.Phase == BackupSourcePhaseUpload && next.Phase == BackupSourcePhaseHeadVerification {
@@ -258,6 +292,21 @@ func validBackupSourceTransition(
 			validateSelectedVolumeArchive(next.Kind, next.VolumeArchive, next.Evidence) == nil) {
 		return false
 	}
+	if current.MySQLArchive != next.MySQLArchive &&
+		!(current.Format == BackupRuntimeFormatMySQL && current.MySQLArchive == (BackupMySQLArchiveEvidence{}) &&
+			current.Phase == BackupSourcePhaseCapture && current.State == BackupSourceAttemptCapturing &&
+			next.State == BackupSourceAttemptReady && next.Phase == BackupSourcePhaseStaging &&
+			validateSelectedMySQLArchive(next.Kind, next.Format, next.MySQLArchive) == nil) {
+		return false
+	}
+	if current.PostgresArchive != next.PostgresArchive &&
+		!(current.Format == BackupRuntimeFormatPostgres &&
+			current.PostgresArchive == (BackupPostgresArchiveEvidence{}) &&
+			current.Phase == BackupSourcePhaseCapture && current.State == BackupSourceAttemptCapturing &&
+			next.State == BackupSourceAttemptReady && next.Phase == BackupSourcePhaseStaging &&
+			validateSelectedPostgresArchive(next.Kind, next.Format, next.PostgresArchive) == nil) {
+		return false
+	}
 	if current.Evidence != (BackupArtifactEvidence{}) && current.Evidence != next.Evidence {
 		return false
 	}
@@ -363,6 +412,8 @@ func backupRunImmutableEqual(current BackupRunRecord, next BackupRunRecord) bool
 		normalized.Sources[index].Evidence = current.Sources[index].Evidence
 		normalized.Sources[index].ConfigArchive = current.Sources[index].ConfigArchive
 		normalized.Sources[index].VolumeArchive = current.Sources[index].VolumeArchive
+		normalized.Sources[index].PostgresArchive = current.Sources[index].PostgresArchive
+		normalized.Sources[index].MySQLArchive = current.Sources[index].MySQLArchive
 		normalized.Sources[index].Upload = current.Sources[index].Upload
 		normalized.Sources[index].Object = current.Sources[index].Object
 		normalized.Sources[index].FailureCode = current.Sources[index].FailureCode
@@ -376,6 +427,7 @@ func backupRunSourceMutableEqual(
 ) bool {
 	return left.State == right.State && left.Phase == right.Phase &&
 		left.ConfigArchive == right.ConfigArchive && left.VolumeArchive == right.VolumeArchive &&
+		left.PostgresArchive == right.PostgresArchive && left.MySQLArchive == right.MySQLArchive &&
 		left.Evidence == right.Evidence && left.Upload == right.Upload && left.Object == right.Object &&
 		left.FailureCode == right.FailureCode
 }

@@ -102,7 +102,21 @@ func (authority *Authority) artifact(prepared *agentpb.BackupArtifactPrepared) (
 	copy(artifact.Evidence.StoredSHA256[:], prepared.Evidence.StoredSha256)
 	switch {
 	case authority.capture.GetPostgres() != nil:
+		archive := prepared.GetPostgres()
+		if archive == nil {
+			return backupobject.Artifact{}, invalidAuthority()
+		}
 		artifact.SourceFormat = backupobject.SourceFormatPostgresCustom
+		artifact.SourceServerVersion = archive.SourceServerVersion
+		artifact.BackupToolVersion = archive.BackupToolVersion
+	case authority.capture.GetMysql() != nil:
+		archive := prepared.GetMysql()
+		if archive == nil {
+			return backupobject.Artifact{}, invalidAuthority()
+		}
+		artifact.SourceFormat = backupobject.SourceFormatMySQLLogical
+		artifact.SourceServerVersion = archive.SourceServerVersion
+		artifact.BackupToolVersion = archive.BackupToolVersion
 	case authority.capture.GetConfig() != nil:
 		artifact.SourceFormat = backupobject.SourceFormatEnvironmentConfig
 	case authority.capture.GetVolume() != nil:
@@ -150,6 +164,7 @@ func (authority *Authority) validateCheckpoint(
 
 func preparedSourceMatches(prepared *agentpb.BackupArtifactPrepared, capture *agentpb.BackupCaptureAuthority) bool {
 	return prepared.GetPostgres() != nil && capture.GetPostgres() != nil ||
+		prepared.GetMysql() != nil && capture.GetMysql() != nil ||
 		prepared.GetConfig() != nil && capture.GetConfig() != nil ||
 		prepared.GetVolume() != nil && capture.GetVolume() != nil
 }

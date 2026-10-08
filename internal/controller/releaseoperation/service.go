@@ -2,8 +2,8 @@ package releaseoperation
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
-	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -502,10 +502,14 @@ func (service *Service) deployCandidate(
 		return releaseCandidateInput{}, errs.New(errs.KindValidationFailed, "release replica count is invalid")
 	}
 	if planning.Service.Record.BackingNetworkID != "" {
-		if planning.Service.Record.Desired.Adapter != "postgres:16" || !postgres16protocol.ValidDatabaseImage(image) ||
-			strategy != domain.StrategyRecreate || replicas != 1 || planning.Service.Record.Runtime.PostgresToolsImage == "" {
-			return releaseCandidateInput{}, errs.New(errs.KindValidationFailed,
-				"Backing image Deploy requires an upstream PostgreSQL 16 Alpine image and singleton recreate")
+		backing := planning.Service.Record.Desired
+		if !backingcatalog.ValidImage(backing.Adapter, backing.AdapterVersion, image) ||
+			strategy != domain.StrategyRecreate || replicas != 1 ||
+			(backing.Adapter == "postgres" && planning.Service.Record.Runtime.PostgresToolsImage == "") {
+			return releaseCandidateInput{}, errs.New(
+				errs.KindValidationFailed,
+				"Backing image Deploy requires an upstream image matching its selected server version and singleton recreate",
+			)
 		}
 		if !hasServing && onFailure != domain.OnFailureLeaveActive {
 			return releaseCandidateInput{}, errs.New(errs.KindValidationFailed,

@@ -17,7 +17,7 @@ import (
 const resolveLocal = unix.RESOLVE_BENEATH | unix.RESOLVE_NO_MAGICLINKS |
 	unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_XDEV
 
-// Mark durably records one exact Controller-owned PostgreSQL execution. The
+// Mark durably records one exact Controller-owned database execution. The
 // empty private directory is the complete marker; there is no partial payload.
 func Mark(ctx context.Context, value IDs) (failure error) {
 	if err := validateRequest(ctx, value); err != nil {
@@ -28,7 +28,7 @@ func Mark(ctx context.Context, value IDs) (failure error) {
 		return err
 	}
 	if !found {
-		return invalid("PostgreSQL execution journal root is unavailable")
+		return invalid("database execution journal root is unavailable")
 	}
 	defer closeDescriptor(rootFD, &failure)
 	if err := lockRoot(ctx, rootFD); err != nil {
@@ -45,7 +45,7 @@ func Mark(ctx context.Context, value IDs) (failure error) {
 		}
 	}
 	if len(names) >= maximumMarkers {
-		return conflict("PostgreSQL execution journal marker capacity is exhausted")
+		return conflict("database execution journal marker capacity is exhausted")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -71,7 +71,7 @@ func Mark(ctx context.Context, value IDs) (failure error) {
 // Any unknown or unsafe entry rejects the complete inventory.
 func Inventory(ctx context.Context) (result []IDs, failure error) {
 	if ctx == nil {
-		return nil, invalid("PostgreSQL execution journal context is required")
+		return nil, invalid("database execution journal context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func Remove(ctx context.Context, value IDs) (failure error) {
 		return storage(err)
 	}
 	if current.Dev != identity.Dev || current.Ino != identity.Ino {
-		return invalid("PostgreSQL execution journal marker changed")
+		return invalid("database execution journal marker changed")
 	}
 	if err := unix.Unlinkat(rootFD, name, unix.AT_REMOVEDIR); err != nil {
 		return storage(err)
@@ -150,7 +150,7 @@ func Remove(ctx context.Context, value IDs) (failure error) {
 
 func validateRequest(ctx context.Context, value IDs) error {
 	if ctx == nil {
-		return invalid("PostgreSQL execution journal context is required")
+		return invalid("database execution journal context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -164,7 +164,7 @@ func inventoryLocked(ctx context.Context, rootFD int) ([]IDs, []string, error) {
 		return nil, nil, err
 	}
 	if len(names) > maximumMarkers {
-		return nil, nil, invalid("PostgreSQL execution journal inventory exceeds its bound")
+		return nil, nil, invalid("database execution journal inventory exceeds its bound")
 	}
 	sort.Strings(names)
 	rows := make([]IDs, 0, len(names))
@@ -201,7 +201,7 @@ func directoryNames(fd, limit int) ([]string, error) {
 	if err != nil {
 		return nil, storage(err)
 	}
-	directory := os.NewFile(uintptr(dup), "postgres-execution-journal")
+	directory := os.NewFile(uintptr(dup), "database-execution-journal")
 	names, readErr := directory.Readdirnames(limit)
 	closeErr := directory.Close()
 	if readErr != nil && !errors.Is(readErr, io.EOF) {
@@ -219,7 +219,7 @@ func openMarker(rootFD int, name string) (int, unix.Stat_t, error) {
 		return -1, unix.Stat_t{}, storage(err)
 	}
 	if !privateDirectory(named) {
-		return -1, unix.Stat_t{}, invalid("PostgreSQL execution journal marker is unsafe")
+		return -1, unix.Stat_t{}, invalid("database execution journal marker is unsafe")
 	}
 	fd, err := unix.Openat2(rootFD, name, &unix.OpenHow{
 		Flags:   uint64(unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC | unix.O_NOFOLLOW),
@@ -235,7 +235,7 @@ func openMarker(rootFD int, name string) (int, unix.Stat_t, error) {
 	}
 	if !privateDirectory(opened) || opened.Dev != named.Dev || opened.Ino != named.Ino {
 		_ = unix.Close(fd)
-		return -1, unix.Stat_t{}, invalid("PostgreSQL execution journal marker changed or is unsafe")
+		return -1, unix.Stat_t{}, invalid("database execution journal marker changed or is unsafe")
 	}
 	return fd, opened, nil
 }
@@ -246,7 +246,7 @@ func markerEmpty(fd int) error {
 		return err
 	}
 	if len(names) != 0 {
-		return invalid("PostgreSQL execution journal marker is not empty")
+		return invalid("database execution journal marker is not empty")
 	}
 	return nil
 }
@@ -267,7 +267,7 @@ func openRoot(ctx context.Context, create bool) (int, bool, error) {
 		if err != nil {
 			return -1, false, storage(err)
 		}
-		return -1, false, invalid("PostgreSQL execution journal root ancestry is unsafe")
+		return -1, false, invalid("database execution journal root ancestry is unsafe")
 	}
 	parts := strings.Split(strings.TrimPrefix(rootPath, "/"), "/")
 	for index, part := range parts {
@@ -295,7 +295,7 @@ func openRoot(ctx context.Context, create bool) (int, bool, error) {
 		}
 		if errors.Is(statErr, unix.ENOENT) {
 			_ = unix.Close(current)
-			return -1, false, invalid("PostgreSQL execution journal root ancestry is unavailable")
+			return -1, false, invalid("database execution journal root ancestry is unavailable")
 		}
 		if statErr != nil {
 			_ = unix.Close(current)
@@ -303,7 +303,7 @@ func openRoot(ctx context.Context, create bool) (int, bool, error) {
 		}
 		if final && !privateDirectory(before) || !final && !safeAncestor(before) {
 			_ = unix.Close(current)
-			return -1, false, invalid("PostgreSQL execution journal root ancestry is unsafe")
+			return -1, false, invalid("database execution journal root ancestry is unsafe")
 		}
 		resolve := uint64(unix.RESOLVE_BENEATH | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_SYMLINKS)
 		if final {
@@ -325,7 +325,7 @@ func openRoot(ctx context.Context, create bool) (int, bool, error) {
 		if after.Dev != before.Dev || after.Ino != before.Ino ||
 			final && !privateDirectory(after) || !final && !safeAncestor(after) {
 			_ = unix.Close(next)
-			return -1, false, invalid("PostgreSQL execution journal root ancestor changed or is unsafe")
+			return -1, false, invalid("database execution journal root ancestor changed or is unsafe")
 		}
 		current = next
 	}

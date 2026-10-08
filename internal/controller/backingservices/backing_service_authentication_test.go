@@ -15,11 +15,11 @@ func TestBackingServiceAuthenticationRejectedBeforeDurableClaim(t *testing.T) {
 	registerAdapters()
 	service := &CreationService{}
 	for _, input := range []apiTypes.BackingServiceCreate{
-		{Adapter: "postgres:16", Authentication: "none"},
-		{Adapter: "postgres:16", Image: "postgres:latest"},
-		{Adapter: "valkey:9"},
-		{Adapter: "valkey:9", Authentication: " "},
-		{Adapter: "valkey:9", Authentication: "invalid"},
+		{Adapter: "postgres", AdapterVersion: "16", Authentication: "none"},
+		{Adapter: "postgres", AdapterVersion: "16", Image: "postgres:latest"},
+		{Adapter: "valkey", AdapterVersion: "9"},
+		{Adapter: "valkey", AdapterVersion: "9", Authentication: " "},
+		{Adapter: "valkey", AdapterVersion: "9", Authentication: "invalid"},
 		{Adapter: "custom"},
 		{Adapter: "custom", Image: " "},
 	} {

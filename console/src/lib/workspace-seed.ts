@@ -36,18 +36,18 @@ function fixtureId(kind: string, seed: string): string {
 
 export const adapters: Adapter[] = [
   {
-    key: "postgres:16",
+    key: "postgres",
     label: "PostgreSQL",
-    prefix: "pg16",
+    prefix: "pg",
     urlScheme: "pgsql",
     requires: { database: true, role: true },
     envVars: [
-      "pg16_URL",
-      "pg16_HOST",
-      "pg16_PORT",
-      "pg16_DATABASE",
-      "pg16_ROLE",
-      "pg16_PASSWORD",
+      "pg_URL",
+      "pg_HOST",
+      "pg_PORT",
+      "pg_DATABASE",
+      "pg_ROLE",
+      "pg_PASSWORD",
     ],
     provision: [
       { op: "create_database", detail: 'CREATE DATABASE "<db>"' },
@@ -63,17 +63,17 @@ export const adapters: Adapter[] = [
     ],
   },
   {
-    key: "valkey:9",
+    key: "valkey",
     label: "Valkey",
-    prefix: "valkey9",
+    prefix: "valkey",
     urlScheme: "redis",
     requires: { database: false, role: true },
     envVars: [
-      "valkey9_URL",
-      "valkey9_HOST",
-      "valkey9_PORT",
-      "valkey9_ROLE",
-      "valkey9_PASSWORD",
+      "valkey_URL",
+      "valkey_HOST",
+      "valkey_PORT",
+      "valkey_ROLE",
+      "valkey_PASSWORD",
     ],
     provision: [
       {
@@ -81,6 +81,26 @@ export const adapters: Adapter[] = [
         detail: "ACL SETUSER <role> on >‹generated› ~* &* +@all -@admin",
       },
       { op: "save_acl", detail: "ACL SAVE" },
+    ],
+  },
+  {
+    key: "mysql",
+    label: "MySQL",
+    prefix: "mysql",
+    urlScheme: "mysql",
+    requires: { database: true, role: true },
+    envVars: [
+      "mysql_URL",
+      "mysql_HOST",
+      "mysql_PORT",
+      "mysql_DATABASE",
+      "mysql_ROLE",
+      "mysql_PASSWORD",
+    ],
+    provision: [
+      { op: "create_database", detail: "Create the consumer database" },
+      { op: "create_user", detail: "Create an independent database user" },
+      { op: "grant", detail: "Grant access only to the consumer database" },
     ],
   },
   {

@@ -406,7 +406,7 @@ func (repository *TaskRepository) prepareBackingRuntimeProjection(
 	previous *projectionrecord.EnvironmentComposeProjection, revision int64,
 ) ([]etcdstore.Condition, error) {
 	serviceID := task.Params[taskjournal.TaskBackingServiceCreationParam]
-	if !backingruntimepublication.IsManagedPostgres(*projection, serviceID) {
+	if !backingruntimepublication.IsManagedDatabase(*projection, serviceID) {
 		return nil, backingruntimepublication.Preserve(projection, previous)
 	}
 	if task.Status != taskjournal.TaskStatusCompleted || task.Executor != taskjournal.TaskExecutorAgent ||

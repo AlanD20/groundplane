@@ -9,10 +9,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func attachPostgresStagingGuard(source etcd.BackupStagingSource, disposition *agentpb.BackupStagingDisposition) error {
+func attachDatabaseStagingGuard(source etcd.BackupStagingSource, disposition *agentpb.BackupStagingDisposition) error {
 	serviceID := source.Step.GetCapture().GetPostgres().GetDatabaseServiceId()
+	if mysql := source.Step.GetCapture().GetMysql(); mysql != nil {
+		serviceID = mysql.DatabaseServiceId
+	}
 	if restore := source.Step.GetRestore().GetPostgres(); restore != nil {
 		serviceID = restore.DatabaseServiceId
+	}
+	if mysql := source.Step.GetRestore().GetMysql(); mysql != nil {
+		serviceID = mysql.DatabaseServiceId
 	}
 	if serviceID == "" {
 		return nil
@@ -20,7 +26,7 @@ func attachPostgresStagingGuard(source etcd.BackupStagingSource, disposition *ag
 	if source.Plan == nil || source.Plan.BackupScope == nil {
 		return unresolvedBackupStage()
 	}
-	guard := &agentpb.BackupPostgresStagingGuard{TaskId: source.Task.Record.ID, Step: proto.CloneOf(source.Step)}
+	guard := &agentpb.BackupDatabaseStagingGuard{TaskId: source.Task.Record.ID, Step: proto.CloneOf(source.Step)}
 	guard.TerminalCleanup = taskjournal.IsTerminalTaskStatus(source.Task.Record.Status) &&
 		disposition.GetDiscardRecovered() != nil
 	guard.CompletedTask = source.Task.Record.Status == taskjournal.TaskStatusCompleted
@@ -50,10 +56,10 @@ func attachPostgresStagingGuard(source etcd.BackupStagingSource, disposition *ag
 	}
 	if disposition.GetRecoveryRequired() != nil {
 		native := source.TerminalRestore
-		if native == nil || native.PostgresProgress == nil {
+		if native == nil || native.DatabaseProgress == nil {
 			return unresolvedBackupStage()
 		}
-		progress := native.PostgresProgress
+		progress := native.DatabaseProgress
 		if progress.ApplyStarted && !progress.SourceCleanupCompleted {
 			nonce, err := hex.DecodeString(progress.ApplyExecutionNonce)
 			if err != nil {
@@ -67,14 +73,30 @@ func attachPostgresStagingGuard(source etcd.BackupStagingSource, disposition *ag
 			if err != nil {
 				return err
 			}
-			guard.RecoveryApply = &agentpb.BackupPostgresRestoreApplyStartCheckpoint{
-				PointId: native.Point.ID, ExecutionNonce: nonce, ContainerId: progress.ContainerID,
-				ExecId: progress.ApplyExecID, RepositoryDigest: repository, ExpectedLabelsSha256: labels,
-				SourceSizeBytes: source.Step.GetRestore().ExpectedEvidence.SourceSizeBytes,
-				SourceSha256:    append([]byte(nil), source.Step.GetRestore().ExpectedEvidence.SourceSha256...),
+			if source.Step.GetRestore().GetPostgres() != nil {
+				guard.RecoveryApply = &agentpb.BackupDatabaseStagingGuard_PostgresRecoveryApply{
+					PostgresRecoveryApply: &agentpb.BackupPostgresRestoreApplyStartCheckpoint{
+						PointId: native.Point.ID, ExecutionNonce: nonce, ContainerId: progress.ContainerID,
+						ExecId: progress.ApplyExecID, RepositoryDigest: repository, ExpectedLabelsSha256: labels,
+						SourceSizeBytes: source.Step.GetRestore().ExpectedEvidence.SourceSizeBytes,
+						SourceSha256:    append([]byte(nil), source.Step.GetRestore().ExpectedEvidence.SourceSha256...),
+					},
+				}
+			} else if source.Step.GetRestore().GetMysql() != nil {
+				guard.RecoveryApply = &agentpb.BackupDatabaseStagingGuard_MysqlRecoveryApply{
+					MysqlRecoveryApply: &agentpb.BackupMySQLRestoreApplyStartCheckpoint{
+						PointId: native.Point.ID, ExecutionNonce: nonce, ContainerId: progress.ContainerID,
+						ExecId: progress.ApplyExecID, ImageReferenceSha256: repository,
+						ExpectedLabelsSha256: labels,
+						SourceSizeBytes:      source.Step.GetRestore().ExpectedEvidence.SourceSizeBytes,
+						SourceSha256:         append([]byte(nil), source.Step.GetRestore().ExpectedEvidence.SourceSha256...),
+					},
+				}
+			} else {
+				return unresolvedBackupStage()
 			}
 		}
 	}
-	disposition.PostgresGuard = guard
+	disposition.DatabaseGuard = guard
 	return nil
 }

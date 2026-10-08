@@ -10,7 +10,7 @@ import (
 // Rationale: the locked backing identity uses the service name and the first six characters of the
 // ULID random tail, not the timestamp or mutable Attach name.
 func TestAttachProvisionIdentityUsesRandomULIDTail(t *testing.T) {
-	identity, err := ProvisionIdentity("att_01ARZ3NDEKTSV4RRFFQ69G5FAV", "api-web")
+	identity, err := ProvisionIdentity("att_01ARZ3NDEKTSV4RRFFQ69G5FAV", "api-web", 63)
 	if err != nil {
 		t.Fatalf("ProvisionIdentity() error = %v", err)
 	}
@@ -20,6 +20,7 @@ func TestAttachProvisionIdentityUsesRandomULIDTail(t *testing.T) {
 	if _, err := ProvisionIdentity(
 		"att_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		strings.Repeat("a", maximumAttachServiceNameLen+1),
+		63,
 	); err == nil {
 		t.Fatal("ProvisionIdentity() accepted an identity PostgreSQL would truncate")
 	}

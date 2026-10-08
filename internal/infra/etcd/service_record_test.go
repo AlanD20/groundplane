@@ -163,7 +163,8 @@ func TestBackingServiceProjectionRequiresStableNetworkBinding(t *testing.T) {
 	// network in the projection, never in a flat Service primary record.
 	t.Parallel()
 	desired := serviceRecordTestDesired()
-	desired.Adapter = "postgres:16"
+	desired.Adapter = "postgres"
+	desired.AdapterVersion = "16"
 	desired.Image = "postgres:16-alpine"
 	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
 	projection := serviceRecordTestProjection(t, environmentID, desired)

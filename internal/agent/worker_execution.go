@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
@@ -12,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
-	"time"
 )
 
 func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservation) {
@@ -103,6 +104,11 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			if p.backupStaging != nil {
 				p.backupStaging.reinspect.Store(true)
 			}
+		} else if step.GetBackupStep().GetCapture().GetMysql() != nil {
+			err = p.executeBackupMySQLCapture(stepCtx, reservation.assignment, step)
+			if p.backupStaging != nil {
+				p.backupStaging.reinspect.Store(true)
+			}
 		} else if step.GetBackupStep().GetRestore().GetConfig() != nil {
 			var restoreMutation bool
 			restoreMutation, err = p.executeBackupConfigRestore(stepCtx, reservation.assignment, step)
@@ -114,6 +120,13 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		} else if step.GetBackupStep().GetRestore().GetPostgres() != nil {
 			var restoreMutation bool
 			restoreMutation, err = p.executeBackupPostgresRestore(stepCtx, reservation.assignment, step)
+			mutationAttempted = mutationAttempted || restoreMutation
+			if p.backupStaging != nil {
+				p.backupStaging.reinspect.Store(true)
+			}
+		} else if step.GetBackupStep().GetRestore().GetMysql() != nil {
+			var restoreMutation bool
+			restoreMutation, err = p.executeBackupMySQLRestore(stepCtx, reservation.assignment, step)
 			mutationAttempted = mutationAttempted || restoreMutation
 			if p.backupStaging != nil {
 				p.backupStaging.reinspect.Store(true)

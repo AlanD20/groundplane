@@ -51,7 +51,7 @@ func TestRequestDockerExecRoundTrip(t *testing.T) {
 		{Operation: OperationProbePGDump, Nonce: nonce, DeadlineUnixNano: 1},
 		{Operation: OperationProbePGRestore, Nonce: nonce, DeadlineUnixNano: 1},
 		{Operation: OperationProbePSQL, Nonce: nonce, DeadlineUnixNano: 1},
-		{Operation: OperationServerMajor, Nonce: nonce, DeadlineUnixNano: 1, Database: "app_012345"},
+		{Operation: OperationServerVersion, Nonce: nonce, DeadlineUnixNano: 1, Database: "app_012345"},
 		{
 			Operation: OperationDump, Nonce: nonce, DeadlineUnixNano: 1,
 			Database: "app_012345", Role: "role_012345",
@@ -143,11 +143,11 @@ func TestStopRejectsInapplicableFields(t *testing.T) {
 func TestParseArgumentsRejectsNoncanonicalIdentity(t *testing.T) {
 	nonce := testNonce(t).String()
 	tests := [][]string{
-		{"stop", "1", nonce, "01"},
-		{"stop", "1", nonce, "0"},
-		{"stop", "1", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "1"},
-		{"stop", "1", nonce, "1", "extra"},
-		{"run", "1", nonce, "1", "probe-pg-dump", "016"},
+		{"stop", "2", nonce, "01"},
+		{"stop", "2", nonce, "0"},
+		{"stop", "2", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "1"},
+		{"stop", "2", nonce, "1", "extra"},
+		{"run", "2", nonce, "1", "probe-pg-dump", "016"},
 	}
 	for index, arguments := range tests {
 		if _, err := ParseArguments(arguments); err == nil {
@@ -226,7 +226,7 @@ func TestOperationPoliciesAreClosed(t *testing.T) {
 		{OperationProbePGDump, PGDumpPath, proofProfile, probePolicy},
 		{OperationProbePGRestore, PGRestorePath, proofProfile, probePolicy},
 		{OperationProbePSQL, PSQLPath, proofProfile, probePolicy},
-		{OperationServerMajor, PSQLPath, proofProfile, proofPolicy},
+		{OperationServerVersion, PSQLPath, proofProfile, proofPolicy},
 		{
 			OperationDump,
 			PGDumpPath,

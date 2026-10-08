@@ -480,7 +480,7 @@ x-gp-entry:
     source:
       fact:
         attach: api-db
-        key: pg16_URL
+        key: pg_URL
     exposure: [api]
     secret: true
 
@@ -677,7 +677,7 @@ embedded in Component configuration.
 
 ### `x-gp-backup`
 
-Config, Volume and PostgreSQL capture/Restore are implemented. **Full recovery
+Config, Volume, PostgreSQL and MySQL capture/Restore are implemented. **Full recovery
 qualification remains incomplete.** This section defines policy input;
 [Backups](features/backups.md) explains how to run it, select Recovery Points
 and handle restore failures.
@@ -701,7 +701,7 @@ x-gp-backup:
 
 Source kinds are `attach`, `volume`, and `config`; `config` refers to this
 Environment's Entries and has no `ref`. Attach `ref` is a credential-owning
-PostgreSQL Attach name; Volume `ref` is its public slug (`x-gp-slug`), not its
+PostgreSQL or MySQL Attach name; Volume `ref` is its public slug (`x-gp-slug`), not its
 immutable Compose key. Valkey and Custom Attach backup sources are unsupported.
 
 `frequency` is a five-field cron expression evaluated in UTC: minute (0–59),
@@ -761,8 +761,9 @@ services:
   postgres:
     networks: [postgres-net]
     x-gp-adapter:
-      key: postgres:16
-      prefix: pg16
+      key: postgres
+      version: "16"
+      prefix: pg
 ```
 
 The registered built-in adapter owns provisioning operations, fact templates,

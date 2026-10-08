@@ -125,7 +125,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 			)
 		}
 	}
-	backingEnvironmentIDs, err := backupruntime.PostgresBackingEnvironmentIDs(current.Record)
+	backingEnvironmentIDs, err := backupruntime.DatabaseBackingEnvironmentIDs(current.Record)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}

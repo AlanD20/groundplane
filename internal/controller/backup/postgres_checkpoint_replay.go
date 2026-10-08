@@ -12,7 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (service *BackupCheckpointService) validatePostgresCheckpointAdvance(ctx context.Context,
+func (service *BackupCheckpointService) validateDatabaseCheckpointAdvance(ctx context.Context,
 	claim etcdstore.Versioned[taskassignments.TaskAssignmentRecord],
 	plan *agentpb.ExecutionPlan, operationID string, readRevision int64,
 	request *agentpb.BackupCheckpointRequest,
@@ -27,7 +27,7 @@ func (service *BackupCheckpointService) validatePostgresCheckpointAdvance(ctx co
 		return err
 	}
 	if hex.EncodeToString(digest) != assignment.BackupAuthorityFence.AuthoritySHA256 || readRevision <= 0 {
-		return errs.New(errs.KindStateConflict, "PostgreSQL checkpoint assignment changed")
+		return errs.New(errs.KindStateConflict, "database checkpoint assignment changed")
 	}
 	var step *agentpb.BackupStepAuthority
 	for _, candidate := range authority.Steps {
@@ -36,8 +36,9 @@ func (service *BackupCheckpointService) validatePostgresCheckpointAdvance(ctx co
 			break
 		}
 	}
-	if step == nil || step.GetCapture().GetPostgres() == nil && step.GetRestore().GetPostgres() == nil {
-		return errs.New(errs.KindValidationFailed, "PostgreSQL checkpoint source binding is invalid")
+	if step == nil || step.GetCapture().GetPostgres() == nil && step.GetCapture().GetMysql() == nil &&
+		step.GetRestore().GetPostgres() == nil && step.GetRestore().GetMysql() == nil {
+		return errs.New(errs.KindValidationFailed, "database checkpoint source binding is invalid")
 	}
 	replay, err := executionplan.NewBackupStepResumeReplay(authority, step, nil)
 	if err != nil {

@@ -48,7 +48,7 @@ func (authority ConfinementReleaseAuthority) clientSHA256(operation Operation) (
 		return authority.PGDumpSHA256, nil
 	case OperationProbePGRestore, OperationRestoreList, OperationRestoreApply:
 		return authority.PGRestoreSHA256, nil
-	case OperationProbePSQL, OperationServerMajor, OperationTerminateDBConnections,
+	case OperationProbePSQL, OperationServerVersion, OperationTerminateDBConnections,
 		OperationAssertZeroDBConnections, OperationPostRestoreVerify:
 		return authority.PSQLSHA256, nil
 	default:

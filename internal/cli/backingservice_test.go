@@ -26,8 +26,10 @@ func TestBackingServiceCreateRequiresValkeyAuthentication(t *testing.T) {
 		command.SetContext(context.WithValue(context.Background(), appKey{}, &App{Client: apiclient.New(server.URL)}))
 		command.SetOut(io.Discard)
 		command.SetErr(io.Discard)
-		command.SetArgs(append([]string{"create", "cache", "--adapter", "valkey:9", "--name", "Cache",
-			"--network-pool", "10.80.0.0/24", "--zone-name", "data", "--zone-subnet", "10.80.0.0/24"}, extra...))
+		command.SetArgs(
+			append([]string{"create", "cache", "--adapter", "valkey", "--adapter-version", "9", "--name", "Cache",
+				"--network-pool", "10.80.0.0/24", "--zone-name", "data", "--zone-subnet", "10.80.0.0/24"}, extra...),
+		)
 		err := command.Execute()
 		if kind, _ := errs.KindOf(err); kind != errs.KindValidationFailed {
 			t.Fatalf("missing authentication error = %v", err)
@@ -44,7 +46,7 @@ func TestBackingServiceCreateSendsValkeyAuthentication(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/v1/backing-services",
-		`{"adapter":"valkey:9","authentication":"password","name":"Shared Valkey","network_pool":"10.20.0.0/16","slug":"shared-valkey","zone":{"internal":true,"name":"data","subnet":"10.20.1.0/24"}}`,
+		`{"adapter":"valkey","adapter_version":"9","authentication":"password","name":"Shared Valkey","network_pool":"10.20.0.0/16","slug":"shared-valkey","zone":{"internal":true,"name":"data","subnet":"10.20.1.0/24"}}`,
 		http.StatusCreated,
 		`{"backing_service":{"authentication":"password","backing_network_id":"net_1","environment_id":"env_1","project_id":"prj_1","service_id":"svc_1"},"task_id":"task_1"}`,
 	)
@@ -57,7 +59,8 @@ func TestBackingServiceCreateSendsValkeyAuthentication(t *testing.T) {
 		Scope{},
 		"create", "shared-valkey",
 		"--name", "Shared Valkey",
-		"--adapter", "valkey:9",
+		"--adapter", "valkey",
+		"--adapter-version", "9",
 		"--authentication", "password",
 		"--network-pool", "10.20.0.0/16",
 		"--zone-name", "data",

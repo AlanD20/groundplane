@@ -24,7 +24,7 @@ func (c *Client) SetServiceObserver(observer ServiceObserver) error {
 	if c.started || c.pool != nil {
 		return errs.New(errs.KindStateConflict, "agent: service observer cannot change after start")
 	}
-	c.observer = observer
+	c.observer = databaseVersionObserver{observer}
 	return nil
 }
 

@@ -20,7 +20,7 @@ func captureBacking(
 	service etcdstore.Versioned[servicerecord.ServiceRecord],
 ) (source, bool) {
 	environmentID, serviceID := service.Record.EnvironmentID, service.Record.Desired.ID
-	if service.Record.Desired.Adapter == "postgres:16" {
+	if service.Record.Desired.Adapter == "postgres" {
 		return capturePostgres(ctx, releases, service)
 	}
 	applied, found, err := releases.GetAppliedProjectionAt(ctx, environmentID, service.ReadRevision)

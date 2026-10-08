@@ -36,12 +36,14 @@ func NewBackupServiceFactResolver(store etcdstore.Store) backupplanning.BackupSe
 			return nil, errs.New(errs.KindStateConflict, "backup Service desired projection is unavailable")
 		}
 		var kind servicefactauthority.Kind
+		adapter := ""
 		for _, desired := range projection.Record.DesiredServices {
 			if desired.Desired.ID == input.ServiceID && desired.EnvironmentID == input.EnvironmentID {
 				kind, err = servicefactauthority.KindForService(desired)
 				if err != nil {
 					return nil, err
 				}
+				adapter = desired.Desired.Adapter
 				break
 			}
 		}
@@ -54,7 +56,7 @@ func NewBackupServiceFactResolver(store etcdstore.Store) backupplanning.BackupSe
 			services.ServiceRuntimeKey(input.ServiceID),
 			servicefactauthority.Key(kind, input.EnvironmentID, input.ServiceID),
 		}
-		if kind == servicefactauthority.BackingRuntime {
+		if kind == servicefactauthority.BackingRuntime && adapter == "postgres" {
 			keys = append(keys, backingpostgresrelease.Key(input.EnvironmentID, input.ServiceID))
 		}
 		read, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: input.ReadRevision})
@@ -91,10 +93,14 @@ func NewBackupServiceFactResolver(store etcdstore.Store) backupplanning.BackupSe
 		if err != nil {
 			return nil, err
 		}
-		if kind == servicefactauthority.BackingRuntime {
+		if kind == servicefactauthority.BackingRuntime && adapter == "postgres" {
 			if err := validateBackupBackingCatalog(read.Values[3], selected, input); err != nil {
 				return nil, err
 			}
+		} else if kind == servicefactauthority.BackingRuntime &&
+			(adapter != "mysql" || projection.Record.BackingRuntime == nil ||
+				projection.Record.BackingRuntime.Adapter != "mysql" || selected.Workload.PostgresToolsImage != "") {
+			return nil, errs.New(errs.KindStateConflict, "MySQL backup Service lacks acknowledged applied runtime evidence")
 		}
 		artifact, workload := selected.Artifact, selected.Workload
 		localImageID, err := hex.DecodeString(strings.TrimPrefix(selected.LocalImageID, "sha256:"))

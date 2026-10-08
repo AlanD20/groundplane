@@ -4,21 +4,21 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/databaserestoreauthority"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresbackingguard"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/postgresrestoreauthority"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (repository *TaskRepository) preparePostgresRestoreClaim(ctx context.Context, task TaskRecord,
+func (repository *TaskRepository) prepareDatabaseRestoreClaim(ctx context.Context, task TaskRecord,
 	plan *agentpb.ExecutionPlan, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if task.Type != taskjournal.TaskRestore || len(plan.GetSteps()) != 1 {
-		return nil, nil, errs.New(errs.KindStateConflict, "PostgreSQL Restore claim plan is invalid")
+		return nil, nil, errs.New(errs.KindStateConflict, "database Restore claim plan is invalid")
 	}
 	membership, err := backupruntime.BackupRestoreEnvironmentIndexKey(task.Owner.EnvironmentID, task.ID)
 	if err != nil {
@@ -31,19 +31,19 @@ func (repository *TaskRepository) preparePostgresRestoreClaim(ctx context.Contex
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil || read.Values[1] == nil {
-		return nil, nil, errs.New(errs.KindStateConflict, "queued PostgreSQL Restore authority is unavailable")
+		return nil, nil, errs.New(errs.KindStateConflict, "queued database Restore authority is unavailable")
 	}
 	defer etcdstore.ClearValues(read.Values)
 	restore, err := backupruntime.DecodeBackupRestoreRecord(read.Values[0].Value)
 	if err != nil || restore.TaskID != task.ID || restore.OperationID != task.OperationID ||
 		restore.EnvironmentID != task.Owner.EnvironmentID || restore.State != backupruntime.BackupRestoreQueued ||
-		backupruntime.ValidatePostgresRestoreExecutionPlan(restore, plan) != nil ||
+		backupruntime.ValidateDatabaseRestoreExecutionPlan(restore, plan) != nil ||
 		read.Values[0].Key != keys[0] || read.Values[1].Key != keys[1] ||
 		read.Values[1].Version != 1 || string(read.Values[1].Value) != task.ID ||
 		read.Values[1].ModRevision != read.Values[0].ModRevision || !restore.CreatedAt.Equal(task.CreatedAt) {
-		return nil, nil, errs.New(errs.KindStateConflict, "queued PostgreSQL Restore does not match its Task")
+		return nil, nil, errs.New(errs.KindStateConflict, "queued database Restore does not match its Task")
 	}
-	authority, err := postgresrestoreauthority.Read(ctx, repository.store, restore, revision)
+	authority, err := databaserestoreauthority.Read(ctx, repository.store, restore, revision)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -53,12 +53,12 @@ func (repository *TaskRepository) preparePostgresRestoreClaim(ctx context.Contex
 	if err != nil {
 		return nil, nil, err
 	}
-	backingEnvironmentID, postgres, err := backupruntime.PostgresRestoreBackingEnvironmentID(restore)
-	if err != nil || !postgres {
+	backingEnvironmentID, found, err := backupruntime.DatabaseRestoreBackingEnvironmentID(restore)
+	if err != nil || !found {
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, nil, errs.New(errs.KindInternal, "PostgreSQL Restore backing Environment is missing")
+		return nil, nil, errs.New(errs.KindInternal, "database Restore backing Environment is missing")
 	}
 	backingGuards, err := postgresbackingguard.PrepareOwnership(
 		ctx,

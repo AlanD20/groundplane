@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/backupartifact"
 	"github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/backupformat"
+	"github.com/AlanD20/groundplane/internal/common/backuppostgres"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/infra/agentpostgresjournal"
@@ -34,7 +35,7 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 	}
 	ctx, cancel := context.WithDeadline(ctx, time.Unix(0, int64(step.StepDeadlineUnixNano)))
 	defer cancel()
-	if err := agentpostgresjournal.Mark(ctx, postgresExecutionIDs(assignment.TaskID, step)); err != nil {
+	if err := agentpostgresjournal.Mark(ctx, databaseExecutionIDs(assignment.TaskID, step)); err != nil {
 		return err
 	}
 	dumpStart := resume.DumpStart
@@ -68,7 +69,7 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 			return pool.retirePostgresExecution(ctx, assignment, step, dumpStart, nil)
 		}
 	}
-	stage, source, sourceEvidence, stored, err := pool.backupStaging.postgresCaptureStage(ctx, assignment.TaskID, step,
+	stage, source, sourceEvidence, stored, err := pool.backupStaging.databaseCaptureStage(ctx, assignment.TaskID, step,
 		dumpStart != nil || resume.PreparedArtifact != nil)
 	if err != nil {
 		return err
@@ -78,6 +79,13 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 	}
 	if sourceEvidence.Name == "" && resume.PreparedArtifact != nil {
 		return invalidAgentStaging()
+	}
+	var archive backuppostgres.ArchiveEvidence
+	if resume.PreparedArtifact != nil {
+		archive, err = backuppostgres.FromWire(resume.PreparedArtifact.GetPostgres())
+		if err != nil {
+			return err
+		}
 	}
 	if sourceEvidence.Name == "" {
 		recorder := &postgresStartRecorder{publisher: publisher, authority: authority,
@@ -101,22 +109,11 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 				return err
 			}
 		}
-		for _, operation := range []postgres16protocol.Operation{
-			postgres16protocol.OperationProbePGDump, postgres16protocol.OperationProbePGRestore,
-			postgres16protocol.OperationProbePSQL, postgres16protocol.OperationServerMajor,
-		} {
-			database := ""
-			if operation == postgres16protocol.OperationServerMajor {
-				database = authority.database
-			}
-			request, err := newPostgresRequest(operation, step, database, "", 0, postgres16protocol.Digest{})
-			if err != nil {
-				return err
-			}
-			if _, err := executor.Execute(ctx, container, request, nil, nil); err != nil {
-				return err
-			}
+		archive, err = observePostgresArchive(ctx, executor, container, step, authority.database)
+		if err != nil {
+			return err
 		}
+		recorder.archive = archive
 		request, err := newPostgresRequest(postgres16protocol.OperationDump, step,
 			authority.database, authority.role, 0, postgres16protocol.Digest{})
 		if err != nil {
@@ -146,6 +143,10 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 			return invalidAgentStaging()
 		}
 		if dumpStart != nil && prepared == nil {
+			archive, err = backuppostgres.FromWire(dumpStart.Archive)
+			if err != nil {
+				return err
+			}
 			original, containerID, execID, err := postgresOriginalRequest(step, dumpStart, nil)
 			if err != nil {
 				return err
@@ -205,15 +206,17 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 	} else {
 		return invalidAgentStaging()
 	}
+	wireArchive, err := archive.Wire()
+	if err != nil {
+		return err
+	}
 	prepared := &agentpb.BackupArtifactPrepared{PointId: capture.PointId,
 		Evidence: &agentpb.BackupArtifactEvidence{SourceSizeBytes: sourceEvidence.Size,
 			SourceSha256: sourceEvidence.SHA256[:], StoredSizeBytes: storedEvidence.Size,
 			StoredSha256: storedEvidence.SHA256[:]},
 		Finals: &agentpb.BackupStagingFinals{SourceRelativeName: executionplan.BackupSourceStagingFinal,
 			StoredRelativeName: storedEvidence.Name, SameInode: proto.Bool(stored == source)},
-		Archive: &agentpb.BackupArtifactPrepared_Postgres{Postgres: &agentpb.BackupPostgresArchiveEvidence{
-			PgDumpMajor:            postgres16protocol.PostgreSQLMajor,
-			AdapterContractVersion: postgres16protocol.AdapterContractVersion}},
+		Archive: &agentpb.BackupArtifactPrepared_Postgres{Postgres: wireArchive},
 	}
 	if resume.PreparedArtifact != nil && !proto.Equal(resume.PreparedArtifact, prepared) {
 		return invalidAgentStaging()
@@ -245,7 +248,7 @@ func (pool *WorkerPool) executeBackupPostgresCapture(ctx context.Context, assign
 	if err := stage.Cleanup(ctx); err != nil {
 		return err
 	}
-	pool.backupStaging.retirePostgresStage(assignment.TaskID, step, stage)
+	pool.backupStaging.retireDatabaseStage(assignment.TaskID, step, stage)
 	if err := publisher.publish(ctx, &agentpb.BackupCheckpointRequest{
 		Checkpoint: &agentpb.BackupCheckpointRequest_SourceCleanupCompleted{
 			SourceCleanupCompleted: &agentpb.BackupSourceCleanupCompleted{

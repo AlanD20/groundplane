@@ -73,10 +73,10 @@ func validClientArguments(operation Operation, arguments [][]byte) bool {
 		return equalArgumentValues(values, []string{"pg_restore", "--version"})
 	case OperationProbePSQL:
 		return equalArgumentValues(values, []string{"psql", "--version"})
-	case OperationServerMajor:
+	case OperationServerVersion:
 		return validPSQLArguments(
 			values,
-			"SELECT pg_catalog.current_setting('server_version_num')::integer / 10000;",
+			"SELECT pg_catalog.current_setting('server_version');",
 		)
 	case OperationDump:
 		return validDumpArguments(values)

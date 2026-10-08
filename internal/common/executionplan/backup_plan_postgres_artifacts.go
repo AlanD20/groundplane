@@ -28,11 +28,39 @@ func markBackupPostgresArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.Back
 	if err != nil {
 		return err
 	}
+	return markBackupDatabaseArtifacts(plan, step, artifacts, used, databaseID,
+		func(service *agentpb.ComposeService, fact *agentpb.BackupServiceFact) bool {
+			return backupPostgresArtifactImage(service, fact, release, true)
+		})
+}
+
+func markBackupMySQLArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.BackupStepAuthority,
+	artifacts map[string]*agentpb.ComposeArtifact, used map[string]bool,
+) error {
+	mysql := step.GetCapture().GetMysql()
+	if restore := step.GetRestore().GetMysql(); restore != nil {
+		mysql = &agentpb.BackupMySQLCaptureAuthority{DatabaseServiceId: restore.DatabaseServiceId,
+			DatabaseImageReferenceSha256: restore.DatabaseImageReferenceSha256}
+	}
+	if mysql == nil {
+		return nil
+	}
+	return markBackupDatabaseArtifacts(plan, step, artifacts, used, mysql.DatabaseServiceId,
+		func(service *agentpb.ComposeService, fact *agentpb.BackupServiceFact) bool {
+			digest := sha256.Sum256([]byte(service.ImageReference))
+			return service.PostgresToolsImage == "" && bytes.Equal(digest[:], mysql.DatabaseImageReferenceSha256)
+		})
+}
+
+func markBackupDatabaseArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.BackupStepAuthority,
+	artifacts map[string]*agentpb.ComposeArtifact, used map[string]bool, databaseID string,
+	databaseImage func(*agentpb.ComposeService, *agentpb.BackupServiceFact) bool,
+) error {
 	serviceIDs := append([]string{databaseID}, step.ConsumerServiceIds...)
 	for _, serviceID := range serviceIDs {
 		fact := backupScopeServiceFact(plan.BackupScope, serviceID)
 		if fact == nil || len(fact.LocalImageIdSha256) != sha256.Size {
-			return invalidBackupPostgresArtifact()
+			return invalidBackupDatabaseArtifact()
 		}
 		selected := ""
 		for id, artifact := range artifacts {
@@ -47,17 +75,21 @@ func markBackupPostgresArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.Back
 				if serviceID == databaseID {
 					if candidate.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED {
 						if _, err := backingruntimefact.SelectWorkload(artifact, serviceID); err != nil {
-							return invalidBackupPostgresArtifact()
+							return invalidBackupDatabaseArtifact()
 						}
 					} else if candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
-						return invalidBackupPostgresArtifact()
+						return invalidBackupDatabaseArtifact()
 					}
 				} else if candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON &&
 					candidate.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
 					continue
 				}
 				digest, err := backupservicefact.LabelsDigest(candidate.ExpectedLabels)
-				if err == nil && backupPostgresArtifactImage(candidate, fact, release, serviceID == databaseID) &&
+				imageMatches := backupDatabaseArtifactImage(candidate, fact)
+				if serviceID == databaseID {
+					imageMatches = imageMatches && databaseImage(candidate, fact)
+				}
+				if err == nil && imageMatches &&
 					uint32(
 						len(candidate.ExpectedLabels),
 					) == fact.RequiredLabelCount && bytes.Equal(digest, fact.RequiredLabelsSha256) {
@@ -68,23 +100,27 @@ func markBackupPostgresArtifacts(plan *agentpb.ExecutionPlan, step *agentpb.Back
 				continue
 			}
 			if matches != 1 || selected != "" {
-				return invalidBackupPostgresArtifact()
+				return invalidBackupDatabaseArtifact()
 			}
 			selected = id
 		}
 		if selected == "" {
-			return invalidBackupPostgresArtifact()
+			return invalidBackupDatabaseArtifact()
 		}
 		used[selected] = true
 	}
 	return nil
 }
 
+func backupDatabaseArtifactImage(service *agentpb.ComposeService, fact *agentpb.BackupServiceFact) bool {
+	return service.ImageReference != "" && (len(service.ImageConfigDigest) == 0 ||
+		bytes.Equal(service.ImageConfigDigest, fact.LocalImageIdSha256))
+}
+
 func backupPostgresArtifactImage(service *agentpb.ComposeService, fact *agentpb.BackupServiceFact,
 	release postgres16protocol.ManagedReleaseIndex, database bool,
 ) bool {
-	if service.ImageReference == "" || len(service.ImageConfigDigest) != 0 &&
-		!bytes.Equal(service.ImageConfigDigest, fact.LocalImageIdSha256) {
+	if !backupDatabaseArtifactImage(service, fact) {
 		return false
 	}
 	if !database {
@@ -98,8 +134,12 @@ func backupPostgresArtifactImage(service *agentpb.ComposeService, fact *agentpb.
 }
 
 func invalidBackupPostgresArtifact() error {
+	return invalidBackupDatabaseArtifact()
+}
+
+func invalidBackupDatabaseArtifact() error {
 	return errs.New(
 		errs.KindValidationFailed,
-		"PostgreSQL operation requires exact applied database and consumer artifacts",
+		"database operation requires exact applied database and consumer artifacts",
 	)
 }

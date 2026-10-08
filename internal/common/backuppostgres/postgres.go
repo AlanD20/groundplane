@@ -1,51 +1,48 @@
-// Package backuppostgres owns the opaque postgres-custom-v1 artifact model.
+// Package backuppostgres owns the PostgreSQL custom archive evidence model.
 package backuppostgres
 
 import (
-	"context"
-	"io"
-
-	"github.com/AlanD20/groundplane/internal/common/backupformat"
+	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/pkg/errs"
-)
-
-const (
-	Format                = "postgres-custom-v1"
-	PGDumpMajor    uint32 = 16
-	AdapterVersion uint32 = 1
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type ArchiveEvidence struct {
-	PGDumpMajor            uint32
-	AdapterContractVersion uint32
-}
-
-type ArtifactEvidence struct {
-	Source  backupformat.Evidence
-	Archive ArchiveEvidence
+	PGDumpMajor            uint32 `json:"pg_dump_major"`
+	AdapterContractVersion uint32 `json:"adapter_contract_version"`
+	SourceServerVersion    string `json:"source_server_version"`
+	BackupToolVersion      string `json:"backup_tool_version"`
 }
 
 func (evidence ArchiveEvidence) Validate() error {
-	if evidence.PGDumpMajor != PGDumpMajor {
-		return errs.New(errs.KindValidationFailed, "postgres backup pg_dump major must be 16")
-	}
-	if evidence.AdapterContractVersion != AdapterVersion {
-		return errs.New(errs.KindValidationFailed, "postgres backup adapter contract version must be 1")
+	if evidence.PGDumpMajor != postgres16protocol.PostgreSQLMajor ||
+		evidence.AdapterContractVersion != postgres16protocol.AdapterContractVersion ||
+		!validObservedVersion(evidence.SourceServerVersion) || !validObservedVersion(evidence.BackupToolVersion) {
+		return errs.New(errs.KindValidationFailed, "PostgreSQL backup archive evidence is invalid")
 	}
 	return nil
 }
 
-func (evidence ArtifactEvidence) Validate() error {
-	if err := evidence.Archive.Validate(); err != nil {
-		return err
+func FromWire(value *agentpb.BackupPostgresArchiveEvidence) (ArchiveEvidence, error) {
+	if value == nil {
+		return ArchiveEvidence{}, errs.New(errs.KindValidationFailed, "PostgreSQL backup archive evidence is required")
 	}
-	return evidence.Source.Validate(backupformat.MaxStoredBytes)
+	evidence := ArchiveEvidence{PGDumpMajor: value.PgDumpMajor,
+		AdapterContractVersion: value.AdapterContractVersion,
+		SourceServerVersion:    value.SourceServerVersion, BackupToolVersion: value.BackupToolVersion}
+	return evidence, evidence.Validate()
 }
 
-// VerifySource requires the exact opaque pg_dump bytes, including exact EOF.
-func VerifySource(ctx context.Context, source io.Reader, evidence ArtifactEvidence) error {
+func (evidence ArchiveEvidence) Wire() (*agentpb.BackupPostgresArchiveEvidence, error) {
 	if err := evidence.Validate(); err != nil {
-		return err
+		return nil, err
 	}
-	return backupformat.Verify(ctx, source, evidence.Source, backupformat.MaxStoredBytes)
+	return &agentpb.BackupPostgresArchiveEvidence{PgDumpMajor: evidence.PGDumpMajor,
+		AdapterContractVersion: evidence.AdapterContractVersion,
+		SourceServerVersion:    evidence.SourceServerVersion, BackupToolVersion: evidence.BackupToolVersion}, nil
+}
+
+func validObservedVersion(value string) bool {
+	parsed, err := postgres16protocol.ParseServerVersion(value)
+	return err == nil && parsed == value
 }

@@ -21,7 +21,7 @@ func CaptureLogSource(
 		return captured.target, nil
 	}
 	if service.Record.BackingNetworkID != "" {
-		if service.Record.Desired.Adapter == "postgres:16" {
+		if service.Record.Desired.Adapter == "postgres" {
 			_, found, err := releases.GetPostgresRuntimeAt(
 				ctx,
 				service.Record.EnvironmentID,

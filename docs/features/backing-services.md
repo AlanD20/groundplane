@@ -10,7 +10,8 @@ backing Project -> Environment named main -> adapter-backed Service
 
 Backing Services run shared workloads. Built-in adapters add convenient
 provisioning; provisioning is not what makes a workload a Backing Service.
-The supported choices are PostgreSQL 16, Valkey 9, and Custom. Custom runs an
+The supported families are PostgreSQL, Valkey, MySQL, and Custom. The initial
+server catalog contains PostgreSQL 16, Valkey 9, and MySQL 8.4. Custom runs an
 operator-selected container image under GP. Without hooks, an Attach only
 connects its consumer Service to the backing network. It creates no credentials
 or facts. Custom does not inherit database grants or managed Backup support.
@@ -43,7 +44,8 @@ credentials; GP does not redact arbitrary container output.
 ### Creation and lifecycle
 
 Backing creation is one protected atomic operation. The operator supplies the
-Project slug, name and optional description, one adapter key,
+Project slug, name and optional description, one adapter family and its server
+version for a managed database,
 the `main` Environment network pool, and one new Zone's name, subnet, and
 `internal` decision. Valkey also requires an explicit immutable authentication mode.
 Custom requires an image. It does not invent a data Volume, credentials, exposed
@@ -232,17 +234,32 @@ credential-bearing URL facts remain masked until explicit reveal. Plaintext
 facts must not enter Attach primaries, Tasks, Activity, list responses, or
 desired-state projections.
 
-Use `groundplane attach fact api-db pg16_HOST` to read one ready fact, or
+Use `groundplane attach fact api-db pg_HOST` to read one ready fact, or
 `--grant <attach>` to select a granted fact set. Replace the Attach and key
 with your own. This explicitly reveals the selected value, including confidential
 facts; keep its output out of logs and public artifacts.
 
 ### Adapter behavior and Valkey authentication
 
-The accepted managed create keys are `postgres:16` and `valkey:9`. Adapter
+The managed create keys are `postgres`, `valkey`, and `mysql`. Select the server
+version separately with `adapter_version` in the API or `--adapter-version` in
+the CLI; the Console lists the Controller's supported versions. Use
+`groundplane backing-service adapters` to read that same catalog. Adapter
 defaults are compiled product behavior and the operator cannot override their
 managed image, mount, bootstrap, health, or procedure decisions through the
-Backing Service create request.
+Backing Service create request. Adding a supported version does not create a
+second adapter implementation or authorize changing an existing database's
+major version over its data directory. Managed fact prefixes are `pg_`,
+`valkey_`, and `mysql_`; old version-bearing keys and prefixes are not accepted.
+
+MySQL uses the upstream `mysql:8.4` image and a persistent data Volume. Each
+credential-owning Attach gets a separate database and user; grants add access
+only to explicitly selected databases. Detach removes that user's access, not
+its database. MySQL account and database statements are not one transactional
+operation: GP keeps the account locked until its database grant is ready, and
+publishes facts only after the complete operation succeeds. MariaDB is not
+included. MySQL Backup/Restore is approved but not yet qualified in this
+implementation batch.
 
 Valkey authentication is required, explicitly selected, immutable instance policy:
 

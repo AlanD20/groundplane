@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func postgresExecutionIDs(taskID string, step *agentpb.BackupStepAuthority) agentpostgresjournal.IDs {
+func databaseExecutionIDs(taskID string, step *agentpb.BackupStepAuthority) agentpostgresjournal.IDs {
 	pointID := step.GetCapture().GetPointId()
 	if pointID == "" {
 		pointID = step.GetRestore().GetPointId()
@@ -17,7 +17,7 @@ func postgresExecutionIDs(taskID string, step *agentpb.BackupStepAuthority) agen
 	return agentpostgresjournal.IDs{Task: taskID, Step: step.GetStepId(), Point: pointID}
 }
 
-func inventoryPostgresExecutions(ctx context.Context, inventory *agentpb.BackupStagingInventory) error {
+func inventoryDatabaseExecutions(ctx context.Context, inventory *agentpb.BackupStagingInventory) error {
 	markers, err := agentpostgresjournal.Inventory(ctx)
 	if err != nil {
 		return err
@@ -36,15 +36,15 @@ func inventoryPostgresExecutions(ctx context.Context, inventory *agentpb.BackupS
 			entry = &agentpb.BackupRecoveredStage{RecoveryKeySha256: key}
 			inventory.Entries = append(inventory.Entries, entry)
 		}
-		entry.PostgresExecution = true
+		entry.DatabaseExecution = true
 	}
 	return nil
 }
 
-func retirePostgresExecutionMarker(ctx context.Context, disposition *agentpb.BackupStagingDisposition) error {
-	guard := disposition.PostgresGuard
+func retireDatabaseExecutionMarker(ctx context.Context, disposition *agentpb.BackupStagingDisposition) error {
+	guard := disposition.DatabaseGuard
 	if guard == nil || !guard.TerminalCleanup {
 		return nil
 	}
-	return agentpostgresjournal.Remove(ctx, postgresExecutionIDs(guard.TaskId, guard.Step))
+	return agentpostgresjournal.Remove(ctx, databaseExecutionIDs(guard.TaskId, guard.Step))
 }

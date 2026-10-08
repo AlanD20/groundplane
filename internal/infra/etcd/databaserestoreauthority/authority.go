@@ -1,6 +1,6 @@
-// Package postgresrestoreauthority verifies a PostgreSQL Restore's exact
+// Package databaserestoreauthority verifies a database Restore's exact
 // selected Attach, dependency indexes and applied Service facts.
-package postgresrestoreauthority
+package databaserestoreauthority
 
 import (
 	"bytes"
@@ -39,10 +39,13 @@ func Read(
 	record backupruntime.BackupRestoreRecord,
 	revision int64,
 ) ([]etcdstore.Condition, error) {
-	if storage == nil || record.CurrentTarget.Postgres == nil || revision <= 0 {
+	if storage == nil || revision <= 0 {
 		return nil, conflict()
 	}
-	target := record.CurrentTarget.Postgres
+	target := databaseTarget(record)
+	if target == nil {
+		return nil, conflict()
+	}
 	expected := make(map[string]keyExpectation)
 	add := func(key string, value keyExpectation) error {
 		if key == "" || value.revision <= 0 {
@@ -61,18 +64,17 @@ func Read(
 		expected[key] = value
 		return nil
 	}
-	source := target.Source
 	base := []struct {
 		key   string
 		value keyExpectation
 	}{
-		{attachments.AttachKey(source.AttachID), keyExpectation{source.AttachRevision, target.AttachSHA256}},
-		{attachments.AttachFactsKey(source.AttachID), keyExpectation{source.AttachFactsRevision, ""}},
-		{hierarchy.ProjectKey(source.BackingProjectID), keyExpectation{source.BackingProjectRevision, ""}},
-		{hierarchy.EnvironmentKey(source.BackingEnvironmentID), keyExpectation{source.BackingEnvironmentRevision, ""}},
+		{attachments.AttachKey(target.attachID), keyExpectation{target.attachRevision, target.attachSHA256}},
+		{attachments.AttachFactsKey(target.attachID), keyExpectation{target.attachFactsRevision, ""}},
+		{hierarchy.ProjectKey(target.backingProjectID), keyExpectation{target.backingProjectRevision, ""}},
+		{hierarchy.EnvironmentKey(target.backingEnvironmentID), keyExpectation{target.backingEnvironmentRevision, ""}},
 		{
-			hierarchy.EnvironmentKey(source.ConsumerEnvironmentID),
-			keyExpectation{target.ConsumerEnvironmentRevision, ""},
+			hierarchy.EnvironmentKey(target.consumerEnvironmentID),
+			keyExpectation{target.consumerEnvironmentRevision, ""},
 		},
 	}
 	for _, item := range base {
@@ -81,12 +83,12 @@ func Read(
 		}
 	}
 	serviceSnapshots := append(
-		[]backupruntime.BackupRestorePostgresServiceSnapshot{target.DatabaseService},
-		target.Consumers...,
+		[]backupruntime.BackupRestoreDatabaseServiceSnapshot{target.databaseService},
+		target.consumers...,
 	)
 	for _, service := range serviceSnapshots {
 		kind := servicefactauthority.ReleaseRuntime
-		if service.ServiceID == target.DatabaseService.ServiceID {
+		if service.ServiceID == target.databaseService.ServiceID {
 			kind = servicefactauthority.BackingRuntime
 		}
 		facts := []struct {
@@ -112,7 +114,7 @@ func Read(
 			}
 		}
 	}
-	for _, index := range target.DependentIndexes {
+	for _, index := range target.dependentIndexes {
 		if err := add(index.Key, keyExpectation{index.Revision, ""}); err != nil {
 			return nil, err
 		}
@@ -155,18 +157,18 @@ func Read(
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: proof.revision})
 	}
 	prefixes := []string{
-		attachments.AttachGrantedByPrefix(source.AttachID),
-		attachments.AttachCredentialByPrefix(source.AttachID),
+		attachments.AttachGrantedByPrefix(target.attachID),
+		attachments.AttachCredentialByPrefix(target.attachID),
 	}
-	parents := map[string]bool{source.AttachID: true}
-	for _, index := range target.DependentIndexes {
+	parents := map[string]bool{target.attachID: true}
+	for _, index := range target.dependentIndexes {
 		if !parents[index.AttachID] {
 			parents[index.AttachID] = true
 			prefixes = append(prefixes, attachments.AttachCredentialByPrefix(index.AttachID))
 		}
 	}
 	sort.Strings(prefixes)
-	for _, index := range target.DependentIndexes {
+	for _, index := range target.dependentIndexes {
 		bound := false
 		for _, prefix := range prefixes {
 			if index.Key == prefix+index.AttachID {
@@ -181,14 +183,14 @@ func Read(
 	for _, prefix := range prefixes {
 		page, err := storage.Range(ctx, etcdstore.RangeRequest{
 			Prefix:   prefix,
-			Limit:    backupruntime.MaxPostgresRestoreConsumers + 1,
+			Limit:    backupruntime.MaxDatabaseRestoreConsumers + 1,
 			Revision: revision,
 		})
 		if err != nil {
 			return nil, err
 		}
 		if page == nil || page.ReadRevision != revision || page.More ||
-			len(page.Values) > backupruntime.MaxPostgresRestoreConsumers {
+			len(page.Values) > backupruntime.MaxDatabaseRestoreConsumers {
 			if page != nil {
 				etcdstore.ClearRangeValues(page.Values)
 			}
@@ -204,7 +206,7 @@ func Read(
 			}
 			seen[row.Key] = true
 		}
-		for _, index := range target.DependentIndexes {
+		for _, index := range target.dependentIndexes {
 			if strings.HasPrefix(index.Key, prefix) && !seen[index.Key] {
 				etcdstore.ClearRangeValues(page.Values)
 				return nil, conflict()
@@ -216,5 +218,56 @@ func Read(
 }
 
 func conflict() error {
-	return errs.New(errs.KindStateConflict, "PostgreSQL Restore selected target or consumer closure changed")
+	return errs.New(errs.KindStateConflict, "database Restore selected target or consumer closure changed")
+}
+
+type selectedTarget struct {
+	consumerEnvironmentID       string
+	consumerEnvironmentRevision int64
+	attachID                    string
+	attachRevision              int64
+	attachFactsRevision         int64
+	attachSHA256                string
+	backingProjectID            string
+	backingProjectRevision      int64
+	backingEnvironmentID        string
+	backingEnvironmentRevision  int64
+	databaseService             backupruntime.BackupRestoreDatabaseServiceSnapshot
+	consumers                   []backupruntime.BackupRestoreDatabaseServiceSnapshot
+	dependentIndexes            []backupruntime.BackupRestoreDatabaseDependentIndex
+}
+
+func databaseTarget(record backupruntime.BackupRestoreRecord) *selectedTarget {
+	if target := record.CurrentTarget.Postgres; target != nil {
+		return selectedDatabaseTarget(target.Source.ConsumerEnvironmentID, target.ConsumerEnvironmentRevision,
+			target.Source.AttachID, target.Source.AttachRevision, target.Source.AttachFactsRevision,
+			target.AttachSHA256, target.Source.BackingProjectID, target.Source.BackingProjectRevision,
+			target.Source.BackingEnvironmentID, target.Source.BackingEnvironmentRevision,
+			target.DatabaseService, target.Consumers, target.DependentIndexes)
+	}
+	if target := record.CurrentTarget.MySQL; target != nil {
+		return selectedDatabaseTarget(target.Source.ConsumerEnvironmentID, target.ConsumerEnvironmentRevision,
+			target.Source.AttachID, target.Source.AttachRevision, target.Source.AttachFactsRevision,
+			target.AttachSHA256, target.Source.BackingProjectID, target.Source.BackingProjectRevision,
+			target.Source.BackingEnvironmentID, target.Source.BackingEnvironmentRevision,
+			target.DatabaseService, target.Consumers, target.DependentIndexes)
+	}
+	return nil
+}
+
+func selectedDatabaseTarget(consumerEnvironmentID string, consumerEnvironmentRevision int64,
+	attachID string, attachRevision, attachFactsRevision int64, attachSHA256,
+	backingProjectID string, backingProjectRevision int64, backingEnvironmentID string,
+	backingEnvironmentRevision int64, databaseService backupruntime.BackupRestoreDatabaseServiceSnapshot,
+	consumers []backupruntime.BackupRestoreDatabaseServiceSnapshot,
+	dependentIndexes []backupruntime.BackupRestoreDatabaseDependentIndex,
+) *selectedTarget {
+	return &selectedTarget{
+		consumerEnvironmentID: consumerEnvironmentID, consumerEnvironmentRevision: consumerEnvironmentRevision,
+		attachID: attachID, attachRevision: attachRevision, attachFactsRevision: attachFactsRevision,
+		attachSHA256: attachSHA256, backingProjectID: backingProjectID,
+		backingProjectRevision: backingProjectRevision, backingEnvironmentID: backingEnvironmentID,
+		backingEnvironmentRevision: backingEnvironmentRevision, databaseService: databaseService,
+		consumers: consumers, dependentIndexes: dependentIndexes,
+	}
 }

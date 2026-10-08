@@ -53,7 +53,8 @@ func TestScriptRepositoryRejectsIneligibleLogicalServices(t *testing.T) {
 		"managed backing": func(project *testkeyvalue.Versioned[testhierarchy.ProjectRecord], target *testkeyvalue.Versioned[testservices.ServiceRecord]) {
 			project.Record.Kind = testhierarchy.ProjectKindBacking
 			project.Record.TenantID = ""
-			target.Record.Desired.Adapter = "postgres:16"
+			target.Record.Desired.Adapter = "postgres"
+			target.Record.Desired.AdapterVersion = "16"
 			target.Record.BackingNetworkID = ids.New(ids.KindNetwork)
 		},
 	}

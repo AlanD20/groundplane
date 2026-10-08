@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	ProtocolVersion        uint32 = 1
+	ProtocolVersion        uint32 = 2
 	AdapterContractVersion uint32 = 1
 	PostgreSQLMajor        uint32 = 16
 
@@ -55,7 +55,7 @@ const (
 	ClientNoFileLimit         uint32 = 64
 )
 
-const protocolVersionArgument = "1"
+const protocolVersionArgument = "2"
 
 var exactEnvironment = [...]string{
 	"PATH=" + PathValue,
@@ -102,7 +102,7 @@ const (
 	OperationProbePGDump             Operation = 1
 	OperationProbePGRestore          Operation = 2
 	OperationProbePSQL               Operation = 3
-	OperationServerMajor             Operation = 4
+	OperationServerVersion           Operation = 4
 	OperationDump                    Operation = 5
 	OperationRestoreList             Operation = 6
 	OperationTerminateDBConnections  Operation = 7
@@ -277,7 +277,7 @@ func (request Request) Arguments() ([]string, error) {
 	switch request.Operation {
 	case OperationProbePGDump, OperationProbePGRestore, OperationProbePSQL:
 		arguments = append(arguments, strconv.FormatUint(uint64(PostgreSQLMajor), 10))
-	case OperationServerMajor:
+	case OperationServerVersion:
 		arguments = append(arguments, strconv.FormatUint(uint64(PostgreSQLMajor), 10), request.Database)
 	case OperationDump:
 		arguments = append(arguments, request.Database, request.Role)
@@ -340,7 +340,7 @@ func (request Request) Validate() error {
 	if !request.Operation.ValidRun() {
 		return invalid("postgres helper run operation is invalid")
 	}
-	needsDatabase := request.Operation == OperationServerMajor || request.Operation == OperationDump ||
+	needsDatabase := request.Operation == OperationServerVersion || request.Operation == OperationDump ||
 		request.Operation == OperationTerminateDBConnections ||
 		request.Operation == OperationAssertZeroDBConnections ||
 		request.Operation == OperationRestoreApply || request.Operation == OperationPostRestoreVerify
@@ -375,8 +375,8 @@ func (operation Operation) String() string {
 		return "probe-pg-restore"
 	case OperationProbePSQL:
 		return "probe-psql"
-	case OperationServerMajor:
-		return "server-major"
+	case OperationServerVersion:
+		return "server-version"
 	case OperationDump:
 		return "dump"
 	case OperationRestoreList:
@@ -408,7 +408,7 @@ func ClientPath(operation Operation) (string, error) {
 		return PGDumpPath, nil
 	case OperationProbePGRestore, OperationRestoreList, OperationRestoreApply:
 		return PGRestorePath, nil
-	case OperationProbePSQL, OperationServerMajor, OperationTerminateDBConnections,
+	case OperationProbePSQL, OperationServerVersion, OperationTerminateDBConnections,
 		OperationAssertZeroDBConnections, OperationPostRestoreVerify:
 		return PSQLPath, nil
 	default:
@@ -422,7 +422,7 @@ func ProfileFor(operation Operation) (FDProfile, error) {
 	case OperationProbePGDump, OperationProbePGRestore, OperationProbePSQL:
 		profile.Stdin = FDReadOnlyDevNull
 		profile.Stdout = FDValidatedResult
-	case OperationServerMajor, OperationTerminateDBConnections, OperationAssertZeroDBConnections,
+	case OperationServerVersion, OperationTerminateDBConnections, OperationAssertZeroDBConnections,
 		OperationPostRestoreVerify:
 		profile.Stdin = FDReadOnlyDevNull
 		profile.Stdout = FDValidatedResult
@@ -444,7 +444,7 @@ func PolicyFor(operation Operation) (StreamPolicy, error) {
 	case OperationProbePGDump, OperationProbePGRestore, OperationProbePSQL:
 		policy.OutputLimit = ProbeStdoutLimitBytes
 		policy.StderrLimit = ProbeStderrLimitBytes
-	case OperationServerMajor,
+	case OperationServerVersion,
 		OperationTerminateDBConnections, OperationAssertZeroDBConnections, OperationPostRestoreVerify:
 		policy.OutputLimit = DiagnosticLimitBytes
 	case OperationDump:

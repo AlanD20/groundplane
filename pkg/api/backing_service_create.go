@@ -8,6 +8,7 @@ type BackingServiceCreate struct {
 	Name           string                    `json:"name"`
 	Description    string                    `json:"description,omitempty"`
 	Adapter        string                    `json:"adapter"`
+	AdapterVersion string                    `json:"adapter_version,omitempty" doc:"Required supported server version for a managed database adapter; omitted for Custom."`
 	Image          string                    `json:"image,omitempty" doc:"Required for the custom adapter and rejected for managed adapters."`
 	Authentication string                    `json:"authentication,omitempty" enum:"username_password,password,none" doc:"Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters."`
 	NetworkPool    string                    `json:"network_pool"`

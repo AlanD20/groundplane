@@ -64,7 +64,7 @@ func (s *Server) resolveBackupStagingPlan(ctx context.Context, store backupStagi
 		if err != nil {
 			return nil, err
 		}
-		if err := attachPostgresStagingGuard(source, disposition); err != nil {
+		if err := attachDatabaseStagingGuard(source, disposition); err != nil {
 			return nil, err
 		}
 		sources = append(sources, source)
@@ -115,8 +115,9 @@ func (s *Server) resolveBackupStagingDisposition(
 	if task.Type == taskjournal.TaskRestore && source.Step.GetRestore().GetVolume() != nil {
 		return s.resolveVolumeRestoreStageDisposition(ctx, store, entry, source)
 	}
-	if task.Type == taskjournal.TaskRestore && source.Step.GetRestore().GetPostgres() != nil {
-		return s.resolvePostgresRestoreStageDisposition(ctx, store, entry, source)
+	if task.Type == taskjournal.TaskRestore &&
+		(source.Step.GetRestore().GetPostgres() != nil || source.Step.GetRestore().GetMysql() != nil) {
+		return s.resolveDatabaseRestoreStageDisposition(ctx, store, entry, source)
 	}
 	// A Restore may contain an irreversible target mutation; it cannot be
 	// classified as a read-only Capture just because its files look alike.
@@ -157,8 +158,8 @@ func (s *Server) resolveBackupStagingDisposition(
 		return nil, err
 	}
 	if prepared == nil {
-		if source.Step.GetCapture().GetPostgres() != nil {
-			return resolvePostgresCaptureDisposition(entry, source, message)
+		if source.Step.GetCapture().GetPostgres() != nil || source.Step.GetCapture().GetMysql() != nil {
+			return resolveDatabaseCaptureDisposition(entry, source, message)
 		}
 		if source.Step.GetCapture().GetVolume() != nil {
 			// Capture has not published an artifact, so no Put could have
@@ -171,8 +172,9 @@ func (s *Server) resolveBackupStagingDisposition(
 		}
 		return s.resolveConfigPrefixDisposition(ctx, agentID, agentGeneration, entry, source, message)
 	}
-	if entry.PostgresExecution && len(entry.Files) == 0 && source.Step.GetCapture().GetPostgres() != nil &&
-		postgresCaptureCleanupAuthorized(source.Step, message.BackupResume) {
+	if entry.DatabaseExecution && len(entry.Files) == 0 &&
+		(source.Step.GetCapture().GetPostgres() != nil || source.Step.GetCapture().GetMysql() != nil) &&
+		databaseCaptureCleanupAuthorized(source.Step, message.BackupResume) {
 		result.Disposition = &agentpb.BackupStagingDisposition_DiscardRecovered{
 			DiscardRecovered: &agentpb.BackupDiscardRecovered{}}
 		return result, nil

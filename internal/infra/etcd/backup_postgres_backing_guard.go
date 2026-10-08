@@ -42,11 +42,11 @@ func (repository *TaskRepository) preparePostgresBackingGuardStagingCleanup(
 	}
 	tasks := make(map[string]*postgresBackingGuardCleanupTask)
 	for index, disposition := range delivery.Record.Plan.Dispositions {
-		guard := disposition.GetPostgresGuard()
+		guard := disposition.GetDatabaseGuard()
 		if guard == nil || disposition.GetDiscardRecovered() == nil {
 			continue
 		}
-		if guard.GetRecoveryApply() != nil {
+		if guard.GetPostgresRecoveryApply() != nil || guard.GetMysqlRecoveryApply() != nil {
 			return postgresbackingguard.Plan{}, backupStagingConflict()
 		}
 		source, err := repository.ReadBackupStagingSource(
@@ -187,11 +187,15 @@ func (repository *TaskRepository) loadPostgresBackingGuardCleanupTask(
 				continue
 			}
 			step := source.Plan.Steps[index].GetBackupStep()
-			if step == nil || step.GetCapture().GetPostgres() == nil ||
+			if step == nil || (step.GetCapture().GetPostgres() == nil && step.GetCapture().GetMysql() == nil) ||
 				cleanup.expectedStepEnvironment[step.GetStepId()] != "" {
 				return nil, backupStagingConflict()
 			}
-			cleanup.expectedStepEnvironment[step.GetStepId()] = attempt.Snapshot.Postgres.BackingEnvironmentID
+			environmentID, ok := backupAttemptBackingEnvironmentID(attempt)
+			if !ok {
+				return nil, backupStagingConflict()
+			}
+			cleanup.expectedStepEnvironment[step.GetStepId()] = environmentID
 		}
 	case taskjournal.TaskRestore:
 		cleanup.nativeKey = backupruntime.BackupRestoreKey(source.Task.Record.ID)
@@ -211,15 +215,15 @@ func (repository *TaskRepository) loadPostgresBackingGuardCleanupTask(
 			restored.OperationID != source.Task.Record.OperationID ||
 			restored.EnvironmentID != source.Task.Record.Owner.EnvironmentID ||
 			restored.State != backupruntime.BackupRestoreFailedSafe ||
-			backupruntime.ValidatePostgresRestoreExecutionPlan(restored, source.Plan) != nil {
+			backupruntime.ValidateDatabaseRestoreExecutionPlan(restored, source.Plan) != nil {
 			return nil, backupStagingConflict()
 		}
-		backingEnvironmentID, found, err := backupruntime.PostgresRestoreBackingEnvironmentID(restored)
+		backingEnvironmentID, found, err := backupruntime.DatabaseRestoreBackingEnvironmentID(restored)
 		if err != nil || !found || len(source.Plan.Steps) != 1 {
 			return nil, backupStagingConflict()
 		}
 		step := source.Plan.Steps[0].GetBackupStep()
-		if step == nil || step.GetRestore().GetPostgres() == nil {
+		if step == nil || (step.GetRestore().GetPostgres() == nil && step.GetRestore().GetMysql() == nil) {
 			return nil, backupStagingConflict()
 		}
 		cleanup.owner = postgresbackingguard.Owner(
@@ -240,11 +244,17 @@ func (repository *TaskRepository) loadPostgresBackingGuardCleanupTask(
 
 func postgresBackingGuardPlanSelectionMatches(
 	source BackupStagingSource,
-	guard *agentpb.BackupPostgresStagingGuard,
+	guard *agentpb.BackupDatabaseStagingGuard,
 ) bool {
 	serviceID := source.Step.GetCapture().GetPostgres().GetDatabaseServiceId()
+	if mysql := source.Step.GetCapture().GetMysql(); mysql != nil {
+		serviceID = mysql.DatabaseServiceId
+	}
 	if restore := source.Step.GetRestore().GetPostgres(); restore != nil {
 		serviceID = restore.GetDatabaseServiceId()
+	}
+	if mysql := source.Step.GetRestore().GetMysql(); mysql != nil {
+		serviceID = mysql.GetDatabaseServiceId()
 	}
 	if serviceID == "" || source.Plan.GetBackupScope() == nil {
 		return false
@@ -271,4 +281,14 @@ func postgresBackingGuardPlanSelectionMatches(
 		}
 	}
 	return factMatches == 1 && artifactMatches == 1
+}
+
+func backupAttemptBackingEnvironmentID(attempt backupruntime.BackupRunSourceAttemptRecord) (string, bool) {
+	if attempt.Snapshot.Postgres != nil && attempt.Snapshot.MySQL == nil {
+		return attempt.Snapshot.Postgres.BackingEnvironmentID, true
+	}
+	if attempt.Snapshot.MySQL != nil && attempt.Snapshot.Postgres == nil {
+		return attempt.Snapshot.MySQL.BackingEnvironmentID, true
+	}
+	return "", false
 }

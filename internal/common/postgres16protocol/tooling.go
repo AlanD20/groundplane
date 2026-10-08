@@ -2,22 +2,18 @@ package postgres16protocol
 
 import (
 	"path/filepath"
-	"regexp"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 )
 
 const HostToolsRoot = "/root/.groundplane/postgres16-tools"
 
-var databaseImagePattern = regexp.MustCompile(
-	`^(?:(?:docker\.io|registry-1\.docker\.io)/)?(?:library/)?postgres:16(?:\.[0-9]+)?-alpine(?:[0-9]+\.[0-9]+)?(?:@sha256:[0-9a-f]{64})?$`,
-)
-
 // ValidDatabaseImage limits managed patches to the official PostgreSQL 16
 // Alpine family, retaining its data location and database uid/gid contract.
 func ValidDatabaseImage(reference string) bool {
-	return databaseImagePattern.MatchString(reference)
+	return backingcatalog.ValidImage("postgres", "16", reference)
 }
 
 // ToolsDirectory is installation-owned runtime state, never Blueprint input.

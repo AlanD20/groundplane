@@ -1,6 +1,7 @@
 package backupruntime
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/databaseversion"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/oklog/ulid/v2"
@@ -9,6 +10,7 @@ import (
 
 type BackupRestoreTargetSnapshot struct {
 	Postgres *BackupRestorePostgresTarget `json:"postgres,omitempty"`
+	MySQL    *BackupRestoreMySQLTarget    `json:"mysql,omitempty"`
 	Volume   *BackupVolumeSourceSnapshot  `json:"volume,omitempty"`
 	Config   *BackupRestoreConfigTarget   `json:"config,omitempty"`
 }
@@ -56,6 +58,9 @@ type BackupRestoreVolumeProgress struct {
 }
 
 type BackupRestoreRecord struct {
+	TargetVersions                *databaseversion.Target        `json:"target_versions,omitempty"`
+	VersionReviewSHA256           string                         `json:"version_review_sha256,omitempty"`
+	VersionDifferenceAcknowledged bool                           `json:"version_difference_acknowledged"`
 	TaskID                        string                         `json:"task_id"`
 	OperationID                   string                         `json:"operation_id"`
 	EnvironmentID                 string                         `json:"environment_id"`
@@ -77,7 +82,7 @@ type BackupRestoreRecord struct {
 	ServiceCount                  uint32                         `json:"service_count"`
 	ConfigProgress                *BackupRestoreConfigProgress   `json:"config_progress,omitempty"`
 	VolumeProgress                *BackupRestoreVolumeProgress   `json:"volume_progress,omitempty"`
-	PostgresProgress              *BackupRestorePostgresProgress `json:"postgres_progress,omitempty"`
+	DatabaseProgress              *BackupRestoreDatabaseProgress `json:"database_progress,omitempty"`
 	Verification                  BackupVerificationState        `json:"verification"`
 	CreatedAt                     time.Time                      `json:"created_at"`
 	UpdatedAt                     time.Time                      `json:"updated_at"`
@@ -92,6 +97,26 @@ type BackupRestoreServiceRecord struct {
 }
 
 func ValidateBackupRestoreRecord(record BackupRestoreRecord) error {
+	if err := ValidateBackupRestoreSelection(record); err != nil {
+		return err
+	}
+	if record.Point.SourceKind == BackupRuntimeSourceAttach {
+		return ValidateRestoreVersionReview(record)
+	}
+	return nil
+}
+
+// Selection is read-only preflight state. Durable database Restore records
+// additionally require the exact observed target and accepted version review.
+func ValidateBackupRestoreSelection(record BackupRestoreRecord) error {
+	if record.TargetVersions != nil &&
+		(record.TargetVersions.Validate() != nil || !recordcodec.ValidSHA256(record.VersionReviewSHA256)) {
+		return invalidBackupRuntimeRecord("Restore version review is invalid")
+	}
+	if record.Point.SourceKind != BackupRuntimeSourceAttach &&
+		(record.TargetVersions != nil || record.VersionReviewSHA256 != "" || record.VersionDifferenceAcknowledged) {
+		return invalidBackupRuntimeRecord("non-database Restore cannot contain database version review")
+	}
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
@@ -154,13 +179,22 @@ func validateBackupRestoreTarget(
 	point BackupRecoveryPointSnapshot,
 	target BackupRestoreTargetSnapshot,
 ) error {
-	if pointerCount(target.Postgres != nil, target.Volume != nil, target.Config != nil) != 1 {
+	if pointerCount(target.Postgres != nil, target.MySQL != nil, target.Volume != nil, target.Config != nil) != 1 {
 		return invalidBackupRuntimeRecord("backup restore target must contain exactly one kind")
 	}
 	switch point.SourceKind {
 	case BackupRuntimeSourceAttach:
-		if target.Postgres == nil || validateBackupRestorePostgresTarget(*target.Postgres, point) != nil {
-			return invalidBackupRuntimeRecord("postgres restore target is invalid")
+		switch point.SourceFormat {
+		case BackupRuntimeFormatPostgres:
+			if target.Postgres == nil || validateBackupRestorePostgresTarget(*target.Postgres, point) != nil {
+				return invalidBackupRuntimeRecord("postgres restore target is invalid")
+			}
+		case BackupRuntimeFormatMySQL:
+			if target.MySQL == nil || validateBackupRestoreMySQLTarget(*target.MySQL, point) != nil {
+				return invalidBackupRuntimeRecord("MySQL restore target is invalid")
+			}
+		default:
+			return invalidBackupRuntimeRecord("database restore target format is invalid")
 		}
 	case BackupRuntimeSourceVolume:
 		if target.Volume == nil || validateBackupVolumeSnapshot(*target.Volume) != nil ||
@@ -300,10 +334,16 @@ func validateBackupRestoreProgress(record BackupRestoreRecord) error {
 		return invalidBackupRuntimeRecord("non-Volume Restore cannot carry Volume progress")
 	}
 	if record.Point.SourceKind == BackupRuntimeSourceAttach {
-		return validateBackupRestorePostgresProgress(record)
+		if record.CurrentTarget.Postgres != nil {
+			return validateBackupRestoreDatabaseProgress(record, len(record.CurrentTarget.Postgres.Consumers))
+		}
+		if record.CurrentTarget.MySQL != nil {
+			return validateBackupRestoreDatabaseProgress(record, len(record.CurrentTarget.MySQL.Consumers))
+		}
+		return invalidBackupRuntimeRecord("database Restore target is unavailable")
 	}
-	if record.PostgresProgress != nil {
-		return invalidBackupRuntimeRecord("non-postgres Restore cannot carry PostgreSQL progress")
+	if record.DatabaseProgress != nil {
+		return invalidBackupRuntimeRecord("non-database Restore cannot carry database progress")
 	}
 	return nil
 }

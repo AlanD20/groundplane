@@ -37,6 +37,9 @@ func validateBackupPlanArtifacts(plan *agentpb.ExecutionPlan) error {
 		if err := markBackupPostgresArtifacts(plan, step, artifacts, used); err != nil {
 			return err
 		}
+		if err := markBackupMySQLArtifacts(plan, step, artifacts, used); err != nil {
+			return err
+		}
 		var volume *agentpb.BackupVolumeProjectionAuthority
 		var volumeID string
 		if capture := step.GetCapture().GetVolume(); capture != nil {

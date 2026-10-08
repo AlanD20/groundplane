@@ -13,10 +13,57 @@ import (
 	"strings"
 )
 
-func ValidateBackupPostgresPublicationEvidence(
+type BackupDatabasePublicationSnapshot struct {
+	ConsumerEnvironmentID      string
+	AttachFactsRevision        int64
+	BackingProjectID           string
+	BackingProjectRevision     int64
+	BackingEnvironmentID       string
+	BackingEnvironmentRevision int64
+	BackingServiceID           string
+	BackingServiceRevision     int64
+	ConsumerServiceID          string
+}
+
+func SelectBackupDatabasePublicationSnapshot(
+	source backupruntime.BackupRunSourceAttemptRecord,
+) (BackupDatabasePublicationSnapshot, error) {
+	if postgres := source.Snapshot.Postgres; postgres != nil && source.Snapshot.MySQL == nil {
+		return BackupDatabasePublicationSnapshot{
+			ConsumerEnvironmentID:      postgres.ConsumerEnvironmentID,
+			AttachFactsRevision:        postgres.AttachFactsRevision,
+			BackingProjectID:           postgres.BackingProjectID,
+			BackingProjectRevision:     postgres.BackingProjectRevision,
+			BackingEnvironmentID:       postgres.BackingEnvironmentID,
+			BackingEnvironmentRevision: postgres.BackingEnvironmentRevision,
+			BackingServiceID:           postgres.BackingServiceID,
+			BackingServiceRevision:     postgres.BackingServiceRevision,
+			ConsumerServiceID:          postgres.ConsumerServiceID,
+		}, nil
+	}
+	if mysql := source.Snapshot.MySQL; mysql != nil && source.Snapshot.Postgres == nil {
+		return BackupDatabasePublicationSnapshot{
+			ConsumerEnvironmentID:      mysql.ConsumerEnvironmentID,
+			AttachFactsRevision:        mysql.AttachFactsRevision,
+			BackingProjectID:           mysql.BackingProjectID,
+			BackingProjectRevision:     mysql.BackingProjectRevision,
+			BackingEnvironmentID:       mysql.BackingEnvironmentID,
+			BackingEnvironmentRevision: mysql.BackingEnvironmentRevision,
+			BackingServiceID:           mysql.BackingServiceID,
+			BackingServiceRevision:     mysql.BackingServiceRevision,
+			ConsumerServiceID:          mysql.ConsumerServiceID,
+		}, nil
+	}
+	return BackupDatabasePublicationSnapshot{}, errs.New(
+		errs.KindInternal,
+		"database backup source snapshot is corrupt",
+	)
+}
+
+func ValidateBackupDatabasePublicationEvidence(
 	values []*etcdstore.KeyValue,
 	source backupruntime.BackupRunSourceAttemptRecord,
-	snapshot backupruntime.BackupPostgresSourceSnapshot,
+	snapshot BackupDatabasePublicationSnapshot,
 ) error {
 	if len(values) != 5 || values[0] == nil || values[1] == nil || values[2] == nil ||
 		values[3] == nil || values[4] == nil || values[0].ModRevision != source.TargetRevision ||
@@ -24,7 +71,7 @@ func ValidateBackupPostgresPublicationEvidence(
 		values[2].ModRevision != snapshot.BackingProjectRevision ||
 		values[3].ModRevision != snapshot.BackingEnvironmentRevision ||
 		values[4].ModRevision != snapshot.BackingServiceRevision {
-		return errs.New(errs.KindStateConflict, "postgres backup publication evidence changed")
+		return errs.New(errs.KindStateConflict, "database backup publication evidence changed")
 	}
 	attach, attachErr := attachrecord.DecodeAttachRecord(values[0].Value)
 	facts, factsErr := attachrecord.DecodeAttachEncryptedFacts(values[1].Value)
@@ -41,7 +88,7 @@ func ValidateBackupPostgresPublicationEvidence(
 		attach.ServiceID != snapshot.ConsumerServiceID || facts.AttachID != source.TargetID ||
 		project.ID != snapshot.BackingProjectID || project.Kind != hierarchyrecord.ProjectKindBacking ||
 		environment.ID != snapshot.BackingEnvironmentID || environment.ProjectID != project.ID {
-		return errs.New(errs.KindStateConflict, "postgres backup publication evidence changed")
+		return errs.New(errs.KindStateConflict, "database backup publication evidence changed")
 	}
 	return nil
 }

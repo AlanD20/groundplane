@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -37,12 +38,12 @@ type CreationEnvironment struct {
 }
 
 type creationAdapter interface {
-	CreationSpec(core.BackingAuthentication) CreationSpec
+	CreationSpec(string, core.BackingAuthentication) CreationSpec
 }
 
 // BackingCreationSpec resolves the immutable creation contract for one managed
 // adapter. Custom creation is resolved separately from its operator image.
-func BackingCreationSpec(key string, authentication core.BackingAuthentication) (CreationSpec, error) {
+func BackingCreationSpec(key, version string, authentication core.BackingAuthentication) (CreationSpec, error) {
 	adapter, ok := Get(key)
 	if !ok {
 		return CreationSpec{}, errs.Newf(errs.KindValidationFailed, "unsupported backing-service adapter %q", key)
@@ -59,8 +60,11 @@ func BackingCreationSpec(key string, authentication core.BackingAuthentication) 
 	if err != nil {
 		return CreationSpec{}, err
 	}
-	spec := creator.CreationSpec(authentication)
-	spec.Image, err = adapter.DefaultImage()
+	if err := backingcatalog.ValidateSelection(key, version); err != nil {
+		return CreationSpec{}, err
+	}
+	spec := creator.CreationSpec(version, authentication)
+	spec.Image, err = adapter.DefaultImage(version)
 	if err != nil {
 		return CreationSpec{}, err
 	}

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/mysql84protocol"
 	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -34,16 +35,27 @@ type BackupRecoveryPointTargetSnapshot struct {
 
 type BackupRecoveryPointSnapshot struct {
 	BackupRecoveryPointTargetSnapshot
-	Evidence      BackupArtifactEvidence      `json:"evidence"`
-	Object        BackupObjectIdentity        `json:"object"`
-	Postgres      BackupPostgresPointIdentity `json:"postgres"`
-	ConfigArchive BackupConfigArchiveEvidence `json:"config_archive"`
-	VolumeArchive BackupVolumeArchiveEvidence `json:"volume_archive"`
+	Evidence        BackupArtifactEvidence        `json:"evidence"`
+	Object          BackupObjectIdentity          `json:"object"`
+	Postgres        BackupPostgresPointIdentity   `json:"postgres"`
+	PostgresArchive BackupPostgresArchiveEvidence `json:"postgres_archive"`
+	MySQL           BackupMySQLPointIdentity      `json:"mysql"`
+	MySQLArchive    BackupMySQLArchiveEvidence    `json:"mysql_archive"`
+	ConfigArchive   BackupConfigArchiveEvidence   `json:"config_archive"`
+	VolumeArchive   BackupVolumeArchiveEvidence   `json:"volume_archive"`
 }
 
 // The Point keeps the captured database identity. A later Attach revision may
 // authorize execution only when it still names this same database and role.
 type BackupPostgresPointIdentity struct {
+	Database             string `json:"database"`
+	Role                 string `json:"role"`
+	BackingEnvironmentID string `json:"backing_environment_id"`
+	BackingServiceID     string `json:"backing_service_id"`
+	ConsumerServiceID    string `json:"consumer_service_id"`
+}
+
+type BackupMySQLPointIdentity struct {
 	Database             string `json:"database"`
 	Role                 string `json:"role"`
 	BackingEnvironmentID string `json:"backing_environment_id"`
@@ -111,7 +123,8 @@ func ValidateBackupRecoveryPointSnapshot(record BackupRecoveryPointSnapshot) err
 	if err := ValidateBackupRecoveryPointTargetSnapshot(record.BackupRecoveryPointTargetSnapshot); err != nil {
 		return err
 	}
-	if !validBackupArtifactForTarget(record.Evidence, record.BackupRecoveryPointTargetSnapshot) ||
+	if !validBackupArtifactForTarget(record.Evidence, record.BackupRecoveryPointTargetSnapshot,
+		record.PostgresArchive, record.MySQLArchive) ||
 		!validBackupObjectIdentity(record.Object) || record.Object.Target != record.ObjectTarget() {
 		return invalidBackupRuntimeRecord("recovery point requires complete evidence and an immutable selected object")
 	}
@@ -121,16 +134,42 @@ func ValidateBackupRecoveryPointSnapshot(record BackupRecoveryPointSnapshot) err
 	if err := validateSelectedVolumeArchive(record.SourceKind, record.VolumeArchive, record.Evidence); err != nil {
 		return err
 	}
+	if err := validateSelectedMySQLArchive(record.SourceKind, record.SourceFormat, record.MySQLArchive); err != nil {
+		return err
+	}
+	if err := validateSelectedPostgresArchive(record.SourceKind, record.SourceFormat, record.PostgresArchive); err != nil {
+		return err
+	}
 	if record.SourceKind == BackupRuntimeSourceAttach {
-		if !postgresidentity.ValidGenerated(record.Postgres.Database) ||
-			!postgresidentity.ValidGenerated(record.Postgres.Role) ||
-			recordcodec.ValidateID(ids.KindEnvironment, record.Postgres.BackingEnvironmentID) != nil ||
-			recordcodec.ValidateID(ids.KindService, record.Postgres.BackingServiceID) != nil ||
-			recordcodec.ValidateID(ids.KindService, record.Postgres.ConsumerServiceID) != nil {
-			return invalidBackupRuntimeRecord("postgres recovery point target identity is incomplete")
+		switch record.SourceFormat {
+		case BackupRuntimeFormatPostgres:
+			if !postgresidentity.ValidGenerated(record.Postgres.Database) ||
+				!postgresidentity.ValidGenerated(record.Postgres.Role) ||
+				recordcodec.ValidateID(ids.KindEnvironment, record.Postgres.BackingEnvironmentID) != nil ||
+				recordcodec.ValidateID(ids.KindService, record.Postgres.BackingServiceID) != nil ||
+				recordcodec.ValidateID(ids.KindService, record.Postgres.ConsumerServiceID) != nil {
+				return invalidBackupRuntimeRecord("postgres recovery point target identity is incomplete")
+			}
+			if record.MySQL != (BackupMySQLPointIdentity{}) {
+				return invalidBackupRuntimeRecord("postgres recovery point carries MySQL identity")
+			}
+		case BackupRuntimeFormatMySQL:
+			if !mysql84protocol.ValidGeneratedIdentity(record.MySQL.Database) ||
+				!mysql84protocol.ValidGeneratedIdentity(record.MySQL.Role) ||
+				recordcodec.ValidateID(ids.KindEnvironment, record.MySQL.BackingEnvironmentID) != nil ||
+				recordcodec.ValidateID(ids.KindService, record.MySQL.BackingServiceID) != nil ||
+				recordcodec.ValidateID(ids.KindService, record.MySQL.ConsumerServiceID) != nil ||
+				record.MySQLArchive.Validate() != nil {
+				return invalidBackupRuntimeRecord("MySQL recovery point target identity is incomplete")
+			}
+			if record.Postgres != (BackupPostgresPointIdentity{}) {
+				return invalidBackupRuntimeRecord("MySQL recovery point carries PostgreSQL identity")
+			}
+		default:
+			return invalidBackupRuntimeRecord("database recovery point format is invalid")
 		}
-	} else if record.Postgres != (BackupPostgresPointIdentity{}) {
-		return invalidBackupRuntimeRecord("non-postgres recovery point carries database identity")
+	} else if record.Postgres != (BackupPostgresPointIdentity{}) || record.MySQL != (BackupMySQLPointIdentity{}) {
+		return invalidBackupRuntimeRecord("non-database recovery point carries database identity")
 	}
 	return nil
 }

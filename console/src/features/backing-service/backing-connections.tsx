@@ -47,7 +47,7 @@ export function ConnectionsTab({
   const adapter = store.adapters.find((a) => a.key === svc.adapter);
   const authenticationDetails = valkeyAuthenticationDetails(svc.authentication);
   const authenticationUnavailable =
-    svc.adapter === "valkey:9" && !authenticationDetails;
+    svc.adapter === "valkey" && !authenticationDetails;
   const exposedFacts = authenticationDetails
     ? authenticationDetails.factSuffixes.map(
         (suffix) => `${svc.prefix ?? adapter?.prefix}_${suffix}`,
@@ -60,7 +60,7 @@ export function ConnectionsTab({
     (authenticationUnavailable ? [] : (adapter?.provision ?? []));
   const exposesRole =
     adapter?.requires.role &&
-    (svc.adapter !== "valkey:9" || svc.authentication === "username_password");
+    (svc.adapter !== "valkey" || svc.authentication === "username_password");
 
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ConsumerLink | null>(null);
@@ -354,7 +354,7 @@ export function ConnectionsTab({
                     )}
                     <Row
                       label="Host"
-                      value={`${svc.serviceName}:${adapter?.urlScheme === "redis" ? 6379 : 5432}`}
+                      value={`${svc.serviceName}:${adapter?.urlScheme === "redis" ? 6379 : adapter?.urlScheme === "mysql" ? 3306 : 5432}`}
                       mono
                     />
                   </div>

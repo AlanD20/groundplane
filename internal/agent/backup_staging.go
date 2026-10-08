@@ -90,7 +90,7 @@ func openBackupStaging(ctx context.Context, journal *agentstagingjournal.Journal
 		state.inventory.Entries = append(state.inventory.Entries, wire)
 		state.physical[hex.EncodeToString(key)] = entry
 	}
-	if err := inventoryPostgresExecutions(ctx, state.inventory); err != nil {
+	if err := inventoryDatabaseExecutions(ctx, state.inventory); err != nil {
 		_ = recovery.Close(ctx)
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func validateRetainedStagingInventory(physical, retained *agentpb.BackupStagingI
 		if expected == nil {
 			return invalidAgentStaging()
 		}
-		if actual.PostgresExecution && !expected.PostgresExecution {
+		if actual.DatabaseExecution && !expected.DatabaseExecution {
 			return invalidAgentStaging()
 		}
 		for _, file := range actual.Files {
@@ -193,7 +193,7 @@ func (state *backupStagingState) applyPlan(
 		return nil, err
 	}
 	for _, disposition := range plan.Dispositions {
-		if err := inspectPostgresStaging(ctx, disposition); err != nil {
+		if err := inspectDatabaseStaging(ctx, disposition); err != nil {
 			return nil, err
 		}
 	}
@@ -213,12 +213,12 @@ func (state *backupStagingState) applyPlan(
 			}
 			// The marker is last: source cleanup cannot hide a helper whose
 			// retirement was interrupted. Exact replay also permits absence.
-			if err := retirePostgresExecutionMarker(ctx, disposition); err != nil {
+			if err := retireDatabaseExecutionMarker(ctx, disposition); err != nil {
 				return nil, err
 			}
 			continue
 		}
-		if !exists && disposition.PostgresGuard != nil && disposition.GetRecoveryRequired() != nil &&
+		if !exists && disposition.DatabaseGuard != nil && disposition.GetRecoveryRequired() != nil &&
 			len(disposition.GetRecoveryRequired().ExpectedFiles) == 0 {
 			continue // Native completed source cleanup; keep the execution marker.
 		}
@@ -265,7 +265,7 @@ func (state *backupStagingState) applyPlan(
 			}
 			files = append(files, file)
 		}
-		restartEncryption := resume.RestartConfigEncryption != nil || resume.RestartPostgresEncryption != nil
+		restartEncryption := resume.RestartConfigEncryption != nil || resume.RestartDatabaseEncryption != nil
 		if len(files) != len(resume.ExpectedFiles) && !(restartEncryption && len(files) == 1 &&
 			backupRecoveredFileRole(files[0].Name) == agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT) {
 			return nil, invalidAgentStaging()

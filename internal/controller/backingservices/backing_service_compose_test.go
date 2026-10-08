@@ -22,15 +22,16 @@ func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 	registerAdapters()
 	for _, input := range []struct {
 		adapter string
+		version string
 		mode    core.BackingAuthentication
 	}{
-		{"postgres:16", ""},
-		{"valkey:9", core.BackingAuthenticationUsernamePassword},
-		{"valkey:9", core.BackingAuthenticationPassword},
-		{"valkey:9", core.BackingAuthenticationNone},
+		{"postgres", "16", ""},
+		{"valkey", "9", core.BackingAuthenticationUsernamePassword},
+		{"valkey", "9", core.BackingAuthenticationPassword},
+		{"valkey", "9", core.BackingAuthenticationNone},
 	} {
 		t.Run(input.adapter+"/"+string(input.mode), func(t *testing.T) {
-			spec, err := adapters.BackingCreationSpec(input.adapter, input.mode)
+			spec, err := adapters.BackingCreationSpec(input.adapter, input.version, input.mode)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -87,7 +88,7 @@ func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 func TestBackingServiceComposePublishesStableEndpointAlias(t *testing.T) {
 	registerAdapters()
 	const suffix = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	spec, err := adapters.BackingCreationSpec("valkey:9", core.BackingAuthenticationNone)
+	spec, err := adapters.BackingCreationSpec("valkey", "9", core.BackingAuthenticationNone)
 	if err != nil {
 		t.Fatal(err)
 	}

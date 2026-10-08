@@ -381,6 +381,84 @@
         ],
         "type": "object"
       },
+      "BackingAdapter": {
+        "additionalProperties": false,
+        "properties": {
+          "custom": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "requires_authentication_mode": {
+            "type": "boolean"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/BackingAdapterVersion"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "versions",
+          "requires_authentication_mode",
+          "custom"
+        ],
+        "type": "object"
+      },
+      "BackingAdapterCatalog": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/BackingAdapterCatalog.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BackingAdapter"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "BackingAdapterVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "image_pattern": {
+            "description": "Accepted upstream image references for this server version.",
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "image_pattern"
+        ],
+        "type": "object"
+      },
       "BackingHookConfiguration": {
         "additionalProperties": false,
         "properties": {
@@ -549,8 +627,12 @@
             "properties": {
               "adapter": {
                 "enum": [
-                  "valkey:9"
+                  "valkey"
                 ],
+                "type": "string"
+              },
+              "adapter_version": {
+                "description": "Required supported server version for a managed database adapter; omitted for Custom.",
                 "type": "string"
               },
               "authentication": {
@@ -565,6 +647,7 @@
             },
             "required": [
               "adapter",
+              "adapter_version",
               "authentication"
             ],
             "type": "object"
@@ -604,25 +687,44 @@
             "properties": {
               "adapter": {
                 "enum": [
-                  "postgres:16"
+                  "postgres",
+                  "mysql"
                 ],
+                "type": "string"
+              },
+              "adapter_version": {
+                "description": "Required supported server version for a managed database adapter; omitted for Custom.",
                 "type": "string"
               }
             },
             "required": [
-              "adapter"
+              "adapter",
+              "adapter_version"
             ],
             "type": "object"
           },
           {
             "not": {
-              "properties": {
-                "authentication": {}
-              },
-              "required": [
-                "authentication"
-              ],
-              "type": "object"
+              "anyOf": [
+                {
+                  "properties": {
+                    "authentication": {}
+                  },
+                  "required": [
+                    "authentication"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "adapter_version": {}
+                  },
+                  "required": [
+                    "adapter_version"
+                  ],
+                  "type": "object"
+                }
+              ]
             },
             "properties": {
               "adapter": {
@@ -654,6 +756,10 @@
             "type": "string"
           },
           "adapter": {
+            "type": "string"
+          },
+          "adapter_version": {
+            "description": "Required supported server version for a managed database adapter; omitted for Custom.",
             "type": "string"
           },
           "authentication": {
@@ -3818,6 +3924,38 @@
         ],
         "type": "object"
       },
+      "PreparedSoftwareArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "architecture": {
+            "type": "string"
+          },
+          "component": {
+            "enum": [
+              "controller",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "manifest_digest": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "component",
+          "reference",
+          "manifest_digest",
+          "os",
+          "architecture"
+        ],
+        "type": "object"
+      },
       "Progress": {
         "additionalProperties": false,
         "properties": {
@@ -4010,6 +4148,9 @@
             "format": "date-time",
             "type": "string"
           },
+          "database": {
+            "$ref": "#/components/schemas/RecoveryPointDatabase"
+          },
           "encrypted": {
             "type": "boolean"
           },
@@ -4083,6 +4224,34 @@
           "task_id",
           "created_at",
           "source_count"
+        ],
+        "type": "object"
+      },
+      "RecoveryPointDatabase": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_format": {
+            "type": "string"
+          },
+          "backup_tool_version": {
+            "type": "string"
+          },
+          "family": {
+            "enum": [
+              "postgres",
+              "mysql"
+            ],
+            "type": "string"
+          },
+          "source_server_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "source_server_version",
+          "backup_tool_version",
+          "artifact_format"
         ],
         "type": "object"
       },
@@ -4687,6 +4856,82 @@
         ],
         "type": "object"
       },
+      "RestoreDatabaseReview": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_format": {
+            "type": "string"
+          },
+          "backup_tool_version": {
+            "type": "string"
+          },
+          "compatibility": {
+            "enum": [
+              "same-version",
+              "unverified"
+            ],
+            "type": "string"
+          },
+          "family": {
+            "enum": [
+              "postgres",
+              "mysql"
+            ],
+            "type": "string"
+          },
+          "restore_tool_version": {
+            "type": "string"
+          },
+          "review_sha256": {
+            "type": "string"
+          },
+          "source_server_version": {
+            "type": "string"
+          },
+          "target_server_version": {
+            "type": "string"
+          },
+          "version_difference": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "family",
+          "source_server_version",
+          "backup_tool_version",
+          "target_server_version",
+          "restore_tool_version",
+          "artifact_format",
+          "version_difference",
+          "compatibility",
+          "review_sha256"
+        ],
+        "type": "object"
+      },
+      "RestorePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RestorePreview.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "database": {
+            "$ref": "#/components/schemas/RestoreDatabaseReview"
+          },
+          "recovery_point_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recovery_point_id"
+        ],
+        "type": "object"
+      },
       "RestoreRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4699,6 +4944,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "acknowledge_version_difference": {
+            "type": "boolean"
+          },
           "age_identity": {
             "maxLength": 4096,
             "type": "string",
@@ -4710,6 +4958,10 @@
           },
           "source_id": {
             "pattern": "^spt_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "version_review_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
             "type": "string"
           }
         },
@@ -5482,6 +5734,9 @@
           "adapter": {
             "type": "string"
           },
+          "adapter_version": {
+            "type": "string"
+          },
           "aliases": {
             "additionalProperties": {
               "items": {
@@ -5787,6 +6042,9 @@
             "type": "string"
           },
           "adapter": {
+            "type": "string"
+          },
+          "adapter_version": {
             "type": "string"
           },
           "aliases": {
@@ -6251,6 +6509,290 @@
         "required": [
           "volume",
           "mount"
+        ],
+        "type": "object"
+      },
+      "SoftwareActivation": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/SoftwareActivation.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "agent_applied": {
+            "type": "boolean"
+          },
+          "agent_task_id": {
+            "type": "string"
+          },
+          "controller_applied": {
+            "type": "boolean"
+          },
+          "controller_task_id": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "error_detail": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "preparation_task_id": {
+            "type": "string"
+          },
+          "selection": {
+            "enum": [
+              "controller",
+              "agent",
+              "both"
+            ],
+            "type": "string"
+          },
+          "task_id": {
+            "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "preparation_task_id",
+          "selection",
+          "phase",
+          "controller_applied",
+          "agent_applied"
+        ],
+        "type": "object"
+      },
+      "SoftwarePreparation": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/SoftwarePreparation.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/PreparedSoftwareArtifact"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "error_detail": {
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "accepted",
+              "preparing",
+              "agent_published",
+              "controller_published",
+              "verified",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "provenance": {
+            "items": {
+              "$ref": "#/components/schemas/SoftwareProvenance"
+            },
+            "type": "array"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "selection": {
+            "enum": [
+              "controller",
+              "agent",
+              "both"
+            ],
+            "type": "string"
+          },
+          "source_kind": {
+            "enum": [
+              "source_ref",
+              "release"
+            ],
+            "type": "string"
+          },
+          "task_id": {
+            "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "selection",
+          "source_kind",
+          "ref",
+          "phase",
+          "created_at",
+          "provenance",
+          "artifacts"
+        ],
+        "type": "object"
+      },
+      "SoftwarePreparationPage": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/SoftwarePreparationPage.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SoftwarePreparation"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "SoftwarePreparationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/SoftwarePreparationRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "selection": {
+            "enum": [
+              "controller",
+              "agent",
+              "both"
+            ],
+            "type": "string"
+          },
+          "source_kind": {
+            "enum": [
+              "source_ref",
+              "release"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "selection",
+          "source_kind",
+          "ref"
+        ],
+        "type": "object"
+      },
+      "SoftwareProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "type": "string"
+          },
+          "component": {
+            "enum": [
+              "controller",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "component",
+          "ref",
+          "commit"
+        ],
+        "type": "object"
+      },
+      "SoftwareReleaseCatalog": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/SoftwareReleaseCatalog.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SoftwareReleaseChoice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "SoftwareReleaseChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "selection": {
+            "enum": [
+              "controller",
+              "agent",
+              "both"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "selection",
+          "name",
+          "published_at"
         ],
         "type": "object"
       },
@@ -7978,6 +8520,37 @@
         "summary": "Rename an attach",
         "tags": [
           "Attach"
+        ]
+      }
+    },
+    "/backing-service-adapters": {
+      "get": {
+        "operationId": "backing-service.adapters",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackingAdapterCatalog"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List supported backing adapter families and versions",
+        "tags": [
+          "Backing service"
         ]
       }
     },
@@ -10647,6 +11220,58 @@
           }
         },
         "summary": "Restore the selected Recovery Point to its original target",
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/environments/{id}/restore/preview": {
+      "post": {
+        "operationId": "backup.restore.preview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestorePreview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Review actual database versions before Restore",
         "tags": [
           "Backup"
         ]
@@ -14023,6 +14648,296 @@
         "summary": "Stop a service",
         "tags": [
           "Service"
+        ]
+      }
+    },
+    "/software/activations/{task}": {
+      "get": {
+        "operationId": "software.activation.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwareActivation"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Inspect component activation outcomes",
+        "tags": [
+          "Software"
+        ]
+      }
+    },
+    "/software/preparations": {
+      "get": {
+        "operationId": "software.preparations",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 4096,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwarePreparationPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List durable software preparations",
+        "tags": [
+          "Software"
+        ]
+      },
+      "post": {
+        "operationId": "software.prepare",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoftwarePreparationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Prepare immutable software without activating it",
+        "tags": [
+          "Software"
+        ]
+      }
+    },
+    "/software/preparations/{task}": {
+      "get": {
+        "operationId": "software.preparation.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwarePreparation"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Inspect preparation provenance and verified artifacts",
+        "tags": [
+          "Software"
+        ]
+      }
+    },
+    "/software/preparations/{task}/apply": {
+      "post": {
+        "operationId": "software.apply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Apply a verified software preparation",
+        "tags": [
+          "Software"
+        ]
+      }
+    },
+    "/software/releases": {
+      "get": {
+        "operationId": "software.releases",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "selection",
+            "required": true,
+            "schema": {
+              "enum": [
+                "controller",
+                "agent",
+                "both"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwareReleaseCatalog"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List recent published component releases",
+        "tags": [
+          "Software"
         ]
       }
     },

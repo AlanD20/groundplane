@@ -20,22 +20,26 @@ func TestBackingServiceAuthenticationHTTPBoundary(t *testing.T) {
 		name, adapter, field, mode string
 		valid                      bool
 	}{
-		{"missing", "valkey:9", "", "", false},
-		{"empty", "valkey:9", `,"authentication":""`, "", false},
-		{"null", "valkey:9", `,"authentication":null`, "", false},
-		{"invalid", "valkey:9", `,"authentication":"invalid"`, "", false},
-		{"named", "valkey:9", `,"authentication":"username_password"`, "username_password", true},
-		{"password", "valkey:9", `,"authentication":"password"`, "password", true},
-		{"none", "valkey:9", `,"authentication":"none"`, "none", true},
-		{"postgres", "postgres:16", "", "", true},
-		{"postgres selected", "postgres:16", `,"authentication":"password"`, "", false},
+		{"missing", "valkey", "", "", false},
+		{"empty", "valkey", `,"authentication":""`, "", false},
+		{"null", "valkey", `,"authentication":null`, "", false},
+		{"invalid", "valkey", `,"authentication":"invalid"`, "", false},
+		{"named", "valkey", `,"authentication":"username_password"`, "username_password", true},
+		{"password", "valkey", `,"authentication":"password"`, "password", true},
+		{"none", "valkey", `,"authentication":"none"`, "none", true},
+		{"postgres", "postgres", "", "", true},
+		{"postgres selected", "postgres", `,"authentication":"password"`, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mutations := &backingAuthenticationMutations{}
 			server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{
 				BackingServiceMutations: mutations,
 			})
-			body := `{"slug":"cache","name":"Cache","adapter":"` + tc.adapter + `"` + tc.field +
+			version := "9"
+			if tc.adapter == "postgres" {
+				version = "16"
+			}
+			body := `{"slug":"cache","name":"Cache","adapter":"` + tc.adapter + `","adapter_version":"` + version + `"` + tc.field +
 				`,"network_pool":"10.80.0.0/24","zone":{"name":"data","subnet":"10.80.0.0/24","internal":true}}`
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/backing-services", strings.NewReader(body))
 			request.Header.Set("Content-Type", "application/json")

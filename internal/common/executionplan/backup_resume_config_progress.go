@@ -14,6 +14,9 @@ func validBackupRestoreResume(state *agentpb.BackupRestoreResume, step *agentpb.
 	if step.GetRestore().GetPostgres() != nil {
 		return validPostgresRestoreResume(state, step)
 	}
+	if step.GetRestore().GetMysql() != nil {
+		return validMySQLRestoreResume(state, step)
+	}
 	if state.ApplyStart != nil {
 		return false
 	}
@@ -133,6 +136,8 @@ func backupResumePreparedSourceMatches(
 		return prepared.GetVolume() != nil
 	case capture.GetPostgres() != nil:
 		return prepared.GetPostgres() != nil
+	case capture.GetMysql() != nil:
+		return prepared.GetMysql() != nil
 	default:
 		return false
 	}
@@ -159,6 +164,8 @@ func backupResumeRestoreArtifactMatches(
 		return value.GetVolume() != nil && proto.Equal(value.GetVolume(), restore.GetVolume().Archive)
 	case restore.GetPostgres() != nil:
 		return value.GetPostgres() != nil
+	case restore.GetMysql() != nil:
+		return value.GetMysql() != nil && proto.Equal(value.GetMysql(), restore.GetMysql().ExpectedArchive)
 	default:
 		return false
 	}

@@ -1,4 +1,4 @@
-package postgres16
+package postgres
 
 import (
 	"github.com/AlanD20/groundplane/internal/adapters"
@@ -6,7 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
-func (a *adapter) CreationSpec(core.BackingAuthentication) adapters.CreationSpec {
+func (a *adapter) CreationSpec(_ string, _ core.BackingAuthentication) adapters.CreationSpec {
 	return adapters.CreationSpec{
 		ServiceName:   "postgres",
 		VolumeSlug:    "data",

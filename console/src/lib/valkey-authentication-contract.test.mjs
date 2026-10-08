@@ -6,14 +6,14 @@ import { backingAuthenticationCreateFields } from './valkey-authentication.ts'
 // Rationale: no Valkey mode may be defaulted; PostgreSQL must not inherit stale
 // Valkey-only fields after the operator changes adapters.
 test('backing creation requires an explicit valid Valkey mode and omits authentication for PostgreSQL', () => {
-  assert.equal(backingAuthenticationCreateFields('valkey:9', ''), undefined)
-  assert.equal(backingAuthenticationCreateFields('valkey:9', 'invalid'), undefined)
+  assert.equal(backingAuthenticationCreateFields('valkey', ''), undefined)
+  assert.equal(backingAuthenticationCreateFields('valkey', 'invalid'), undefined)
   for (const authentication of ['username_password', 'password', 'none']) {
-    assert.deepEqual(backingAuthenticationCreateFields('valkey:9', authentication), {
-      adapter: 'valkey:9',
+    assert.deepEqual(backingAuthenticationCreateFields('valkey', authentication), {
+      adapter: 'valkey',
       authentication,
     })
   }
-  assert.deepEqual(backingAuthenticationCreateFields('postgres:16', ''), { adapter: 'postgres:16' })
-  assert.deepEqual(backingAuthenticationCreateFields('postgres:16', 'username_password'), { adapter: 'postgres:16' })
+  assert.deepEqual(backingAuthenticationCreateFields('postgres', ''), { adapter: 'postgres' })
+  assert.deepEqual(backingAuthenticationCreateFields('postgres', 'username_password'), { adapter: 'postgres' })
 })

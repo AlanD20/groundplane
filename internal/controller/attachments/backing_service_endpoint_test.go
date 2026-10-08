@@ -18,9 +18,9 @@ import (
 // distinct stable aliases that select only the intended instance while both networks remain attached.
 func TestPrepareAttachFactsUsesStableBackingEndpoint(t *testing.T) {
 	registerAdapters()
-	adapter, registered := adapters.Get("postgres:16")
+	adapter, registered := adapters.Get("postgres")
 	if !registered {
-		t.Fatal("postgres:16 adapter is not registered")
+		t.Fatal("postgres adapter is not registered")
 	}
 	tests := []struct {
 		serviceID string
@@ -44,7 +44,7 @@ func TestPrepareAttachFactsUsesStableBackingEndpoint(t *testing.T) {
 				etcd.AttachCreateScope{
 					BackingService: testkeyvalue.Versioned[testservices.ServiceRecord]{
 						Record: testservices.ServiceRecord{Desired: core.Service{
-							ID: test.serviceID, Name: "postgres", Adapter: "postgres:16",
+							ID: test.serviceID, Name: "postgres", Adapter: "postgres", AdapterVersion: "16",
 						}},
 					},
 					Grants: []testkeyvalue.Versioned[testattachments.Record]{{Record: testattachments.Record{
@@ -124,10 +124,10 @@ func assertBackingEndpointFacts(
 	for _, fact := range facts {
 		values[fact.Key] = string(fact.Value)
 	}
-	if values["pg16_HOST"] != wantHost {
-		t.Fatalf("%s HOST = %q, want endpoint %q", set, values["pg16_HOST"], wantHost)
+	if values["pg_HOST"] != wantHost {
+		t.Fatalf("%s HOST = %q, want endpoint %q", set, values["pg_HOST"], wantHost)
 	}
-	if !strings.Contains(values["pg16_URL"], "@"+wantHost+":5432/") {
+	if !strings.Contains(values["pg_URL"], "@"+wantHost+":5432/") {
 		t.Fatalf("%s URL does not use endpoint %q", set, wantHost)
 	}
 }

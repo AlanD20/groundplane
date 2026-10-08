@@ -26,7 +26,7 @@ func (repository *TaskRepository) prepareConfigRestoreSuccessfulTerminal(ctx con
 		return repository.prepareVolumeRestoreSuccessfulTerminal(ctx, runtime, current, result, at, restored)
 	}
 	if restored.Record.Point.SourceKind == backupruntime.BackupRuntimeSourceAttach {
-		return repository.preparePostgresRestoreSuccessfulTerminal(ctx, runtime, current, result, at, restored)
+		return repository.prepareDatabaseRestoreSuccessfulTerminal(ctx, runtime, current, result, at, restored)
 	}
 	at = backupTerminalTimestamp(at, restored.Record.UpdatedAt)
 	taskPlan, err := repository.prepareBackupTaskTerminal(ctx, current, taskjournal.TaskStatusCompleted, result, at)
@@ -56,7 +56,7 @@ func (repository *TaskRepository) preparePendingConfigRestoreTerminal(
 		return repository.preparePendingVolumeRestoreTerminal(ctx, runtime, current, status, at, restored)
 	}
 	if restored.Record.Point.SourceKind == backupruntime.BackupRuntimeSourceAttach {
-		return repository.preparePendingPostgresRestoreTerminal(ctx, runtime, current, status, at, restored)
+		return repository.preparePendingDatabaseRestoreTerminal(ctx, runtime, current, status, at, restored)
 	}
 	if restored.Record.State != backupruntime.BackupRestoreQueued {
 		return TaskRecord{}, nil, nil, errs.New(errs.KindStateConflict, "pending Restore has execution progress")

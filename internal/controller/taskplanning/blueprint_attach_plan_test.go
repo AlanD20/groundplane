@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
+	"github.com/AlanD20/groundplane/internal/adapters/postgres"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testtaskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
@@ -19,7 +19,7 @@ import (
 )
 
 func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T) {
-	registerAttachPlanPostgres.Do(postgres16.Register)
+	registerAttachPlanPostgres.Do(postgres.Register)
 	now := time.Date(2026, 8, 29, 14, 0, 0, 0, time.UTC)
 	reader, baseTask := blueprintPlanTestState(t)
 	taskID := baseTask.ID
@@ -31,7 +31,7 @@ func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T
 		attachID, reader.environment.ID, "api-db", ids.NewAt(ids.KindProject, now, 5),
 		backingEnvironmentID, backingServiceID, backingNetworkID, reader.projection.DesiredServices[0].Desired.ID,
 		attachID, nil,
-		[]testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg16_DATABASE"}}}},
+		[]testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg_DATABASE"}}}},
 		taskID, now,
 	)
 	if err != nil {
@@ -46,7 +46,7 @@ func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T
 		attaches: map[string]testkeyvalue.Versioned[testattachments.Record]{attachID: {Record: record}},
 		service: testkeyvalue.Versioned[testservices.ServiceRecord]{Record: testservices.ServiceRecord{
 			EnvironmentID: backingEnvironmentID, BackingNetworkID: backingNetworkID,
-			Desired: core.Service{ID: backingServiceID, Name: "postgres", Adapter: "postgres:16"},
+			Desired: core.Service{ID: backingServiceID, Name: "postgres", Adapter: "postgres", AdapterVersion: "16"},
 			Runtime: core.ServiceRuntime{ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
 		}},
 		identity: identity, blueprintIntent: &intent,
@@ -86,7 +86,7 @@ func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T
 	procedureTask.Steps = []testtaskjournal.TaskStepRecord{
 		{Kind: testtaskjournal.TaskStepOperation, ID: procedureStepID},
 	}
-	procedures, err := BuildAttachProvisionSteps(procedureTask, record, "postgres:16", identity)
+	procedures, err := BuildAttachProvisionSteps(procedureTask, record, "postgres", identity)
 	if err != nil {
 		t.Fatalf("BuildAttachProvisionSteps() error = %v", err)
 	}

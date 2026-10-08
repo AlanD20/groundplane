@@ -146,6 +146,7 @@ function recoveryPointFromAPI(point: RecoveryPointPageItem): RecoveryPoint {
     throw new Error("Controller returned an invalid Recovery Point size");
   }
   const base = {
+	 database: point.database,
     capture: point.capture
       ? {
           taskId: point.capture.task_id,

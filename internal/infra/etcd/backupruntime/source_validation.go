@@ -3,6 +3,7 @@ package backupruntime
 import (
 	"filippo.io/age"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/mysql84protocol"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -31,6 +32,30 @@ func validateBackupPostgresSnapshot(snapshot BackupPostgresSourceSnapshot) error
 		snapshot.BackingServiceRevision <= 0 || snapshot.AttachFactsRevision <= 0 ||
 		!postgresidentity.ValidGenerated(snapshot.Database) || !postgresidentity.ValidGenerated(snapshot.Role) {
 		return invalidBackupRuntimeRecord("postgres source snapshot is invalid")
+	}
+	return nil
+}
+
+func validateBackupMySQLSnapshot(snapshot BackupMySQLSourceSnapshot) error {
+	if snapshot.AdapterVersion != "8.4" ||
+		recordcodec.ValidateID(ids.KindEnvironment, snapshot.ConsumerEnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindAttach, snapshot.AttachID) != nil || snapshot.AttachRevision <= 0 ||
+		recordcodec.ValidateID(
+			ids.KindProject,
+			snapshot.BackingProjectID,
+		) != nil || snapshot.BackingProjectRevision <= 0 ||
+		recordcodec.ValidateID(
+			ids.KindEnvironment,
+			snapshot.BackingEnvironmentID,
+		) != nil || snapshot.BackingEnvironmentRevision <= 0 ||
+		recordcodec.ValidateID(ids.KindService, snapshot.BackingServiceID) != nil ||
+		recordcodec.ValidateID(
+			ids.KindService,
+			snapshot.ConsumerServiceID,
+		) != nil || snapshot.BackingServiceRevision <= 0 ||
+		snapshot.AttachFactsRevision <= 0 || !mysql84protocol.ValidGeneratedIdentity(snapshot.Database) ||
+		!mysql84protocol.ValidGeneratedIdentity(snapshot.Role) {
+		return invalidBackupRuntimeRecord("MySQL source snapshot is invalid")
 	}
 	return nil
 }
@@ -75,8 +100,8 @@ func validateBackupSourceIdentity(
 	switch kind {
 	case BackupRuntimeSourceAttach:
 		if recordcodec.ValidateID(ids.KindAttach, targetID) != nil ||
-			format != BackupRuntimeFormatPostgres {
-			return invalidBackupRuntimeRecord("postgres backup source identity is invalid")
+			(format != BackupRuntimeFormatPostgres && format != BackupRuntimeFormatMySQL) {
+			return invalidBackupRuntimeRecord("database backup source identity is invalid")
 		}
 	case BackupRuntimeSourceVolume:
 		if recordcodec.ValidateID(ids.KindVolume, targetID) != nil ||

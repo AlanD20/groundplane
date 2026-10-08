@@ -171,7 +171,7 @@ func acknowledgeRetryPostgresCleanup(t *testing.T, tasks *TaskRepository, task T
 		t.Fatal(err)
 	}
 	inventory := &agentpb.BackupStagingInventory{Entries: []*agentpb.BackupRecoveredStage{{
-		RecoveryKeySha256: key, PostgresExecution: true,
+		RecoveryKeySha256: key, DatabaseExecution: true,
 	}}}
 	digest, err := executionplan.BackupStagingInventorySHA256(inventory)
 	if err != nil {
@@ -184,7 +184,7 @@ func acknowledgeRetryPostgresCleanup(t *testing.T, tasks *TaskRepository, task T
 			Disposition: &agentpb.BackupStagingDisposition_DiscardRecovered{
 				DiscardRecovered: &agentpb.BackupDiscardRecovered{},
 			},
-			PostgresGuard: &agentpb.BackupPostgresStagingGuard{TaskId: task.ID, Step: source.Step,
+			DatabaseGuard: &agentpb.BackupDatabaseStagingGuard{TaskId: task.ID, Step: source.Step,
 				TerminalCleanup: true, DatabaseService: source.Plan.BackupScope.Services[0], DatabaseArtifact: source.Plan.Artifacts[0]},
 		}},
 	}

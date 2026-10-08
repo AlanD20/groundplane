@@ -238,7 +238,7 @@ export function ServiceTab({
           value={svc.prefix ?? adapter?.prefix ?? "—"}
           mono
         />
-        {svc.adapter === "valkey:9" && (
+        {svc.adapter === "valkey" && (
           <Row
             label="Authentication"
             value={authenticationDetails?.label ?? "Unavailable"}

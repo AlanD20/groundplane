@@ -17,9 +17,9 @@ func clientArguments(request postgres16protocol.Request) ([][]byte, error) {
 		arguments = []string{"pg_restore", "--version"}
 	case postgres16protocol.OperationProbePSQL:
 		arguments = []string{"psql", "--version"}
-	case postgres16protocol.OperationServerMajor:
+	case postgres16protocol.OperationServerVersion:
 		arguments = append(psqlArguments(request.Database),
-			"--command=SELECT pg_catalog.current_setting('server_version_num')::integer / 10000;")
+			"--command=SELECT pg_catalog.current_setting('server_version');")
 	case postgres16protocol.OperationDump:
 		arguments = []string{
 			"pg_dump", "--format=custom", "--compress=0", "--no-owner", "--no-acl",

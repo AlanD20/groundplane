@@ -21,7 +21,7 @@ export function DesiredStateTab({
   const adapter = store.adapters.find((a) => a.key === svc.adapter);
   const authenticationDetails = valkeyAuthenticationDetails(svc.authentication);
   const authenticationUnavailable =
-    svc.adapter === "valkey:9" && !authenticationDetails;
+    svc.adapter === "valkey" && !authenticationDetails;
   const doc: Record<string, unknown> = {
     kind: "backing",
     schema: 1,
@@ -32,7 +32,8 @@ export function DesiredStateTab({
     backing: {
       name: svc.serviceName,
       adapter: svc.adapter,
-      ...(svc.adapter === "valkey:9"
+      adapter_version: svc.adapterVersion,
+      ...(svc.adapter === "valkey"
         ? { authentication: svc.authentication }
         : {}),
       image: svc.image,
@@ -43,7 +44,9 @@ export function DesiredStateTab({
           ? 6379
           : adapter?.urlScheme === "pgsql"
             ? 5432
-            : undefined,
+            : adapter?.urlScheme === "mysql"
+              ? 3306
+              : undefined,
       zones: env.zones.map((z) => ({
         name: z.name,
         subnet: z.subnet,

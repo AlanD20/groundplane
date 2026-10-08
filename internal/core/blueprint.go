@@ -17,11 +17,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/dnsname"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
-	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 )
 
 // Document is implemented by every top-level Blueprint document.
@@ -143,13 +143,18 @@ func (e Environment) Validate() error {
 }
 
 func (s Service) Validate() error {
+	if backingcatalog.Managed(s.Adapter) || s.Adapter == "" || s.Adapter == "custom" {
+		if err := backingcatalog.ValidateSelection(s.Adapter, s.AdapterVersion); err != nil {
+			return err
+		}
+	}
 	if s.ID == "" || s.Name == "" || s.Image == "" {
 		return fmt.Errorf("id, name, and image are required")
 	}
-	if s.Adapter == "postgres:16" && (!postgres16protocol.ValidDatabaseImage(s.Image) ||
+	if backingcatalog.Managed(s.Adapter) && (!backingcatalog.ValidImage(s.Adapter, s.AdapterVersion, s.Image) ||
 		(s.Replicas != 0 && s.Replicas != 1) || (s.Strategy != "" && s.Strategy != StrategyRecreate)) {
 		return fmt.Errorf(
-			"PostgreSQL Backing Service requires an upstream PostgreSQL 16 Alpine image and singleton recreate",
+			"managed Backing Service requires an upstream image matching its selected server version and singleton recreate",
 		)
 	}
 	switch s.Strategy {

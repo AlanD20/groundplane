@@ -122,6 +122,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		RecoveryPointRemover:    dependencies.backup.retention,
 		BackupRuns:              dependencies.backup.runs,
 		BackupRestores:          dependencies.backup.restores,
+		BackupRestorePreviews:   dependencies.backup.restores,
 		BackupKeyMutations:      dependencies.backup.keys,
 		BackupKeyExports:        dependencies.backup.keys,
 		Volumes:                 dependencies.dataServices.volumeReads,

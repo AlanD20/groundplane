@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func postgresCaptureCleanupAuthorized(step *agentpb.BackupStepAuthority, resume *agentpb.BackupTaskResume) bool {
+func databaseCaptureCleanupAuthorized(step *agentpb.BackupStepAuthority, resume *agentpb.BackupTaskResume) bool {
 	for _, retained := range resume.GetSteps() {
 		if retained.StepId != step.StepId || retained.ExecutionId != step.ExecutionId {
 			continue
@@ -24,7 +24,7 @@ func postgresCaptureCleanupAuthorized(step *agentpb.BackupStepAuthority, resume 
 // Before Prepared no upload can have started. DumpStart still spends the dump
 // attempt: resume only its retained bytes, then let the original worker prove
 // them against the original Exec and helper evidence before publishing them.
-func resolvePostgresCaptureDisposition(entry *agentpb.BackupRecoveredStage,
+func resolveDatabaseCaptureDisposition(entry *agentpb.BackupRecoveredStage,
 	source etcd.BackupStagingSource, message *agentpb.TaskAssignment,
 ) (*agentpb.BackupStagingDisposition, error) {
 	capture := source.Step.GetCapture()
@@ -40,7 +40,8 @@ func resolvePostgresCaptureDisposition(entry *agentpb.BackupRecoveredStage,
 		return nil, unresolvedBackupStage()
 	}
 	result := &agentpb.BackupStagingDisposition{RecoveryKeySha256: append([]byte(nil), entry.RecoveryKeySha256...)}
-	if retained.DumpStart == nil {
+	dumpStarted := retained.DumpStart != nil || retained.MysqlDumpStart != nil
+	if !dumpStarted {
 		if retained.CheckpointSequence > 1 {
 			return nil, unresolvedBackupStage()
 		}
@@ -48,9 +49,13 @@ func resolvePostgresCaptureDisposition(entry *agentpb.BackupRecoveredStage,
 			DiscardRecovered: &agentpb.BackupDiscardRecovered{}}
 		return result, nil
 	}
+	maximum := capture.GetPostgres().GetMaxPlaintextBytes()
+	if mysql := capture.GetMysql(); mysql != nil {
+		maximum = mysql.MaxPlaintextBytes
+	}
 	if len(entry.Files) < 1 || len(entry.Files) > 2 ||
 		entry.Files[0].Role != agentpb.BackupRecoveredFileRole_BACKUP_RECOVERED_FILE_ROLE_SOURCE_PLAINTEXT ||
-		entry.Files[0].SizeBytes > capture.GetPostgres().MaxPlaintextBytes {
+		entry.Files[0].SizeBytes > maximum {
 		return nil, unresolvedBackupStage()
 	}
 	resumeSHA, err := executionplan.BackupStagingAssignmentResumeSHA256(message.BackupAuthority, message.BackupResume)
@@ -80,7 +85,7 @@ func resolvePostgresCaptureDisposition(entry *agentpb.BackupRecoveredStage,
 				return nil, unresolvedBackupStage()
 			}
 			resume.ExpectedFiles = append(resume.ExpectedFiles, proto.CloneOf(entry.Files[1]))
-			resume.RestartPostgresEncryption = &agentpb.BackupRestartPostgresEncryption{}
+			resume.RestartDatabaseEncryption = &agentpb.BackupRestartDatabaseEncryption{}
 		}
 	default:
 		return nil, unresolvedBackupStage()

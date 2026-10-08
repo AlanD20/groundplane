@@ -1,4 +1,4 @@
-package valkey9
+package valkey
 
 import (
 	"bytes"
@@ -20,7 +20,7 @@ func TestNamedAuthenticationExposesRole(t *testing.T) {
 	}
 	defer adapters.ClearFacts(facts)
 	for _, fact := range facts {
-		if fact.Key == "valkey9_ROLE" && string(fact.Value) == "api_5d3f9a" {
+		if fact.Key == "valkey_ROLE" && string(fact.Value) == "api_5d3f9a" {
 			return
 		}
 	}

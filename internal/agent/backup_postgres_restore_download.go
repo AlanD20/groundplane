@@ -13,17 +13,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type postgresRestoreArtifact struct {
+type databaseRestoreArtifact struct {
 	stage    *backupstage.Stage
 	source   *backupstage.Artifact
 	evidence backupstage.ArtifactEvidence
 	proof    *agentpb.BackupRestoreArtifactValidated
 }
 
-func (pool *WorkerPool) downloadPostgresRestore(ctx context.Context,
+func (pool *WorkerPool) downloadDatabaseRestore(ctx context.Context,
 	assignment taskassignment.Assignment, step *agentpb.BackupStepAuthority,
-) (*postgresRestoreArtifact, error) {
-	stage, source, stored, err := pool.backupStaging.postgresRestoreStage(ctx, assignment.TaskID, step)
+) (*databaseRestoreArtifact, error) {
+	stage, source, stored, err := pool.backupStaging.databaseRestoreStage(ctx, assignment.TaskID, step)
 	if err != nil {
 		return nil, err
 	}
@@ -75,10 +75,12 @@ func (pool *WorkerPool) downloadPostgresRestore(ctx context.Context,
 		), Evidence: proto.CloneOf(step.GetRestore().ExpectedEvidence),
 		Finals: &agentpb.BackupStagingFinals{SourceRelativeName: download.SourceEvidence.Name,
 			StoredRelativeName: download.StoredEvidence.Name, SameInode: proto.Bool(download.Source == download.Stored)},
-		Archive: &agentpb.BackupRestoreArtifactValidated_Postgres{Postgres: &agentpb.BackupPostgresArchiveEvidence{
-			PgDumpMajor:            postgres16protocol.PostgreSQLMajor,
-			AdapterContractVersion: postgres16protocol.AdapterContractVersion}},
 	}
-	return &postgresRestoreArtifact{stage: stage, source: download.Source,
+	if mysql := step.GetRestore().GetMysql(); mysql != nil {
+		proof.Archive = &agentpb.BackupRestoreArtifactValidated_Mysql{Mysql: proto.CloneOf(mysql.ExpectedArchive)}
+	} else {
+		proof.Archive = &agentpb.BackupRestoreArtifactValidated_Postgres{Postgres: proto.CloneOf(step.GetRestore().GetPostgres().ExpectedArchive)}
+	}
+	return &databaseRestoreArtifact{stage: stage, source: download.Source,
 		evidence: download.SourceEvidence, proof: proof}, nil
 }

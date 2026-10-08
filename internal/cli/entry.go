@@ -270,7 +270,7 @@ func newEntryAddCmd() *cobra.Command {
 		"optional granted Attach id selecting an additional fact set",
 	)
 	cmd.Flags().
-		StringVar(&factKey, "fact-key", "", "a live fact source: the fact key, e.g. pg16_URL — pairs with --fact-attach")
+		StringVar(&factKey, "fact-key", "", "a live fact source: the fact key, e.g. pg_URL — pairs with --fact-attach")
 	cmd.Flags().StringSliceVar(&services, "service", nil, "expose to specific service(s) (repeatable); omit for --all")
 	cmd.Flags().
 		BoolVar(&all, "all", true, "expose to all services in the environment (default; overridden by --service)")

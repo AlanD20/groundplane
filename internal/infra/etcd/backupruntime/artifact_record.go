@@ -83,7 +83,9 @@ func validBackupUploadOutcome(value BackupUploadOutcome) bool {
 	}
 }
 
-func validBackupArtifactForTarget(value BackupArtifactEvidence, target BackupRecoveryPointTargetSnapshot) bool {
+func validBackupArtifactForTarget(value BackupArtifactEvidence, target BackupRecoveryPointTargetSnapshot,
+	postgres BackupPostgresArchiveEvidence, mysql BackupMySQLArchiveEvidence,
+) bool {
 	if !validBackupArtifact(value) {
 		return false
 	}
@@ -93,6 +95,22 @@ func validBackupArtifactForTarget(value BackupArtifactEvidence, target BackupRec
 			target.SourceFormat,
 		), Encryption: backupobject.Encryption(target.Encryption),
 		Evidence: backupobject.Evidence{SourceSizeBytes: value.SourceSizeBytes, StoredSizeBytes: value.StoredSizeBytes},
+	}
+	switch target.SourceFormat {
+	case BackupRuntimeFormatPostgres:
+		if postgres.Validate() != nil || mysql != (BackupMySQLArchiveEvidence{}) {
+			return false
+		}
+		artifact.SourceServerVersion, artifact.BackupToolVersion = postgres.SourceServerVersion, postgres.BackupToolVersion
+	case BackupRuntimeFormatMySQL:
+		if mysql.Validate() != nil || postgres != (BackupPostgresArchiveEvidence{}) {
+			return false
+		}
+		artifact.SourceServerVersion, artifact.BackupToolVersion = mysql.SourceServerVersion, mysql.BackupToolVersion
+	default:
+		if postgres != (BackupPostgresArchiveEvidence{}) || mysql != (BackupMySQLArchiveEvidence{}) {
+			return false
+		}
 	}
 	if target.Encryption == BackupRuntimeEncryptionAge {
 		if target.KeyEra <= 0 {

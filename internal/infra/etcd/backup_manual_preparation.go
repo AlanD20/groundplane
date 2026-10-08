@@ -11,12 +11,12 @@ import (
 func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	ctx context.Context,
 	input backupplanning.ManualBackupRunInput,
-	resolvePostgres backupplanning.BackupPostgresIdentityResolver,
+	resolveDatabase backupplanning.BackupDatabaseIdentityResolver,
 ) (PreparedManualBackupRun, error) {
 	if repository == nil || repository.store == nil {
 		return PreparedManualBackupRun{}, errs.New(errs.KindInternal, "backup runtime repository is not configured")
 	}
-	sources, err := repository.PrepareManualRunSources(ctx, input, resolvePostgres)
+	sources, err := repository.PrepareManualRunSources(ctx, input, resolveDatabase)
 	if err != nil {
 		return PreparedManualBackupRun{}, err
 	}

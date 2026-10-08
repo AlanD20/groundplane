@@ -199,7 +199,11 @@ func (service *Service) prepareBlueprintAttaches(
 		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "new" || item.adapter.Custom() {
 			continue
 		}
-		identityName, err := attachments.ProvisionIdentity(attachIDs[name], item.consumer.Desired.Name)
+		identityName, err := attachments.ProvisionIdentity(
+			attachIDs[name],
+			item.consumer.Desired.Name,
+			item.adapter.CredentialIdentityLimit(),
+		)
 		if err != nil {
 			return preparedBlueprintAttaches{}, err
 		}

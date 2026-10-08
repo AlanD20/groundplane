@@ -12,48 +12,48 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// ObservePostgresConsumer authenticates a read-only Compose observation against
-// the sealed Backup Service fact before a PostgreSQL consumer transition.
-func (runtime *Runtime) ObservePostgresConsumer(ctx context.Context,
+// ObserveDatabaseConsumer authenticates a read-only Compose observation against
+// the sealed Backup Service fact before a database Restore consumer transition.
+func (runtime *Runtime) ObserveDatabaseConsumer(ctx context.Context,
 	assignment taskassignment.Assignment, artifactID, serviceID string,
 ) (*agentpb.ObservedProject, [sha256.Size]byte, error) {
 	var zero [sha256.Size]byte
 	if runtime == nil || runtime.observer == nil || assignment.Plan == nil ||
 		assignment.Plan.BackupScope == nil || artifactID == "" || serviceID == "" {
-		return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer authority is unavailable")
+		return nil, zero, errs.New(errs.KindStateConflict, "database consumer authority is unavailable")
 	}
 	var fact *agentpb.BackupServiceFact
 	for _, candidate := range assignment.Plan.BackupScope.Services {
 		if candidate.ServiceId == serviceID {
 			if fact != nil {
-				return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer fact is ambiguous")
+				return nil, zero, errs.New(errs.KindStateConflict, "database consumer fact is ambiguous")
 			}
 			fact = candidate
 		}
 	}
 	artifact := taskassignment.ComposeArtifact(assignment.Plan, artifactID)
 	if fact == nil || artifact == nil {
-		return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer artifact is unavailable")
+		return nil, zero, errs.New(errs.KindStateConflict, "database consumer artifact is unavailable")
 	}
 	var service *agentpb.ComposeService
 	for _, candidate := range artifact.Services {
 		if candidate.ServiceId == serviceID && candidate.ComposeName == fact.CurrentName {
 			if service != nil {
-				return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer is ambiguous")
+				return nil, zero, errs.New(errs.KindStateConflict, "database consumer is ambiguous")
 			}
 			service = candidate
 		}
 	}
 	if service == nil || uint32(len(service.ExpectedLabels)) != fact.RequiredLabelCount {
-		return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer labels are unavailable")
+		return nil, zero, errs.New(errs.KindStateConflict, "database consumer labels are unavailable")
 	}
 	labels, err := backupservicefact.LabelsDigest(service.ExpectedLabels)
 	if err != nil || !bytes.Equal(labels, fact.RequiredLabelsSha256) {
-		return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer labels changed")
+		return nil, zero, errs.New(errs.KindStateConflict, "database consumer labels changed")
 	}
 	observed, err := runtime.observer.Observe(ctx, assignment.Plan, artifactID)
 	if err != nil || observed == nil || len(observed.Collisions) != 0 {
-		return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer observation is unavailable")
+		return nil, zero, errs.New(errs.KindStateConflict, "database consumer observation is unavailable")
 	}
 	observed = backupConsumerObservation(observed, artifact, serviceID)
 	count := uint32(0)
@@ -63,14 +63,14 @@ func (runtime *Runtime) ObservePostgresConsumer(ctx context.Context,
 		}
 		if !labelPairsEqual(container.Labels, service.ExpectedLabels) ||
 			!sameBackupVolumeImageID(container.ImageId, fact.LocalImageIdSha256) {
-			return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer identity changed")
+			return nil, zero, errs.New(errs.KindStateConflict, "database consumer identity changed")
 		}
 		count++
 	}
 	if count != 0 && count != service.ExpectedReplicas ||
 		fact.PriorRuntimeIntent.GetKind() == agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_ABSENT &&
 			count != 0 {
-		return nil, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer count changed")
+		return nil, zero, errs.New(errs.KindStateConflict, "database consumer count changed")
 	}
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(observed)
 	if err != nil {
@@ -79,42 +79,62 @@ func (runtime *Runtime) ObservePostgresConsumer(ctx context.Context,
 	return observed, sha256.Sum256(encoded), nil
 }
 
-func (runtime *Runtime) ExecutePostgresConsumer(ctx context.Context,
+type DatabaseConsumerOperation uint8
+
+const (
+	DatabaseConsumerStop DatabaseConsumerOperation = iota + 1
+	DatabaseConsumerRecover
+)
+
+func (runtime *Runtime) ExecuteDatabaseConsumer(ctx context.Context,
 	assignment taskassignment.Assignment, step *agentpb.ExecutionStep,
-	artifactID, serviceID string, operation agentpb.BackupPostgresConsumerOperation,
+	artifactID, serviceID string, operation DatabaseConsumerOperation,
 ) (StepResult, [sha256.Size]byte, error) {
 	var zero [sha256.Size]byte
-	if runtime == nil || runtime.helper == nil || step.GetBackupStep().GetRestore().GetPostgres() == nil ||
-		(operation != agentpb.BackupPostgresConsumerOperation_BACKUP_POSTGRES_CONSUMER_OPERATION_STOP &&
-			operation != agentpb.BackupPostgresConsumerOperation_BACKUP_POSTGRES_CONSUMER_OPERATION_RECOVER) {
-		return StepResult{}, zero, errs.New(errs.KindStateConflict, "PostgreSQL consumer action is unavailable")
+	restore := step.GetBackupStep().GetRestore()
+	if runtime == nil || runtime.helper == nil ||
+		restore.GetPostgres() == nil && restore.GetMysql() == nil ||
+		operation != DatabaseConsumerStop && operation != DatabaseConsumerRecover {
+		return StepResult{}, zero, errs.New(errs.KindStateConflict, "database consumer action is unavailable")
 	}
-	if _, _, err := runtime.ObservePostgresConsumer(ctx, assignment, artifactID, serviceID); err != nil {
+	if _, _, err := runtime.ObserveDatabaseConsumer(ctx, assignment, artifactID, serviceID); err != nil {
 		return StepResult{}, zero, err
 	}
 	request := &agentpb.ComposeHelperRequest{Schema: composeHelperSchema,
 		AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
 		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.StepId,
 		TimeoutSeconds: taskassignment.RemainingSeconds(ctx, step.TimeoutSeconds),
-		BackupPostgresConsumer: &agentpb.BackupPostgresConsumerAction{
-			ServiceId: serviceID, Operation: operation}}
+	}
+	if restore.GetPostgres() != nil {
+		value := agentpb.BackupPostgresConsumerOperation_BACKUP_POSTGRES_CONSUMER_OPERATION_STOP
+		if operation == DatabaseConsumerRecover {
+			value = agentpb.BackupPostgresConsumerOperation_BACKUP_POSTGRES_CONSUMER_OPERATION_RECOVER
+		}
+		request.BackupPostgresConsumer = &agentpb.BackupPostgresConsumerAction{ServiceId: serviceID, Operation: value}
+	} else {
+		value := agentpb.BackupMySQLConsumerOperation_BACKUP_MYSQL_CONSUMER_OPERATION_STOP
+		if operation == DatabaseConsumerRecover {
+			value = agentpb.BackupMySQLConsumerOperation_BACKUP_MYSQL_CONSUMER_OPERATION_RECOVER
+		}
+		request.BackupMysqlConsumer = &agentpb.BackupMySQLConsumerAction{ServiceId: serviceID, Operation: value}
+	}
 	result := StepResult{MutationAttempted: true}
 	response, helperErr := runtime.helper.Execute(ctx, request)
-	observed, digest, observeErr := runtime.ObservePostgresConsumer(ctx, assignment, artifactID, serviceID)
+	observed, digest, observeErr := runtime.ObserveDatabaseConsumer(ctx, assignment, artifactID, serviceID)
 	result.Observed = observed
 	if observeErr == nil {
-		if operation == agentpb.BackupPostgresConsumerOperation_BACKUP_POSTGRES_CONSUMER_OPERATION_STOP &&
+		if operation == DatabaseConsumerStop &&
 			postgresConsumerRunning(observed, serviceID) ||
-			operation == agentpb.BackupPostgresConsumerOperation_BACKUP_POSTGRES_CONSUMER_OPERATION_RECOVER &&
+			operation == DatabaseConsumerRecover &&
 				!postgresConsumerAllRunning(observed, serviceID) {
-			observeErr = errs.New(errs.KindStateConflict, "PostgreSQL consumer state did not converge")
+			observeErr = errs.New(errs.KindStateConflict, "database consumer state did not converge")
 		}
 	}
 	if helperErr != nil || observeErr != nil || response == nil || response.Schema != composeHelperSchema ||
 		response.Outcome != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED ||
 		response.ExitCode != 0 || response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
 		result.ReconciliationRequired = true
-		return result, digest, errs.New(errs.KindStateConflict, "PostgreSQL consumer action outcome is unknown")
+		return result, digest, errs.New(errs.KindStateConflict, "database consumer action outcome is unknown")
 	}
 	return result, digest, nil
 }

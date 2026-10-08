@@ -256,7 +256,7 @@ export function ServiceFormBody({
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <Label htmlFor="bs-prefix">
-                          Prefix (facts keys on attach — e.g. pg16_URL)
+                          Prefix (facts keys on attach — e.g. pg_URL)
                         </Label>
                         <Input
                           id="bs-prefix"

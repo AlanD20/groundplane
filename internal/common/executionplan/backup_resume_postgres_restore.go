@@ -84,16 +84,17 @@ func (replay *BackupStepResumeReplay) postgresRestoreCheckpoint(request *agentpb
 		if replay.postgresObserved == nil || (replay.postgresApplyStart != nil && replay.postgresVerified == nil) {
 			return backupResumeHistoryInvalid()
 		}
-		if err := replay.postgresConsumerCheckpoint(request.GetPostgresServiceProgress()); err != nil {
+		value := request.GetPostgresServiceProgress()
+		if err := replay.databaseConsumerCheckpoint(value.ServiceCursor, value.ServiceId, value.Phase, value.ObservationSha256,
+			replay.postgresVerified != nil); err != nil {
 			return err
 		}
-		value := request.GetPostgresServiceProgress()
 		state.Cursor.ServiceCursor = value.ServiceCursor
 		state.Checkpoint = &agentpb.BackupRestoreResume_PostgresServiceProgress{PostgresServiceProgress: value}
 	case request.GetPostgresRestoreApplyStart() != nil:
 		value, observed := request.GetPostgresRestoreApplyStart(), replay.postgresObserved
 		if !validBackupPostgresApply(value) || observed == nil || replay.postgresApplyStart != nil ||
-			int(replay.postgresStopped) != len(step.ConsumerServiceIds) || value.PointId != restore.PointId ||
+			int(replay.databaseStopped) != len(step.ConsumerServiceIds) || value.PointId != restore.PointId ||
 			value.ContainerId != observed.ContainerId || !bytes.Equal(value.RepositoryDigest, observed.RepositoryDigest) ||
 			!bytes.Equal(value.ExpectedLabelsSha256, observed.ObservedLabelsSha256) ||
 			value.SourceSizeBytes != restore.ExpectedEvidence.SourceSizeBytes ||
@@ -116,7 +117,7 @@ func (replay *BackupStepResumeReplay) postgresRestoreCheckpoint(request *agentpb
 		state.Checkpoint = &agentpb.BackupRestoreResume_PostgresRestoreVerified{PostgresRestoreVerified: value}
 	case request.GetSourceCleanupCompleted() != nil:
 		value := request.GetSourceCleanupCompleted()
-		if replay.postgresVerified == nil || int(replay.postgresRecovered) != len(step.ConsumerServiceIds) ||
+		if replay.postgresVerified == nil || int(replay.databaseRecovered) != len(step.ConsumerServiceIds) ||
 			value.PointId != restore.PointId || !proto.Equal(value.Evidence, restore.ExpectedEvidence) {
 			return backupResumeHistoryInvalid()
 		}
@@ -128,20 +129,22 @@ func (replay *BackupStepResumeReplay) postgresRestoreCheckpoint(request *agentpb
 	return nil
 }
 
-func (replay *BackupStepResumeReplay) postgresConsumerCheckpoint(value *agentpb.BackupPostgresServiceProgress) error {
+func (replay *BackupStepResumeReplay) databaseConsumerCheckpoint(cursor uint32, serviceID string,
+	phase agentpb.BackupServicePhase, observation []byte, recovering bool,
+) error {
 	const idle = agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_UNSPECIFIED
-	recovering := replay.postgresVerified != nil
-	index := int(replay.postgresStopped)
+	index := int(replay.databaseStopped)
 	if recovering {
-		index = len(replay.step.ConsumerServiceIds) - 1 - int(replay.postgresRecovered)
+		index = len(replay.step.ConsumerServiceIds) - 1 - int(replay.databaseRecovered)
 	}
-	if !validBackupPostgresService(value) || index < 0 || index >= len(replay.step.ConsumerServiceIds) ||
-		value.ServiceCursor != uint32(index) || value.ServiceId != replay.step.ConsumerServiceIds[index] {
+	if !backupCheckpointServicePhase(phase) || !backupCheckpointDigest(observation) ||
+		!backupCheckpointServiceID(serviceID) || index < 0 || index >= len(replay.step.ConsumerServiceIds) ||
+		cursor != uint32(index) || serviceID != replay.step.ConsumerServiceIds[index] {
 		return backupResumeHistoryInvalid()
 	}
 	var fact *agentpb.BackupServiceFact
 	for _, candidate := range replay.authority.Services {
-		if candidate.ServiceId == value.ServiceId {
+		if candidate.ServiceId == serviceID {
 			fact = candidate
 			break
 		}
@@ -151,8 +154,7 @@ func (replay *BackupStepResumeReplay) postgresConsumerCheckpoint(value *agentpb.
 	}
 	finished := false
 	if fact.PriorRuntimeIntent.Kind != agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING {
-		if replay.postgresServicePhase != idle ||
-			value.Phase != agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_NOT_RUNNING {
+		if replay.databaseServicePhase != idle || phase != agentpb.BackupServicePhase_BACKUP_SERVICE_PHASE_NOT_RUNNING {
 			return backupResumeHistoryInvalid()
 		}
 		finished = true
@@ -170,24 +172,24 @@ func (replay *BackupStepResumeReplay) postgresConsumerCheckpoint(value *agentpb.
 			}
 		}
 		previous, accepted := idle, false
-		for index, phase := range phases {
-			if replay.postgresServicePhase == previous && value.Phase == phase {
+		for index, candidate := range phases {
+			if replay.databaseServicePhase == previous && phase == candidate {
 				accepted, finished = true, index == len(phases)-1
 				break
 			}
-			previous = phase
+			previous = candidate
 		}
 		if !accepted {
 			return backupResumeHistoryInvalid()
 		}
 	}
-	replay.postgresServicePhase = value.Phase
+	replay.databaseServicePhase = phase
 	if finished {
-		replay.postgresServicePhase = idle
+		replay.databaseServicePhase = idle
 		if recovering {
-			replay.postgresRecovered++
+			replay.databaseRecovered++
 		} else {
-			replay.postgresStopped++
+			replay.databaseStopped++
 		}
 	}
 	return nil

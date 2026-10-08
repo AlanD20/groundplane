@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/common/backuppostgres"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
@@ -22,6 +23,7 @@ type postgresStartRecorder struct {
 	attempted  *bool
 	called     bool
 	dumpStart  *agentpb.BackupPostgresDumpStart
+	archive    backuppostgres.ArchiveEvidence
 	applyStart *agentpb.BackupPostgresRestoreApplyStartCheckpoint
 }
 
@@ -46,6 +48,10 @@ func (recorder *postgresStartRecorder) check(start postgres16execution.Start,
 func (recorder *postgresStartRecorder) RecordDumpStart(ctx context.Context,
 	start postgres16execution.Start,
 ) error {
+	archive, err := recorder.archive.Wire()
+	if err != nil {
+		return err
+	}
 	if err := recorder.check(start, postgres16protocol.OperationDump); err != nil ||
 		start.Request.Database != recorder.authority.database || start.Request.Role != recorder.authority.role ||
 		recorder.authority.maxPlaintext == 0 {
@@ -61,6 +67,7 @@ func (recorder *postgresStartRecorder) RecordDumpStart(ctx context.Context,
 				AdapterContractVersion: postgres16protocol.AdapterContractVersion,
 				DatabaseName:           recorder.authority.database, RoleName: recorder.authority.role,
 				MaxPlaintextBytes: recorder.authority.maxPlaintext,
+				Archive:           archive,
 			},
 		},
 	}

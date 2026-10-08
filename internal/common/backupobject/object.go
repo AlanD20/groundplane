@@ -31,6 +31,8 @@ const (
 	metadataSourceSHA256  = "groundplane-source-sha256"
 	metadataStoredSize    = "groundplane-stored-size-bytes"
 	metadataStoredSHA256  = "groundplane-stored-sha256"
+	metadataServerVersion = "groundplane-source-server-version"
+	metadataBackupTool    = "groundplane-backup-tool-version"
 	artifactFilename      = "artifact.bin"
 )
 
@@ -40,6 +42,7 @@ const (
 	SourceFormatEnvironmentConfig SourceFormat = "environment-config-v1"
 	SourceFormatVolumeTar         SourceFormat = "volume-tar-v1"
 	SourceFormatPostgresCustom    SourceFormat = "postgres-custom-v1"
+	SourceFormatMySQLLogical      SourceFormat = "mysql-logical-v1"
 )
 
 type Encryption string
@@ -69,6 +72,10 @@ type Artifact struct {
 	Encryption      Encryption
 	KeyEra          *uint64
 	Evidence        Evidence
+	// Database tool versions are authenticated as part of the complete object
+	// metadata set. They are required for database formats and absent otherwise.
+	SourceServerVersion string
+	BackupToolVersion   string
 }
 
 func (artifact Artifact) Validate() error {
@@ -84,7 +91,14 @@ func (artifact Artifact) Validate() error {
 		return err
 	}
 	switch artifact.SourceFormat {
-	case SourceFormatEnvironmentConfig, SourceFormatVolumeTar, SourceFormatPostgresCustom:
+	case SourceFormatEnvironmentConfig, SourceFormatVolumeTar:
+		if artifact.SourceServerVersion != "" || artifact.BackupToolVersion != "" {
+			return errs.New(errs.KindValidationFailed, "backup object carries unexpected database version metadata")
+		}
+	case SourceFormatPostgresCustom, SourceFormatMySQLLogical:
+		if !validMetadataVersion(artifact.SourceServerVersion) || !validMetadataVersion(artifact.BackupToolVersion) {
+			return errs.New(errs.KindValidationFailed, "database backup object version metadata is invalid")
+		}
 	default:
 		return errs.New(errs.KindValidationFailed, "backup object source format is invalid")
 	}
@@ -160,7 +174,23 @@ func (artifact Artifact) Metadata() map[string]string {
 	if artifact.KeyEra != nil {
 		metadata[metadataKeyEra] = strconv.FormatUint(*artifact.KeyEra, 10)
 	}
+	if artifact.SourceServerVersion != "" {
+		metadata[metadataServerVersion] = artifact.SourceServerVersion
+		metadata[metadataBackupTool] = artifact.BackupToolVersion
+	}
 	return metadata
+}
+
+func validMetadataVersion(value string) bool {
+	if value == "" || len(value) > 128 || !utf8.ValidString(value) {
+		return false
+	}
+	for _, character := range value {
+		if character < 0x20 || character > 0x7e {
+			return false
+		}
+	}
+	return strings.TrimSpace(value) == value
 }
 
 type DiscriminatorKind string

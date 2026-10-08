@@ -631,7 +631,7 @@ func TestBackupRuntimeRepositoryRejectsMismatchedChangedSourceOrdinal(t *testing
 	orphaned.UpdatedAt = current.UpdatedAt.Add(time.Second)
 	orphan := testbackupruntime.BackupOrphanRecord{
 		Target: point.BackupRecoveryPointTargetSnapshot, Evidence: point.Evidence,
-		Object: point.Object, Postgres: point.Postgres,
+		Object: point.Object, Postgres: point.Postgres, PostgresArchive: point.PostgresArchive,
 		Upload: testbackupruntime.BackupUploadOutcome{
 			Kind:   testbackupruntime.BackupUploadReturned,
 			Target: point.Object.Target, ReturnedObject: point.Object,

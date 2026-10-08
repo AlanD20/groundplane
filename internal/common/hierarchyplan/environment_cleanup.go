@@ -42,7 +42,7 @@ func EnvironmentCleanup(
 		return nil, errs.New(errs.KindInternal, "artifact-free Environment cleanup has a Compose step")
 	}
 	return executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: 1, PlanId: planID, RenderGeneration: renderGeneration,
+		Schema: executionplan.SchemaVersion, PlanId: planID, RenderGeneration: renderGeneration,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetId: environmentID,
 		Artifacts: artifacts, Steps: steps,
 	})

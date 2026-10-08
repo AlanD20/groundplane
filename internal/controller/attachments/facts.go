@@ -222,7 +222,7 @@ func (service *FactService) ResolveBackupIdentity(
 	ctx context.Context,
 	current etcdstore.Versioned[attachrecord.Record],
 	stored attachrecord.EncryptedFacts,
-	consume func(backupplanning.BackupPostgresIdentity) error,
+	consume func(backupplanning.BackupDatabaseIdentity) error,
 ) error {
 	if ctx == nil || consume == nil || current.Record.Status != core.AttachReady ||
 		!current.Record.OwnsCredential() ||
@@ -233,7 +233,7 @@ func (service *FactService) ResolveBackupIdentity(
 		if bundle.Identity.Database == "" || bundle.Identity.Role == "" {
 			return errs.New(errs.KindInternal, "backup Attach identity is incomplete")
 		}
-		return consume(backupplanning.BackupPostgresIdentity{
+		return consume(backupplanning.BackupDatabaseIdentity{
 			Database: bundle.Identity.Database,
 			Role:     bundle.Identity.Role,
 		})
