@@ -17,8 +17,10 @@ type EditPublication struct {
 }
 
 func ValidateEditMarker(record connectorrecord.Record, marker idempotencyrecord.IdempotencyMarker) error {
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != record.Connector.EnvironmentID ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != record.Connector.EnvironmentID ||
 		marker.Locator.Method != "PATCH" ||
 		marker.Locator.Route != "/api/v1/connectors/{id}" ||
 		marker.Response.Status != 200 {
