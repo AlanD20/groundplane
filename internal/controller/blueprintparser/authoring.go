@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/controller/authoringyaml"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"gopkg.in/yaml.v3"
@@ -109,7 +110,7 @@ func MarshalAuthoringDocument(input AuthoringDocument) ([]byte, error) {
 		}
 	}
 	markScriptBodiesLiteral(root)
-	encoded, err := yaml.Marshal(&yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}})
+	encoded, err := authoringyaml.Marshal(&yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}})
 	if err != nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint authoring projection failed")
 	}

@@ -1,11 +1,11 @@
 package composerender
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
+	"github.com/AlanD20/groundplane/internal/controller/authoringyaml"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -231,30 +231,13 @@ func ProjectEnvironmentServiceNativeCompose(
 	projectedRoot := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	AppendMappingValue(projectedRoot, "services", projectedServices)
 	projected := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{projectedRoot}}
-	// This is an operator-facing projection, not the canonical deployment artifact.
-	// Expand inherited flow collections while retaining scalar quoting and content.
-	blockComposeCollections(projected)
-	var encoded bytes.Buffer
-	encoder := yaml.NewEncoder(&encoded)
-	encoder.SetIndent(2)
-	if err := encoder.Encode(projected); err != nil {
+	encoded, err := authoringyaml.Marshal(projected)
+	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}
-	if err := encoder.Close(); err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	result := encoded.String()
-	clear(encoded.Bytes())
+	result := string(encoded)
+	clear(encoded)
 	return result, nil
-}
-
-func blockComposeCollections(node *yaml.Node) {
-	if node.Kind == yaml.MappingNode || node.Kind == yaml.SequenceNode {
-		node.Style &^= yaml.FlowStyle
-	}
-	for _, child := range node.Content {
-		blockComposeCollections(child)
-	}
 }
 
 func serviceArtifactComponentOwner(service *agentpb.ComposeService) (string, error) {
