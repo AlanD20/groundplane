@@ -417,6 +417,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		hostResolutionBaseConditionCount := len(conditions)
 		hostResolutionChange, err := repository.prepareHostResolutionReconciliation(
 			ctx, terminal, terminalStatus, primaryAndAssignment.ReadRevision, conditions, platformComponentChange,
+			materializationProjectionChange,
 		)
 		if err != nil {
 			journal.clearPrimary()

@@ -89,6 +89,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	revision int64,
 	baseConditions []etcdstore.Condition,
 	platformChange platformComponentTaskChange,
+	materializationChange taskMaterializationProjectionChange,
 ) (hostResolutionReconciliationChange, error) {
 	resource := task.Params[taskjournal.TaskResourceKindParam]
 	if resource != taskjournal.TaskResourceRoute && resource != taskjournal.TaskResourceComponent &&
@@ -98,12 +99,16 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	if revision <= 0 {
 		return hostResolutionReconciliationChange{}, errs.New(errs.KindInternal, "host-resolution revision is invalid")
 	}
-	routes, err := repository.scanRoutesAtRevision(ctx, revision)
+	projection, err := hostResolutionTerminalProjection(task, terminalStatus, materializationChange)
+	if err != nil {
+		return hostResolutionReconciliationChange{}, err
+	}
+	routes, err := repository.scanRoutesAtRevision(ctx, revision, projection)
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
 	removeRouteID, routeOverride, componentOverride, err :=
-		repository.hostResolutionTerminalOverlay(ctx, task, terminalStatus, revision)
+		repository.hostResolutionTerminalOverlay(ctx, task, terminalStatus, revision, routes)
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}

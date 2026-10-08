@@ -20,8 +20,22 @@ type scannedRoute struct {
 	record routerecord.Record
 }
 
-func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revision int64) ([]scannedRoute, error) {
+func (repository *TaskRepository) scanRoutesAtRevision(
+	ctx context.Context, revision int64, replacement *projectionrecord.EnvironmentComposeProjection,
+) ([]scannedRoute, error) {
 	result := make([]scannedRoute, 0)
+	if replacement != nil {
+		versioned := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
+			Record: *replacement, ReadRevision: revision,
+		}
+		for _, desired := range replacement.DesiredRoutes {
+			record, err := projectionrecord.ReadRoute(ctx, repository.store, versioned, desired)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, scannedRoute{record: record.Record})
+		}
+	}
 	start := ""
 	for {
 		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
@@ -49,6 +63,9 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 			if decodeErr != nil || projection.EnvironmentID != environmentID {
 				recordquery.ClearRangeKeyValues(page.Values)
 				return nil, projectionrecord.CorruptEnvironmentComposeProjection()
+			}
+			if replacement != nil && replacement.EnvironmentID == environmentID {
+				continue
 			}
 			versioned := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 				Record: projection, Revision: value.ModRevision, ReadRevision: page.ReadRevision,
@@ -143,15 +160,9 @@ func appendHostResolutionCondition(
 	return append(conditions, candidate)
 }
 
-func (repository *TaskRepository) routeAtRevision(
-	ctx context.Context,
-	routeID string,
-	revision int64,
+func hostResolutionRouteAtSnapshot(
+	routes []scannedRoute, routeID string,
 ) (routerecord.Record, error) {
-	routes, err := repository.scanRoutesAtRevision(ctx, revision)
-	if err != nil {
-		return routerecord.Record{}, err
-	}
 	for _, route := range routes {
 		if route.record.Desired.ID == routeID {
 			return route.record, nil

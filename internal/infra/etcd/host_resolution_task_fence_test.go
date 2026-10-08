@@ -408,6 +408,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		secondClaim.Task.ReadRevision,
 		nil,
 		platformComponentTaskChange{},
+		taskMaterializationProjectionChange{},
 	)
 	if err != nil {
 		t.Fatalf("unresolved terminal contribution: %v", err)

@@ -17,6 +17,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 	task TaskRecord,
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
+	routes []scannedRoute,
 ) (string, map[string]routerecord.Record, map[string]componentrecord.Record, error) {
 	removal := ""
 	routeOverride := make(map[string]routerecord.Record)
@@ -103,7 +104,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 			if intent.RouteProjection != nil && (terminalStatus == taskjournal.TaskStatusCompleted ||
 				task.Params[releaserender.TaskReleasePublicationParam] == "") {
 				for _, candidate := range intent.RouteProjection.Routes {
-					route, routeErr := repository.routeAtRevision(ctx, candidate.Desired.ID, revision)
+					route, routeErr := hostResolutionRouteAtSnapshot(routes, candidate.Desired.ID)
 					if routeErr != nil {
 						return "", nil, nil, routeErr
 					}

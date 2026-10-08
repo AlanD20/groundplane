@@ -29,7 +29,6 @@ func (repository *TaskRepository) AbortPendingTask(
 	if err := recordcodec.ValidateTimestamp("task terminal_at", terminalAt); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-
 	conflicts := 0
 	for {
 		current, err := repository.GetTask(ctx, taskID)
@@ -417,7 +416,8 @@ func (repository *TaskRepository) AbortPendingTask(
 		}
 		hostResolutionBaseConditionCount := len(conditions)
 		hostResolutionChange, err := repository.prepareHostResolutionReconciliation(
-			ctx, terminal, taskjournal.TaskStatusAborted, current.ReadRevision, conditions, platformComponentChange,
+			ctx, terminal, taskjournal.TaskStatusAborted, current.ReadRevision,
+			conditions, platformComponentChange, taskMaterializationProjectionChange{},
 		)
 		if err != nil {
 			clear(terminalValue)
