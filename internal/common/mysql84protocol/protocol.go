@@ -249,7 +249,14 @@ case "$op" in
     ;;
   post-restore-verify)
     db="$1"
-    mysqlcheck --no-defaults --protocol=socket --user=root --silent --check --databases "$db" >/dev/null
+    checks=$(mysql --no-defaults --protocol=socket --user=root --batch --skip-column-names --raw --database=mysql --execute="SELECT CONCAT('CHECK TABLE ',CHAR(96),REPLACE(TABLE_NAME,CHAR(96),CONCAT(CHAR(96),CHAR(96))),CHAR(96),';') FROM information_schema.tables WHERE TABLE_SCHEMA = '$db' ORDER BY TABLE_NAME")
+    if test -n "$checks"; then
+      checked=$(printf '%s\n' "$checks" | mysql --no-defaults --protocol=socket --user=root --batch --skip-column-names --raw --database="$db")
+      printf '%s\n' "$checked" | awk -F '\t' '
+        $3 == "error" { failed = 1 }
+        $3 == "status" { seen = 1; if ($4 != "OK") failed = 1 }
+        END { exit failed || !seen }'
+    fi
     exec mysql --no-defaults --protocol=socket --user=root --batch --skip-column-names --database=mysql --execute="SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME = '$db'"
     ;;
   recover-dump)

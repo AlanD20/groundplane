@@ -124,6 +124,8 @@ are not one atomic transaction. Recovery must inspect the original Exec and
 its retained terminal/input evidence; an unknown outcome never permits another
 restore-apply. [The execution owner](../../internal/infra/docker/mysql84execution)
 attests image, labels and the exact data Volume around each operation.
+Post-restore verification uses `CHECK TABLE` through the upstream `mysql` client;
+it does not depend on the separately packaged `mysqlcheck` executable.
 
 Database archive evidence records actual server and backup-tool versions before
 dump-start acknowledgement. Recovery uses those pinned versions, not fresh
