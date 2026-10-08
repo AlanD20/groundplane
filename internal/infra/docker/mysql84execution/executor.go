@@ -309,9 +309,7 @@ func (executor *Executor) RecoverExecution(ctx context.Context, expected Contain
 	if !validDockerID(execID) {
 		return Result{}, invalidExecution("MySQL original Exec identity is invalid")
 	}
-	inspected, err := executor.engine.ExecInspect(ctx, execID, client.ExecInspectOptions{})
-	if err != nil || inspected.ID != execID || inspected.ContainerID != expected.ID || inspected.Running ||
-		inspected.ExitCode != 0 {
+	if _, err := executor.waitExit(ctx, expected, execID); err != nil {
 		return Result{}, invalidExecution("MySQL original Exec success is unproven")
 	}
 	recovery := mysql84protocol.Request{Nonce: original.Nonce, DeadlineUnixNano: original.DeadlineUnixNano}

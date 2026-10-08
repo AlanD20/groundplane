@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"io"
 	"strings"
 	"time"
 
@@ -166,14 +165,25 @@ func (pool *WorkerPool) executeBackupMySQLCapture(ctx context.Context, assignmen
 			if err != nil || container.ID != containerID {
 				return errs.New(errs.KindStateConflict, "MySQL dump container identity changed")
 			}
-			result, err := executor.RecoverExecution(ctx, container, original, execID, discardWriteCloser{Writer: io.Discard})
-			if err != nil || !result.Stdout.EOF || sourceEvidence.Size != result.Stdout.Bytes ||
-				mysql84protocol.Digest(sourceEvidence.SHA256) != result.Stdout.SHA256 {
-				return errs.New(errs.KindStateConflict, "MySQL retained dump does not match original execution")
+			prefix, err := source.OpenPrefix(ctx)
+			if err != nil {
+				return err
+			}
+			writer := &databaseDumpRecoveryWriter{prefix: prefix, remainingPrefix: sourceEvidence.Size,
+				output: &postgresArtifactWriter{ctx: ctx, artifact: source, limit: authority.maxPlaintext - sourceEvidence.Size},
+				limit:  authority.maxPlaintext}
+			result, recoveryErr := executor.RecoverExecution(ctx, container, original, execID, writer)
+			closeErr := prefix.Close()
+			if recoveryErr != nil || closeErr != nil || !result.Stdout.EOF || writer.remainingPrefix != 0 {
+				return errs.WrapJoined(errs.KindStateConflict,
+					errs.New(errs.KindStateConflict, "original MySQL dump recovery is incomplete"), recoveryErr, closeErr)
 			}
 			sourceEvidence, err = source.Publish(ctx)
 			if err != nil {
 				return err
+			}
+			if sourceEvidence.Size != result.Stdout.Bytes || mysql84protocol.Digest(sourceEvidence.SHA256) != result.Stdout.SHA256 {
+				return errs.New(errs.KindStateConflict, "MySQL retained dump does not match original execution")
 			}
 		}
 	}
@@ -294,7 +304,3 @@ func observeMySQLArchive(ctx context.Context, executor *mysql84execution.Executo
 		AdapterContractVersion: mysql84protocol.AdapterContractVersion}
 	return evidence, evidence.Validate()
 }
-
-type discardWriteCloser struct{ io.Writer }
-
-func (discardWriteCloser) Close() error { return nil }

@@ -90,6 +90,13 @@ func resolveDatabaseCaptureDisposition(entry *agentpb.BackupRecoveredStage,
 	default:
 		return nil, unresolvedBackupStage()
 	}
+	if capture.GetMysql() != nil && len(entry.Files) == 1 {
+		// The daemon-owned Dump may have completed after Agent loss. Its
+		// original bytes must finish the retained prefix before encryption;
+		// their size is not yet known. Serialize and reserve each added write.
+		resume.RemainingGrowth = agentpb.BackupRemainingGrowth_BACKUP_REMAINING_GROWTH_EXCLUSIVE_UNKNOWN
+		resume.RequiredGrowthBytes = 0
+	}
 	result.Disposition = &agentpb.BackupStagingDisposition_ResumePrepared{ResumePrepared: resume}
 	return result, nil
 }
