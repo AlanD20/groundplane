@@ -16,6 +16,7 @@ func TestNativeWorkloadAdmitsPinnedFamiliesAndRejectsChangedAuthority(t *testing
 		name, image, labelValue string
 		accepted                bool
 	}{
+		{"captured-local-image", "sha256:" + strings.Repeat("a", 64), "plan_" + suffix, true},
 		{"mysql", "mysql:8.4@sha256:" + strings.Repeat("a", 64), "plan_" + suffix, true},
 		{"postgres", "postgres:16-alpine@sha256:" + strings.Repeat("a", 64), "plan_" + suffix, true},
 		{"mutable", "mysql:8.4", "plan_" + suffix, false},

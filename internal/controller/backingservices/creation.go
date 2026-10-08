@@ -34,8 +34,10 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -75,6 +77,8 @@ type CreationService struct {
 	idempotency      *desiredrevision.Idempotency
 	protector        *secretvalue.Protector
 	plans            *taskplanning.TaskPlanResolver
+	agents           *agentregistration.Repository
+	images           workloadseal.Resolver
 	hookInputs       backingServiceHookInputs
 	componentCatalog []componentrender.EnvironmentComponentRegistration
 	now              func() time.Time
@@ -89,6 +93,8 @@ func NewCreationService(
 	plans *taskplanning.TaskPlanResolver,
 	hookInputs backingServiceHookInputs,
 	componentCatalog []componentrender.EnvironmentComponentRegistration,
+	agents *agentregistration.Repository,
+	images workloadseal.Resolver,
 ) (*CreationService, error) {
 	if volumeRoot == "" || !environmentPool.IsValid() || repository == nil || idempotency == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service creation dependencies are incomplete")
@@ -100,6 +106,7 @@ func NewCreationService(
 		volumeRoot: volumeRoot, environmentPool: environmentPool,
 		repository: repository, idempotency: idempotency, protector: protector,
 		plans: plans, hookInputs: hookInputs,
+		agents: agents, images: images,
 		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),
 		now:              time.Now,
 	}, nil
@@ -352,6 +359,15 @@ func (service *CreationService) createBackingServiceFromStage(
 		Entries: entryDesired, CreatedAt: environment.CreatedAt,
 	}
 	baseProject := backingComposeProject(spec, serviceID, zone.Desired, volume, environment)
+	if input.Adapter == "mysql" {
+		image, imageErr := service.sealCreationImage(ctx, spec.Image)
+		if imageErr != nil {
+			return idempotencyrecord.IdempotencyResponse{}, imageErr
+		}
+		workload := baseProject.Services[spec.ServiceName]
+		workload.Image = image
+		baseProject.Services[spec.ServiceName] = workload
+	}
 	componentProjection, err := composerender.ProjectEnvironmentComponents(
 		baseProject,
 		environmentProjection,

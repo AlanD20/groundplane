@@ -90,7 +90,7 @@ func Workload(
 	if selected == nil || selected.ComposeName == "" || selected.ExpectedReplicas != 1 ||
 		selected.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED ||
 		selected.Slot != "" || selected.OwnerComponentId != "" ||
-		!(imageref.IsDigestPinned(selected.ImageReference) ||
+		!(workloadimage.LocalIDValid(selected.ImageReference) || imageref.IsDigestPinned(selected.ImageReference) ||
 			backingcatalog.ValidPinnedImage(selected.ImageReference)) {
 		return nil, invalid()
 	}
@@ -151,6 +151,7 @@ func MatchesObservation(value Observation, artifact *agentpb.ComposeArtifact, wo
 	if ValidateObservation(value) != nil || value.ProjectName != artifact.ProjectName ||
 		value.ServiceID != workload.ServiceId ||
 		value.ImageReference != workload.ImageReference ||
+		workloadimage.LocalIDValid(workload.ImageReference) && value.LocalImageID != workload.ImageReference ||
 		value.State != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING ||
 		workload.HasHealthcheck && value.Health != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 		return false
