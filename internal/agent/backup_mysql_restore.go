@@ -142,7 +142,16 @@ func (pool *WorkerPool) executeBackupMySQLRestore(ctx context.Context,
 	if _, err := executor.Execute(ctx, container, request, nil, nil); err != nil {
 		return mutationAttempted, err
 	}
-	reader, err := artifact.source.OpenPrefix(ctx)
+	if err := ctx.Err(); err != nil {
+		return mutationAttempted, err
+	}
+	// After admission, a channel disconnect must not truncate the verified SQL
+	// input of the original Exec. Join that operation within the existing step
+	// deadline; checkpoint delivery and later recovery still use the session.
+	applyDeadline, _ := ctx.Deadline()
+	applyCtx, cancelApply := context.WithDeadline(context.WithoutCancel(ctx), applyDeadline)
+	defer cancelApply()
+	reader, err := artifact.source.OpenPrefix(applyCtx)
 	if err != nil {
 		return mutationAttempted, err
 	}
@@ -153,7 +162,7 @@ func (pool *WorkerPool) executeBackupMySQLRestore(ctx context.Context,
 		_ = reader.Close()
 		return mutationAttempted, err
 	}
-	result, err := executor.Execute(ctx, container, request, reader, nil)
+	result, err := executor.Execute(applyCtx, container, request, reader, nil)
 	closeErr := reader.Close()
 	if err != nil || closeErr != nil || !result.Stdin.EOF || result.Stdin.Bytes != artifact.evidence.Size ||
 		result.Stdin.SHA256 != artifact.evidence.SHA256 {
