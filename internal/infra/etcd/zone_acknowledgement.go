@@ -46,7 +46,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	}
 	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil ||
 		state.Values[1] == nil || state.Values[3] == nil || state.Values[4] == nil ||
-		state.Values[5] == nil || state.Values[6] == nil {
+		state.Values[6] == nil {
 		return nil, nil, errs.New(errs.KindInternal, "Zone removal state is inconsistent")
 	}
 	intent, err := environmentchanges.DecodeZoneRemovalIntent(state.Values[3].Value)
@@ -57,16 +57,15 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		return nil, nil, err
 	}
 	if intent.Status != taskjournal.TaskStatusPending || state.Values[4].ModRevision != intent.DesiredHeadRevision ||
-		state.Values[5].ModRevision != intent.AppliedProjectionRevision || string(state.Values[6].Value) != task.ID {
+		!environmentchanges.ZoneRemovalAppliedEvidenceMatches(
+			intent,
+			state.Values[5],
+		) || string(state.Values[6].Value) != task.ID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal terminal ownership changed")
 	}
 	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[4].Value)
 	if err != nil || headID != intent.DesiredProjection.RevisionID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal desired head changed")
-	}
-	applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[5].Value)
-	if err != nil || !environmentchanges.SameServiceRemovalProjection(applied, intent.AppliedProjection) {
-		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal applied projection changed")
 	}
 	zone, err := projectedZoneRemovalTarget(intent, readRevision)
 	if err != nil {
@@ -99,7 +98,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		{Key: keys[2], ModRevision: etcdstore.RevisionOf(state.Values[2])},
 		{Key: keys[3], ModRevision: state.Values[3].ModRevision},
 		{Key: keys[4], ModRevision: state.Values[4].ModRevision},
-		{Key: keys[5], ModRevision: state.Values[5].ModRevision},
+		{Key: keys[5], ModRevision: etcdstore.RevisionOf(state.Values[5])},
 		{Key: keys[6], ModRevision: state.Values[6].ModRevision},
 	}
 	if terminalStatus != taskjournal.TaskStatusCompleted {
@@ -189,11 +188,18 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	mutations = append(mutations, identityPublication.mutations...)
 	mutations = append(mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[4], Value: headValue},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[5], Value: projectionValue},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[3]},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[6]},
 	)
+	if intent.AppliedProjectionRevision > 0 {
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[5], Value: projectionValue},
+		)
+	} else {
+		clear(projectionValue)
+	}
 	if state.Values[2] != nil {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[2]})
 	}
@@ -230,21 +236,27 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 		return err
 	}
 	if state == nil || len(state.Values) != len(keys) || state.Values[0] != nil ||
-		state.Values[3] == nil || state.Values[4] == nil || state.Values[5] != nil {
+		state.Values[3] == nil || state.Values[5] != nil {
 		return errs.New(errs.KindStateConflict, "Zone removal terminal state does not match its Task")
-	}
-	applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[4].Value)
-	if err != nil {
-		return err
 	}
 	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[3].Value)
 	if err != nil {
 		return err
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		if state.Values[2] != nil || headID != task.Params[blueprints.EnvironmentDesiredRevisionParam] ||
-			applied.RevisionID != headID || projectionContainsZone(applied, task.Target) {
+		if state.Values[2] != nil || headID != task.Params[blueprints.EnvironmentDesiredRevisionParam] {
 			return errs.New(errs.KindStateConflict, "completed Zone removal retained old desired state")
+		}
+		desired, found, readErr := blueprints.ReadCurrentProjection(ctx, repository.store, environmentID, readRevision)
+		if readErr != nil || !found || desired.Record.RevisionID != headID ||
+			projectionContainsZone(desired.Record, task.Target) {
+			return errs.New(errs.KindStateConflict, "completed Zone removal desired projection changed")
+		}
+		if state.Values[4] != nil {
+			applied, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[4].Value)
+			if decodeErr != nil || applied.RevisionID != headID || projectionContainsZone(applied, task.Target) {
+				return errs.New(errs.KindStateConflict, "completed Zone removal applied projection changed")
+			}
 		}
 		if state.Values[1] != nil {
 			pool, poolErr := recordcodec.Decode[networkreservations.ZonePoolRegistry](
@@ -267,8 +279,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	if err != nil || validateZoneRemovalTaskOwner(task, intent) != nil || intent.Status != terminalStatus ||
 		intent.TerminalAt == nil || task.FinishedAt == nil || !intent.TerminalAt.Equal(*task.FinishedAt) ||
 		state.Values[3].ModRevision != intent.DesiredHeadRevision || headID != intent.DesiredProjection.RevisionID ||
-		state.Values[4].ModRevision != intent.AppliedProjectionRevision ||
-		!environmentchanges.SameServiceRemovalProjection(applied, intent.AppliedProjection) {
+		!environmentchanges.ZoneRemovalAppliedEvidenceMatches(intent, state.Values[4]) {
 		return errs.New(errs.KindStateConflict, "failed Zone removal changed sealed desired state")
 	}
 	zone, err := projectedZoneRemovalTarget(intent, readRevision)

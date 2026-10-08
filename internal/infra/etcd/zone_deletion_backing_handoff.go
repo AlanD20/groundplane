@@ -102,8 +102,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, err
 	}
 	if parentResult == nil || len(parentResult.Values) != 5 || parentResult.Values[0] == nil ||
-		parentResult.Values[1] == nil || parentResult.Values[2] == nil || parentResult.Values[3] == nil ||
-		parentResult.Values[4] == nil {
+		parentResult.Values[1] == nil || parentResult.Values[2] == nil || parentResult.Values[3] == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing Zone parent Task is missing")
 	}
 	parent, err := DecodeTaskRecord(parentResult.Values[0].Value)
@@ -117,13 +116,11 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	}
 	currentIntent, err := environmentchanges.DecodeZoneRemovalIntent(parentResult.Values[1].Value)
 	headID, headErr := idempotencyrecord.DecodeTaskReference(parentResult.Values[3].Value)
-	applied, appliedErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(parentResult.Values[4].Value)
 	if err != nil || currentIntent.OperationID != intent.OperationID || currentIntent.ActiveTaskID != parentTaskID ||
 		currentIntent.Status != taskjournal.TaskStatusPending || string(parentResult.Values[2].Value) != parentTaskID ||
 		headErr != nil || headID != currentIntent.DesiredProjection.RevisionID ||
 		parentResult.Values[3].ModRevision != currentIntent.DesiredHeadRevision ||
-		appliedErr != nil || parentResult.Values[4].ModRevision != currentIntent.AppliedProjectionRevision ||
-		!environmentchanges.SameServiceRemovalProjection(applied, currentIntent.AppliedProjection) ||
+		!environmentchanges.ZoneRemovalAppliedEvidenceMatches(currentIntent, parentResult.Values[4]) ||
 		intent.Claim.RevisionID != currentIntent.Claim.RevisionID ||
 		!environmentchanges.SameServiceRemovalProjection(intent.DesiredProjection, currentIntent.DesiredProjection) ||
 		!environmentchanges.SameServiceRemovalProjection(intent.AppliedProjection, currentIntent.AppliedProjection) ||
@@ -211,7 +208,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		},
 		{
 			Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
-			ModRevision: parentResult.Values[4].ModRevision,
+			ModRevision: etcdstore.RevisionOf(parentResult.Values[4]),
 		},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), intent.EnvironmentID)},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), zone.Record.Desired.OwnerID)},

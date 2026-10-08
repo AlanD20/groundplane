@@ -8,7 +8,6 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // GetEnvironmentZoneRemovalAuthorities reads both authorities required to
@@ -21,15 +20,9 @@ func (repository *ProjectionReader) GetEnvironmentZoneRemovalAuthorities(
 	if err != nil || !found {
 		return environmentchanges.EnvironmentZoneRemovalAuthorities{}, found, err
 	}
-	applied, found, err := repository.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
+	applied, _, err := repository.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
 	if err != nil {
 		return environmentchanges.EnvironmentZoneRemovalAuthorities{}, false, err
-	}
-	if !found {
-		return environmentchanges.EnvironmentZoneRemovalAuthorities{}, false, errs.New(
-			errs.KindStateConflict,
-			"Environment applied projection is missing",
-		)
 	}
 	return environmentchanges.EnvironmentZoneRemovalAuthorities{Desired: desired, Applied: applied}, true, nil
 }

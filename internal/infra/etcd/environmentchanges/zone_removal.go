@@ -118,21 +118,19 @@ func ValidateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		intent.ZoneName == "" ||
 		intent.ZoneRevision <= 0 ||
 		intent.DesiredHeadRevision <= 0 ||
-		intent.AppliedProjectionRevision <= 0 ||
+		!validZoneRemovalAppliedProjection(intent) ||
 		blueprints.ValidateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
 		intent.Claim.EnvironmentID != intent.EnvironmentID ||
 		intent.Claim.RevisionID != intent.Claim.TaskID ||
 		intent.Claim.BaselineHeadRevision != intent.DesiredHeadRevision ||
 		intent.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		intent.DesiredProjection.EnvironmentID != intent.EnvironmentID ||
-		intent.AppliedProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.RevisionID != intent.Claim.RevisionID ||
 		intent.DesiredProjection.RevisionID == intent.CandidateProjection.RevisionID ||
 		intent.DesiredProjection.RenderGeneration+1 != intent.CandidateProjection.RenderGeneration ||
 		intent.CandidateProjection.RenderGeneration != intent.Claim.RenderGeneration ||
 		projectionrecord.ValidateEnvironmentComposeProjection(intent.DesiredProjection) != nil ||
-		projectionrecord.ValidateEnvironmentComposeProjection(intent.AppliedProjection) != nil ||
 		projectionrecord.ValidateEnvironmentComposeProjection(intent.CandidateProjection) != nil ||
 		recordcodec.ValidateTimestamp("Zone removal created_at", intent.CreatedAt) != nil ||
 		recordcodec.ValidateTimestamp("Zone removal active Task created_at", intent.ActiveTaskCreatedAt) != nil ||

@@ -60,23 +60,19 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		return backingZoneTaskChange{}, err
 	}
 	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil || state.Values[1] != nil ||
-		state.Values[2] == nil || state.Values[3] == nil || state.Values[4] != nil {
+		state.Values[2] == nil || state.Values[4] != nil {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone is not available for removal retry")
 	}
 	intent, err := environmentchanges.DecodeZoneRemovalIntent(state.Values[0].Value)
 	if err != nil || validateZoneRemovalTaskOwner(source, intent) != nil || intent.Status != source.Status ||
 		intent.TerminalAt == nil || !intent.TerminalAt.Equal(*source.FinishedAt) ||
 		state.Values[2].ModRevision != intent.DesiredHeadRevision ||
-		state.Values[3].ModRevision != intent.AppliedProjectionRevision {
+		!environmentchanges.ZoneRemovalAppliedEvidenceMatches(intent, state.Values[3]) {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry authority changed")
 	}
 	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
 	if err != nil || headID != intent.DesiredProjection.RevisionID {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
-	}
-	projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
-	if decodeErr != nil || !environmentchanges.SameServiceRemovalProjection(projection, intent.AppliedProjection) {
-		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry projection changed")
 	}
 	if _, err := projectedZoneRemovalTarget(intent, revision); err != nil {
 		return backingZoneTaskChange{}, err
@@ -126,7 +122,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 			{Key: keys[0], ModRevision: state.Values[0].ModRevision},
 			{Key: keys[1]},
 			{Key: keys[2], ModRevision: state.Values[2].ModRevision},
-			{Key: keys[3], ModRevision: state.Values[3].ModRevision},
+			{Key: keys[3], ModRevision: etcdstore.RevisionOf(state.Values[3])},
 			{Key: keys[4]},
 			{
 				Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),

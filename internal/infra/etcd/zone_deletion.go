@@ -348,7 +348,7 @@ func classifyZoneDeletionStartConflict(
 			return errs.New(errs.KindResourceInUse, "Zone removal or Environment mutation is already active")
 		}
 		if values[12] == nil || values[12].ModRevision != expectedHeadRevision ||
-			values[13] == nil || values[13].ModRevision != projectionRevision ||
+			etcdstore.RevisionOf(values[13]) != projectionRevision ||
 			values[15] == nil || values[16] == nil || values[17] == nil {
 			return errs.New(errs.KindStateConflict, "Zone sealed desired state changed")
 		}
