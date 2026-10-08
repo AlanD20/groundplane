@@ -13,6 +13,12 @@ import (
 )
 
 func ValidateTaskRecord(record TaskRecord) error {
+	if err := validateSoftwarePreparationTask(record); err != nil {
+		return err
+	}
+	if err := validateSoftwareActivationTask(record); err != nil {
+		return err
+	}
 	if err := validateImageFetchTask(record); err != nil {
 		return err
 	}

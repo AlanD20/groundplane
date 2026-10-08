@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/app/softwareplatform"
 	"time"
 
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
@@ -27,6 +28,7 @@ type controllerHTTPDependencies struct {
 	dataServices            controllerDataComposition
 	execution               controllerExecutionComposition
 	platform                *controllerPlatform
+	software                *softwareplatform.Composition
 	images                  *imagedelivery.Service
 	agentRuntime            *channeltransport.Runtime
 	runner                  *controllerRunnerComposition
@@ -79,6 +81,8 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		Host: dependencies.platform.host, ControllerConfig: dependencies.bootstrap.controllerConfig,
 		EtcdConfig: dependencies.bootstrap.etcdLifecycle.Configuration(), EtcdConfigApplier: dependencies.platform.etcdConfig,
 		ControllerUpdates: dependencies.platform.upgrades,
+		SoftwarePreparer:  dependencies.software.Preparations, SoftwareReleases: dependencies.software.Releases,
+		SoftwareActivator: dependencies.software.Activations,
 		Images:            dependencies.images,
 		OnHTTPReady:       dependencies.platform.readiness.MarkHTTPReady, MutationAdmission: dependencies.platform.upgrades,
 		Agents: dependencies.platform.reads, AgentMutations: dependencies.platform.mutations,
@@ -160,6 +164,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 			dependencies.backup.orphans,
 		),
 		controllerTasks: dependencies.controllerTasks,
+		software:        dependencies.software,
 		localAgent:      dependencies.platform.reconciliation,
 		attachMutations: dependencies.attachMutations,
 		container:       dependencies.platform,

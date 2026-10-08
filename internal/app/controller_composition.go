@@ -11,7 +11,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
-	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
@@ -538,21 +537,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, err
 	}
-	controllerTaskHandler, err := taskdispatch.NewResourceHandler(
-		platform.agents,
-		backingZoneCascades,
-		authority.runnerRecords,
-		imageDelivery,
-		runnerComposition.lifecycle,
+	software, softwareTasks, err := newControllerSoftwareRuntime(
+		bootstrap, authority, platform, backingZoneCascades, imageDelivery, runnerComposition,
 	)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
+		return nil, err
 	}
-	nativeTasks := platform.etcdConfig.Dispatcher(controllerTaskHandler)
 	controllerTaskRunner, err := newControllerTaskRuntime(
-		ctx, authority.tasks, nativeTasks, backups.keys, hierarchyDeletions,
+		ctx, authority.tasks, softwareTasks, backups.keys, hierarchyDeletions,
 		platform.agents, agentRuntime.Registry, platform.native, bootstrap.tick, bootstrap.logger,
 	)
 	if err != nil {
@@ -567,6 +561,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		dataServices:            dataServices,
 		execution:               execution,
 		platform:                platform,
+		software:                software,
 		images:                  imageDelivery,
 		agentRuntime:            agentRuntime,
 		runner:                  runnerComposition,

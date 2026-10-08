@@ -38,6 +38,9 @@ type Server struct {
 	etcdConfig              NativeConfigStore
 	etcdConfigApplier       EtcdConfigApplier
 	controllerUpdates       ControllerUpdater
+	softwarePreparer        SoftwarePreparer
+	softwareActivator       SoftwareActivator
+	softwareReleases        SoftwareReleaseReader
 	images                  ImageFetcher
 	agents                  AgentReader
 	agentMutations          AgentMutator
@@ -113,6 +116,9 @@ type Options struct {
 	EtcdConfig              NativeConfigStore
 	EtcdConfigApplier       EtcdConfigApplier
 	ControllerUpdates       ControllerUpdater
+	SoftwarePreparer        SoftwarePreparer
+	SoftwareActivator       SoftwareActivator
+	SoftwareReleases        SoftwareReleaseReader
 	Images                  ImageFetcher
 	Agents                  AgentReader
 	AgentMutations          AgentMutator
@@ -205,6 +211,9 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		etcdConfig:              options.EtcdConfig,
 		etcdConfigApplier:       options.EtcdConfigApplier,
 		controllerUpdates:       options.ControllerUpdates,
+		softwarePreparer:        options.SoftwarePreparer,
+		softwareActivator:       options.SoftwareActivator,
+		softwareReleases:        options.SoftwareReleases,
 		images:                  options.Images,
 		agents:                  options.Agents,
 		agentMutations:          options.AgentMutations,
@@ -281,6 +290,8 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerControllerConfig()
 	s.registerEtcdConfig()
 	s.registerControllerUpdate()
+	s.registerSoftwarePreparation()
+	s.registerSoftwareActivation()
 	s.registerImageFetch()
 	s.registerComponents()
 	s.registerEnvironments()

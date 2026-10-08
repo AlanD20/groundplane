@@ -26,6 +26,12 @@ func (service *Service) retainTaskImages(
 	if !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return false, nil
 	}
+	if resource := task.Params[taskjournal.TaskResourceKindParam]; resource == taskjournal.TaskResourceSoftwarePreparation ||
+		resource == taskjournal.TaskResourceSoftware {
+		// Durable preparation/activation records retain exact outputs and
+		// predecessors independently, including terminal partial failures.
+		return true, nil
+	}
 	if task.Executor == taskjournal.TaskExecutorController && task.Type == taskjournal.TaskCreate &&
 		task.Params[taskjournal.TaskResourceKindParam] == runners.TaskResourceRunner {
 		// Fresh-token retry uses the retained Runner, scanned independently.

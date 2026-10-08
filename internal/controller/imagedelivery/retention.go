@@ -13,6 +13,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
+	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -93,6 +95,37 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 			return err
 		}
 		result.retain(runner.ImageRef, "Retained Runner "+runner.ID)
+		return nil
+	}); err != nil {
+		return result, err
+	}
+	if err := read(preparationrecord.Prefix, func(value keyvalue.KeyValue) error {
+		record, err := preparationrecord.Decode(value.Value)
+		if err != nil {
+			return err
+		}
+		if preparationrecord.Key(record.TaskID) != value.Key {
+			return errs.New(errs.KindInternal, "software preparation image authority is inconsistent")
+		}
+		result.software(record.Progress.Result, "Prepared software "+record.TaskID)
+		return nil
+	}); err != nil {
+		return result, err
+	}
+	if err := read(activationrecord.Prefix, func(value keyvalue.KeyValue) error {
+		record, err := activationrecord.Decode(value.Value)
+		if err != nil {
+			return err
+		}
+		if activationrecord.Key(record.TaskID) != value.Key {
+			return errs.New(errs.KindInternal, "software activation image authority is inconsistent")
+		}
+		reason := "Retained software activation " + record.TaskID
+		result.software(record.Input.Preparation.Progress.Result, reason)
+		if record.Input.Agent != nil {
+			result.retain(record.Input.Agent.Image, reason)
+		}
+		result.retain(record.Input.StagingAgentImage, reason)
 		return nil
 	}); err != nil {
 		return result, err

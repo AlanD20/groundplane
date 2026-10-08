@@ -15,6 +15,19 @@ func (repository *TaskRepository) CreateTask(
 	record TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
+	return repository.createTask(
+		ctx, record, marker, nil, nil, classifyTaskCreateConflict(record.OperationID),
+	)
+}
+
+func (repository *TaskRepository) createTask(
+	ctx context.Context,
+	record TaskRecord,
+	marker idempotencyrecord.IdempotencyMarker,
+	extraConditions []etcdstore.Condition,
+	extraMutations []etcdstore.Mutation,
+	classify idempotencyPlanClassifier,
+) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -77,12 +90,14 @@ func (repository *TaskRepository) CreateTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(record.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(record.Executor, record.ID), Value: reference},
 	}
+	conditions = append(conditions, extraConditions...)
+	mutations = append(mutations, extraMutations...)
 	plan, err := newTaskIdempotencyMutationPlan(
 		record,
 		initiation,
 		conditions,
 		mutations,
-		classifyTaskCreateConflict(record.OperationID),
+		classify,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

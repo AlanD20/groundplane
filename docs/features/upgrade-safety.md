@@ -18,14 +18,26 @@ Use [installation and updates](../deployment.md) for commands and artifact
 selection. An Agent update pins its exact image digest; changing that digest with
 the same idempotency key is a conflict.
 
-## Source builds (accepted, not yet available)
+## Prepare software, then Apply
 
-The accepted preparation workflow covers published releases and branch/commit
-builds for both Controller and Agent. Development builds will run in Docker on
-the GP host for its architecture, with immutable artifacts retained separately
-from activation. Published releases keep their existing requirements. The
-current Console still activates staged Controller releases and explicit Agent
-image digests; it does not yet fetch release tags or launch source builds.
+Software preparation supports Controller-only, Agent-only and Both, each from
+a published release or an explicit branch, tag or commit. Source builds run in
+Docker on the GP host for its architecture; host Go/Node toolchains are not
+required. Both resolves one source commit, or the matching component release
+tags. Published release inputs download verified artifacts instead of rebuilding.
+
+The **Software preparation** panel on the Controller page retains progress and
+Task links. Prepare never activates software. Apply is a separate action using
+the verified outputs in GP's registry, pinned by manifest digest. Both completes
+both preparations before Controller-then-Agent activation. A successful
+Controller followed by a failed Agent remains a partial update, not a rollback.
+
+Use `groundplane software prepare --component controller|agent|both
+--source source_ref|release --ref REF`, follow its Task, then
+`groundplane software apply PREPARATION_TASK`. Preparation and activation have
+independent Task ids. Preserve the exact key and inputs when resolving an
+uncertain request. Published releases retain their existing qualification
+requirements; this implementation's build/interruption journeys remain unqualified.
 See [host-built development versions](../decisions/release-packaging.md#host-built-development-versions).
 
 ## Admission and activation

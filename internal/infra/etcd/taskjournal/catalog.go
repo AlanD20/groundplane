@@ -23,6 +23,8 @@ const (
 	TaskDestroy     TaskType = "destroy"
 	TaskRotate      TaskType = "rotate"
 	TaskFetch       TaskType = "fetch"
+	TaskPrepare     TaskType = "prepare"
+	TaskApply       TaskType = "apply"
 )
 
 // TaskExecutor is the immutable authority allowed to claim a Task. It is
@@ -33,6 +35,7 @@ type TaskExecutor string
 const (
 	TaskExecutorAgent      TaskExecutor = "agent"
 	TaskExecutorController TaskExecutor = "controller"
+	TaskExecutorSoftware   TaskExecutor = "software"
 	// Blueprint parents are coordinated independently of the serial native
 	// Controller runner. Their Agent child Tasks use TaskExecutorAgent.
 	TaskExecutorBlueprint TaskExecutor = "blueprint"
@@ -40,7 +43,7 @@ const (
 
 func ValidExecutor(executor TaskExecutor) bool {
 	switch executor {
-	case TaskExecutorAgent, TaskExecutorController, TaskExecutorBlueprint:
+	case TaskExecutorAgent, TaskExecutorController, TaskExecutorSoftware, TaskExecutorBlueprint:
 		return true
 	default:
 		return false

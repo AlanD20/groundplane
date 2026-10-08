@@ -27,6 +27,13 @@ func (c *Controller) Run(ctx context.Context) error {
 		c.controllerTasks.Run(runCtx)
 	}()
 	localAgentDone := make(chan struct{})
+	softwareDone := make(chan struct{})
+	go func() {
+		defer close(softwareDone)
+		if c.software != nil {
+			c.software.Run(runCtx)
+		}
+	}()
 	go func() {
 		defer close(localAgentDone)
 		c.localAgent.Run(runCtx)
@@ -83,6 +90,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 	<-schedulerDone
 	<-controllerTasksDone
+	<-softwareDone
 	<-localAgentDone
 	<-runnersDone
 	<-resolverDone

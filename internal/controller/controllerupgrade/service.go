@@ -83,6 +83,28 @@ func (service *Service) UpdateController(
 	ctx context.Context,
 	release, key string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	return service.updateController(ctx, release, key, nil)
+}
+
+// UpdateControllerFromPredecessor uses the same publisher with the activation
+// parent's frozen Agent authority, including an explicitly absent Agent.
+func (service *Service) UpdateControllerFromPredecessor(ctx context.Context, release, key string,
+	predecessor *upgrade.AgentPredecessor,
+) (idempotencyrecord.IdempotencyResponse, error) {
+	return service.updateController(ctx, release, key, func(input Input) error {
+		if predecessor == nil && input.Agent == nil ||
+			predecessor != nil && input.Agent != nil && *predecessor == *input.Agent {
+			return nil
+		}
+		return errs.New(errs.KindStateConflict, "software activation Agent predecessor changed")
+	})
+}
+
+func (service *Service) updateController(
+	ctx context.Context,
+	release, key string,
+	validate func(Input) error,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
@@ -113,6 +135,11 @@ func (service *Service) UpdateController(
 	input, err := service.freeze(ctx, id)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if validate != nil {
+		if err := validate(input); err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
 	}
 	now := service.now().UTC()
 	task, err := NewTask(now, key, input)

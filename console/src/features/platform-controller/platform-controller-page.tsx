@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { useStore } from "@/lib/store";
 import { ControllerUpdateCard } from "./controller-update-card";
+import { SoftwarePreparationPanel } from "./software-preparation-panel";
 
 export default function PlatformControllerPage() {
   const [search] = useSearchParams();
@@ -165,6 +166,7 @@ export default function PlatformControllerPage() {
         </div>
       )}
       <div hidden={tab !== "updates"}>
+        <SoftwarePreparationPanel active={tab === "updates"} />
         <ControllerUpdateCard />
       </div>
       <div hidden={tab !== "configuration"}>

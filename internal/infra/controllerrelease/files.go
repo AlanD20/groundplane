@@ -403,6 +403,10 @@ func (store *Store) atomicWrite(
 	if err := root.Rename(temporary, name); err != nil {
 		return fileError(err)
 	}
+	return syncDirectory(root)
+}
+
+func syncDirectory(root *os.Root) error {
 	directory, err := root.Open(".")
 	if err != nil {
 		return fileError(err)

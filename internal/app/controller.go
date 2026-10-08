@@ -42,6 +42,7 @@ type Controller struct {
 	agent            controllerAgentChannel
 	scheduler        controllerScheduler
 	controllerTasks  controllerScheduler
+	software         controllerScheduler
 	runners          controllerScheduler
 	resolverListener controllerScheduler
 	localAgent       controllerScheduler

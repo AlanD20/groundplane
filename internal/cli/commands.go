@@ -34,6 +34,7 @@ func addCommands(root *cobra.Command, deps Dependencies) {
 		newActivityCmd(),
 		newHostCmd(),
 		newImageCmd(),
+		newSoftwareCmd(),
 		withExecutionClass(newControllerCmd(deps), executionLocal),
 		withExecutionClass(newAgentRunCmd(), executionLocal),
 		withExecutionClass(newVersionCmd(), executionTool),

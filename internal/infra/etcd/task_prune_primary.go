@@ -72,6 +72,24 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	}
 	conditions = append(conditions, nativeConditions...)
 	mutations = append(mutations, nativeMutations...)
+	softwareConditions, softwareMutations, err := repository.prepareSoftwareProjectionPrune(
+		ctx,
+		task,
+		taskResult.ReadRevision,
+	)
+	if err != nil {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
+	}
+	conditions = append(conditions, softwareConditions...)
+	mutations = append(mutations, softwareMutations...)
+	heldSoftware, childConditions, err := repository.softwareChildPruneAuthority(ctx, task, taskResult.ReadRevision)
+	if err != nil {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
+	}
+	if heldSoftware {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
+	}
+	conditions = append(conditions, childConditions...)
 	if held, err := terminalDeliveryPruneAuthority(task, current.Record.TaskRevision, taskResult.Values[2:]); held ||
 		err != nil {
 		if err != nil {
