@@ -36,8 +36,9 @@ Use `groundplane software prepare --component controller|agent|both
 --source source_ref|release --ref REF`, follow its Task, then
 `groundplane software apply PREPARATION_TASK`. Preparation and activation have
 independent Task ids. Preserve the exact key and inputs when resolving an
-uncertain request. Published releases retain their existing qualification
-requirements; this implementation's build/interruption journeys remain unqualified.
+uncertain request. [H97](../acceptance.md#source-software-preparation-and-activation)
+records bounded source-build interruption and normal activation evidence.
+Published release inputs retain their separate qualification requirements.
 See [host-built development versions](../decisions/release-packaging.md#host-built-development-versions).
 
 ## Admission and activation
@@ -78,6 +79,7 @@ service without operator repair, not uninterrupted service while powered off.
 staging, the independent predecessor guard and durable acceptance. The
 [platform runtime](../decisions/platform-runtime.md) explains process ownership.
 
-Historical update checks are in [acceptance](../acceptance.md#historical-evidence-register). Current source
-still needs the candidate-specific upgrade and connection-continuity cases in the
-[QA matrix](../qa-matrix.md); old incident pauses are not current host instructions.
+Historical update checks are in [acceptance](../acceptance.md#historical-evidence-register).
+H97's Ubuntu amd64 HTTP/data continuity does not qualify held connections,
+other platforms or every failure boundary in the [QA matrix](../qa-matrix.md).
+Old incident pauses are not current host instructions.

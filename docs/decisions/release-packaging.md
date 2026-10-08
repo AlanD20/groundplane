@@ -192,8 +192,9 @@ requirements tracked by the feature and capability status documents.
 
 ## Host-built development versions
 
-Preparation and activation are implemented; host-build and interruption
-qualification remains pending. Controller and Agent source selection offers
+Preparation and activation are implemented; [H97](../acceptance.md#source-software-preparation-and-activation)
+records bounded source-build and interruption qualification, not a published-release
+or all-platform pass. Controller and Agent source selection offers
 published GitHub releases and an explicit branch, tag or
 commit from the Groundplane repository. GitHub release assets and source refs
 are distinct inputs: a tag without a published release is a source build.

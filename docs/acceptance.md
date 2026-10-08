@@ -1138,10 +1138,52 @@ deleted disposable runtime/data while retaining registry, tools and incident
 evidence in ignored local/private staging.
 
 Cross-version acknowledgement, MySQL patch recovery, other providers and arm64
-were NOT RUN. Current Controller-only, Agent-only and Both source preparation
-and normal activation are still pending; published artifact QA is deferred.
+were NOT RUN. Subsequent source preparation and normal activation evidence is
+recorded separately below; published artifact QA is deferred.
 These passes do not establish production readiness or recovery of older failed
 Tasks.
+
+## Source software preparation and activation
+
+**H97 — Controller-only, Agent-only and Both source Prepare/Apply PASS on
+2026-10-08, including original-build interruption and application continuity.**
+
+On disposable Ubuntu 24.04 amd64, the host built commit `b2fa6405d` inside
+Docker and published digest-pinned artifacts to GP's registry. Preparation did
+not replace serving software. Controller interruption during the original build
+preserved etcd's start time, application containers and mounted data; following
+the same preparation Task completed the build. CLI and API reported the same
+verified artifact.
+
+Normal Controller-only Apply completed under 379 HTTP requests with zero errors
+and p95 latency 0.0039 seconds. The enrolled Agent, application container
+identities/images and mounted marker remained unchanged.
+
+The first Agent-only Apply failed because activation had not imported its
+prepared registry image. GP restored the predecessor Agent; all 458 measured
+application requests succeeded. Repair `52264085d` stages and verifies the exact
+Agent artifact before publishing the update child, without manual image pulls,
+Task rewriting or compatibility fallbacks. Its complete required local CI passed.
+The repair reached QA through the normal Controller updater. A new Apply of the
+same verified Agent preparation then completed: 330 HTTP requests, zero errors,
+p95 0.0028 seconds, unchanged Controller and preserved workload/mounted data.
+The original failed Tasks remain failed.
+
+Both preparation built `52264085d47aed33be965372e8f309224e195b3c` for both
+artifacts without activating either component; CLI/API artifact metadata agreed.
+The prepared Agent image was absent locally before Apply, so this exercised
+registry staging rather than relying on a cached runtime image. Normal Apply
+completed Controller then Agent, reporting the same source version for both.
+All 687 measured HTTP requests succeeded with p95 0.0024 seconds; exact
+application container identities/images and mounted data were preserved.
+Preparation-owned build containers and temporary image tags were removed;
+the serving application and retained registry artifacts remained.
+
+Published release inputs, arm64, other supported operating systems, partial
+Both activation, broader interruption boundaries and held connection continuity
+were NOT RUN. This is a software Prepare/Apply journey, not fresh installation
+or a blanket production-readiness pass. Published artifact QA is explicitly
+deferred; no tag or release was created.
 
 ## Interpretation limit
 
