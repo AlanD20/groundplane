@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	buildClientImage     = "docker:29.1.3-cli@sha256:4fa0ee1f3a7e4354c4ea34558b6d4ee32859baf4973d4c8ccc8e7fe3dd730c04"
 	buildkitImage        = "moby/buildkit:buildx-stable-1"
 	agentRepository      = "groundplane-agent"
 	controllerRepository = "groundplane-controller-bundle"
@@ -331,6 +332,9 @@ func componentProvenance(source ResolvedSource, component Selection) (string, ti
 }
 
 func (operation *dockerOperation) cleanup(ctx context.Context) error {
+	if err := operation.removeBuildClient(ctx); err != nil {
+		return err
+	}
 	var cleanupErr error
 	for _, tag := range operation.ownedTags {
 		result, err := operation.run(ctx, cleanupTimeout, "image", "ls", "--quiet", "--no-trunc", tag)
@@ -353,6 +357,24 @@ func (operation *dockerOperation) cleanup(ctx context.Context) error {
 		cleanupErr = errors.Join(cleanupErr, err)
 	}
 	return cleanupErr
+}
+
+func (operation *dockerOperation) removeBuildClient(ctx context.Context) error {
+	result, err := operation.run(ctx, cleanupTimeout, "container", "ls", "--all", "--no-trunc",
+		"--filter", "name=^/"+operation.builder+"-client$",
+		"--filter", "label=com.groundplane.software-operation="+operation.operationID, "--format", "{{.ID}}")
+	if err != nil {
+		return err
+	}
+	identity := strings.TrimSpace(string(result.Stdout))
+	if identity == "" {
+		return nil
+	}
+	if !digestPattern.MatchString("sha256:" + identity) {
+		return errs.New(errs.KindStateConflict, "software build client ownership is invalid")
+	}
+	_, err = operation.run(ctx, cleanupTimeout, "container", "rm", "--force", identity)
+	return err
 }
 
 func (operation *dockerOperation) builderExists(ctx context.Context) (bool, error) {
@@ -382,6 +404,21 @@ func (operation *dockerOperation) runIn(
 	directory string,
 	args ...string,
 ) (commandrunner.Result, error) {
+	if len(args) > 0 && args[0] == "buildx" {
+		workingDirectory := directory
+		if workingDirectory == "" {
+			workingDirectory = operation.directory
+		}
+		client := []string{"run", "--rm", "--name", operation.builder + "-client", "--network", "host",
+			"--label", "com.groundplane.software-operation=" + operation.operationID,
+			"--mount", "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
+			"--mount", "type=bind,source=" + operation.directory + ",target=" + operation.directory,
+			"--workdir", workingDirectory, "--env", "DOCKER_HOST=unix:///var/run/docker.sock",
+			"--env", "DOCKER_CONFIG=" + operation.dockerConfig,
+			"--env", "BUILDX_CONFIG=" + filepath.Join(operation.dockerConfig, "buildx"),
+			"--entrypoint", "docker", buildClientImage}
+		args = append(client, args...)
+	}
 	result, err := operation.preparer.commands.Run(ctx, commandrunner.RunCmdOpts{
 		Name: "docker", Args: args, Dir: directory,
 		Env: []string{
