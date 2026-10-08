@@ -1109,6 +1109,40 @@ edits. A local fixture also rejected direct removal with lifecycle dependency
 edges because the remaining plan order was incomplete; that separate limitation
 was not repaired or qualified by this journey.
 
+## MySQL data restoration and native lifecycle
+
+**H96 — selected MySQL 8.4 R2 Restore, interruption, review and lifecycle
+journeys PASS on 2026-10-08; full software activation remains unqualified.**
+
+On disposable Ubuntu amd64, GP provisioned upstream MySQL 8.4 and a
+credential-owning Attach, then deployed its consumer. An encrypted R2 Backup
+followed by deliberate SQL changes and Restore recovered both exact original
+sentinel rows and removed the extra row. Component qualification also exercised
+original Dump and Restore execution rejoining without another database effect.
+
+The live original Dump completed after Agent kill/restart. Following the scoped
+`694b77b31` input-lifetime repair, the original Restore completed after Controller
+restart: its original Docker Exec exited zero, the exact sentinel rows and
+32 MiB payload returned, and etcd's start time did not change.
+
+Repair `9d2b7e767` removed an incorrect aggregate-projection dependency from
+ordinary redeploy recovery. The original pending consumer redeploy completed
+without rewriting its Task. A separate redeploy changed the reviewed runtime;
+Restore rejected the earlier review before effects and SQL proved unchanged rows.
+
+With `b2fa6405d`, GP-native MySQL Stop and Start both completed, preserving the
+same container, image, mounts, exact sentinel rows and payload. Complete local
+CI passed for the three repair commits. Controller repair installation preserved
+data but is not normal-upgrade evidence. The approved subsequent GP-only reset
+deleted disposable runtime/data while retaining registry, tools and incident
+evidence in ignored local/private staging.
+
+Cross-version acknowledgement, MySQL patch recovery, other providers and arm64
+were NOT RUN. Current Controller-only, Agent-only and Both source preparation
+and normal activation are still pending; published artifact QA is deferred.
+These passes do not establish production readiness or recovery of older failed
+Tasks.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
