@@ -35,6 +35,16 @@ func BackupCheckpointTag(request *agentpb.BackupCheckpointRequest) uint32 {
 		return 31
 	case *agentpb.BackupCheckpointRequest_UploadCompleted:
 		return 32
+	case *agentpb.BackupCheckpointRequest_MysqlContainerObserved:
+		return 33
+	case *agentpb.BackupCheckpointRequest_MysqlDumpStart:
+		return 34
+	case *agentpb.BackupCheckpointRequest_MysqlRestoreApplyStart:
+		return 35
+	case *agentpb.BackupCheckpointRequest_MysqlRestoreVerified:
+		return 36
+	case *agentpb.BackupCheckpointRequest_MysqlServiceProgress:
+		return 37
 	default:
 		return 0
 	}
@@ -65,6 +75,12 @@ func BackupCheckpointPointID(request *agentpb.BackupCheckpointRequest) string {
 		return checkpoint.PruneObjectDeleted.GetPointId()
 	case *agentpb.BackupCheckpointRequest_PostgresRestoreVerified:
 		return checkpoint.PostgresRestoreVerified.GetPointId()
+	case *agentpb.BackupCheckpointRequest_MysqlDumpStart:
+		return checkpoint.MysqlDumpStart.GetPointId()
+	case *agentpb.BackupCheckpointRequest_MysqlRestoreApplyStart:
+		return checkpoint.MysqlRestoreApplyStart.GetPointId()
+	case *agentpb.BackupCheckpointRequest_MysqlRestoreVerified:
+		return checkpoint.MysqlRestoreVerified.GetPointId()
 	default:
 		return ""
 	}

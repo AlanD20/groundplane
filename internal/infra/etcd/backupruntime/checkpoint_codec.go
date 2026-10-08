@@ -62,7 +62,7 @@ func validateBackupCheckpointDedupRecord(record BackupCheckpointDedupRecord) err
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindAssignment, record.AssignmentID) != nil ||
 		recordcodec.ValidateID(ids.KindStep, record.StepID) != nil || record.Sequence == 0 ||
-		record.CheckpointTag < 20 || record.CheckpointTag > 32 || !recordcodec.ValidSHA256(record.PayloadSHA256) {
+		record.CheckpointTag < 20 || record.CheckpointTag > 37 || !recordcodec.ValidSHA256(record.PayloadSHA256) {
 		return errs.New(
 			errs.KindValidationFailed,
 			"backup checkpoint deduplication record is invalid",
