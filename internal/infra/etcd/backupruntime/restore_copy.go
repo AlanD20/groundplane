@@ -1,6 +1,9 @@
 package backupruntime
 
-import "bytes"
+import (
+	"bytes"
+	"slices"
+)
 
 func CloneBackupRestoreRecord(record BackupRestoreRecord) BackupRestoreRecord {
 	clone := record
@@ -13,14 +16,14 @@ func CloneBackupRestoreRecord(record BackupRestoreRecord) BackupRestoreRecord {
 	clone.CurrentTarget.Volume = target.Volume
 	if record.CurrentTarget.Postgres != nil {
 		postgres := *record.CurrentTarget.Postgres
-		postgres.Consumers = append([]BackupRestoreDatabaseServiceSnapshot(nil), postgres.Consumers...)
-		postgres.DependentIndexes = append([]BackupRestoreDatabaseDependentIndex(nil), postgres.DependentIndexes...)
+		postgres.Consumers = slices.Clone(postgres.Consumers)
+		postgres.DependentIndexes = slices.Clone(postgres.DependentIndexes)
 		clone.CurrentTarget.Postgres = &postgres
 	}
 	if record.CurrentTarget.MySQL != nil {
 		mysql := *record.CurrentTarget.MySQL
-		mysql.Consumers = append([]BackupRestoreDatabaseServiceSnapshot(nil), mysql.Consumers...)
-		mysql.DependentIndexes = append([]BackupRestoreDatabaseDependentIndex(nil), mysql.DependentIndexes...)
+		mysql.Consumers = slices.Clone(mysql.Consumers)
+		mysql.DependentIndexes = slices.Clone(mysql.DependentIndexes)
 		clone.CurrentTarget.MySQL = &mysql
 	}
 	if record.CurrentTarget.Config != nil {

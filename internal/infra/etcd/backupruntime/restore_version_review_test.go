@@ -20,12 +20,20 @@ func TestRestoreVersionReviewAcknowledgementIsBoundToExactSelection(t *testing.T
 					ContainerID: strings.Repeat("a", 64), ImageID: "sha256:" + strings.Repeat("b", 64)},
 			}
 			if family == "postgres" {
+				record.CurrentTarget.Postgres = &BackupRestorePostgresTarget{
+					Consumers:        []BackupRestoreDatabaseServiceSnapshot{},
+					DependentIndexes: []BackupRestoreDatabaseDependentIndex{},
+				}
 				record.Point.SourceFormat = BackupRuntimeFormatPostgres
 				record.Point.PostgresArchive = backuppostgres.ArchiveEvidence{
 					SourceServerVersion: "16.8", BackupToolVersion: "16.8",
 				}
 				record.TargetVersions.ServerVersion, record.TargetVersions.RestoreToolVersion = "16.9", "16.9"
 			} else {
+				record.CurrentTarget.MySQL = &BackupRestoreMySQLTarget{
+					Consumers:        []BackupRestoreDatabaseServiceSnapshot{},
+					DependentIndexes: []BackupRestoreDatabaseDependentIndex{},
+				}
 				record.Point.SourceFormat = BackupRuntimeFormatMySQL
 				record.Point.MySQLArchive = backupmysql.ArchiveEvidence{
 					SourceServerVersion: "8.4.4", BackupToolVersion: "mysqldump  Ver 8.4.4 for Linux on x86_64",
