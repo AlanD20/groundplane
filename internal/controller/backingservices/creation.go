@@ -80,6 +80,7 @@ type CreationService struct {
 	plans            *taskplanning.TaskPlanResolver
 	agents           *agentregistration.Repository
 	images           workloadseal.Resolver
+	imageRegistry    creationImageRegistry
 	hookInputs       backingServiceHookInputs
 	componentCatalog []componentrender.EnvironmentComponentRegistration
 	now              func() time.Time
@@ -96,6 +97,7 @@ func NewCreationService(
 	componentCatalog []componentrender.EnvironmentComponentRegistration,
 	agents *agentregistration.Repository,
 	images workloadseal.Resolver,
+	imageRegistry creationImageRegistry,
 ) (*CreationService, error) {
 	if volumeRoot == "" || !environmentPool.IsValid() || repository == nil || idempotency == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service creation dependencies are incomplete")
@@ -107,7 +109,7 @@ func NewCreationService(
 		volumeRoot: volumeRoot, environmentPool: environmentPool,
 		repository: repository, idempotency: idempotency, protector: protector,
 		plans: plans, hookInputs: hookInputs,
-		agents: agents, images: images,
+		agents: agents, images: images, imageRegistry: imageRegistry,
 		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),
 		now:              time.Now,
 	}, nil

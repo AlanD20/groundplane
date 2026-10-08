@@ -456,6 +456,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		bootstrap.componentCatalog,
 		authority.agents,
 		imageSelections,
+		registryimages.Local{},
 	)
 	if err != nil {
 		_ = store.Close()
