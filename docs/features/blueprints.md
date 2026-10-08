@@ -11,7 +11,15 @@ Choose **Edit Blueprint**, adjust the YAML, select one Service or the entire
 Environment under **Apply scope**, then review changes before confirming Apply.
 The editor supports per-section folding, **Fold all** and **Expand all** in both
 the saved view and the draft. Folding changes presentation only. A selected
-Service Apply keeps the draft so unapplied edits remain available.
+Service Apply from the Environment editor keeps the draft so unapplied edits
+remain available.
+
+On a Service's **Configuration report**, choose **Edit Service Blueprint** to
+edit only that Service's YAML. GP merges it into the saved Environment Blueprint
+and validates the complete document with Apply fixed to that Service. Other
+Services and shared resources are preserved; change them from the Environment
+editor. Review the proposed changes before confirming Apply. After a successful
+Apply, the Service editor reloads the saved result unless you have newer edits.
 The Tenant, Project and Environment must already exist. For a first Blueprint,
 start with the [complete example](../blueprint.md#start-with-one-service).
 

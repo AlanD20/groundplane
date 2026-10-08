@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  serviceBlueprintDocument,
+  mergeServiceBlueprint,
+} from "./service-document";
+
 import { Input } from "@/components/ui/input";
 import { subscribeTerminalTasks } from "@/features/task/terminal-observation";
 import {
@@ -59,14 +64,18 @@ type PreparedBlueprint = {
   request: BlueprintApplyRequest;
   validation: BlueprintValidationResponse;
   key: string;
+  document: string;
+  service: string;
 };
 
 export function BlueprintWorkspace({
   environment,
   workspace,
+  serviceName,
 }: {
   environment: Environment;
   workspace: string;
+  serviceName?: string;
 }) {
   const store = useStore();
   const getBlueprint = store.getBlueprint;
@@ -79,7 +88,9 @@ export function BlueprintWorkspace({
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  const [selectedService, setSelectedService] = useState("");
+  const [scope, setSelectedService] = useState("");
+  const selectedService = serviceName ?? scope;
+  const [savedDocument, setSavedDocument] = useState("");
   const [error, setError] = useState("");
   const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null);
   const submitted = useRef<{
@@ -164,8 +175,12 @@ export function BlueprintWorkspace({
     try {
       const current = await getBlueprint(environment.id);
       if (generation !== loadGeneration.current) return;
+      const displayed = serviceName
+        ? serviceBlueprintDocument(current.document, serviceName)
+        : current.document;
       setSnapshot(current);
-      setDraft(current.document);
+      setSavedDocument(displayed);
+      setDraft(displayed);
       setEditing(false);
       setSavedChanged(false);
     } catch (cause) {
@@ -178,7 +193,7 @@ export function BlueprintWorkspace({
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
     }
-  }, [environment.id, getBlueprint]);
+  }, [environment.id, getBlueprint, serviceName]);
 
   useEffect(() => {
     void load();
@@ -193,17 +208,17 @@ export function BlueprintWorkspace({
     () =>
       subscribeTerminalTasks((task) => {
         if (task.environment_id !== environment.id) return;
-        const ownFullApply =
+        const ownCompletedApply =
           task.id === submitted.current?.taskId &&
-          !submitted.current.service &&
+          (!submitted.current.service || !!serviceName) &&
           task.status === "completed" &&
           submitted.current.document === currentDraft.current.draft;
-        if (!currentDraft.current.editing || ownFullApply) {
+        if (!currentDraft.current.editing || ownCompletedApply) {
           submitted.current = null;
           void load();
         } else setSavedChanged(true);
       }),
-    [environment.id, load],
+    [environment.id, load, serviceName],
   );
 
   async function importDocument(event: ChangeEvent<HTMLInputElement>) {
@@ -222,17 +237,17 @@ export function BlueprintWorkspace({
   function exportDocument() {
     if (!snapshot) return;
     const url = URL.createObjectURL(
-      new Blob([snapshot.document], { type: "application/yaml;charset=utf-8" }),
+      new Blob([savedDocument], { type: "application/yaml;charset=utf-8" }),
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${environment.name}.blueprint.yaml`;
+    link.download = `${serviceName ?? environment.name}.blueprint.yaml`;
     link.click();
     URL.revokeObjectURL(url);
   }
 
   function refresh() {
-    if (editing && snapshot && draft !== snapshot.document) {
+    if (editing && snapshot && draft !== savedDocument) {
       setConfirmRefresh(true);
       return;
     }
@@ -244,14 +259,23 @@ export function BlueprintWorkspace({
     setWorking(true);
     setError("");
     try {
-      const request = await createBlueprintTextApplyRequest(draft);
+      const document = serviceName
+        ? mergeServiceBlueprint(snapshot.document, draft, serviceName)
+        : draft;
+      const request = await createBlueprintTextApplyRequest(document);
       if (selectedService) request.manifest.service = selectedService;
       const validation = await store.validateBlueprint(
         environment.id,
         request,
         snapshot.revision,
       );
-      setPrepared({ request, validation, key: newULID() });
+      setPrepared({
+        request,
+        validation,
+        key: newULID(),
+        document: draft,
+        service: selectedService,
+      });
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Blueprint validation failed.",
@@ -267,21 +291,24 @@ export function BlueprintWorkspace({
         <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <FileCode2 className="size-4 text-primary" /> Blueprint
+              <FileCode2 className="size-4 text-primary" />{" "}
+              {serviceName ? "Service Blueprint" : "Blueprint"}
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              Edit the Environment’s Compose YAML, then review and apply changes
-              to one Service or the entire Environment. Secret values stay
-              private.
+              {serviceName
+                ? `Edit Compose YAML for ${serviceName}, then review and apply to this Service. Other Services and shared resources are kept unchanged.`
+                : "Edit the Environment’s Compose YAML, then review and apply changes to one Service or the entire Environment. Secret values stay private."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <BlueprintApplyAction
-              environment={environment}
-              workspace={workspace}
-              disabled={applyBlocked}
-              onIntentChange={refreshRecovery}
-            />
+            {!serviceName && (
+              <BlueprintApplyAction
+                environment={environment}
+                workspace={workspace}
+                disabled={applyBlocked}
+                onIntentChange={refreshRecovery}
+              />
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -369,7 +396,8 @@ export function BlueprintWorkspace({
                   disabled={!snapshot || loading}
                   onClick={() => setEditing(true)}
                 >
-                  <Pencil /> Edit Blueprint
+                  <Pencil />{" "}
+                  {serviceName ? "Edit Service Blueprint" : "Edit Blueprint"}
                 </Button>
               )}
             </div>
@@ -381,15 +409,34 @@ export function BlueprintWorkspace({
             </p>
           )}
           <div className={workspaceSectionClassName(editing, "space-y-4")}>
-            <BlueprintApplyScope
-              environment={environment}
-              value={selectedService}
-              onChange={setSelectedService}
-              disabled={working || applyBlocked}
-            />
+            {serviceName ? (
+              <p className="text-sm">
+                <strong>Apply scope: {serviceName}</strong>
+                <br />
+                <span className="text-muted-foreground">
+                  Running workloads follow their release strategy; recreate
+                  causes downtime. Stopped Services stay stopped.
+                </span>
+              </p>
+            ) : (
+              <BlueprintApplyScope
+                environment={environment}
+                value={selectedService}
+                onChange={setSelectedService}
+                disabled={working || applyBlocked}
+              />
+            )}
             <CodeEditor
-              id="environment-blueprint"
-              label="Environment Blueprint YAML"
+              id={
+                serviceName
+                  ? `service-blueprint-${serviceName}`
+                  : "environment-blueprint"
+              }
+              label={
+                serviceName
+                  ? `${serviceName} Blueprint YAML`
+                  : "Environment Blueprint YAML"
+              }
               language="yaml"
               value={loading && !snapshot ? "Loading Blueprint…" : draft}
               readOnly={!editing || loading}
@@ -403,7 +450,7 @@ export function BlueprintWorkspace({
                   variant="outline"
                   disabled={working}
                   onClick={() => {
-                    setDraft(snapshot?.document ?? "");
+                    setDraft(savedDocument);
                     setEditing(false);
                     setError("");
                   }}
@@ -445,7 +492,7 @@ export function BlueprintWorkspace({
             if (open) return;
             setPrepared(null);
           }}
-          title={`Apply Blueprint · ${environment.name}`}
+          title={`Apply Blueprint · ${serviceName ?? environment.name}`}
           description="Confirm the validated changes. Apply requires the reviewed base revision to remain current."
           type="update"
           target={environment.id}
@@ -468,8 +515,8 @@ export function BlueprintWorkspace({
               );
               submitted.current = {
                 taskId: accepted.task_id,
-                document: draft,
-                service: selectedService,
+                document: prepared.document,
+                service: prepared.service,
               };
               return accepted.task_id;
             } finally {

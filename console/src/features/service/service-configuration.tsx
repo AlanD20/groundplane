@@ -1,3 +1,5 @@
+import { BlueprintWorkspace } from "@/features/blueprint/blueprint-workspace";
+import { useRequiredParams } from "@/lib/router";
 import { DetailRow } from "@/components/common/detail-row";
 import { ImageReference } from "@/components/common/image-reference";
 import {
@@ -5,7 +7,6 @@ import {
   AdvancedDetails,
 } from "@/components/common/resource-panel";
 import { CopyButton } from "@/components/common/copy-button";
-import { CodeEditor } from "@/components/ui/code-editor";
 import { Button } from "@/components/ui/button";
 import type { Environment, Service } from "@/lib/types";
 import {
@@ -16,16 +17,13 @@ import {
 export function ServiceConfiguration({
   service,
   env,
-  loading,
-  error,
   onNavigate,
 }: {
   service: Service;
   env?: Environment;
-  loading: boolean;
-  error?: string;
   onNavigate?: (destination: ServiceDestination) => void;
 }) {
+  const params = useRequiredParams("tenant");
   const edit = (destination: ServiceDestination) =>
     onNavigate && (
       <Button size="sm" variant="link" onClick={() => onNavigate(destination)}>
@@ -213,32 +211,26 @@ export function ServiceConfiguration({
           mono
         />
       </ResourcePanel>
-      <AdvancedDetails title="Generated Compose & managed labels">
+      {env && (
+        <BlueprintWorkspace
+          key={service.id}
+          environment={env}
+          workspace={params.tenant}
+          serviceName={service.name}
+        />
+      )}
+      <AdvancedDetails title="Managed labels & generated export">
         <DetailRow label="Managed" value="com.groundplane.managed=true" mono />
         <DetailRow
           label="Service label"
           value={`com.groundplane.service-id=${service.id}`}
           mono
         />
-        {service.nativeCompose ? (
-          <>
-            <div className="flex justify-end">
-              <CopyButton value={service.nativeCompose} label="Copy Compose" />
-            </div>
-            <CodeEditor
-              id={`service-compose-${service.id}`}
-              label="Generated desired Compose"
-              value={service.nativeCompose}
-              language="yaml"
-              readOnly
-            />
-          </>
-        ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {loading
-              ? "Loading generated Compose…"
-              : (error ?? "No generated Compose available.")}
-          </p>
+        {service.nativeCompose && (
+          <CopyButton
+            value={service.nativeCompose}
+            label="Copy generated Compose"
+          />
         )}
       </AdvancedDetails>
     </div>

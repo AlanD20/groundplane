@@ -332,8 +332,6 @@ export function ServiceWorkspace({
                 env={env}
                 onNavigate={selectTab}
                 service={service}
-                loading={loading}
-                error={detailError}
               />
             </div>
           )}
