@@ -363,13 +363,15 @@ func (service *CreationService) createBackingServiceFromStage(
 		Entries: entryDesired, CreatedAt: environment.CreatedAt,
 	}
 	baseProject := backingComposeProject(spec, serviceID, zone.Desired, volume, environment)
+	var sealedImage creationImage
 	if input.Adapter == "mysql" {
 		image, imageErr := service.sealCreationImage(ctx, spec.Image)
 		if imageErr != nil {
 			return idempotencyrecord.IdempotencyResponse{}, imageErr
 		}
+		sealedImage = image
 		workload := baseProject.Services[spec.ServiceName]
-		workload.Image = image
+		workload.Image = image.localID
 		baseProject.Services[spec.ServiceName] = workload
 	}
 	componentProjection, err := composerender.ProjectEnvironmentComponents(
@@ -401,6 +403,15 @@ func (service *CreationService) createBackingServiceFromStage(
 	})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if input.Adapter == "mysql" {
+		for _, workload := range artifact.Services {
+			if workload.ServiceId == serviceID {
+				workload.ImageOs = "linux"
+				workload.ImageArchitecture = sealedImage.architecture
+				workload.ImageVariant = sealedImage.variant
+			}
+		}
 	}
 	artifactValue, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
