@@ -43,7 +43,13 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 	if current.ReadRevision <= 0 {
 		return Publication{}, errs.New(errs.KindInternal, "desired authoring snapshot is unavailable")
 	}
-	state, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{hierarchy.EnvironmentKey(environmentID)}, Revision: current.ReadRevision})
+	state, err := store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{
+			Keys:     []string{hierarchy.EnvironmentKey(environmentID)},
+			Revision: current.ReadRevision,
+		},
+	)
 	if err != nil {
 		return Publication{}, err
 	}
@@ -61,16 +67,30 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 	var projection environmentprojection.EnvironmentComposeProjection
 	var owned environmentprojection.EnvironmentOwnedIdentities
 	if found {
-		previous, hasProjection, readErr := blueprints.ReadCurrentProjection(ctx, store, environmentID, current.ReadRevision)
+		previous, hasProjection, readErr := blueprints.ReadCurrentProjection(
+			ctx,
+			store,
+			environmentID,
+			current.ReadRevision,
+		)
 		if readErr != nil {
 			return Publication{}, readErr
 		}
-		identities, hasOwned, readErr := blueprints.ReadCurrentOwnedIdentities(ctx, store, environmentID, current.ReadRevision)
+		identities, hasOwned, readErr := blueprints.ReadCurrentOwnedIdentities(
+			ctx,
+			store,
+			environmentID,
+			current.ReadRevision,
+		)
 		if readErr != nil {
 			return Publication{}, readErr
 		}
-		if !hasProjection || !hasOwned || previous.Record.RevisionID != current.Record.RevisionID || identities.Record.RevisionID != current.Record.RevisionID {
-			return Publication{}, errs.New(errs.KindStateConflict, "desired authoring requires a complete current runtime projection")
+		if !hasProjection || !hasOwned || previous.Record.RevisionID != current.Record.RevisionID ||
+			identities.Record.RevisionID != current.Record.RevisionID {
+			return Publication{}, errs.New(
+				errs.KindStateConflict,
+				"desired authoring requires a complete current runtime projection",
+			)
 		}
 		projection = environmentprojection.CloneEnvironmentComposeProjection(previous.Record)
 		owned = environmentprojection.CloneEnvironmentOwnedIdentities(identities.Record)
@@ -92,16 +112,28 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 	if err := mutate(&input.Input, &projection); err != nil {
 		return Publication{}, err
 	}
-	publication, err := PrepareValues(input, projection, owned, marker, baseRevisionID, current.Revision, state.Values[0].ModRevision)
+	publication, err := PrepareValues(
+		input,
+		projection,
+		owned,
+		marker,
+		baseRevisionID,
+		current.Revision,
+		state.Values[0].ModRevision,
+	)
 	if err != nil {
 		return Publication{}, err
 	}
 	return stage(ctx, store, publication)
 }
 
-func PrepareValues(input environmentprojection.EnvironmentDesiredInput, projection environmentprojection.EnvironmentComposeProjection,
-	owned environmentprojection.EnvironmentOwnedIdentities, marker idempotency.IdempotencyMarker,
-	baseRevisionID string, headRevision, environmentRevision int64,
+func PrepareValues(
+	input environmentprojection.EnvironmentDesiredInput,
+	projection environmentprojection.EnvironmentComposeProjection,
+	owned environmentprojection.EnvironmentOwnedIdentities,
+	marker idempotency.IdempotencyMarker,
+	baseRevisionID string,
+	headRevision, environmentRevision int64,
 ) (Publication, error) {
 	claim := blueprints.EnvironmentBlueprintStageClaim{DescriptorID: strings.TrimPrefix(input.RevisionID, "task_"),
 		EnvironmentID: input.EnvironmentID, RevisionID: input.RevisionID, TaskID: input.RevisionID,
@@ -112,9 +144,13 @@ func PrepareValues(input environmentprojection.EnvironmentDesiredInput, projecti
 	if err != nil {
 		return Publication{}, err
 	}
-	streams, err := blueprints.BuildEnvironmentBlueprintStreams(blueprints.EnvironmentBlueprintStageRequest{Claim: claim,
-		Mutation:     &blueprints.EnvironmentDesiredMutationAudit{Configuration: &blueprints.EnvironmentConfigurationMutationAudit{BaseRevisionID: baseRevisionID}},
-		DesiredInput: input, DependencyDigest: digest})
+	streams, err := blueprints.BuildEnvironmentBlueprintStreams(
+		blueprints.EnvironmentBlueprintStageRequest{Claim: claim,
+			Mutation: &blueprints.EnvironmentDesiredMutationAudit{
+				Configuration: &blueprints.EnvironmentConfigurationMutationAudit{BaseRevisionID: baseRevisionID},
+			},
+			DesiredInput: input, DependencyDigest: digest},
+	)
 	if err != nil {
 		return Publication{}, err
 	}
@@ -133,7 +169,10 @@ func PrepareValues(input environmentprojection.EnvironmentDesiredInput, projecti
 			return err
 		}
 		publication.Conditions = append(publication.Conditions, keyvalue.Condition{Key: key})
-		publication.Mutations = append(publication.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
+		publication.Mutations = append(
+			publication.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value},
+		)
 		return nil
 	}
 	descriptorValue, err := encodeDescriptor(descriptor)
@@ -145,15 +184,19 @@ func PrepareValues(input environmentprojection.EnvironmentDesiredInput, projecti
 			from := int(index) * blueprints.EnvironmentBlueprintChunkBytes
 			to := min(from+blueprints.EnvironmentBlueprintChunkBytes, len(stream))
 			data := stream[from:to]
-			value, encodeErr := blueprints.EncodeEnvironmentBlueprintChunk(blueprints.EnvironmentBlueprintChunk{Family: family,
-				Sequence: index, LogicalOffset: uint64(from), LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data})
+			value, encodeErr := blueprints.EncodeEnvironmentBlueprintChunk(
+				blueprints.EnvironmentBlueprintChunk{Family: family,
+					Sequence: index, LogicalOffset: uint64(from), LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data},
+			)
 			if err = add(blueprints.EnvironmentBlueprintChunkKeyFor(input.EnvironmentID, input.RevisionID, family, index), value, encodeErr); err != nil {
 				keyvalue.ClearMutationValues(publication.Mutations)
 				return Publication{}, err
 			}
 		}
 	}
-	seal, err := blueprints.EncodeEnvironmentBlueprintSeal(blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor))
+	seal, err := blueprints.EncodeEnvironmentBlueprintSeal(
+		blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor),
+	)
 	if err = add(blueprints.EnvironmentBlueprintRootKey(input.EnvironmentID, input.RevisionID), seal, err); err != nil {
 		return Publication{}, err
 	}

@@ -164,7 +164,16 @@ func prepareNativeRouteMutation(
 		taskjournal.TaskResourceKindParam:     taskjournal.TaskResourceRoute,
 		taskjournal.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
-	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep), Action: "Publish Route configuration", Description: "Commit the selected Route's desired configuration without changing a running workload.", Target: intent.RouteID, TimeoutSeconds: 30}}
+	task.Steps = []taskjournal.TaskStepRecord{
+		{
+			Kind:           taskjournal.TaskStepOperation,
+			ID:             ids.New(ids.KindStep),
+			Action:         "Publish Route configuration",
+			Description:    "Commit the selected Route's desired configuration without changing a running workload.",
+			Target:         intent.RouteID,
+			TimeoutSeconds: 30,
+		},
+	}
 	value, err := json.Marshal(struct {
 		Version    int                                  `json:"version"`
 		Kind       environmentchanges.RouteMutationKind `json:"kind"`

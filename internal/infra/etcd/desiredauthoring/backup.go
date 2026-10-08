@@ -14,9 +14,19 @@ import (
 func SetBackup(ctx context.Context, store Store, input *core.BlueprintDesiredInput,
 	projection *environmentprojection.EnvironmentComposeProjection, policy backupqueries.BackupPolicyProjection,
 ) error {
-	authored := &core.BackupSpec{Enabled: policy.Enabled, Frequency: policy.Frequency, Keep: policy.Keep, Encryption: policy.Encryption}
-	resolved := &environmentprojection.EnvironmentBlueprintBackupPolicy{Enabled: policy.Enabled, Frequency: policy.Frequency,
-		Keep: policy.Keep, Encryption: policy.Encryption, ConnectorID: policy.ConnectorID}
+	authored := &core.BackupSpec{
+		Enabled:    policy.Enabled,
+		Frequency:  policy.Frequency,
+		Keep:       policy.Keep,
+		Encryption: policy.Encryption,
+	}
+	resolved := &environmentprojection.EnvironmentBlueprintBackupPolicy{
+		Enabled:     policy.Enabled,
+		Frequency:   policy.Frequency,
+		Keep:        policy.Keep,
+		Encryption:  policy.Encryption,
+		ConnectorID: policy.ConnectorID,
+	}
 	keys := make([]string, 0, len(policy.Sources)+1)
 	if policy.ConnectorID != "" {
 		keys = append(keys, connectors.RecordKey(policy.ConnectorID))
@@ -77,7 +87,14 @@ func SetBackup(ctx context.Context, store Store, input *core.BlueprintDesiredInp
 			return errs.New(errs.KindStateConflict, "Backup authored target is absent")
 		}
 		authored.Sources = append(authored.Sources, entry)
-		resolved.Sources = append(resolved.Sources, environmentprojection.EnvironmentBlueprintBackupPolicySource{ID: source.ID, Kind: source.Kind, TargetID: source.TargetID})
+		resolved.Sources = append(
+			resolved.Sources,
+			environmentprojection.EnvironmentBlueprintBackupPolicySource{
+				ID:       source.ID,
+				Kind:     source.Kind,
+				TargetID: source.TargetID,
+			},
+		)
 	}
 	input.Backup, projection.Backup = authored, resolved
 	return nil

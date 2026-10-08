@@ -10,7 +10,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func EmptyProjection(environment hierarchy.EnvironmentRecord, revisionID string) (environmentprojection.EnvironmentComposeProjection, error) {
+func EmptyProjection(
+	environment hierarchy.EnvironmentRecord,
+	revisionID string,
+) (environmentprojection.EnvironmentComposeProjection, error) {
 	yaml := []byte("services: {}\nnetworks: {}\n")
 	digest := sha256.Sum256(yaml)
 	suffix := strings.TrimPrefix(revisionID, "task_")

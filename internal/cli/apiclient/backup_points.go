@@ -69,7 +69,9 @@ func (c *Client) ListRecoveryPoints(
 		}
 		if point.Capture != nil {
 			converted.Capture = &apiTypes.RecoveryPointCapture{TaskID: point.Capture.TaskId,
-				CreatedAt: point.Capture.CreatedAt.UTC().Format(time.RFC3339), SourceCount: int(point.Capture.SourceCount)}
+				CreatedAt: point.Capture.CreatedAt.UTC().
+					Format(time.RFC3339),
+				SourceCount: int(point.Capture.SourceCount)}
 		}
 		if point.KeyEra != nil {
 			converted.KeyEra = int(*point.KeyEra)

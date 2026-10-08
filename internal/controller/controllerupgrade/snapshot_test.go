@@ -42,11 +42,21 @@ func TestControllerUpdateSnapshotReadsPreviousEpochWithoutAuthorizingExecution(t
 		}
 		task.Params[InputParam] = string(canonicalInput)
 		task.PlanHash = string(upgrade.Hash(canonicalInput))[7:]
-		task, err = etcd.TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, h.now.Add(time.Second))
+		task, err = etcd.TransitionTaskStatus(
+			task,
+			taskjournal.TaskStatusPending,
+			taskjournal.TaskStatusRunning,
+			h.now.Add(time.Second),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		task, err = etcd.TransitionTaskStatus(task, taskjournal.TaskStatusRunning, taskjournal.TaskStatusCompleted, h.now.Add(2*time.Second))
+		task, err = etcd.TransitionTaskStatus(
+			task,
+			taskjournal.TaskStatusRunning,
+			taskjournal.TaskStatusCompleted,
+			h.now.Add(2*time.Second),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}

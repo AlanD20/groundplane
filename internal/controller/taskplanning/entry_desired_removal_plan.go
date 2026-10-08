@@ -87,7 +87,16 @@ func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 		task.Params = map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceEntry,
 			taskjournal.TaskEntryEnvironmentParam: claim.EnvironmentID, blueprints.EnvironmentDesiredRevisionParam: claim.RevisionID}
 		task.Materializations = nil
-		task.Steps = []taskjournal.TaskStepRecord{{ID: ids.New(ids.KindStep), Kind: taskjournal.TaskStepOperation, Action: "Remove Entry definition", Description: "Commit the desired Entry removal; this operation has no running workload to update.", Target: task.Target, TimeoutSeconds: 30}}
+		task.Steps = []taskjournal.TaskStepRecord{
+			{
+				ID:             ids.New(ids.KindStep),
+				Kind:           taskjournal.TaskStepOperation,
+				Action:         "Remove Entry definition",
+				Description:    "Commit the desired Entry removal; this operation has no running workload to update.",
+				Target:         task.Target,
+				TimeoutSeconds: 30,
+			},
+		}
 		digest := sha256.Sum256(
 			[]byte(task.PlanID + "/" + task.Target + "/" + claim.DescriptorID + "/" + claim.RevisionID),
 		)

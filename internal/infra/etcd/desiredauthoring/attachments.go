@@ -20,7 +20,12 @@ func AttachmentSpec(ctx context.Context, store Store, record attachments.Record)
 	if !found {
 		return core.AttachmentSpec{}, errs.New(errs.KindStateConflict, "Attach consumer projection is unavailable")
 	}
-	backing, found, err := blueprints.ReadCurrentProjection(ctx, store, record.BackingEnvironmentID, consumer.ReadRevision)
+	backing, found, err := blueprints.ReadCurrentProjection(
+		ctx,
+		store,
+		record.BackingEnvironmentID,
+		consumer.ReadRevision,
+	)
 	if err != nil {
 		return core.AttachmentSpec{}, err
 	}

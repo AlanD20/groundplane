@@ -38,10 +38,18 @@ func (repository *BackupPolicyRepository) ReplaceBackupPolicyProtected(
 	}
 	if evidence != nil {
 		existing, err := evidence.Marker()
-		return IdempotencyTransactionResult{kind: idempotencyTransactionExisting, revision: state.ReadRevision, marker: existing}, err
+		return IdempotencyTransactionResult{
+			kind:     idempotencyTransactionExisting,
+			revision: state.ReadRevision,
+			marker:   existing,
+		}, err
 	}
 	if !matches {
-		return IdempotencyTransactionResult{kind: idempotencyTransactionConflict, revision: state.ReadRevision, conflict: plan.ClassifyConflict(state.Values)}, nil
+		return IdempotencyTransactionResult{
+			kind:     idempotencyTransactionConflict,
+			revision: state.ReadRevision,
+			conflict: plan.ClassifyConflict(state.Values),
+		}, nil
 	}
 	if plan.OperationCount(marker) > etcdstore.MaximumOperations {
 		return IdempotencyTransactionResult{}, errs.New(

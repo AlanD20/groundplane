@@ -10,5 +10,11 @@ import (
 func prepareAttachDesiredAuthoring(ctx context.Context, store hierarchyStore, record attachrecord.Record,
 	oldName string, remove bool, marker idempotencyrecord.IdempotencyMarker,
 ) (routeHeadPublication, error) {
-	return prepareDirectDesiredProjectionPublication(ctx, store, record.EnvironmentID, marker, desiredauthoring.AttachmentMutation(ctx, store, record, oldName, remove))
+	return prepareDirectDesiredProjectionPublication(
+		ctx,
+		store,
+		record.EnvironmentID,
+		marker,
+		desiredauthoring.AttachmentMutation(ctx, store, record, oldName, remove),
+	)
 }

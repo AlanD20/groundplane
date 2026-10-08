@@ -320,7 +320,13 @@ func (repository *Reader) listBackupRecoveryPoints(
 			return BackupRuntimePage[BackupRecoveryPointRecord]{}, CorruptBackupRuntimeRecord()
 		}
 		records[position] = point
-		companionKeys = append(companionKeys, environmentIndex, sourceIndex, connectorIndex, BackupRecoveryPointCaptureKey(point.ID))
+		companionKeys = append(
+			companionKeys,
+			environmentIndex,
+			sourceIndex,
+			connectorIndex,
+			BackupRecoveryPointCaptureKey(point.ID),
+		)
 		if pruneValue := points.Values[position*2+1]; pruneValue != nil {
 			prune, pruneErr := DecodeBackupRecoveryPointPruneRecord(pruneValue.Value)
 			if pruneErr != nil || prune.Point != point.BackupRecoveryPointSnapshot ||

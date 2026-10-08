@@ -24,11 +24,21 @@ func TestTaskDescriptionsSurviveCompletionAndRetryWithoutCredentials(t *testing.
 	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps[:1], []*agentpb.ExecutionStep{step})
 	procedure.AdapterKey, procedure.AttachId = "mutated-adapter", ids.New(ids.KindAttach)
 	step.TimeoutSeconds = 99
-	task, err := TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, now.Add(time.Second))
+	task, err := TransitionTaskStatus(
+		task,
+		taskjournal.TaskStatusPending,
+		taskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err = TransitionTaskStatus(task, taskjournal.TaskStatusRunning, taskjournal.TaskStatusFailed, now.Add(2*time.Second))
+	task, err = TransitionTaskStatus(
+		task,
+		taskjournal.TaskStatusRunning,
+		taskjournal.TaskStatusFailed,
+		now.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +53,8 @@ func TestTaskDescriptionsSurviveCompletionAndRetryWithoutCredentials(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restored.TargetName != "shared-access" || restored.Steps[0].Action != "Run postgres16 adapter: grant" || restored.Steps[0].TimeoutSeconds != 45 {
+	if restored.TargetName != "shared-access" || restored.Steps[0].Action != "Run postgres16 adapter: grant" ||
+		restored.Steps[0].TimeoutSeconds != 45 {
 		t.Fatalf("captured presentation changed: %#v", restored.Steps)
 	}
 	retry, err := CloneRetryTask(restored, ids.New(ids.KindTask), taskjournal.TaskActorOperator, now.Add(3*time.Second))

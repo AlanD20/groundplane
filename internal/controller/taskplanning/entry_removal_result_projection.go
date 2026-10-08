@@ -27,7 +27,13 @@ func entryRemovalTaskPlan(task etcd.TaskRecord) (entrycapability.RemovalTaskPlan
 		Materializations: make([]entrycapability.RemovalMaterialization, len(task.Materializations)),
 	}
 	for index, step := range task.Steps {
-		plan.Steps[index] = entrycapability.RemovalStep{ID: step.ID, Action: step.Action, Description: step.Description, Target: step.Target, TimeoutSeconds: step.TimeoutSeconds}
+		plan.Steps[index] = entrycapability.RemovalStep{
+			ID:             step.ID,
+			Action:         step.Action,
+			Description:    step.Description,
+			Target:         step.Target,
+			TimeoutSeconds: step.TimeoutSeconds,
+		}
 	}
 	for index, materialization := range task.Materializations {
 		converted, err := entryRemovalMaterialization(materialization)

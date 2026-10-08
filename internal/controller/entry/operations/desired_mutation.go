@@ -30,7 +30,13 @@ import (
 )
 
 type entryDesiredMutationRepository interface {
-	InitializeEnvironmentDesiredState(context.Context, string, idempotencyrecord.IdempotencyLocator, idempotencyrecord.ProtectedIntentRecord, time.Time) error
+	InitializeEnvironmentDesiredState(
+		context.Context,
+		string,
+		idempotencyrecord.IdempotencyLocator,
+		idempotencyrecord.ProtectedIntentRecord,
+		time.Time,
+	) error
 	controllerrevision.Repository
 	GetEnvironmentDesiredInput(
 		context.Context,

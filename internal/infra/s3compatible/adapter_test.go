@@ -112,11 +112,22 @@ func TestETagIdentitySurvivesReturnedVersionID(t *testing.T) {
 			if deleted {
 				return nil, providerTestError{status: http.StatusNotFound, code: "NoSuchKey"}
 			}
-			return &s3.HeadObjectOutput{ContentLength: aws.Int64(int64(len(body))), Metadata: artifact.Metadata(), VersionId: version, ETag: etag}, nil
+			return &s3.HeadObjectOutput{
+				ContentLength: aws.Int64(int64(len(body))),
+				Metadata:      artifact.Metadata(),
+				VersionId:     version,
+				ETag:          etag,
+			}, nil
 		},
 		getObject: func(input *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
 			checkIdentity(input.VersionId, input.IfMatch)
-			return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(body)), ContentLength: aws.Int64(int64(len(body))), Metadata: artifact.Metadata(), VersionId: version, ETag: etag}, nil
+			return &s3.GetObjectOutput{
+				Body:          io.NopCloser(bytes.NewReader(body)),
+				ContentLength: aws.Int64(int64(len(body))),
+				Metadata:      artifact.Metadata(),
+				VersionId:     version,
+				ETag:          etag,
+			}, nil
 		},
 		deleteObject: func(input *s3.DeleteObjectInput, _ []func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
 			checkIdentity(input.VersionId, input.IfMatch)
@@ -129,14 +140,23 @@ func TestETagIdentitySurvivesReturnedVersionID(t *testing.T) {
 	if err != nil || object.Discriminator.Kind != backupobject.DiscriminatorETag {
 		t.Fatalf("upload identity = %#v, error = %v", object.Discriminator, err)
 	}
-	if head, err := adapter.HeadExact(context.Background(), artifact, &object.Discriminator); err != nil || !head.Present {
+	if head, err := adapter.HeadExact(context.Background(), artifact, &object.Discriminator); err != nil ||
+		!head.Present {
 		t.Fatalf("verification = %#v, %v", head, err)
 	}
 	var restored bytes.Buffer
-	if err := adapter.GetExact(context.Background(), object, &restored); err != nil || !bytes.Equal(restored.Bytes(), body) {
+	if err := adapter.GetExact(context.Background(), object, &restored); err != nil ||
+		!bytes.Equal(restored.Bytes(), body) {
 		t.Fatalf("download error = %v, body = %q", err, restored.Bytes())
 	}
-	authority := backupobject.PruneAuthority{Key: artifact.Key, EnvironmentID: artifact.EnvironmentID, SourceID: artifact.SourceID, RecoveryPointID: artifact.RecoveryPointID, Evidence: artifact.Evidence, Discriminator: object.Discriminator}
+	authority := backupobject.PruneAuthority{
+		Key:             artifact.Key,
+		EnvironmentID:   artifact.EnvironmentID,
+		SourceID:        artifact.SourceID,
+		RecoveryPointID: artifact.RecoveryPointID,
+		Evidence:        artifact.Evidence,
+		Discriminator:   object.Discriminator,
+	}
 	authority.MetadataCount, authority.MetadataSHA256 = artifact.MetadataEvidence()
 	if err := adapter.PruneExact(context.Background(), authority); err != nil || !deleted {
 		t.Fatalf("prune error = %v, deleted = %t", err, deleted)

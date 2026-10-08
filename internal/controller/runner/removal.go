@@ -238,7 +238,14 @@ func newRunnerRemovalTask(record runnerrecord.RunnerRecord, key string, now time
 		Type: taskjournal.TaskRemove, Target: record.Desired.ID,
 		Params: runnerrecord.RunnerRemovalTaskParams(record),
 		Steps: []taskjournal.TaskStepRecord{
-			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep), Action: "Remove GitHub Runner", Description: "Unregister the Runner and remove its isolated runtime.", Target: record.Desired.ID, TimeoutSeconds: uint32(runnerRemoveTimeoutSeconds)},
+			{
+				Kind:           taskjournal.TaskStepOperation,
+				ID:             ids.New(ids.KindStep),
+				Action:         "Remove GitHub Runner",
+				Description:    "Unregister the Runner and remove its isolated runtime.",
+				Target:         record.Desired.ID,
+				TimeoutSeconds: uint32(runnerRemoveTimeoutSeconds),
+			},
 		}, TimeoutSeconds: runnerRemoveTimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}

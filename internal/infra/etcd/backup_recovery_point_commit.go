@@ -57,7 +57,11 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 			"direct Recovery Point commit cannot carry an orphan",
 		)
 	}
-	point.Capture = backupruntime.BackupRecoveryPointCapture{TaskID: nextRun.TaskID, CreatedAt: nextRun.CreatedAt, SourceCount: len(nextRun.Sources)}
+	point.Capture = backupruntime.BackupRecoveryPointCapture{
+		TaskID:      nextRun.TaskID,
+		CreatedAt:   nextRun.CreatedAt,
+		SourceCount: len(nextRun.Sources),
+	}
 	pointValue, err := backupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err

@@ -18,11 +18,16 @@ func Validate(ctx context.Context, store referenceStore, current etcdstore.Versi
 	if err := servicerecord.ValidateServiceVersion(current); err != nil {
 		return Guards{}, err
 	}
-	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision || projection.Record.EnvironmentID != current.Record.EnvironmentID || projectionrecord.ValidateEnvironmentComposeProjection(projection.Record) != nil {
+	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
+		projection.Record.EnvironmentID != current.Record.EnvironmentID ||
+		projectionrecord.ValidateEnvironmentComposeProjection(projection.Record) != nil {
 		return Guards{}, errs.New(errs.KindValidationFailed, "Service removal projection is invalid")
 	}
 	if current.Record.BackingNetworkID != "" || current.Record.Desired.Adapter != "" {
-		return Guards{}, errs.New(errs.KindResourceInUse, "Backing Services are removed through their backing lifecycle")
+		return Guards{}, errs.New(
+			errs.KindResourceInUse,
+			"Backing Services are removed through their backing lifecycle",
+		)
 	}
 	for _, service := range projection.Record.DesiredServices {
 		if service.Desired.ID == current.Record.Desired.ID {
@@ -34,11 +39,17 @@ func Validate(ctx context.Context, store referenceStore, current etcdstore.Versi
 	}
 	for _, component := range projection.Record.Components {
 		if slices.Contains(component.Runtime.GeneratedServices, current.Record.Desired.ID) {
-			return Guards{}, errs.New(errs.KindResourceInUse, "Component-generated Services are removed through their Component")
+			return Guards{}, errs.New(
+				errs.KindResourceInUse,
+				"Component-generated Services are removed through their Component",
+			)
 		}
 	}
 	for _, prefix := range []string{"/v1/indexes/attaches/by-service/service/" + current.Record.Desired.ID + "/", "/v1/indexes/attaches/by-backing-service/service/" + current.Record.Desired.ID + "/"} {
-		page, err := store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: 1, Revision: projection.ReadRevision})
+		page, err := store.Range(
+			ctx,
+			etcdstore.RangeRequest{Prefix: prefix, Limit: 1, Revision: projection.ReadRevision},
+		)
 		if err != nil {
 			return Guards{}, err
 		}
@@ -49,7 +60,12 @@ func Validate(ctx context.Context, store referenceStore, current etcdstore.Versi
 			return Guards{}, errs.New(errs.KindResourceInUse, "Service is referenced by an Attach")
 		}
 	}
-	selected, found, err := blueprints.ReadCurrentProjection(ctx, store, current.Record.EnvironmentID, projection.ReadRevision)
+	selected, found, err := blueprints.ReadCurrentProjection(
+		ctx,
+		store,
+		current.Record.EnvironmentID,
+		projection.ReadRevision,
+	)
 	if err != nil {
 		return Guards{}, err
 	}
@@ -64,7 +80,12 @@ func Validate(ctx context.Context, store referenceStore, current etcdstore.Versi
 	if err != nil {
 		return Guards{}, err
 	}
-	_, err = scriptsourceevidence.PrepareServiceScriptAbsence(ctx, store, current.Record.Desired.ID, projection.ReadRevision)
+	_, err = scriptsourceevidence.PrepareServiceScriptAbsence(
+		ctx,
+		store,
+		current.Record.Desired.ID,
+		projection.ReadRevision,
+	)
 	if err != nil {
 		return Guards{}, err
 	}

@@ -117,7 +117,8 @@ func preparedAuthoringCandidate(prepared ReleaseGroupPreparedMutation) (domain.G
 			continue
 		}
 		group, err := DecodeReleaseGroupStored(mutation.Value)
-		if err != nil || group.ID != prepared.groupID || group.EnvironmentID != prepared.environmentID || candidate != nil {
+		if err != nil || group.ID != prepared.groupID || group.EnvironmentID != prepared.environmentID ||
+			candidate != nil {
 			return domain.Group{}, errs.New(errs.KindInternal, "release group prepared authoring candidate is invalid")
 		}
 		candidate = &group

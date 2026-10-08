@@ -7,7 +7,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 )
 
-func AttachmentMutation(ctx context.Context, store Store, record attachrecord.Record, oldName string, remove bool) func(*core.BlueprintDesiredInput, *environmentprojection.EnvironmentComposeProjection) error {
+func AttachmentMutation(
+	ctx context.Context,
+	store Store,
+	record attachrecord.Record,
+	oldName string,
+	remove bool,
+) func(*core.BlueprintDesiredInput, *environmentprojection.EnvironmentComposeProjection) error {
 	return func(input *core.BlueprintDesiredInput, _ *environmentprojection.EnvironmentComposeProjection) error {
 		if remove {
 			delete(input.Attachments, record.Name)

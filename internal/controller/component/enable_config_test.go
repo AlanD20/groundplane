@@ -67,14 +67,19 @@ func TestEnableComponentAuthorsConfigurationInOneApply(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			original := "services:\n  app:\n    image: example/app:qa\n" + test.components
-			fixture := &enableBlueprintFixture{revision: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", bundle: core.BlueprintBundle{
-				RootPath: "compose.yaml", Files: []core.BlueprintFile{{Path: "compose.yaml", Content: []byte(original)}},
-			}}
+			fixture := &enableBlueprintFixture{
+				revision: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				bundle: core.BlueprintBundle{
+					RootPath: "compose.yaml", Files: []core.BlueprintFile{{Path: "compose.yaml", Content: []byte(original)}},
+				},
+			}
 			service := &MutationService{
-				components: managedConfigReadRepository{record: testcomponents.Record{Desired: testcomponents.DesiredRecord{
-					ID: "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV", Owner: core.ComponentOwnerEnvironment,
-					OwnerID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Kind: core.ComponentKindIngressCaddy,
-				}}}, applier: fixture,
+				components: managedConfigReadRepository{
+					record: testcomponents.Record{Desired: testcomponents.DesiredRecord{
+						ID: "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV", Owner: core.ComponentOwnerEnvironment,
+						OwnerID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Kind: core.ComponentKindIngressCaddy,
+					}},
+				}, applier: fixture,
 			}
 			_, err := service.EnableComponent(context.Background(), "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				apiTypes.ComponentEnableRequest{Config: test.config}, "enable-key-123456")
@@ -103,7 +108,8 @@ func TestEnableComponentAuthorsConfigurationInOneApply(t *testing.T) {
 			}
 			if test.name == "missing router" {
 				other := decoded.Components["edge-tunnel"]
-				if len(decoded.Components) != 2 || other.Enabled || other.Implementation != core.ComponentKindEdgeCloudflare {
+				if len(decoded.Components) != 2 || other.Enabled ||
+					other.Implementation != core.ComponentKindEdgeCloudflare {
 					t.Fatalf("unrelated Tunnel was changed: %#v", decoded.Components)
 				}
 			} else if len(decoded.Components) != 1 {

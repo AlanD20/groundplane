@@ -25,7 +25,15 @@ func prepareControllerRemovalPlan(request RemovalPlanRequest) (RemovalTaskPlan, 
 	return RemovalTaskPlan{
 		Executor: RemovalExecutorController, PlanHash: planHash, RenderGeneration: 1,
 		EnvironmentID: request.EnvironmentID, Identity: request.Identity,
-		Steps: []RemovalStep{{ID: ids.New(ids.KindStep), Action: "Remove Entry definition", Description: "Remove the selected Entry from desired configuration without changing a running workload.", Target: request.EntryID, TimeoutSeconds: uint32(controllerRemovalTimeoutSeconds)}}, TimeoutSeconds: controllerRemovalTimeoutSeconds,
+		Steps: []RemovalStep{
+			{
+				ID:             ids.New(ids.KindStep),
+				Action:         "Remove Entry definition",
+				Description:    "Remove the selected Entry from desired configuration without changing a running workload.",
+				Target:         request.EntryID,
+				TimeoutSeconds: uint32(controllerRemovalTimeoutSeconds),
+			},
+		}, TimeoutSeconds: controllerRemovalTimeoutSeconds,
 	}, nil
 }
 

@@ -59,7 +59,12 @@ func TestBackupPolicyProtectedReplacementCommitsAgeStateAndReplays(t *testing.T)
 			t.Fatalf("stored source order = %#v", stored.Record.SourceIDs)
 		}
 	}
-	desired, found, err := testblueprints.ReadCurrentDesiredInput(context.Background(), fixture.store, fixture.environment.Record.ID, 0)
+	desired, found, err := testblueprints.ReadCurrentDesiredInput(
+		context.Background(),
+		fixture.store,
+		fixture.environment.Record.ID,
+		0,
+	)
 	if err != nil || !found || desired.Record.Input.Backup == nil {
 		t.Fatalf("read authored Backup = %#v, %t, %v", desired, found, err)
 	}

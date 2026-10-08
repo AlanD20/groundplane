@@ -63,14 +63,22 @@ func TestDirectDesiredPublicationPreservesRuntimeAndRejectsStaleCandidate(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if current.Record.RevisionID == baseline.Record.RevisionID || current.Record.RenderGeneration != baseline.Record.RenderGeneration || !bytes.Equal(current.Record.ComposeArtifact, baseline.Record.ComposeArtifact) {
+	if current.Record.RevisionID == baseline.Record.RevisionID ||
+		current.Record.RenderGeneration != baseline.Record.RenderGeneration ||
+		!bytes.Equal(current.Record.ComposeArtifact, baseline.Record.ComposeArtifact) {
 		t.Fatal("metadata change altered runtime authority or failed to advance desired identity")
 	}
 	input, _, err := blueprints.ReadCurrentDesiredInput(ctx, store, environment.Record.ID, 0)
 	if err != nil || input.Record.Input.NetworkPool != "10.48.0.0/16" {
 		t.Fatalf("desired pool = %q/%v", input.Record.Input.NetworkPool, err)
 	}
-	prior, found, err := blueprints.ReadDesiredInputRevision(ctx, store, environment.Record.ID, baseline.Record.RevisionID, 0)
+	prior, found, err := blueprints.ReadDesiredInputRevision(
+		ctx,
+		store,
+		environment.Record.ID,
+		baseline.Record.RevisionID,
+		0,
+	)
 	if err != nil || !found || prior.Record.Input.NetworkPool != environment.Record.NetworkPool {
 		t.Fatal("immutable predecessor was altered")
 	}
@@ -83,14 +91,24 @@ func TestDirectDesiredPublicationPreservesRuntimeAndRejectsStaleCandidate(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if removed, err := desiredauthoring.Cleanup(ctx, store, descriptor, descriptorRead.Entry.ModRevision, marker.CreatedAt); err != nil || removed {
+	if removed, err := desiredauthoring.Cleanup(ctx, store, descriptor, descriptorRead.Entry.ModRevision, marker.CreatedAt); err != nil ||
+		removed {
 		t.Fatalf("unexpired staging cleanup = %v/%v", removed, err)
 	}
 	if removed, err := desiredauthoring.Cleanup(ctx, store, descriptor, descriptorRead.Entry.ModRevision,
 		marker.CreatedAt.Add(blueprints.EnvironmentBlueprintStageExpiry+time.Second)); err != nil || !removed {
 		t.Fatalf("expired staging cleanup = %v/%v", removed, err)
 	}
-	remaining, err := store.Range(ctx, keyvalue.RangeRequest{Prefix: blueprints.EnvironmentBlueprintRevisionPrefixFinal(environment.Record.ID, descriptor.Claim.RevisionID), Limit: 32})
+	remaining, err := store.Range(
+		ctx,
+		keyvalue.RangeRequest{
+			Prefix: blueprints.EnvironmentBlueprintRevisionPrefixFinal(
+				environment.Record.ID,
+				descriptor.Claim.RevisionID,
+			),
+			Limit: 32,
+		},
+	)
 	if err != nil || len(remaining.Values) != 0 {
 		t.Fatal("expired private content remains")
 	}
@@ -111,7 +129,12 @@ func TestDirectDesiredPublicationStagesLargeInputWithinTransactionLimits(t *test
 			input.Scripts = make(map[string]core.ScriptSpec)
 			for index := 0; index < 24; index++ {
 				name := fmt.Sprintf("script-%d", index)
-				input.Scripts[name] = core.ScriptSpec{Slug: name, Service: "app", When: core.ScriptManual, Script: "echo " + strings.Repeat("x", 60_000)}
+				input.Scripts[name] = core.ScriptSpec{
+					Slug:    name,
+					Service: "app",
+					When:    core.ScriptManual,
+					Script:  "echo " + strings.Repeat("x", 60_000),
+				}
 			}
 			return nil
 		})
@@ -135,7 +158,11 @@ func TestDirectDesiredPublicationStagesLargeInputWithinTransactionLimits(t *test
 
 type boundedDesiredStore struct{ *memoryHierarchyStore }
 
-func (store *boundedDesiredStore) Transact(ctx context.Context, conditions []keyvalue.Condition, mutations []keyvalue.Mutation) (keyvalue.TransactionResult, error) {
+func (store *boundedDesiredStore) Transact(
+	ctx context.Context,
+	conditions []keyvalue.Condition,
+	mutations []keyvalue.Mutation,
+) (keyvalue.TransactionResult, error) {
 	budget, err := store.MeasureTransaction(ctx, conditions, mutations)
 	if err != nil {
 		return keyvalue.TransactionResult{}, err

@@ -164,7 +164,8 @@ func prepareRuntimeConfigurationTask(
 			return TaskRecord{}, err
 		}
 	}
-	if task.Configuration != nil && task.Configuration.Current != (runtimeconfiguration.Reference{}) && reference != task.Configuration.Current {
+	if task.Configuration != nil && task.Configuration.Current != (runtimeconfiguration.Reference{}) &&
+		reference != task.Configuration.Current {
 		return TaskRecord{}, errs.New(errs.KindStateConflict, "prepared configuration source set changed")
 	}
 	prepared := cloneTaskRecord(task)

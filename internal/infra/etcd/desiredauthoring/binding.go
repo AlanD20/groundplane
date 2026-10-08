@@ -18,7 +18,10 @@ func Bind(publication Publication,
 		found := false
 		for _, existing := range conditions {
 			if existing.Key == desired.Key && existing != desired {
-				return nil, nil, nil, errs.New(errs.KindStateConflict, "Environment desired authority changed during preparation")
+				return nil, nil, nil, errs.New(
+					errs.KindStateConflict,
+					"Environment desired authority changed during preparation",
+				)
 			}
 			if existing == desired {
 				found = true

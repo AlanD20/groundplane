@@ -33,7 +33,16 @@ func prepareDirectDesiredProjectionPublication(ctx context.Context, store hierar
 	return result, nil
 }
 
-func (publication routeHeadPublication) bindDirectDesired(conditions []etcdstore.Condition, mutations []etcdstore.Mutation, previous idempotencyPlanClassifier) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
-	conditions, mutations, classify, err := desiredauthoring.Bind(desiredauthoring.Publication{Conditions: publication.conditions, Mutations: publication.mutations}, conditions, mutations, desiredauthoring.Classifier(previous))
+func (publication routeHeadPublication) bindDirectDesired(
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+	previous idempotencyPlanClassifier,
+) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
+	conditions, mutations, classify, err := desiredauthoring.Bind(
+		desiredauthoring.Publication{Conditions: publication.conditions, Mutations: publication.mutations},
+		conditions,
+		mutations,
+		desiredauthoring.Classifier(previous),
+	)
 	return conditions, mutations, idempotencyPlanClassifier(classify), err
 }

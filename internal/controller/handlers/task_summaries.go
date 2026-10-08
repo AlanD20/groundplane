@@ -49,7 +49,11 @@ func taskResultSummary(record etcd.TaskRecord) string {
 		return "The executor verified that candidate workload effects are absent."
 	}
 	if len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 {
-		return fmt.Sprintf("Executor returned %d proxy and %d workload runtime observations.", len(result.ProxyEvidence), len(result.RecreateEvidence))
+		return fmt.Sprintf(
+			"Executor returned %d proxy and %d workload runtime observations.",
+			len(result.ProxyEvidence),
+			len(result.RecreateEvidence),
+		)
 	}
 	if len(result.Projects) != 0 {
 		return fmt.Sprintf("Executor returned runtime observations for %d container project(s).", len(result.Projects))

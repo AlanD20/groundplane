@@ -164,12 +164,23 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		return binding.ClassifyConflict(revision, values, originalClassify)
 	}
-	desired, err := prepareAttachDesiredAuthoring(ctx, repository.store, replacement, current.Record.Name, false, marker)
+	desired, err := prepareAttachDesiredAuthoring(
+		ctx,
+		repository.store,
+		replacement,
+		current.Record.Name,
+		false,
+		marker,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clearRouteHeadPublication(desired)
-	conditions, mutations, classify, err = desired.bindDirectDesired(binding.Conditions(), binding.Mutations(), classify)
+	conditions, mutations, classify, err = desired.bindDirectDesired(
+		binding.Conditions(),
+		binding.Mutations(),
+		classify,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

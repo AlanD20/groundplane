@@ -20,7 +20,10 @@ func Cleanup(ctx context.Context, store Store, descriptor blueprints.Environment
 		return false, nil
 	}
 	page, err := store.Range(ctx, keyvalue.RangeRequest{
-		Prefix: blueprints.EnvironmentBlueprintRevisionPrefixFinal(descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID), Limit: 32,
+		Prefix: blueprints.EnvironmentBlueprintRevisionPrefixFinal(
+			descriptor.Claim.EnvironmentID,
+			descriptor.Claim.RevisionID,
+		), Limit: 32,
 	})
 	if err != nil {
 		return false, err

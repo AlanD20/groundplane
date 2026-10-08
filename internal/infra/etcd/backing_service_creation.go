@@ -72,7 +72,12 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	defer hookPublication.clear()
 	defer func() { returnErr = hookPublication.finish(ctx, repository.store, returnErr) }()
 	creation.Task = hookPublication.task
-	creation.Task, err = prepareRuntimeConfigurationTask(ctx, repository.store, creation.Task, creation.Stage.ReadRevision)
+	creation.Task, err = prepareRuntimeConfigurationTask(
+		ctx,
+		repository.store,
+		creation.Task,
+		creation.Stage.ReadRevision,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

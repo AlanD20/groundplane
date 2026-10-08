@@ -30,7 +30,13 @@ const (
 )
 
 type zoneCreationRepository interface {
-	InitializeEnvironmentDesiredState(context.Context, string, idempotencyrecord.IdempotencyLocator, idempotencyrecord.ProtectedIntentRecord, time.Time) error
+	InitializeEnvironmentDesiredState(
+		context.Context,
+		string,
+		idempotencyrecord.IdempotencyLocator,
+		idempotencyrecord.ProtectedIntentRecord,
+		time.Time,
+	) error
 	GetEnvironmentDesiredInput(
 		context.Context,
 		string,
@@ -246,7 +252,10 @@ func (service *zoneCreationService) createZoneOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !found {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Environment desired initialization is incomplete")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Environment desired initialization is incomplete",
+		)
 	}
 	environment, err := service.repository.GetEnvironment(ctx, input.EnvironmentID)
 	if err != nil {

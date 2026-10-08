@@ -6,7 +6,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func CheckConditions(ctx context.Context, store Store, conditions []keyvalue.Condition) (*keyvalue.GetManyResult, bool, error) {
+func CheckConditions(
+	ctx context.Context,
+	store Store,
+	conditions []keyvalue.Condition,
+) (*keyvalue.GetManyResult, bool, error) {
 	keys := make([]string, len(conditions))
 	for index, condition := range conditions {
 		keys[index] = condition.Key

@@ -40,9 +40,16 @@ func stage(ctx context.Context, store Store, publication Publication) (Publicati
 	}
 	descriptorRevision := result.Revision
 	final := Publication{Conditions: append([]keyvalue.Condition(nil), publication.Conditions[:3]...)}
-	final.Conditions = append(final.Conditions, keyvalue.Condition{Key: descriptorMutation.Key, ModRevision: descriptorRevision})
+	final.Conditions = append(
+		final.Conditions,
+		keyvalue.Condition{Key: descriptorMutation.Key, ModRevision: descriptorRevision},
+	)
 	for _, mutation := range publication.Mutations[1 : len(publication.Mutations)-1] {
-		result, err = store.Transact(ctx, []keyvalue.Condition{{Key: descriptorMutation.Key, ModRevision: descriptorRevision}, {Key: mutation.Key}}, []keyvalue.Mutation{mutation})
+		result, err = store.Transact(
+			ctx,
+			[]keyvalue.Condition{{Key: descriptorMutation.Key, ModRevision: descriptorRevision}, {Key: mutation.Key}},
+			[]keyvalue.Mutation{mutation},
+		)
 		if err != nil {
 			return Publication{}, err
 		}
@@ -50,7 +57,10 @@ func stage(ctx context.Context, store Store, publication Publication) (Publicati
 			return Publication{}, errs.New(errs.KindStateConflict, "desired staged content changed")
 		}
 		if !strings.Contains(mutation.Key, "/chunks/") {
-			final.Conditions = append(final.Conditions, keyvalue.Condition{Key: mutation.Key, ModRevision: result.Revision})
+			final.Conditions = append(
+				final.Conditions,
+				keyvalue.Condition{Key: mutation.Key, ModRevision: result.Revision},
+			)
 		}
 	}
 	head := publication.Mutations[len(publication.Mutations)-1]
