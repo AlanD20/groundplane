@@ -111,6 +111,7 @@ func extractSourceArchive(archivePath, destination, commit string) error {
 	prefix := "groundplane-" + commit
 	reader := tar.NewReader(compressed)
 	seen := make(map[string]struct{})
+	globalSeen := false
 	var total int64
 	for {
 		header, err := reader.Next()
@@ -119,6 +120,13 @@ func extractSourceArchive(archivePath, destination, commit string) error {
 		}
 		if err != nil {
 			return errs.New(errs.KindStateConflict, "selected source archive is invalid")
+		}
+		if header.Typeflag == tar.TypeXGlobalHeader {
+			if globalSeen || len(seen) != 0 || len(header.PAXRecords) != 1 || header.PAXRecords["comment"] != commit {
+				return errs.New(errs.KindStateConflict, "selected source archive commit metadata is invalid")
+			}
+			globalSeen = true
+			continue
 		}
 		name := strings.TrimSuffix(header.Name, "/")
 		parts := strings.Split(name, "/")
