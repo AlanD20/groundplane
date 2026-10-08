@@ -3,6 +3,7 @@
 import { CopyButton } from "@/components/common/copy-button";
 import {
   ResourceForm,
+  ResourceFormBody,
   ResourceFormHeader as DialogHeader,
   ResourceFormTitle as DialogTitle,
   ResourceFormDescription as DialogDescription,
@@ -65,7 +66,7 @@ export function TaskRunnerDialog({
   onDispatch: () => Promise<string | null>;
   // "drawer" for anything that takes inputs (deploy, rollback), "dialog"
   // for plain confirmations (restore, run, start/stop/destroy).
-  variant?: "drawer" | "dialog" | "inline";
+  variant?: "drawer" | "dialog" | "inline" | "embedded";
 }) {
   const { abortTask, getTask, watchTaskEvents } = useStore();
   const [phase, setPhase] = useState<Phase>("review");
@@ -489,6 +490,8 @@ export function TaskRunnerDialog({
     </>
   );
 
+  if (variant === "embedded")
+    return open ? <ResourceFormBody>{Body}</ResourceFormBody> : null;
   if (variant === "inline")
     return (
       <ResourceForm open={open} onOpenChange={onOpenChange}>

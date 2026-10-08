@@ -21,6 +21,15 @@ import { cn } from "@/lib/utils";
 
 const Inline = createContext(false);
 
+/** Form content inside an existing workspace section that owns its expansion. */
+export function ResourceFormBody({ children }: { children: ReactNode }) {
+  return (
+    <Inline.Provider value>
+      <div className="space-y-4">{children}</div>
+    </Inline.Provider>
+  );
+}
+
 /** One form body, with contextual inline editing or a bounded modal entry point. */
 export function ResourceForm({
   open,

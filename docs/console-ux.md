@@ -304,6 +304,10 @@ List details and editors belong immediately beneath their owning row. The same
 disclosure button opens and closes details, exposes its expanded state, and
 keeps focus; inspection must not scroll to a detached panel after the list.
 New-resource forms appear beneath the section header, before existing rows.
+When configuring an existing component, expand its current section in place;
+keep the section mounted and animate its height with reduced-motion support.
+The highlight surrounds both the added fields and their action footer. Do not
+append a detached configuration card beneath the component list.
 Bound form width and pair related short fields on wide screens; stack them on
 narrow screens. Group section actions together at the header's trailing edge.
 Long paths and identifiers must not push row actions outside the visible area.
