@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 )
 
@@ -77,7 +78,7 @@ func validJournal(t *testing.T) Journal {
 				64,
 			),
 			StorageEpoch:  StorageEpoch,
-			ChannelSchema: 1,
+			ChannelSchema: executionplan.SchemaVersion,
 		},
 		StartedAt: now, Deadline: now.Add(600 * time.Second)}
 }

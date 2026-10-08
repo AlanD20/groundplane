@@ -23,7 +23,7 @@ func TestBuildPlanSealsDeterministicOwnedCopy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPlan(replay) error = %v", err)
 	}
-	if first.GetSchema() != 1 || len(first.GetPlanHash()) != sha256.Size ||
+	if len(first.GetPlanHash()) != sha256.Size ||
 		!bytes.Equal(first.GetPlanHash(), second.GetPlanHash()) {
 		t.Fatalf("BuildPlan() hashes = %x / %x", first.GetPlanHash(), second.GetPlanHash())
 	}

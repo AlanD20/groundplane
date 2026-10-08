@@ -13,10 +13,14 @@ import (
 // Rationale: exporting the current Blueprint must preserve order after human
 // edits; reapplying the exported input must not silently revert migration order.
 func TestAuthoringRetainsScriptOrder(t *testing.T) {
+	at := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	for _, order := range []uint16{0, 10, 65535} {
 		result, err := Authoring([]testkeyvalue.Versioned[testscripts.Record]{{Record: testscripts.Record{
+			EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 1),
+			ServiceID:     ids.NewAt(ids.KindService, at, 2), ActiveGeneration: 1,
 			Origin: "blueprint", ReconciliationKey: "migration-hook",
 			Desired: core.Script{
+				ID:          ids.NewAt(ids.KindScript, at, 3),
 				Slug:        "renamed",
 				ServiceName: "api",
 				Body:        "echo migrate",
@@ -35,9 +39,11 @@ func TestAuthoringRetainsScriptOrder(t *testing.T) {
 func TestAuthoringIncludesDirectScriptWithStableKey(t *testing.T) {
 	at := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	id := ids.NewAt(ids.KindScript, at, 1)
-	record := testscripts.Record{Origin: "api", Desired: core.Script{
-		ID: id, Slug: "setup", ServiceName: "api", Body: "echo setup", When: core.ScriptManual,
-	}}
+	record := testscripts.Record{Origin: "api", ActiveGeneration: 1,
+		EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 2), ServiceID: ids.NewAt(ids.KindService, at, 3),
+		Desired: core.Script{
+			ID: id, Slug: "setup", ServiceName: "api", Body: "echo setup", When: core.ScriptManual,
+		}}
 	key, err := testscripts.BlueprintAuthoringKey(record)
 	if err != nil {
 		t.Fatal(err)

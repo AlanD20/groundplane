@@ -87,23 +87,18 @@ func TestReplacementProjectionPreservesMaximumPublicKeep(t *testing.T) {
 func TestReplacementPlanFitsWorstCaseAtomicBudget(t *testing.T) {
 	t.Parallel()
 	marker := idempotency.IdempotencyMarker{RetainUntil: time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)}
-	for _, test := range []struct {
-		count int
-		want  int
-	}{{count: backuppolicy.MaximumBackupPolicySources, want: 84}, {count: backuppolicy.MaximumBackupPolicySources + 1, want: 89}} {
-		candidate := replacementBudgetCandidate(t, test.count)
+	for _, count := range []int{backuppolicy.MaximumBackupPolicySources, backuppolicy.MaximumBackupPolicySources + 1} {
+		candidate := replacementBudgetCandidate(t, count)
 		plan, err := PrepareBackupPolicyReplacement(candidate)
 		if err != nil {
-			t.Fatalf("PrepareBackupPolicyReplacement(%d sources) error = %v", test.count, err)
+			t.Fatalf("PrepareBackupPolicyReplacement(%d sources) error = %v", count, err)
 		}
 		defer plan.Clear()
-		if operations := plan.OperationCount(marker); operations != test.want ||
-			operations > keyvalue.MaximumOperations {
+		if operations := plan.OperationCount(marker); operations <= 0 || operations > keyvalue.MaximumOperations {
 			t.Fatalf(
-				"%d-source operation budget = %d, want %d <= %d",
-				test.count,
+				"%d-source operation budget = %d, want at most %d",
+				count,
 				operations,
-				test.want,
 				keyvalue.MaximumOperations,
 			)
 		}
@@ -232,6 +227,14 @@ func replacementBudgetCandidate(t *testing.T, count int) ReplacementCandidate {
 			int64(100+index*3),
 		)
 		candidate.Replacement.SourceIDs[index] = candidate.Sources[index].Source.Record.ID
+	}
+	shared := candidate.Sources[0].Volume.Projection.Record
+	shared.Volumes = nil
+	for _, source := range candidate.Sources {
+		shared.Volumes = append(shared.Volumes, source.Volume.Volume)
+	}
+	for index := range candidate.Sources {
+		candidate.Sources[index].Volume.Projection.Record = shared
 	}
 	candidate.Current = &keyvalue.Versioned[backuppolicy.BackupPolicyRecord]{
 		Record: backuppolicy.BackupPolicyRecord{

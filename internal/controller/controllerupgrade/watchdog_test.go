@@ -8,6 +8,7 @@ import (
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -192,7 +193,7 @@ func watchdogJournal() upgrade.Journal {
 				64,
 			),
 			StorageEpoch:  upgrade.StorageEpoch,
-			ChannelSchema: 1,
+			ChannelSchema: executionplan.SchemaVersion,
 		},
 		StartedAt:   now,
 		Deadline:    now.Add(600 * time.Second),

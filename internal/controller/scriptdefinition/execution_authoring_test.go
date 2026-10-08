@@ -21,7 +21,9 @@ func TestAuthoringScriptExecutionResolvesStableIDsToKeys(t *testing.T) {
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
 	volumeID, entryID := ids.NewAt(ids.KindVolume, at, 2), ids.NewAt(ids.KindEnvEntry, at, 3)
 	record := testscripts.Record{EnvironmentID: environmentID, Origin: "blueprint", ReconciliationKey: "setup-hook",
-		Desired: core.Script{Slug: "setup", ServiceName: "api", When: core.ScriptPreDeploy, Body: "echo setup",
+		ServiceID: ids.NewAt(ids.KindService, at, 5), ActiveGeneration: 1,
+		Desired: core.Script{ID: ids.NewAt(ids.KindScript, at, 6),
+			Slug: "setup", ServiceName: "api", When: core.ScriptPreDeploy, Body: "echo setup",
 			Execution: &core.ScriptExecution{Mode: core.ScriptExecutionExplicit, User: "0:0",
 				Image: "example.invalid/setup@sha256:" + strings.Repeat("a", 64),
 				Volumes: []core.ScriptVolumeGrant{
