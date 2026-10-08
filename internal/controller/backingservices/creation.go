@@ -29,6 +29,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -117,6 +118,7 @@ func (service *CreationService) CreateBackingService(
 	input apiTypes.BackingServiceCreate,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	ctx = imagefence.WithScope(ctx)
 	if idempotencyKey == "" {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
