@@ -420,7 +420,9 @@ export type TaskType =
   | "remove"
   | "update"
   | "rotate"
-  | "fetch";
+  | "fetch"
+  | "prepare"
+  | "apply";
 
 export type TaskStepState = "pending" | "running" | "done" | "failed";
 

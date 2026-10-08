@@ -271,7 +271,7 @@ func taskAPIType(taskType taskjournal.TaskType, actor taskjournal.TaskActor) (st
 		taskjournal.TaskRestore, taskjournal.TaskAttach, taskjournal.TaskDetach, taskjournal.TaskRun,
 		taskjournal.TaskScript, taskjournal.TaskProvision, taskjournal.TaskCreate, taskjournal.TaskUpdate,
 		taskjournal.TaskRemove, taskjournal.TaskStart, taskjournal.TaskStop, taskjournal.TaskDestroy,
-		taskjournal.TaskRotate, taskjournal.TaskFetch:
+		taskjournal.TaskRotate, taskjournal.TaskFetch, taskjournal.TaskPrepare, taskjournal.TaskApply:
 	default:
 		return "", errs.New(errs.KindInternal, "task has an invalid durable type")
 	}

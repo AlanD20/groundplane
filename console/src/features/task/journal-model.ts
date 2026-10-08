@@ -127,6 +127,8 @@ function taskTitle(
     update: "Update",
     rotate: "Rotate",
     fetch: "Fetch image",
+    prepare: "Prepare software",
+    apply: "Apply software",
   };
   return `${labels[type]} · ${target}`;
 }

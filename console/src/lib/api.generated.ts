@@ -3812,7 +3812,7 @@ export interface components {
             /** Format: int64 */
             timeout_seconds: number;
             /** @enum {string} */
-            type: "deploy" | "rollback" | "backup" | "backup_prune" | "restore" | "attach" | "detach" | "run" | "script" | "provision" | "create" | "update" | "remove" | "start" | "stop" | "destroy" | "rotate" | "fetch";
+            type: "deploy" | "rollback" | "backup" | "backup_prune" | "restore" | "attach" | "detach" | "run" | "script" | "provision" | "create" | "update" | "remove" | "start" | "stop" | "destroy" | "rotate" | "fetch" | "prepare" | "apply";
             /** Format: date-time */
             updated_at: string;
             /** @enum {string} */

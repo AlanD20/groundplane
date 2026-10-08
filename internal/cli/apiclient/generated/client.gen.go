@@ -1059,6 +1059,7 @@ func (e TaskExecutor) Valid() bool {
 
 // Defines values for TaskType.
 const (
+	TaskTypeApply       TaskType = "apply"
 	TaskTypeAttach      TaskType = "attach"
 	TaskTypeBackup      TaskType = "backup"
 	TaskTypeBackupPrune TaskType = "backup_prune"
@@ -1067,6 +1068,7 @@ const (
 	TaskTypeDestroy     TaskType = "destroy"
 	TaskTypeDetach      TaskType = "detach"
 	TaskTypeFetch       TaskType = "fetch"
+	TaskTypePrepare     TaskType = "prepare"
 	TaskTypeProvision   TaskType = "provision"
 	TaskTypeRemove      TaskType = "remove"
 	TaskTypeRestore     TaskType = "restore"
@@ -1082,6 +1084,8 @@ const (
 // Valid indicates whether the value is a known member of the TaskType enum.
 func (e TaskType) Valid() bool {
 	switch e {
+	case TaskTypeApply:
+		return true
 	case TaskTypeAttach:
 		return true
 	case TaskTypeBackup:
@@ -1097,6 +1101,8 @@ func (e TaskType) Valid() bool {
 	case TaskTypeDetach:
 		return true
 	case TaskTypeFetch:
+		return true
+	case TaskTypePrepare:
 		return true
 	case TaskTypeProvision:
 		return true

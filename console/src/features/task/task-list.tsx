@@ -145,6 +145,8 @@ export function TaskList({
                 "destroy",
                 "rotate",
                 "fetch",
+                "prepare",
+                "apply",
               ].map((value) => ({
                 value,
                 label:

@@ -36,6 +36,8 @@ const ICONS: Record<TaskType, React.ReactNode> = {
   update: <Settings2 />,
   rotate: <KeyRound />,
   fetch: <Download />,
+  prepare: <Download />,
+  apply: <ArrowUpCircle />,
 }
 
 export function ActivityIcon({ type, status }: { type: TaskType; status: TaskStatus }) {
