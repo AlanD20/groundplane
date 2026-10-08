@@ -378,7 +378,8 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	}
 	conditions = append(conditions, backingConditions...)
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: projectionKey, Value: projectionValue}}
-	if projection.BackingRuntime != nil && projection.BackingRuntime.TaskID == record.ID {
+	if projection.BackingRuntime != nil && projection.BackingRuntime.Adapter == "postgres" &&
+		projection.BackingRuntime.TaskID == record.ID {
 		backing, err := backingpostgresruntime.FromProvisioning(projection)
 		if err != nil {
 			return taskMaterializationProjectionChange{}, err
