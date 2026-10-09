@@ -131,8 +131,7 @@ export function ScriptVolumeGrants({
         <Plus className="size-3.5" /> Volume grant
       </Button>
       <p className="text-xs text-muted-foreground">
-        Only these managed Volumes are mounted. No Service mounts are inherited;
-        empty Volumes are not populated from the image.
+        Only selected Volumes are mounted; no image data is copied into them.
       </p>
     </fieldset>
   );

@@ -242,10 +242,7 @@ export function ServiceSettings({
       }
     >
       <p className="text-sm text-muted-foreground">
-        Saved configuration is applied on the next deploy. Editing here does not
-        change running containers. Deploy is a separate action and defaults to
-        the configured <span className="font-medium">{service.strategy}</span>{" "}
-        strategy.
+        Changes apply on the next deploy.
       </p>
       <div className="space-y-2">
         {rows

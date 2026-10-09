@@ -360,12 +360,8 @@ export function SettingsCard({ env }: { env: Environment }) {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Backups encrypt with the public recipient (safe in desired
-                state). The Controller keeps the private identity wrapped
-                outside the ordinary Console store; export is a repeatable
-                transient no-store response to keep off-host for disaster
-                recovery. Rotating affects new backups only; previous recovery
-                points need the previously exported identity.
+                Keep an exported identity off-host. Older backups still need
+                their original key.
               </p>
               {backup.keyEra && (
                 <p className="text-xs text-muted-foreground">

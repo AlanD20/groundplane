@@ -85,7 +85,6 @@ export default function TenantPage() {
         <EmptyState
           icon={<Boxes />}
           title="No projects yet"
-          description="A project is an application — it may be a microservice architecture with many services."
           action={
             <Button onClick={() => setOpen(true)}>
               <Plus className="size-4" /> New project
@@ -137,11 +136,7 @@ export default function TenantPage() {
                 placeholder="What this project is"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              A project may be a microservice architecture. Environments
-              (staging, production) are created inside it, and each environment
-              attaches backing services.
-            </p>
+
             {projectError && (
               <p role="alert" className="text-xs text-destructive">
                 {projectError}
@@ -195,12 +190,6 @@ export default function TenantPage() {
           id={removingProject.id}
           workspace={tenant.slug}
           description="Permanently removes this Project and every Environment, workload, volume, Secret, Connector, and project Runner it owns."
-          steps={[
-            { label: "Freeze Project membership", state: "pending" },
-            { label: "Remove child runtime and storage", state: "pending" },
-            { label: "Remove Environment state", state: "pending" },
-            { label: "Remove the Project", state: "pending" },
-          ]}
           onDispatch={() => store.deleteProject(removingProject.id)}
           onCommit={() => setRemovingProject(null)}
         />

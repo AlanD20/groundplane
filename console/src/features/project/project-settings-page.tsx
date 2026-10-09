@@ -22,7 +22,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
-import type { TaskStep } from "@/lib/types";
 
 function normalizeSlug(value: string): string {
   return value
@@ -66,10 +65,6 @@ export default function ProjectSettingsPage() {
   const connectorCount = store.connectors.filter((connector) =>
     environmentIds.has(connector.scopeRef),
   ).length;
-  const attachCount = environments.reduce(
-    (count, environment) => count + environment.attaches.length,
-    0,
-  );
   const normalizedSlug = normalizeSlug(slug);
   const slugTaken = store.tenantProjects.some(
     (candidate) =>
@@ -77,24 +72,6 @@ export default function ProjectSettingsPage() {
       candidate.tenantId === tenant.id &&
       candidate.slug === normalizedSlug,
   );
-  const deleteSteps: TaskStep[] = [
-    {
-      label: `Detach ${attachCount} backing attach${attachCount === 1 ? "" : "es"}`,
-      state: "pending",
-    },
-    {
-      label: `Destroy ${environments.length} environment${environments.length === 1 ? "" : "s"} and their volumes`,
-      state: "pending",
-    },
-    {
-      label: `Delete ${secretCount} secret${secretCount === 1 ? "" : "s"} and ${connectorCount} connector${connectorCount === 1 ? "" : "s"}`,
-      state: "pending",
-    },
-    {
-      label: `Remove project ${project.id} from desired state`,
-      state: "pending",
-    },
-  ];
 
   return (
     <div
@@ -103,7 +80,6 @@ export default function ProjectSettingsPage() {
       <PageHeader
         eyebrow={`Project · ${tenant.slug}/${project.slug}`}
         title="Project settings"
-        description="Edit the display name, rename the URL label, or delete this project and everything it owns. Stable references always use the project id."
         icon={<Settings />}
         meta={
           <>
@@ -169,10 +145,6 @@ export default function ProjectSettingsPage() {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                The human-readable project name. Changing it does not change
-                URLs or references.
-              </p>
             </div>
           </SettingsDraft>
         </CardContent>
@@ -239,10 +211,6 @@ export default function ProjectSettingsPage() {
                 readOnly
                 className="font-mono text-muted-foreground"
               />
-              <p className="text-xs text-muted-foreground">
-                This stable id owns environments and scoped records. It never
-                changes.
-              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="project-slug">Slug (URL label)</Label>
@@ -313,7 +281,6 @@ export default function ProjectSettingsPage() {
         destructive
         confirmText={project.slug}
         startLabel="Delete project"
-        steps={deleteSteps}
         onDispatch={() => store.deleteProject(project.id)}
         onCommit={() => window.location.assign(`/t/${tenant.slug}`)}
       />

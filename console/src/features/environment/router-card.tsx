@@ -122,13 +122,6 @@ export function RouterCard({ env }: { env: Environment }) {
       }}
       variant={configuring ? "embedded" : "dialog"}
       title={`${operation.action === "config" ? "Configure" : operation.action === "enable" ? "Enable" : operation.action === "disable" ? "Disable" : "Reapply configuration for"} ${componentName} · ${env.name}`}
-      description={
-        operation.action === "update"
-          ? "Reapply the saved configuration and reconcile this component’s runtime. This does not select a new software version."
-          : operation.component.kind === "caddy"
-            ? "Route requests to this Environment’s Services. Changes are applied through a Task."
-            : "Connect this Environment to Cloudflare using your tunnel token. Changes are applied through a Task."
-      }
       type="run"
       target={operation.component.id}
       workspace={params.tenant}
@@ -145,8 +138,8 @@ export function RouterCard({ env }: { env: Environment }) {
               title="Network access"
               description={
                 operation.component.kind === "caddy"
-                  ? "Select the Zones that connect the router to your Services."
-                  : "Select the Zones the tunnel can reach, including one with outbound internet access."
+                  ? ""
+                  : "Requires a Zone with outbound internet access."
               }
             >
               <div className="sm:col-span-2">
@@ -220,16 +213,8 @@ export function RouterCard({ env }: { env: Environment }) {
                       value={routerAlias}
                       maxLength={63}
                       onChange={(event) => setRouterAlias(event.target.value)}
-                      aria-describedby="router-alias-help"
                     />
-                    <p
-                      id="router-alias-help"
-                      className="text-xs text-muted-foreground"
-                    >
-                      An additional name for reaching the router on its primary
-                      network, for example from a tunnel. Leave empty if not
-                      needed.
-                    </p>
+
                     {routerAlias !== "" &&
                       !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(
                         routerAlias,
@@ -317,15 +302,6 @@ export function RouterCard({ env }: { env: Environment }) {
           </div>
         ) : undefined
       }
-      steps={[
-        {
-          label: "Check configuration and network access",
-          state: "pending",
-        },
-        { label: `Apply ${componentName} configuration`, state: "pending" },
-        { label: `Report ${componentName} status`, state: "pending" },
-      ]}
-      executionCopy="After you confirm:"
       onDispatch={() => {
         if (operation.action === "disable")
           return store.setComponentEnabled(operation.component.id, false);
@@ -482,9 +458,7 @@ export function RouterCard({ env }: { env: Environment }) {
               : "none"}
           </div>
           <p className="text-xs text-muted-foreground">
-            Groundplane starts the outbound connector from its Secret and
-            reports health. DNS, public hostnames, ingress rules, origin
-            targets, and protocol remain provider-managed.
+            Manage hostnames and tunnel routing in Cloudflare.
           </p>
         </CardContent>
       </Card>

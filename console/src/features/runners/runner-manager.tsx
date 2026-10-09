@@ -226,8 +226,7 @@ export default function RunnerManager({
           <DialogHeader>
             <DialogTitle>Add Runner</DialogTitle>
             <DialogDescription>
-              Register one GitHub organization or repository Runner. The
-              short-lived token is sent once and never stored.
+              Use a short-lived GitHub registration token.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -386,8 +385,7 @@ export default function RunnerManager({
           <DialogHeader>
             <DialogTitle>Retry Runner creation</DialogTitle>
             <DialogDescription>
-              Reuse the Runner id, quota, host slot, and subnet with a fresh
-              short-lived GitHub registration token.
+              Enter a fresh GitHub registration token.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -464,10 +462,7 @@ export default function RunnerManager({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Runner slug</DialogTitle>
-            <DialogDescription>
-              Changes only the Groundplane label. GitHub name, registration,
-              owner, and runtime stay unchanged.
-            </DialogDescription>
+            <DialogDescription>GitHub name stays unchanged.</DialogDescription>
           </DialogHeader>
           <form
             className="space-y-4"
@@ -545,24 +540,13 @@ export default function RunnerManager({
           if (!open) setRemoving(null);
         }}
         title={`Remove Runner · ${removing?.slug ?? ""}`}
-        description="Stop and remove the local Runner runtime, then release its Tenant quota, dedicated subnet, host identity, and record. GitHub deregistration remains manual."
+        description="Remove this Runner. You must also deregister it in GitHub."
         type="remove"
         target={removing?.id ?? tenant.id}
         workspace={params.tenant}
         destructive
         confirmText={removing?.slug ?? ""}
         startLabel="Remove Runner"
-        executionCopy="The Controller will remove this managed Runner:"
-        steps={[
-          {
-            label: "Stop and remove the local Runner runtime",
-            state: "pending",
-          },
-          {
-            label: "Release Runner record and reserved allocations",
-            state: "pending",
-          },
-        ]}
         onDispatch={() =>
           removing
             ? store.removeRunner(removing.id)

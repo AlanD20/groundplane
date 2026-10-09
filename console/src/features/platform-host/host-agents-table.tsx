@@ -139,20 +139,10 @@ export function HostAgentsTable() {
           if (!next) void refreshAgents();
         }}
         title="Join local Agent"
-        description="Creates the single local Agent record and starts its Controller-managed container. No credentials are exposed through this action."
         type="create"
         target={host?.hostname ?? "unavailable"}
         workspace="platform"
         startLabel="Join Agent"
-        executionCopy="The Controller will create and start the local Agent:"
-        steps={[
-          { label: "Create local Agent record", state: "pending" },
-          {
-            label: "Start Controller-managed Agent container",
-            state: "pending",
-          },
-          { label: "Wait for the first healthy report", state: "pending" },
-        ]}
         onDispatch={async () => (await joinAgent()).task_id}
       />
     </>

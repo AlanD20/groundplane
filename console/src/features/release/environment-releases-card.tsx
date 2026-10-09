@@ -44,10 +44,6 @@ export function ReleasesCard({ env }: { env: Environment }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="mb-2 text-xs text-muted-foreground">
-          Deployment history is recorded as Releases. Open a deployment for its
-          exact image and deployment details; track execution in Tasks.
-        </p>
         <ListToolbar
           label="Deployments"
           query={query}

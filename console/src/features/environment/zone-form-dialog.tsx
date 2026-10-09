@@ -62,10 +62,7 @@ export function ZoneFormDialog({
       <DialogHeader>
         <DialogTitle>Add zone · {env.name}</DialogTitle>
       </DialogHeader>
-      <FormSection
-        title="Zone details"
-        description="Choose a name and a subnet within the Environment pool."
-      >
+      <FormSection title="Zone details">
         <NetworkRange cidr={env.networkPool} label="Environment pool" />
         {env.zones.length > 0 && (
           <p className="text-xs text-muted-foreground sm:col-span-2">

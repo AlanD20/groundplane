@@ -41,8 +41,7 @@ export function ServiceConfiguration({
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
         <h2 className="text-lg font-semibold">Desired configuration</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Saved settings for the next deployment. These may differ from the
-          currently running containers.
+          Saved configuration · applies on deploy.
         </p>
       </div>
       <div className="grid gap-5 xl:grid-cols-2">

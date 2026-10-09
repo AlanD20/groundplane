@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { ImageFetchTaskDetails } from "@/features/image-delivery/image-fetch-task-details";
 import { requestTask } from "@/features/task/api";
 import { taskFromAPI } from "@/features/task/journal-model";
-import { TaskOverview, taskPresentation } from "@/features/task/task-overview";
+import {
+  TaskIdentity,
+  TaskOverview,
+  taskPresentation,
+} from "@/features/task/task-overview";
 import { TaskExecutionTerminal } from "@/features/task/task-execution-terminal";
 import { useStore } from "@/lib/store";
 import { taskDetailActions } from "@/lib/task-detail-actions";
@@ -126,6 +130,9 @@ export function TaskDetailDrawer({
           : "Task details"
       }
       status={task && <StatusBadge status={task.status} />}
+      actions={
+        task && <TaskIdentity task={task} onClose={() => onOpenChange(false)} />
+      }
       footer={
         <>
           {actions.abort && (
@@ -196,11 +203,11 @@ export function TaskDetailDrawer({
           <>
             {task.imageFetch ? (
               <>
-                <ImageFetchTaskDetails task={task} />
                 <TaskExecutionTerminal task={task} />
+                <ImageFetchTaskDetails task={task} />
               </>
             ) : (
-              <TaskOverview task={task} onClose={() => onOpenChange(false)} />
+              <TaskOverview task={task} />
             )}
           </>
         )}

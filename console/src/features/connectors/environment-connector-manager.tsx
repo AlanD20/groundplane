@@ -155,10 +155,6 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
               <Plug className="size-4 text-muted-foreground" /> Backup
               destinations
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Destinations owned only by this environment. Connectors never
-              inherit from project or platform scope.
-            </p>
           </div>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="size-3.5" /> Add destination
@@ -362,13 +358,6 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
         destructive
         confirmText={removing?.name ?? ""}
         startLabel="Remove destination"
-        executionCopy="The Controller will verify policy references and atomically finalize this Connector:"
-        steps={[
-          {
-            label: "Remove metadata and encrypted credentials",
-            state: "pending",
-          },
-        ]}
         onDispatch={() => {
           if (!removing)
             return Promise.reject(new Error("No Connector selected"));

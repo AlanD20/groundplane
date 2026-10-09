@@ -180,10 +180,7 @@ export function RoutesCard({ env }: { env: Environment }) {
             ]}
           />
         </div>
-        <p className="text-xs text-muted-foreground">
-          The route host, path, target service, and target port remain
-          unchanged.
-        </p>
+
         {editError ? (
           <p role="alert" className="text-sm text-destructive">
             {editError}
@@ -316,7 +313,7 @@ export function RoutesCard({ env }: { env: Environment }) {
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}
         title={`Remove route · ${removing ? `${removing.host || "internal"}${removing.path}` : ""}`}
-        description="Removes this route from the environment and reconciles the router configuration."
+        description="Traffic will no longer use this route."
         type="destroy"
         target={removing?.id ?? env.id}
         workspace={params.tenant}
@@ -325,11 +322,6 @@ export function RoutesCard({ env }: { env: Environment }) {
           removing ? `${removing.host || "internal"}${removing.path}` : ""
         }
         startLabel="Remove route"
-        steps={[
-          { label: "Validate the route record", state: "pending" },
-          { label: "Remove the route", state: "pending" },
-          { label: "Reconcile router configuration", state: "pending" },
-        ]}
         onDispatch={async () => {
           if (!removing) throw new Error("No Route selected for removal");
           return store.removeRoute(env.id, removing.id);
@@ -478,9 +470,7 @@ function RouteForm({
       </DialogHeader>
       <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
         <p className="text-xs text-muted-foreground sm:col-span-2">
-          A Route sends traffic to a Service. Public Routes require separately
-          managed ingress components to be served; creating a Route never
-          enables them.
+          Public routes require an enabled router.
         </p>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="r-host">Host</Label>

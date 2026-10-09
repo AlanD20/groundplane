@@ -70,9 +70,7 @@ export function EntryReferenceFields({
             }))}
           />
           <p className="text-xs text-muted-foreground">
-            Choose a reference or enter a key. Matching Project keys take
-            precedence over Platform fallbacks. This references the Secret
-            without changing its owner.
+            Project keys take precedence over matching Platform keys.
           </p>
         </div>
       )}
@@ -181,10 +179,6 @@ export function EntryReferenceFields({
                 })
               }
             />
-            <p className="text-xs text-muted-foreground">
-              Choose a connection value without revealing it. The variable name
-              or file path above controls how your Service receives the value.
-            </p>
           </div>
         </div>
       )}

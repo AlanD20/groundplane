@@ -236,7 +236,6 @@ export function ServiceFormBody({
                   inline ? "border-0 p-0 [&>legend]:sr-only" : undefined
                 }
                 title="Service"
-                description="Name the service and choose its container image."
               >
                 <div className="flex flex-col gap-4 sm:col-span-2">
                   {isBacking && (
@@ -321,7 +320,6 @@ export function ServiceFormBody({
                   inline ? "border-0 p-0 [&>legend]:sr-only" : undefined
                 }
                 title="Network"
-                description="Choose network memberships and the ports other services can reach."
               >
                 <div className="flex flex-col gap-4 sm:col-span-2">
                   {!isBacking && env && env.zones.length > 0 && (
@@ -373,7 +371,6 @@ export function ServiceFormBody({
                   inline ? "border-0 p-0 [&>legend]:sr-only" : undefined
                 }
                 title="Runtime and resources"
-                description="Set deployment behavior, replicas and resource limits."
               >
                 <div className="flex flex-col gap-4 sm:col-span-2">
                   <div className="flex flex-col gap-1.5">
@@ -464,7 +461,6 @@ export function ServiceFormBody({
                   inline ? "border-0 p-0 [&>legend]:sr-only" : undefined
                 }
                 title="Health check"
-                description="Choose how Groundplane checks whether the service is ready."
               >
                 <div className="flex flex-col gap-4 sm:col-span-2">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

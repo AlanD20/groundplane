@@ -33,9 +33,6 @@ export function ConnectorViewDialog({
     >
       <DialogHeader>
         <DialogTitle>Backup destination · {connector?.name}</DialogTitle>
-        <DialogDescription>
-          Where this Environment stores backups. Credentials remain hidden.
-        </DialogDescription>
       </DialogHeader>
       {connector && (
         <div className="flex flex-col gap-4">

@@ -83,7 +83,6 @@ export default function ReleaseGroupDetailPage() {
           </Link>
         }
         title={group.name}
-        description="Deploy related Services in a defined order."
         icon={<Workflow />}
         meta={
           <>
@@ -114,9 +113,6 @@ export default function ReleaseGroupDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>Release order</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              The Controller advances only after each member succeeds.
-            </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             {group.order.map((service, index) => (
@@ -212,21 +208,13 @@ export default function ReleaseGroupDetailPage() {
         open={removing}
         onOpenChange={setRemoving}
         title={`Remove ${group.name}`}
-        description="Remove this release-group desired-state record. Member services and their runtime state are preserved."
+        description="Remove this group. Member Services are kept."
         type="destroy"
         target={group.id}
         workspace={params.tenant}
         destructive
         confirmText={group.name}
         startLabel="Remove group"
-        steps={[
-          {
-            label: "Validate deployment group is not locked by another task",
-            state: "pending",
-          },
-          { label: "Remove deployment group desired state", state: "pending" },
-          { label: "Preserve member service records", state: "pending" },
-        ]}
         onDispatch={() => store.removeReleaseGroup(environment.id, group.id)}
         onCommit={() => {
           void store

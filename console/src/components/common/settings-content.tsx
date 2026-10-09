@@ -27,7 +27,6 @@ export function SettingsContent({
           workspace === "platform" ? "Platform" : `Tenant · ${workspace}`
         }
         title="Console preferences"
-        description="Display and secret-reveal preferences apply immediately in this browser."
         icon={<Settings />}
       />
       <ResourcePanel title="Visualization">

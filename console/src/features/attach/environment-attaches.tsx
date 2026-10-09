@@ -185,10 +185,6 @@ export function RenameAttach({
       >
         <DialogHeader>
           <DialogTitle>Rename connection</DialogTitle>
-          <DialogDescription>
-            Choose the connection name used in your Blueprint. Existing
-            credentials and network access stay the same.
-          </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`attach-rename-${attach.id}`}>Connection name</Label>
@@ -281,35 +277,6 @@ export function DetachAttach({
         destructive
         confirmText={g?.name ?? "detach"}
         startLabel="Detach"
-        steps={
-          custom
-            ? [
-                ...(detachHook
-                  ? [
-                      {
-                        label: "run custom detach hook",
-                        state: "pending" as const,
-                      },
-                    ]
-                  : []),
-                { label: "remove network join", state: "pending" },
-              ]
-            : [
-                {
-                  label: `revoke grants on ${attach.database}`,
-                  state: "pending",
-                },
-                { label: `drop role ${attach.role}`, state: "pending" },
-                {
-                  label:
-                    attach.database !== "—"
-                      ? `drop database ${attach.database}`
-                      : "no database to drop",
-                  state: "pending",
-                },
-                { label: "remove desired-state record", state: "pending" },
-              ]
-        }
         onDispatch={() => store.removeAttach(env.id, attach.id)}
       />
     </>

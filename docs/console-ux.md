@@ -145,6 +145,23 @@ resource, with a link to detailed work and a return path. Show unavailable or
 stale observations honestly. Destructive actions must identify the target and
 data consequences using the owning feature's actual contract.
 
+## Concise interface copy
+
+Let labels, values and controls explain routine interactions. Remove definitions
+of familiar resources, instructions that repeat the button, and backend execution
+narration. Do not add a helper paragraph to every field or section. Optional
+syntax or uncommon field semantics belong in a focused tooltip; omit redundant
+copy rather than replacing it with a help icon.
+
+Keep errors, disabled-action reasons, shared effects and irreversible consequences
+visible where they affect a decision. State each consequence once, briefly.
+Before confirmation, show the chosen inputs and actual impact, never a speculative
+numbered Task checklist. After acceptance, show recorded progress and failures.
+
+Task inspectors put the execution terminal first, with step details collapsed
+below. Use compact copyable references and timing beside the title. Avoid separate
+walls of identifiers, repeated status summaries and implementation terminology.
+
 ## Locked reference design
 
 The Service detail workspace is the accepted visual and interaction reference.

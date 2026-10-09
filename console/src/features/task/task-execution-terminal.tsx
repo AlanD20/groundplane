@@ -71,10 +71,6 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
   }, [events]);
 
   const steps = task.steps ?? [];
-  const knownStepIDs = new Set(steps.map((step) => step.label));
-  const unlistedEvents = events.filter(
-    (event) => !knownStepIDs.has(event.step_id),
-  );
 
   return (
     <section className="space-y-3" aria-label="Task execution">
@@ -82,12 +78,8 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
         <div className="space-y-1">
           <h3 className="flex items-center gap-2 text-sm font-medium">
             <Terminal className="size-4" aria-hidden />
-            Execution plan
+            Execution
           </h3>
-          <p className="text-xs text-muted-foreground">
-            Captured actions and retained state transitions. Commands and output
-            are not exposed.
-          </p>
         </div>
         <StreamStatus
           state={streamState}
@@ -96,27 +88,9 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
         />
       </div>
 
-      {steps.length ? (
-        <ol className="space-y-2">
-          {steps.map((step, index) => (
-            <li key={step.label}>
-              <TaskStepDetails
-                index={index}
-                step={step}
-                events={events.filter((event) => event.step_id === step.label)}
-              />
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
-          No step plan was captured for this Task.
-        </p>
-      )}
-
       <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950 text-slate-200">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
-          <span>Recorded timeline</span>
+          <span>Task events</span>
           <span>
             {events.length} {events.length === 1 ? "transition" : "transitions"}
           </span>
@@ -135,10 +109,10 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
                   element.clientHeight <
                 40;
           }}
-          className="max-h-80 min-h-32 overflow-auto p-4 font-mono text-xs leading-6"
+          className="max-h-80 min-h-32 overflow-auto py-3 font-mono text-xs leading-6"
         >
           {!events.length && (
-            <p className="text-slate-400">
+            <p className="px-4 text-slate-400">
               <time dateTime={task.updatedAt ?? task.ts}>
                 {new Date(task.updatedAt ?? task.ts).toLocaleTimeString()}
               </time>{" "}
@@ -156,7 +130,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
             return (
               <div
                 key={event.sequence}
-                className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 py-1 sm:grid-cols-[auto_5.5rem_minmax(0,1fr)]"
+                className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-4 py-1 even:bg-white/5 sm:grid-cols-[auto_5.5rem_minmax(0,1fr)]"
               >
                 <time
                   className="shrink-0 text-slate-500"
@@ -169,15 +143,15 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
                   {eventStateLabel(event.state)}
                 </span>
                 <span className="col-span-2 min-w-0 break-words [overflow-wrap:anywhere] sm:col-span-1">
-                  {name} · attempt {event.attempt}
+                  {name}
+                  {event.attempt > 1 ? ` | attempt ${event.attempt}` : ""}
                 </span>
               </div>
             );
           })}
           {streamState === "reconnecting" && (
             <p role="status" className="text-amber-300">
-              Live event connection interrupted; retrying. This does not mark
-              the Task as failed.
+              Reconnecting…
             </p>
           )}
           {eventError && (
@@ -188,14 +162,33 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
         </div>
       </div>
 
-      {!!unlistedEvents.length && (
-        <p className="text-xs text-muted-foreground">
-          {unlistedEvents.length} retained transition
-          {unlistedEvents.length === 1 ? " refers" : "s refer"} to a step that
-          is not present in the captured plan. The timeline preserves those
-          events without reconstructing a step.
-        </p>
-      )}
+      <Disclosure
+        summary={`Steps · ${steps.length}`}
+        className="rounded-lg border border-border"
+        summaryClassName="p-3 text-sm font-medium"
+      >
+        <div className="px-3 pb-3">
+          {steps.length ? (
+            <ol className="space-y-2">
+              {steps.map((step, index) => (
+                <li key={step.label}>
+                  <TaskStepDetails
+                    index={index}
+                    step={step}
+                    events={events.filter(
+                      (event) => event.step_id === step.label,
+                    )}
+                  />
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
+              No step plan was captured for this Task.
+            </p>
+          )}
+        </div>
+      </Disclosure>
     </section>
   );
 }
@@ -211,9 +204,7 @@ function TaskStepDetails({
 }) {
   const latest = events.at(-1);
   const state = latest?.state ?? stepState(step);
-  const [expanded, setExpanded] = useState(
-    () => state === "running" || failureStates.includes(state),
-  );
+  const [expanded, setExpanded] = useState(false);
   const lastEventAt = latest?.received_at;
   const highestAttempt = events.reduce(
     (highest, event) => Math.max(highest, event.attempt),
@@ -303,8 +294,7 @@ function TaskStepDetails({
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            No retained transitions are available for this step. Its displayed
-            state comes from the Task snapshot.
+            No recorded events for this step.
           </p>
         )}
       </div>

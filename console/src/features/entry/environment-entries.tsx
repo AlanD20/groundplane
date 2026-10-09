@@ -448,8 +448,7 @@ export function EnvVarsCard({
               )}
               {editing?.secret && (
                 <p className="text-xs text-muted-foreground">
-                  The existing secret is never loaded into this form. Enter a
-                  replacement value.
+                  Enter a replacement secret.
                 </p>
               )}
             </div>
@@ -540,7 +539,7 @@ export function EnvVarsCard({
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}
         title={`Remove Entry · ${removing ? (removing.type === "env" ? removing.key : removing.path) : ""}`}
-        description="Removes the pinned materialization, rewrites generated environment files when needed, and deletes the Entry only after the Agent reports success."
+        description="Remove this variable or file from all exposed Services."
         type="destroy"
         target={removing?.id ?? env.id}
         workspace={params.tenant}
@@ -553,11 +552,6 @@ export function EnvVarsCard({
             : ""
         }
         startLabel="Remove Entry"
-        steps={[
-          { label: "Validate the pinned Entry generation", state: "pending" },
-          { label: "Remove or rewrite materialized files", state: "pending" },
-          { label: "Finalize the Entry record", state: "pending" },
-        ]}
         onDispatch={async () => {
           if (!removing) throw new Error("No Entry selected for removal");
           return store.removeEntry(env.id, removing.id);

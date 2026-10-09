@@ -117,11 +117,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
               {runError}
             </p>
           )}
-          {pinnedEditor && (
-            <p className="text-xs text-muted-foreground">
-              The Script being edited stays visible until you save or cancel.
-            </p>
-          )}
+          {pinnedEditor && null}
           {visibleRows.map((script) => (
             <InlineEditorRegion key={script.id} editing={false}>
               <div
@@ -245,11 +241,6 @@ export function ScriptsCard({ env }: { env: Environment }) {
         destructive
         confirmText={removing?.slug ?? ""}
         startLabel="Remove script"
-        steps={[
-          { label: "Validate the script record", state: "pending" },
-          { label: "Remove the automatic hook registration", state: "pending" },
-          { label: "Remove the script", state: "pending" },
-        ]}
         onDispatch={async () => {
           if (!removing) throw new Error("No Script selected for removal");
           return store.removeScript(env.id, removing.id);

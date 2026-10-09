@@ -49,16 +49,13 @@ export function ScriptExecutionFields({
       </div>
       {execution.mode === "inherited" ? (
         <p className="text-xs text-muted-foreground">
-          Runs with the sealed Service/Release context. Saving this choice
-          removes any explicit image, user and grants.
+          Uses the Service’s execution context.
         </p>
       ) : (
         <>
           <p className="text-xs text-muted-foreground">
-            A separate one-off setup image, with no network or inherited Service
-            environment. Only image defaults, the Script body and the exact
-            grants below are available. Manual runs still require a serving
-            Release.
+            Isolated image with no network; only the grants below are available.
+            Requires a serving Release.
           </p>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="script-execution-image">
@@ -75,8 +72,7 @@ export function ScriptExecutionFields({
               }
             />
             <p className="text-xs text-muted-foreground">
-              A SHA-256 repository reference already available on the host; runs
-              never pull or build it.
+              Use an image digest already on this host.
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -94,8 +90,7 @@ export function ScriptExecutionFields({
               }
             />
             <p className="text-xs text-muted-foreground">
-              Explicit uid:gid. Choose the identity permitted to initialize the
-              selected data.
+              User and group: uid:gid.
             </p>
           </div>
           <ScriptVolumeGrants

@@ -190,10 +190,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
             placeholder="app_data"
           />
         </div>
-        <p className="text-xs text-muted-foreground sm:col-span-2">
-          Slugs are operator-facing labels. The immutable Compose key is used in
-          desired state; the Controller derives the managed path.
-        </p>
+
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
       </div>
       <DialogFooter>
@@ -294,8 +291,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           />
         </div>
         <p className="text-xs text-muted-foreground">
-          Changing the slug does not change the immutable Compose key or the
-          derived path.
+          The Compose key and storage path stay unchanged.
         </p>
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
       </div>
@@ -444,10 +440,6 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           </p>
         )}
         <TablePagination table={table} label="Volumes" />
-        <p className="mt-2 break-all text-xs text-muted-foreground">
-          Volumes live inside the environment&apos;s controller-managed folder (
-          {env.volumeDir}). No traversal outside it; no host ports.
-        </p>
       </CardContent>
 
       <TaskRunnerDialog
@@ -464,14 +456,6 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           impactLoading || Boolean(impactError) || !finalImpact?.impact_token
         }
         startLabel="Remove volume"
-        steps={[
-          { label: "Intent sealed", state: "pending" },
-          { label: "Revision staged", state: "pending" },
-          { label: "Desired state published", state: "pending" },
-          { label: "Consumers detached", state: "pending" },
-          { label: "Directory absent", state: "pending" },
-          { label: "Runtime finalized", state: "pending" },
-        ]}
         review={
           <div className="flex flex-col gap-2">
             {impactLoading && (

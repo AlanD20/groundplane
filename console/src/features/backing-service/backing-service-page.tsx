@@ -191,10 +191,6 @@ export default function BackingServiceDetailPage() {
                   }
                 />
                 {port && <DetailRow label="Port" value={String(port)} />}
-                <p className="text-sm text-muted-foreground">
-                  Applications connect through an Attach. Credentials and
-                  connection URLs belong to each connection.
-                </p>
               </ResourcePanel>
               <ResourcePanel
                 title="Connected applications"
@@ -335,7 +331,6 @@ export default function BackingServiceDetailPage() {
           target={svc.name}
           workspace="platform"
           startLabel="Remove containers"
-          steps={[]}
           onDispatch={() => store.runBackingRuntimeAction(g.id, "destroy")}
         />
       )}

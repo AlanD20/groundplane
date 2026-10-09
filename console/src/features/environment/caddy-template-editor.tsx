@@ -1,3 +1,4 @@
+import { HelpHint } from "@/components/common/resource-panel";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,31 +96,27 @@ export function CaddyTemplateEditor({
         </SettingsRow>
         {custom && (
           <div className="flex min-w-0 flex-col gap-2">
-            <Label htmlFor="caddy-template">Caddyfile</Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="caddy-template">Caddyfile</Label>
+              <HelpHint label="Caddyfile placeholders">
+                Use <code>{"{gp.routes}"}</code> for all Routes, or{" "}
+                <code>{"{gp.route:HOST:PATH:FIELD}"}</code> for host, path or
+                upstream. Native Caddy placeholders stay unchanged.
+              </HelpHint>
+            </div>
             <CodeEditor
               id="caddy-template"
               label="Caddyfile template"
               value={value}
               disabled={reading}
               aria-invalid={error !== null}
-              aria-describedby="caddy-template-help caddy-template-error"
+              aria-describedby={error ? "caddy-template-error" : undefined}
               onValueChange={(value) => {
                 setReadError(null);
                 onChange(value);
               }}
             />
-            <p
-              id="caddy-template-help"
-              className="text-xs text-muted-foreground"
-            >
-              Leave empty to use automatic routing. Use{" "}
-              <code>{"{gp.routes}"}</code> to insert all Routes into a custom
-              file, or reference a declared Route with{" "}
-              <code className="break-all">{"{gp.route:HOST:PATH:FIELD}"}</code>,
-              where FIELD is host, path or upstream. Native Caddy placeholders
-              stay unchanged. The Controller resolves references; Caddy
-              validates before reload.
-            </p>
+
             <Label htmlFor="caddy-template-file">
               Import complete file (UTF-8, up to 32 KiB)
             </Label>

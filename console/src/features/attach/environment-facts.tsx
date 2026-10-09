@@ -59,9 +59,7 @@ export function FactsCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-xs text-muted-foreground">
-          Each connection provides values you can use in your Service. Reveal a
-          value when needed, or reference it from Variables & files to expose it
-          to a Service. Granted databases have separate value sets.
+          Use these values in Variables & files.
         </p>
         {factGroups.map((grp) => (
           <div key={grp.id} className="flex flex-col gap-2">

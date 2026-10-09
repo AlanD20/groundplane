@@ -222,10 +222,6 @@ export function ServiceOverview({
             No HTTP routes point to this Service.
           </p>
         )}
-        <p className="text-xs text-muted-foreground">
-          Route status and container health do not verify application
-          reachability.
-        </p>
       </ResourcePanel>
       <ServiceContainers observation={observation} onOpenLogs={onOpenLogs} />
       <div className="grid gap-5 lg:grid-cols-2">

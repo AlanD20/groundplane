@@ -26,7 +26,6 @@ export default function PlatformInfraPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Components"
-        description="CoreDNS provides shared DNS for this host. Manage routing and tunnels from their Environment."
         icon={<Server />}
         actions={
           <Button

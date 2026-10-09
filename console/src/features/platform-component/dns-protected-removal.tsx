@@ -100,12 +100,6 @@ export function DNSProtectedRemoval({
       workspace="platform"
       destructive
       startLabel="Remove DNS records and continue"
-      steps={[
-        {
-          label: "Apply DNS configuration without these records",
-          state: "pending",
-        },
-      ]}
       description="Keep these records by cancelling. To remove this resource, first remove its DNS records and wait for that Task to complete."
       review={
         <div className="space-y-2">

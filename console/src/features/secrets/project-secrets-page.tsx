@@ -93,7 +93,6 @@ export default function ProjectSecretsPage() {
       <PageHeader
         title="Secrets"
         eyebrow={`Project · ${project.name}`}
-        description="Project-owned encrypted inputs and the platform references available as fallbacks."
         icon={<KeyRound />}
         meta={
           <MetaPill icon={<KeyRound />}>

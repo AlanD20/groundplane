@@ -66,7 +66,6 @@ export default function PlatformSecretsPage() {
       <PageHeader
         title="Secrets"
         eyebrow="Settings"
-        description="Reusable encrypted inputs. Values are loaded only after an explicit reveal."
         icon={<KeyRound />}
         actions={
           <Button onClick={() => setOpen(true)}>

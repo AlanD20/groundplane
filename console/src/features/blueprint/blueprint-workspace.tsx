@@ -477,10 +477,8 @@ export function BlueprintWorkspace({
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Review the validation result before applying. It lists proposed
-            changes and any resources that need a separate Remove action.
-            Volumes and backing networks with active consumers require protected
-            removal.
+            Active Volumes and backing networks require a separate Remove
+            action.
           </p>
         </CardContent>
       </Card>
@@ -493,16 +491,9 @@ export function BlueprintWorkspace({
             setPrepared(null);
           }}
           title={`Apply Blueprint · ${serviceName ?? environment.name}`}
-          description="Confirm the validated changes. Apply requires the reviewed base revision to remain current."
           type="update"
           target={environment.id}
           workspace={workspace}
-          executionCopy="The Controller revision-fences the desired-state publication before scheduling reconciliation:"
-          steps={[
-            { label: "Recheck Blueprint revision", state: "pending" },
-            { label: "Publish canonical desired revision", state: "pending" },
-            { label: "Schedule Environment reconciliation", state: "pending" },
-          ]}
           review={<BlueprintReview validation={prepared.validation} />}
           startLabel="Confirm and apply"
           onDispatch={async () => {

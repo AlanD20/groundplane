@@ -38,13 +38,6 @@ export function RecoveryPointDeleteDialog({
       abortable={false}
       confirmText={point.id}
       startLabel="Permanently delete archive"
-      executionCopy="The Controller will delete and verify absence of only this selected archive before releasing its Recovery Point record:"
-      steps={[
-        {
-          label: "Delete and verify the selected archive",
-          state: "pending",
-        },
-      ]}
       review={
         <dl className="grid gap-3 rounded-lg border border-border bg-surface p-4 text-sm">
           <div>

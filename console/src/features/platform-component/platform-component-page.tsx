@@ -170,7 +170,6 @@ export default function PlatformComponentPage() {
       </div>
       <PageHeader
         title={component.name}
-        description="Shared host DNS, custom records and upstream forwarding."
         icon={kindIcon[component.kind]}
         meta={<StatusBadge status={component.status} />}
       />

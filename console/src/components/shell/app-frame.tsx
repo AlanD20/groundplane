@@ -276,10 +276,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   onChange={(e) => setSlug(e.target.value)}
                   placeholder="acme"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Follows Display name until edited. Projects, runners, and
-                  secrets live under this isolation boundary.
-                </p>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="t-desc">Description</Label>

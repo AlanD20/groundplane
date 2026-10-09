@@ -77,7 +77,6 @@ export default function PlatformControllerPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Controller"
-        description="Host control plane, software updates and startup settings."
         icon={<ServerCog />}
         meta={
           <>
@@ -110,10 +109,6 @@ export default function PlatformControllerPage() {
               label="Service"
               value={host?.controller.service ?? "Unavailable"}
             />
-            <p className="text-sm text-muted-foreground">
-              The Controller coordinates work on this host. Application
-              containers keep running during its restart.
-            </p>
           </ResourcePanel>
           <ResourcePanel
             title="Software updates"
@@ -133,9 +128,6 @@ export default function PlatformControllerPage() {
                 "No release staged"
               }
             />
-            <p className="text-sm text-muted-foreground">
-              Review the prepared release and follow update progress.
-            </p>
           </ResourcePanel>
           <ResourcePanel
             title="Startup configuration"
@@ -159,8 +151,7 @@ export default function PlatformControllerPage() {
               }
             />
             <p className="text-sm text-muted-foreground">
-              Save configuration separately. Changes take effect on the next
-              Controller restart.
+              Applies on the next Controller restart.
             </p>
           </ResourcePanel>
         </div>
@@ -257,23 +248,14 @@ export default function PlatformControllerPage() {
                     value={content}
                     onValueChange={setContent}
                     disabled={saving || controllerConfigLoading}
-                    aria-describedby="controller-config-help"
                   />
-                  <p
-                    id="controller-config-help"
-                    className="text-xs text-muted-foreground"
-                  >
-                    Saving validates the startup schema and atomically replaces
-                    the exact file. Comments and formatting are preserved.
-                  </p>
                 </div>
                 {controllerConfig.restart_required ? (
                   <p
                     role="status"
                     className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground"
                   >
-                    The file differs from the running startup snapshot. Restart
-                    the Controller to apply it.
+                    Restart required to apply these settings.
                   </p>
                 ) : null}
                 {saveError ? (

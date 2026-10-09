@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDraftField } from "@/lib/use-draft-field";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { ReleaseGroupRollbackPreviewResponse } from "./api";
-import type { Environment, ReleaseGroup, TaskStep } from "@/lib/types";
+import type { Environment, ReleaseGroup } from "@/lib/types";
 import { releaseGroupPolicyLabel } from "./release-group-projections";
 import {
   acceptRollbackPreview,
@@ -42,31 +42,13 @@ export function DeployReleaseGroupDialog({
     if (open) setTag(group.tag ?? "");
   }, [group.id, open]);
 
-  const steps = useMemo<TaskStep[]>(
-    () => [
-      {
-        label: "Acquire the environment release-group task lock",
-        state: "pending",
-      },
-      ...group.order.map((service) => ({
-        label: `Deploy ${service} · ${tag || "<tag>"}`,
-        state: "pending" as const,
-      })),
-      {
-        label: "Record member results and release the task lock",
-        state: "pending",
-      },
-    ],
-    [group.order, tag],
-  );
-
   return (
     <TaskRunnerDialog
       open={open}
       onOpenChange={onOpenChange}
       variant="drawer"
       title={`Deploy ${group.name} · ${env.name}`}
-      description="Deploy one immutable tag to every member in the stored order under one task lock. Each member retains its own release record."
+      description="Deploy this tag to all members in order."
       type="deploy"
       target={group.id}
       workspace={params.tenant}
@@ -91,7 +73,6 @@ export function DeployReleaseGroupDialog({
           </div>
         </div>
       }
-      steps={steps}
       onDispatch={() => store.deployReleaseGroup(env.id, group.id, tag.trim())}
       onSettled={async () => {
         await store.refreshEnvironmentReleases(env.id);
@@ -205,7 +186,7 @@ export function RollbackReleaseGroupDialog({
       }}
       variant="drawer"
       title={`Roll back ${group.name} · ${env.name}`}
-      description="Use each member's previous successful release or override every member with one tag, then roll back in stored order. Migrations are never reversed."
+      description="Roll back all members in order. Database migrations are not reversed."
       type="rollback"
       target={group.id}
       workspace={params.tenant}
@@ -288,20 +269,6 @@ export function RollbackReleaseGroupDialog({
           </div>
         </div>
       }
-      steps={[
-        {
-          label: "Acquire the environment release-group task lock",
-          state: "pending",
-        },
-        ...sources.map((source) => ({
-          label: `Roll back ${source.service_id} · ${source.tag}`,
-          state: "pending" as const,
-        })),
-        {
-          label: "Record member results and release the task lock",
-          state: "pending",
-        },
-      ]}
       onDispatch={async () => {
         const dispatchScope = rollbackPreviewScope(
           env.id,

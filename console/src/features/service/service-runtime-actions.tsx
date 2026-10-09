@@ -117,12 +117,6 @@ export function ServiceOperationDialog({
   const store = useStore();
   if (!operation) return null;
 
-  const runtimeIntent =
-    operation === "start"
-      ? "running"
-      : operation === "stop"
-        ? "stopped"
-        : "absent";
   const removing = operation === "remove";
   const title = removing
     ? `Delete Service · ${service.name}`
@@ -136,37 +130,6 @@ export function ServiceOperationDialog({
       : operation === "stop"
         ? "Stop this Service’s containers. Configuration, containers and persistent Volumes are kept. The Service stays stopped until you start it again."
         : "Start this Service’s containers using its last acknowledged configuration. Use Deploy to apply configuration changes.";
-  const steps = removing
-    ? [
-        {
-          label: "Validate desired-state references",
-          state: "pending" as const,
-        },
-        {
-          label: "Remove Service containers",
-          state: "pending" as const,
-        },
-        {
-          label: "Delete the Service definition after cleanup",
-          state: "pending" as const,
-        },
-      ]
-    : [
-        {
-          label: `Persist runtime intent ${runtimeIntent}`,
-          state: "pending" as const,
-        },
-        {
-          label:
-            operation === "start"
-              ? "Reconcile the service runtime"
-              : operation === "stop"
-                ? "Stop service containers"
-                : "Remove service containers",
-          state: "pending" as const,
-        },
-        { label: "Record observed runtime state", state: "pending" as const },
-      ];
 
   return (
     <DNSProtectedRemoval
@@ -193,7 +156,6 @@ export function ServiceOperationDialog({
               ? "Remove containers"
               : `${operation[0].toUpperCase()}${operation.slice(1)} service`
         }
-        steps={steps}
         {...(removing
           ? {
               onDispatch: () => store.deleteService(env.id, service.id),

@@ -133,11 +133,7 @@ export function RevealValue({
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Reveal {label ?? "secret"}</DialogTitle>
-              <DialogDescription>
-                This value is sensitive and never cached or logged. Type{" "}
-                <span className="font-mono text-foreground">{confirmWord}</span>{" "}
-                to reveal it.
-              </DialogDescription>
+              <DialogDescription>Type to reveal this secret.</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="reveal-confirm">Confirmation</Label>

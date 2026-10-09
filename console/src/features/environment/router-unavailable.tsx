@@ -11,9 +11,7 @@ export function EnvironmentRouterUnavailable() {
       </CardHeader>
       <CardContent>
         <p className="text-xs text-muted-foreground">
-          Router components are not part of this Environment projection. The
-          Controller has not published an authoritative Caddy or Cloudflare
-          Tunnel record, so no local controls are shown.
+          Router configuration is unavailable.
         </p>
       </CardContent>
     </Card>

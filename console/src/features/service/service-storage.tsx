@@ -302,10 +302,6 @@ export function ServiceStorage({
         </Button>
       }
     >
-      <p className="text-sm text-muted-foreground">
-        Mount Environment Volumes at paths inside this Service. Each mount is
-        saved independently.
-      </p>
       <AnimatedSection open={!!draft && !draft.original}>
         {draft && !draft.original && editor}
       </AnimatedSection>
@@ -380,10 +376,7 @@ export function ServiceStorage({
           editor}
       </div>
       {!mounts.length && !draft && (
-        <p className="text-sm text-muted-foreground">
-          No Volumes mounted. Add a mount to give this Service persistent
-          storage.
-        </p>
+        <p className="text-sm text-muted-foreground">No mounts.</p>
       )}
       {saved && (
         <p

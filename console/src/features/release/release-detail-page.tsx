@@ -127,7 +127,6 @@ export default function ReleaseDetailPage() {
           </Link>
         }
         title={service}
-        description="Deployment image, configuration and execution"
         icon={<History />}
         meta={
           <>

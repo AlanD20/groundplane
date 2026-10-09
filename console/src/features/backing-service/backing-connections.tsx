@@ -163,14 +163,7 @@ export function ConnectionsTab({
           <div className="flex flex-col gap-3">
             {adapter?.custom ? (
               <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  Custom container managed by Groundplane.
-                </span>{" "}
-                {svc.hooks?.attach
-                  ? "Each new Attach runs your provisioning command and publishes its declared facts after success."
-                  : "Attaching connects a consumer to the backing network without provisioning."}{" "}
-                Hooks are configured under Edit service. Custom services have no
-                managed grants or backups.
+                Custom services have no managed grants or backups.
               </p>
             ) : authenticationUnavailable ? (
               <p role="alert" className="text-xs text-destructive">
@@ -191,23 +184,7 @@ export function ConnectionsTab({
                 backing network and publishes the mode&apos;s facts; nothing is
                 injected automatically.
               </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                The Controller dispatches to this adapter to auto-provision
-                consumers. These operations run on attach, rotate, and repair —
-                each parameter is filled from the attach facts and the generated
-                password. Attaching exposes facts (prefix{" "}
-                <span className="font-mono">
-                  {svc.prefix ?? adapter?.prefix}
-                </span>
-                ), e.g.{" "}
-                <span className="font-mono">
-                  {svc.prefix ?? adapter?.prefix}_URL
-                </span>{" "}
-                — you create env vars from them; nothing is injected
-                automatically.
-              </p>
-            )}
+            ) : null}
             <div className="flex flex-col gap-1.5 text-sm">
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 [overflow-wrap:anywhere]">
                 <span className="text-muted-foreground">Network</span>
@@ -361,9 +338,13 @@ export function ConnectionsTab({
                   </div>
                 )}
                 {!adapter?.custom && (
-                  <Disclosure className="mt-2" summaryClassName="cursor-pointer text-xs text-primary" summary={<>
-                      procedure the Agent runs · {provision.length} steps
-                    </>}>
+                  <Disclosure
+                    className="mt-2"
+                    summaryClassName="cursor-pointer text-xs text-primary"
+                    summary={
+                      <>procedure the Agent runs · {provision.length} steps</>
+                    }
+                  >
                     <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
                       {authenticationUnavailable ? (
                         <p className="text-xs text-muted-foreground">

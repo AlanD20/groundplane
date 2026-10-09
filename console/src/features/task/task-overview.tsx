@@ -1,9 +1,5 @@
-import { CopyButton } from "@/components/common/copy-button";
-import {
-  AdvancedDetails,
-  SummaryItem,
-  SummaryStrip,
-} from "@/components/common/resource-panel";
+import { CompactReference } from "@/components/common/compact-reference";
+import { Disclosure } from "@/components/common/disclosure";
 import { TaskJournalMetadata } from "@/components/common/task-journal-metadata";
 import { TaskLink } from "@/components/common/task-link";
 import { useStore } from "@/lib/store";
@@ -135,7 +131,34 @@ export function taskPresentation(
   };
 }
 
-export function TaskOverview({
+export function TaskOverview({ task }: { task: ActivityEntry }) {
+  return (
+    <>
+      <TaskExecutionTerminal task={task} />
+      <TaskOutcome task={task} />
+      {task.reconciliationRequired && (
+        <p
+          role="alert"
+          className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm"
+        >
+          Restoration is not proven. The resolver stays locked to this Task;
+          retry it to apply the same sealed configuration. GP has not reported a
+          successful restore.
+        </p>
+      )}
+      {task.note && (
+        <section className="space-y-1 rounded-lg border border-border p-3 text-sm">
+          <h3 className="text-xs font-medium text-muted-foreground">
+            Task note
+          </h3>
+          <p className="break-words [overflow-wrap:anywhere]">{task.note}</p>
+        </section>
+      )}
+    </>
+  );
+}
+
+export function TaskIdentity({
   task,
   onClose,
 }: {
@@ -157,126 +180,77 @@ export function TaskOverview({
       )
     : null;
   return (
-    <>
-      <SummaryStrip>
-        <SummaryItem label="Plan progress">
-          {steps.length
-            ? `${done} of ${steps.length} completed`
-            : "No plan captured"}
-        </SummaryItem>
-        <SummaryItem label={task.finishedAt ? "Execution time" : "Elapsed"}>
-          {duration === null ? "Not started" : durationLabel(duration)}
-        </SummaryItem>
-        <SummaryItem label="Executor">
-          {task.executor ? executorLabel(task.executor) : "Not recorded"}
-        </SummaryItem>
-        <SummaryItem label="Time limit">
-          {task.timeoutSeconds
-            ? durationLabel(task.timeoutSeconds)
-            : "Not recorded"}
-        </SummaryItem>
-      </SummaryStrip>
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">
-            {view.resourceKind ?? "Affected resource"}
-          </p>
-          <h3 className="break-words text-sm font-medium [overflow-wrap:anywhere]">
-            {view.resource}
-          </h3>
-          <p className="break-words text-xs text-muted-foreground">
-            {view.scope}
-          </p>
-        </div>
+    <div className="w-full min-w-0 space-y-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <CompactReference label="Task" value={task.id} />
+        {duration !== null && (
+          <span
+            className="inline-flex items-center gap-1"
+            title={task.finishedAt ? "Execution time" : "Elapsed"}
+          >
+            <Clock3 aria-hidden className="size-3.5" />
+            {durationLabel(duration)}
+          </span>
+        )}
+        {steps.length > 0 && (
+          <span>
+            {done}/{steps.length} steps
+          </span>
+        )}
         {view.destination && (
           <ContextLink
-            className="inline-flex items-center gap-1 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             to={view.destination.href}
             onClick={onClose}
+            className="inline-flex items-center gap-1 text-primary hover:underline"
           >
             {view.destination.label}
-            <ArrowUpRight className="size-3.5" aria-hidden />
+            <ArrowUpRight aria-hidden className="size-3.5" />
           </ContextLink>
         )}
-      </section>
-      <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-        <Info label="Requested" value={timestamp(task.createdAt)} />
-        <Info
-          label="Requested by"
-          value={task.actor === "system" ? "Groundplane" : "Operator"}
-        />
-        <Info
-          label="Started"
-          value={task.startedAt ? timestamp(task.startedAt) : "Not started"}
-        />
-        <Info
-          label={task.finishedAt ? "Finished" : "Last update"}
-          value={timestamp(task.finishedAt ?? task.updatedAt)}
-        />
-      </dl>
-      <TaskOutcome task={task} />
-      {task.reconciliationRequired && (
-        <p
-          role="alert"
-          className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm"
-        >
-          Restoration is not proven. The resolver stays locked to this Task;
-          retry it to apply the same sealed configuration. GP has not reported a
-          successful restore.
-        </p>
-      )}
-      {task.note && (
-        <section className="space-y-1 rounded-lg border border-border p-3 text-sm">
-          <h3 className="text-xs font-medium text-muted-foreground">
-            Task note
-          </h3>
-          <p className="break-words [overflow-wrap:anywhere]">{task.note}</p>
-        </section>
-      )}
-      <TaskExecutionTerminal task={task} />
-      <AdvancedDetails title="Task identifiers & execution metadata">
-        <dl className="mt-3 space-y-3 text-xs">
-          {[
-            ["Task ID", task.id],
-            ["Target reference", task.target],
-            ["Operation ID", task.operationId],
-            ["Plan hash", task.planHash],
-          ].map(
-            ([label, value]) =>
-              value && (
-                <div key={label}>
-                  <dt className="mb-1 text-muted-foreground">{label}</dt>
-                  <dd className="flex min-w-0 items-start gap-2">
-                    <code className="min-w-0 flex-1 break-all">{value}</code>
-                    <CopyButton value={value} label={`Copy ${label}`} />
-                  </dd>
-                </div>
-              ),
-          )}
+      </div>
+      <Disclosure
+        summary="Details"
+        summaryClassName="text-xs text-muted-foreground"
+      >
+        <div className="space-y-3 border-t border-border pt-3 mt-3">
+          <TaskJournalMetadata entry={task} />
+          <div className="flex flex-wrap gap-3">
+            <CompactReference label="Target" value={task.target} />
+            {task.operationId && (
+              <CompactReference label="Operation" value={task.operationId} />
+            )}
+            {task.planHash && (
+              <CompactReference label="Plan" value={task.planHash} />
+            )}
+          </div>
+          <dl className="grid grid-cols-2 gap-3 text-xs">
+            <Info
+              label="Executor"
+              value={
+                task.executor ? executorLabel(task.executor) : "Not recorded"
+              }
+            />
+            <Info
+              label="Time limit"
+              value={
+                task.timeoutSeconds
+                  ? durationLabel(task.timeoutSeconds)
+                  : "Not recorded"
+              }
+            />
+            {task.taskState && (
+              <Info label="Execution state" value={task.taskState} />
+            )}
+          </dl>
           {task.retryOf && (
-            <div>
-              <dt>Retry of</dt>
-              <dd>
-                <TaskLink taskId={task.retryOf} onClick={onClose} />
-              </dd>
+            <div className="text-xs">
+              Retry of <TaskLink taskId={task.retryOf} onClick={onClose} />
             </div>
           )}
-        </dl>
-        <div className="mt-4">
-          <TaskJournalMetadata entry={task} />
-          {task.taskState && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Execution state: {task.taskState}
-            </p>
-          )}
         </div>
-      </AdvancedDetails>
-    </>
+      </Disclosure>
+    </div>
   );
-}
-
-function timestamp(value?: string | null) {
-  return value ? new Date(value).toLocaleString() : "Not recorded";
 }
 
 function durationLabel(seconds: number) {
@@ -306,10 +280,15 @@ function resourceKindLabel(kind?: string) {
 }
 
 function TaskOutcome({ task }: { task: ActivityEntry }) {
+  if (
+    ["pending", "running", "completed"].includes(task.status) &&
+    !task.resultSummary
+  )
+    return null;
   const active = task.status === "pending" || task.status === "running";
   const failed = ["failed", "timed_out", "aborted"].includes(task.status);
   const title = active
-    ? "Current state"
+    ? "Status"
     : task.status === "completed"
       ? "Result"
       : "Failure";
@@ -318,8 +297,7 @@ function TaskOutcome({ task }: { task: ActivityEntry }) {
       ? "Waiting for an executor."
       : "Execution is in progress."
     : task.status === "completed"
-      ? (task.resultSummary ??
-        "The Task is recorded as completed. No result summary was captured.")
+      ? (task.resultSummary ?? "Completed.")
       : (task.failureSummary ?? failureFallback(task.status));
   const Icon = active ? Clock3 : failed ? CircleAlert : CircleCheck;
 

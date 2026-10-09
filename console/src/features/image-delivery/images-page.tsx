@@ -123,7 +123,6 @@ export default function ImagesPage() {
           </Link>
           <PageHeader
             title="Images"
-            description="Host Agent inventory, with every local tag grouped under its immutable image."
             icon={<Boxes />}
             actions={
               <>

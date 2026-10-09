@@ -1,7 +1,6 @@
-'use client'
+"use client";
 
-import { TaskRunnerDialog } from '@/components/common/task-runner-dialog'
-import type { TaskStep } from '@/lib/types'
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 
 export function HierarchyDeleteDialog({
   open,
@@ -11,20 +10,18 @@ export function HierarchyDeleteDialog({
   id,
   workspace,
   description,
-  steps,
   onDispatch,
   onCommit,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  kind: 'tenant' | 'project' | 'environment'
-  name: string
-  id: string
-  workspace: string
-  description: string
-  steps: TaskStep[]
-  onDispatch: () => Promise<string>
-  onCommit?: () => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  kind: "tenant" | "project" | "environment";
+  name: string;
+  id: string;
+  workspace: string;
+  description: string;
+  onDispatch: () => Promise<string>;
+  onCommit?: () => void;
 }) {
   return (
     <TaskRunnerDialog
@@ -38,9 +35,8 @@ export function HierarchyDeleteDialog({
       destructive
       confirmText={name}
       startLabel={`Delete ${kind}`}
-      steps={steps}
       onDispatch={onDispatch}
       onCommit={onCommit}
     />
-  )
+  );
 }

@@ -78,9 +78,7 @@ export function ImageFetchAction({
         onDispatch={dispatch}
         onCommit={() => setCompleted(true)}
         onSettled={onSettled}
-        description="Select an explicit tag or digest. GP pins its content before acceptance; retries keep that selection."
-        executionCopy="The Controller fetches and verifies the selected content; your running Services are unchanged."
-        steps={[]}
+        description="Use an image tag or digest."
         review={
           <div className="space-y-2">
             <Label htmlFor="fetch-image">Registry image</Label>

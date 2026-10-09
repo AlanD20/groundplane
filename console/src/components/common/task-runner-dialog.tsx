@@ -1,5 +1,5 @@
-import { Disclosure } from "@/components/common/disclosure";
-"use client";
+import { CompactReference } from "@/components/common/compact-reference";
+("use client");
 
 import { CopyButton } from "@/components/common/copy-button";
 import {
@@ -11,7 +11,6 @@ import {
   ResourceFormFooter as DialogFooter,
 } from "@/components/common/resource-form";
 import { TaskLink } from "@/components/common/task-link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
@@ -19,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { TaskResponse } from "@/features/task/api";
 import { useStore } from "@/lib/store";
-import type { TaskStep, TaskType } from "@/lib/types";
+import type { TaskType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -34,9 +33,7 @@ export function TaskRunnerDialog({
   type,
   target,
   workspace,
-  steps,
   review,
-  executionCopy = "Controller will sequence the steps and the Agent will apply them:",
   startLabel = "Run task",
   startDisabled = false,
   confirmText,
@@ -54,9 +51,7 @@ export function TaskRunnerDialog({
   type: TaskType;
   target: string;
   workspace: string;
-  steps: TaskStep[];
   review?: React.ReactNode;
-  executionCopy?: React.ReactNode;
   startLabel?: string;
   startDisabled?: boolean;
   confirmText?: string;
@@ -257,35 +252,15 @@ export function TaskRunnerDialog({
       <DialogHeader>
         <div className="flex items-center gap-2">
           <DialogTitle>{title}</DialogTitle>
-          <Badge variant="outline" className="font-mono">
-            {type}
-          </Badge>
         </div>
         {description && <DialogDescription>{description}</DialogDescription>}
       </DialogHeader>
 
-      <Disclosure className="text-xs text-muted-foreground" summary={<>Operation target</>}>
-        <code className="mt-2 block break-all font-mono">{target}</code>
-      </Disclosure>
+      <CompactReference label="Target" value={target} />
 
       {phase === "review" && (
         <div className="flex flex-col gap-3">
           {review}
-          <div className="rounded-lg border border-border bg-surface/50 p-3">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">
-              {executionCopy}
-            </p>
-            <ol className="flex flex-col gap-1.5">
-              {steps.map((s, i) => (
-                <li key={i} className="flex items-center gap-2 text-sm">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <span>{s.label}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
           {confirmText && (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2">

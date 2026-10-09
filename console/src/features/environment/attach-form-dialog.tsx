@@ -325,15 +325,11 @@ function AttachForm({
             <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
               {credentialMode === "existing" ? (
                 <p className="text-xs text-muted-foreground">
-                  Reuses the selected owner&apos;s facts and only reconciles
-                  this Service&apos;s network membership. It provisions no new
-                  identity.
+                  Reuses this connection’s credentials.
                 </p>
               ) : authenticationDetails.provision.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  No credential is generated and no ACL identity is provisioned.
-                  The Attach creates the self-owned fact binding and joins the
-                  network.
+                  Network access only; no credentials.
                 </p>
               ) : (
                 authenticationDetails.provision.map((operation) => (

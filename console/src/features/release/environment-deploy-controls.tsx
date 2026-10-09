@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { ImagePicker } from "@/features/image-delivery/image-picker";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
-import type { Environment, Service, TaskStep } from "@/lib/types";
+import type { Environment, Service } from "@/lib/types";
 import { useDraftField } from "@/lib/use-draft-field";
 import { ArrowUpCircle, History } from "lucide-react";
 import { useState } from "react";
@@ -103,7 +103,6 @@ export function DeployDialog({
 
   if (!svc)
     return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
-  const steps = deploySteps(env, svc.name, strategy);
 
   return (
     <TaskRunnerDialog
@@ -111,7 +110,7 @@ export function DeployDialog({
       onOpenChange={onOpenChange}
       variant="drawer"
       title={`Deploy ${svc.name} · ${env.name}`}
-      description="Choose an available image and strategy for this Release. Deploy does not pull images or edit the Service's configured image."
+      description="Use an image already on this host."
       type="deploy"
       target={env.id}
       workspace={params.tenant}
@@ -171,7 +170,6 @@ export function DeployDialog({
           </div>
         </div>
       }
-      steps={steps}
       startDisabled={!image.trim()}
       onDispatch={() =>
         store.commitDeploy(
@@ -232,7 +230,7 @@ export function RollbackDialog({
       onOpenChange={onOpenChange}
       variant="drawer"
       title={`Roll back ${svc.name} · ${env.name}`}
-      description="Rollback targets the SAME service and tracks its previous tag from deploy history — pre-selected below (editable for an explicit tag). It is a traffic switch, never a cold start, and never reverses migrations."
+      description="Switch to a previous release. Database migrations are not reversed."
       type="rollback"
       target={env.id}
       workspace={params.tenant}
@@ -293,13 +291,6 @@ export function RollbackDialog({
           </p>
         </div>
       }
-      steps={[
-        { label: "Run pre-rollback hooks", state: "pending" },
-        { label: "Start previous image in inactive slot", state: "pending" },
-        { label: "Wait for healthcheck", state: "pending" },
-        { label: "Reload router (traffic switch)", state: "pending" },
-        { label: "Run post-rollback hooks", state: "pending" },
-      ]}
       onDispatch={() => store.commitRollback(env.id, svc.name, tag)}
       onSettled={async () => {
         await Promise.all([
@@ -325,52 +316,4 @@ export function imageTag(image: string): string {
   return i > -1 && !image.slice(i + 1).includes("/")
     ? image.slice(i + 1)
     : "latest";
-}
-
-export function deploySteps(
-  env: Environment,
-  serviceName: string,
-  strategy: Service["strategy"],
-): TaskStep[] {
-  const service = env.services.find((service) => service.name === serviceName);
-  const hasPublic = env.routes.some(
-    (route) =>
-      route.exposure === "public" && route.targetServiceId === service?.id,
-  );
-  if (strategy === "blue-green")
-    return [
-      { label: "Run pre-deploy hooks", state: "pending" },
-      { label: "Start inactive slot", state: "pending" },
-      { label: "Wait for healthcheck", state: "pending" },
-      ...(hasPublic
-        ? [
-            { label: "Render + validate Caddyfile", state: "pending" as const },
-            {
-              label: "Reload router (traffic switch)",
-              state: "pending" as const,
-            },
-          ]
-        : []),
-      { label: "Recreate workers (singleton)", state: "pending" },
-      { label: "Run post-deploy hooks", state: "pending" },
-    ];
-  if (strategy === "rolling")
-    return [
-      { label: "Run pre-deploy hooks", state: "pending" },
-      { label: "Roll out replicas one by one", state: "pending" },
-      { label: "Wait for healthcheck on each replica", state: "pending" },
-      { label: "Run post-deploy hooks", state: "pending" },
-    ];
-  return [
-    { label: "Run pre-deploy hooks", state: "pending" },
-    { label: "Stop current container", state: "pending" },
-    { label: "Start new container", state: "pending" },
-    {
-      label: service?.healthcheck
-        ? "Wait for healthcheck"
-        : "Wait for containers to run",
-      state: "pending",
-    },
-    { label: "Run post-deploy hooks", state: "pending" },
-  ];
 }

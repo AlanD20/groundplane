@@ -93,14 +93,11 @@ export function BackupsTab({
     >
       {adapter?.custom ? (
         <p className="text-xs text-muted-foreground">
-          Custom hooks do not provide a managed backup adapter. The operator is
-          responsible for this service&apos;s backups, whether or not
-          provisioning hooks are configured.
+          Managed backups are unavailable for custom services.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Backup policies belong to consumer Environments. Configure them on
-          each consumer&apos;s Backups page.
+          Manage backups in each connected Environment.
         </p>
       )}
 

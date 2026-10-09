@@ -45,10 +45,6 @@ export function ServiceTab({
   return (
     <>
       {" "}
-      <p className="text-sm text-muted-foreground">
-        Saved configuration for this shared instance. Runtime observations are
-        shown in Overview.
-      </p>
       <div className="grid items-start gap-5 xl:grid-cols-2">
         <ResourcePanel
           title="Image & runtime"

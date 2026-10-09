@@ -64,11 +64,6 @@ export function ControllerUpdateCard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
-          <p className="text-sm text-muted-foreground">
-            Activate an immutable release staged on this host. The Controller
-            drains active work, restarts, and preserves the enrolled Agent
-            version. Application workloads remain running.
-          </p>
           {!host && hostLoading ? (
             <p role="status" className="text-sm text-muted-foreground">
               Loading release metadata…
@@ -81,17 +76,13 @@ export function ControllerUpdateCard() {
           ) : null}
           {update && !update.available ? (
             <p role="status" className="text-sm text-muted-foreground">
-              {update.error ||
-                "Native updates are unavailable. Guarded bootstrap and release staging are required on this host."}
+              {update.error || "Native updates are unavailable on this host."}
             </p>
           ) : null}
           {candidate ? (
             <ControllerReleaseDetails release={candidate} />
           ) : update ? (
-            <p className="text-sm text-muted-foreground">
-              No staged candidate. Stage a verified release using deployment
-              tooling first.
-            </p>
+            <p className="text-sm text-muted-foreground">No release staged.</p>
           ) : null}
           <ControllerUpdateProgress />
           {controllerUpdateError ? (
@@ -101,10 +92,7 @@ export function ControllerUpdateCard() {
           ) : null}
           {unresolved ? (
             <div className="flex flex-col gap-2 rounded-lg border border-warning/40 p-3 text-xs">
-              <p>
-                Acceptance is unresolved. Resolve the original request before
-                starting another update.
-              </p>
+              <p>Request status unknown.</p>
               <code className="break-all">
                 {pendingControllerUpdate.release}
               </code>
@@ -157,17 +145,14 @@ export function ControllerUpdateCard() {
       >
         <DialogContent className="max-h-full overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Update native Controller?</DialogTitle>
+            <DialogTitle>Update Controller?</DialogTitle>
             <DialogDescription>
-              The API briefly disconnects. This Console follows the same Task
-              after restart. A failed candidate restores the previous Controller
-              and Agent; the update still fails.
+              The Console will briefly disconnect. Applications keep running.
             </DialogDescription>
           </DialogHeader>
           {review ? <ControllerReleaseDetails release={review} /> : null}
           <p className="text-xs text-muted-foreground">
-            Up to 120 seconds to drain active work; 600 seconds for the update
-            and recovery. Abort is unavailable once activation commits.
+            Cannot be aborted once activation starts.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReview(null)}>

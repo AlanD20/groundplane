@@ -177,7 +177,6 @@ export function ReusableSecretOwnerList({
           type="remove"
           target={confirmation.id}
           workspace={confirmation.scope === "platform" ? "Platform" : "Project"}
-          steps={[]}
           startLabel="Delete Secret"
           destructive
           onDispatch={async () => (await onRemove(confirmation)).task_id}

@@ -123,7 +123,6 @@ export default function TenantProjectPage() {
         <EmptyState
           icon={<Boxes />}
           title="No environments yet"
-          description="An environment is one deployable instance of this project — staging, production, anything."
           action={
             <Button onClick={() => setOpen(true)}>
               <Plus className="size-4" /> New environment
@@ -163,11 +162,6 @@ export default function TenantProjectPage() {
                 placeholder="10.200.0.0/16"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              One deployable instance of the project. Public routes need the
-              ingress components (Caddy + Cloudflare Tunnel), enabled on the
-              Environment’s Router page — never auto-deployed.
-            </p>
           </div>
           {createError && (
             <p role="alert" className="text-sm text-destructive">
@@ -222,12 +216,6 @@ export default function TenantProjectPage() {
           id={removingEnvironment.id}
           workspace={tenant.slug}
           description="Permanently removes this Environment and every workload, volume, Entry, Attach, backup, recovery point, and Component state it owns."
-          steps={[
-            { label: "Freeze Environment membership", state: "pending" },
-            { label: "Remove workload runtime and storage", state: "pending" },
-            { label: "Remove Environment-scoped state", state: "pending" },
-            { label: "Remove the Environment", state: "pending" },
-          ]}
           onDispatch={() => store.deleteEnvironment(removingEnvironment.id)}
           onCommit={() => setRemovingEnvironment(null)}
         />

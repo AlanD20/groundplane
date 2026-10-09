@@ -41,7 +41,7 @@ export function RunnerOwnerPicker({
         }
       />
       <p className="text-xs text-muted-foreground">
-        Owner is permanent. Trusted workflows use normal GP CLI/API access.
+        Owner cannot be changed later.
       </p>
     </div>
   );

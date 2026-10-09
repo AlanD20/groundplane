@@ -250,9 +250,7 @@ export function ServiceWorkloadSettingsForm({
           <div className="space-y-5">
             <fieldset className="space-y-4">
               <legend className="text-sm font-medium">Network aliases</legend>
-              <p className="text-xs text-muted-foreground">
-                Aliases belong to a joined Zone and are saved as literal names.
-              </p>
+
               {aliasZones.length > 0 ? (
                 aliasZones.map((zone) => (
                   <ArgumentList
@@ -282,9 +280,7 @@ export function ServiceWorkloadSettingsForm({
             <fieldset className="space-y-3">
               <legend className="text-sm font-medium">Dependencies</legend>
               <p className="text-xs text-muted-foreground">
-                Choose another Service, its required state and the lifecycle
-                phases that enforce the dependency. With no phases selected, the
-                dependency applies to native startup ordering only.
+                No phases selected: startup ordering only.
               </p>
               {dependencyNames.map((name, index) => (
                 <DependencyEditor

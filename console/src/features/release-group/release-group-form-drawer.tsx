@@ -161,10 +161,7 @@ function ReleaseGroupForm({
         <DialogTitle>
           {group ? `Edit ${group.name}` : "Add deployment group"}
         </DialogTitle>
-        <DialogDescription>
-          Choose at least two services and set their exact release order.
-          Membership is never inferred.
-        </DialogDescription>
+        <DialogDescription>Select at least two Services.</DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
@@ -310,9 +307,6 @@ function ReleaseGroupForm({
               },
             ]}
           />
-          <p className="text-xs text-muted-foreground">
-            Default: switch back every member already advanced by this task.
-          </p>
         </div>
       </div>
       {error && (

@@ -162,9 +162,8 @@ export function ScriptEditor({
           </div>
         </div>
         <p id="script-order-help" className="text-xs text-muted-foreground">
-          0–65535. Lower numbers run first within this Service and phase; ties
-          use the Script slug. Service dependencies and Release Group order are
-          unchanged. Manual runs ignore this field.
+          Lower numbers run first; ties use the Script name. Ignored for manual
+          runs.
         </p>
         {parsedOrder === undefined && (
           <p role="alert" className="text-xs text-destructive">

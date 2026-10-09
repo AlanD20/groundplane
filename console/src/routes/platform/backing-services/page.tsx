@@ -151,7 +151,6 @@ export default function PlatformBackingServicesPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Backing services"
-        description="Shared infrastructure with separate connections and credentials for each consumer."
         icon={<Database />}
         actions={
           <Button onClick={openCreate}>
@@ -232,10 +231,7 @@ export default function PlatformBackingServicesPage() {
             <DialogTitle>New backing service</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-5">
-            <FormSection
-              title="Identity"
-              description="How this backing service appears in Groundplane."
-            >
+            <FormSection title="Identity">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="backing-name">Name</Label>
                 <Input

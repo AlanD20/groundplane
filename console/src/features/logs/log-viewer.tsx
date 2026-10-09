@@ -37,8 +37,7 @@ export function LogViewer({
           <DialogHeader>
             <DialogTitle>{label}</DialogTitle>
             <DialogDescription>
-              Read output from deployed containers. Reopen after a deployment to
-              select the new containers.
+              Reopen after deploying to select new containers.
             </DialogDescription>
           </DialogHeader>
           {open && <LogStream target={target} />}

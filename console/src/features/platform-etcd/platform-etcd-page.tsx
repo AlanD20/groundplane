@@ -130,11 +130,7 @@ export default function PlatformEtcdPage() {
   }
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="etcd"
-        icon={<Database />}
-        description="Control-plane store configuration"
-      />
+      <PageHeader title="etcd" icon={<Database />} />
       <ResourcePanel
         title="etcd configuration"
         actions={

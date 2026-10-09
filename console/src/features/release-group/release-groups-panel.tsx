@@ -29,10 +29,6 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
             <Workflow className="size-4 text-primary" /> Deployment groups
             <Badge variant="outline">{env.releaseGroups.length}</Badge>
           </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Explicit service sets deployed or rolled back in a fixed order under
-            one task lock.
-          </p>
         </div>
         <Button
           onClick={() => setAdding(true)}

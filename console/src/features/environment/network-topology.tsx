@@ -350,14 +350,6 @@ export function ZoneColumn({
               ) : null}
             </div>
           }
-          steps={[
-            {
-              label: "Validate dependent services and attaches",
-              state: "pending",
-            },
-            { label: `Remove network ${zone.name}`, state: "pending" },
-            { label: "Update affected service memberships", state: "pending" },
-          ]}
           onDispatch={() => {
             if (!removalImpact)
               return Promise.reject(
