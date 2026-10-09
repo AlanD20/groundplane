@@ -25,7 +25,7 @@ type VolumeReader interface {
 }
 
 type volumeViewReader interface {
-	ListVolumeViews(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[apiTypes.Volume], error)
+	ListVolumeViews(context.Context, string, etcdstore.PageRequest) (apiTypes.Page[apiTypes.Volume], error)
 }
 
 type volumeDetailReader interface {
@@ -177,11 +177,7 @@ func (s *Server) listVolumes(ctx context.Context, request *volumeListInput) (*vo
 		if err != nil {
 			return nil, normalizeProjectError(err)
 		}
-		items := make([]apiTypes.Volume, len(page.Items))
-		for index, item := range page.Items {
-			items[index] = item.Record
-		}
-		return &volumePageOutput{Body: apiTypes.Page[apiTypes.Volume]{Items: items, NextCursor: page.NextCursor}}, nil
+		return &volumePageOutput{Body: page}, nil
 	}
 	page, err := s.volumes.ListVolumes(ctx, request.Environment, pageRequest)
 	if err != nil {
