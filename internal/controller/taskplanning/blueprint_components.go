@@ -41,19 +41,9 @@ func ReconcileBlueprintComponents(
 		return BlueprintComponentChanges{}, err
 	}
 
-	authored := make(map[core.ComponentKind]core.ComponentSpec, len(specs))
-	for capability, spec := range specs {
-		kind, err := validateBlueprintComponentSpec(core.ComponentCapability(capability), spec)
-		if err != nil {
-			return BlueprintComponentChanges{}, err
-		}
-		if _, duplicate := authored[kind]; duplicate {
-			return BlueprintComponentChanges{}, errs.New(
-				errs.KindValidationFailed,
-				"Blueprint Component kind is duplicated",
-			)
-		}
-		authored[kind] = spec
+	authored, err := blueprintAuthoredComponents(specs)
+	if err != nil {
+		return BlueprintComponentChanges{}, err
 	}
 
 	kinds := []core.ComponentKind{
@@ -108,6 +98,42 @@ func ReconcileBlueprintComponents(
 		return result.Candidates[left].Current.ID < result.Candidates[right].Current.ID
 	})
 	return result, nil
+}
+
+// SelectBlueprintComponentSingletons binds authored capabilities to the existing
+// Environment identities without preparing effects or allocating new runtime.
+func SelectBlueprintComponentSingletons(
+	specs map[string]core.ComponentSpec, current []core.Component,
+) ([]core.Component, error) {
+	byKind, err := blueprintComponentMap(current)
+	if err != nil {
+		return nil, err
+	}
+	authored, err := blueprintAuthoredComponents(specs)
+	if err != nil {
+		return nil, err
+	}
+	selected := make([]core.Component, 0, len(authored))
+	for kind := range authored {
+		selected = append(selected, cloneBlueprintComponent(byKind[kind]))
+	}
+	sort.Slice(selected, func(left, right int) bool { return selected[left].Kind < selected[right].Kind })
+	return selected, nil
+}
+
+func blueprintAuthoredComponents(specs map[string]core.ComponentSpec) (map[core.ComponentKind]core.ComponentSpec, error) {
+	authored := make(map[core.ComponentKind]core.ComponentSpec, len(specs))
+	for capability, spec := range specs {
+		kind, err := validateBlueprintComponentSpec(core.ComponentCapability(capability), spec)
+		if err != nil {
+			return nil, err
+		}
+		if _, duplicate := authored[kind]; duplicate {
+			return nil, errs.New(errs.KindValidationFailed, "Blueprint Component kind is duplicated")
+		}
+		authored[kind] = spec
+	}
+	return authored, nil
 }
 
 func blueprintComponentMap(current []core.Component) (map[core.ComponentKind]core.Component, error) {

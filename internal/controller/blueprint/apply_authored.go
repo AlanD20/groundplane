@@ -203,12 +203,12 @@ func (service *Service) applyAuthoredOnce(
 		ids.KindAttach,
 		allocator.Named,
 	)
-	components := selectAuthoredNamedResources(
-		parsed.Extensions.Components,
-		previous.Components,
-		ids.KindComponent,
-		allocator.Named,
+	components, err := service.authoredComponentIdentities(
+		ctx, environmentID, parsed.Extensions.Components, previous.Components,
 	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	reconciledScripts, scriptPublication, err := service.prepareApplyScripts(
 		ctx, environmentID, claim.RevisionID, parsed.Extensions.Scripts, desiredServices,
 		desiredrevision.BlueprintScriptResources{Volumes: changes.Current.Volumes, Entries: entries.Current},
