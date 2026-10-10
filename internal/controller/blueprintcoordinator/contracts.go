@@ -50,6 +50,18 @@ type DormantServiceSettler interface {
 	TrySettleDormantService(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
 }
 
+// DisabledComponentSettler acknowledges an explicitly authored Component only
+// when its disabled configuration already matches the protected singleton and
+// the ledger proves that no earlier Component effect remains.
+type DisabledComponentSettler interface {
+	TrySettleDisabledComponent(
+		context.Context,
+		etcd.TaskRecord,
+		blueprintunits.Unit,
+		blueprintunits.Snapshot,
+	) (bool, error)
+}
+
 // ChildPreparer prepares one exact ready unit as a private Agent Task. It must
 // use the parent's immutable desired revision rather than the current head as
 // a substitute for that revision.

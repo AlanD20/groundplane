@@ -405,10 +405,8 @@ func validateBlueprintRuntimeComponentSeal(input BlueprintRuntimeProjectionSeal)
 			receipt.ReadRevision != input.SnapshotReadRevision ||
 			receipt.Record.EnvironmentID != projection.EnvironmentID ||
 			receipt.Record.Target != selected.Unit.Target || receipt.Record.State != blueprintunits.Applied ||
-			receipt.Record.Fingerprint != selected.Unit.Fingerprint || !authority.RuntimePresent ||
-			receipt.Record.SourceTaskID != authority.Runtime.Record.TaskID ||
-			receipt.Record.SourcePlanID != authority.Runtime.Record.PlanID ||
-			receipt.Record.ParentTaskID != authority.Runtime.Record.RevisionID {
+			receipt.Record.Fingerprint != selected.Unit.Fingerprint ||
+			!blueprintRuntimeComponentReceiptMatches(receipt.Record, authority) {
 			return errs.New(errs.KindStateConflict, "Blueprint Component receipt authority changed")
 		}
 		if _, duplicate := seenReceipts[selected.Identity.ID]; duplicate {
@@ -417,4 +415,27 @@ func validateBlueprintRuntimeComponentSeal(input BlueprintRuntimeProjectionSeal)
 		seenReceipts[selected.Identity.ID] = struct{}{}
 	}
 	return nil
+}
+
+func blueprintRuntimeComponentReceiptMatches(
+	receipt blueprintunits.AppliedRecord,
+	authority BlueprintRuntimeComponent,
+) bool {
+	if receipt.SourceTaskID != "" {
+		return authority.RuntimePresent &&
+			receipt.SourceTaskID == authority.Runtime.Record.TaskID &&
+			receipt.SourcePlanID == authority.Runtime.Record.PlanID &&
+			receipt.ParentTaskID == authority.Runtime.Record.RevisionID
+	}
+	component := authority.Component
+	if receipt.ControllerOperationID == "" ||
+		receipt.ControllerComponentRecordRevision != component.Revision ||
+		component.Record.Desired.Enabled || len(component.Record.Runtime.GeneratedServices) != 0 ||
+		component.Record.Runtime.PinnedIPv4 != "" || component.Record.Runtime.Healthy {
+		return false
+	}
+	if authority.RuntimePresent {
+		return receipt.ControllerComponentRuntimeRevision == authority.Runtime.Revision
+	}
+	return receipt.ControllerComponentRuntimeRevision == 0
 }

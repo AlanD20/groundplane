@@ -65,7 +65,7 @@ func (service *Service) loadAuthoredRuntimeComponents(
 			}
 		} else {
 			spec, found := source.desired.Record.Input.Components[identity.Name]
-			if !found || spec.Implementation != record.Desired.Kind || !authority.RuntimePresent {
+			if !found || spec.Implementation != record.Desired.Kind {
 				return authoredRuntimeComponents{}, errs.New(
 					errs.KindStateConflict,
 					"Blueprint Component runtime identity changed",
@@ -74,9 +74,7 @@ func (service *Service) loadAuthoredRuntimeComponents(
 			unit, applied, found := authoredRuntimeAppliedReceipt(
 				snapshot, blueprintunits.ResourceKey{Kind: ids.KindComponent, ID: identity.ID},
 			)
-			if !found || applied.Record.SourceTaskID != authority.Runtime.Record.TaskID ||
-				applied.Record.SourcePlanID != authority.Runtime.Record.PlanID ||
-				applied.Record.ParentTaskID != authority.Runtime.Record.RevisionID {
+			if !found || !authoredRuntimeComponentReceiptMatches(applied.Record, authority) {
 				return authoredRuntimeComponents{}, errs.New(
 					errs.KindStateConflict,
 					"Blueprint Component receipt does not match acknowledged runtime",
@@ -124,6 +122,29 @@ func (service *Service) loadAuthoredRuntimeComponents(
 		return result.sources[left].ComponentKind < result.sources[right].ComponentKind
 	})
 	return result, nil
+}
+
+func authoredRuntimeComponentReceiptMatches(
+	receipt blueprintunits.AppliedRecord,
+	authority etcd.BlueprintRuntimeComponent,
+) bool {
+	if receipt.SourceTaskID != "" {
+		return authority.RuntimePresent &&
+			receipt.SourceTaskID == authority.Runtime.Record.TaskID &&
+			receipt.SourcePlanID == authority.Runtime.Record.PlanID &&
+			receipt.ParentTaskID == authority.Runtime.Record.RevisionID
+	}
+	component := authority.Component
+	if receipt.ControllerOperationID == "" ||
+		receipt.ControllerComponentRecordRevision != component.Revision ||
+		component.Record.Desired.Enabled || len(component.Record.Runtime.GeneratedServices) != 0 ||
+		component.Record.Runtime.PinnedIPv4 != "" || component.Record.Runtime.Healthy {
+		return false
+	}
+	if authority.RuntimePresent {
+		return receipt.ControllerComponentRuntimeRevision == authority.Runtime.Revision
+	}
+	return receipt.ControllerComponentRuntimeRevision == 0
 }
 
 func authoredRuntimeAppliedReceipt(
