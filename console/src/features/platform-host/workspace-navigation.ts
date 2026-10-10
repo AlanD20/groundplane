@@ -7,12 +7,10 @@ import {
   Package,
   Settings,
   Tag,
-  Upload,
 } from "lucide-react";
 
 export const controllerDestinations = [
   { key: "overview", label: "Overview", icon: Info },
-  { key: "updates", label: "Updates", icon: Upload },
   { key: "configuration", label: "Startup configuration", icon: FileCode2 },
 ];
 export const coreDNSDestinations = [

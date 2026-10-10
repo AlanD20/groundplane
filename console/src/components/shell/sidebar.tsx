@@ -1,4 +1,8 @@
 import {
+  settingsDestinations,
+  settingsDestination,
+} from "@/features/platform-settings/workspace-navigation";
+import {
   controllerDestinations,
   coreDNSDestinations,
   imageDestinations,
@@ -43,6 +47,7 @@ export function hasWorkspaceNavigation(pathname: string) {
     (scope === "platform" &&
       (section === "overview" ||
         section === "host" ||
+        section === "settings" ||
         section === "components" ||
         (section === "backing-services" && !!resource)))
   );
@@ -237,6 +242,17 @@ export function Sidebar({
           item("Images", "/platform/host/images", Package),
           item("Components", "/platform/components", Boxes),
         ],
+      },
+    ];
+  } else if (parts[1] === "settings") {
+    groups = [
+      {
+        label: "Platform settings",
+        items: settingsDestinations.map((entry) => ({
+          ...entry,
+          href: `/platform/settings?tab=${entry.key}`,
+          active: settingsDestination(search) === entry.key,
+        })),
       },
     ];
   } else if (parts[1] === "overview") {

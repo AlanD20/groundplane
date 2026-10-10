@@ -26,7 +26,7 @@ Docker on the GP host for its architecture; host Go/Node toolchains are not
 required. Both resolves one source commit, or the matching component release
 tags. Published release inputs download verified artifacts instead of rebuilding.
 
-The **Software preparation** panel on the Controller page retains progress and
+**Platform Settings → Software updates** retains preparation progress and
 Task links. Prepare never activates software. Apply is a separate action using
 the verified outputs in GP's registry, pinned by manifest digest. Both completes
 both preparations before Controller-then-Agent activation. A successful

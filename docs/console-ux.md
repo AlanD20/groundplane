@@ -63,6 +63,11 @@ Resource links out of a Service retain an explicit return to that Service and
 destination, including when following a Task to its affected resource. Keep this
 return distinct from hierarchical breadcrumbs and preserve it across local tabs.
 
+Platform Settings separates Console preferences from Software updates. Updates
+for Controller, Agent or both share this platform-wide home; Host detail pages
+link there rather than embedding another update workflow. Keep runtime health
+and startup configuration with their owning resources.
+
 Secondary navigation supports expanded labels or an icon-only desktop rail, with
 accessible labels, hover/focus tooltips and the active destination preserved.
 Remember the preference; mobile navigation retains full labels. Editor expansion

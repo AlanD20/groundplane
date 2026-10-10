@@ -15,12 +15,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { useStore } from "@/lib/store";
-import { ControllerUpdateCard } from "./controller-update-card";
-import { SoftwarePreparationPanel } from "./software-preparation-panel";
 
 export default function PlatformControllerPage() {
   const [search] = useSearchParams();
-  const tab = ["updates", "configuration"].includes(search.get("tab") ?? "")
+  const tab = ["configuration"].includes(search.get("tab") ?? "")
     ? search.get("tab")
     : "overview";
   const destination = (value: string) => {
@@ -115,7 +113,7 @@ export default function PlatformControllerPage() {
             actions={
               <Link
                 className="text-sm text-primary hover:underline"
-                to={destination("updates")}
+                to="/platform/settings?tab=updates"
               >
                 Manage updates →
               </Link>
@@ -156,10 +154,6 @@ export default function PlatformControllerPage() {
           </ResourcePanel>
         </div>
       )}
-      <div hidden={tab !== "updates"}>
-        <SoftwarePreparationPanel active={tab === "updates"} />
-        <ControllerUpdateCard />
-      </div>
       <div hidden={tab !== "configuration"}>
         <Card>
           <CardHeader>

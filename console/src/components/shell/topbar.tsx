@@ -37,7 +37,7 @@ function buildCrumbs(
       activity: "Tasks",
       secrets: "Secrets",
       host: "Host",
-      settings: "Preferences",
+      settings: "Settings",
     };
     const crumbs: Crumb[] = [{ label: "Platform", href: "/platform/overview" }];
     if (parts[1])
@@ -93,7 +93,7 @@ const PLATFORM_SECTIONS: CrumbOption[] = [
   { label: "Tasks", href: "/platform/activity" },
   { label: "Secrets", href: "/platform/secrets" },
   { label: "Host", href: "/platform/host" },
-  { label: "Preferences", href: "/platform/settings" },
+  { label: "Settings", href: "/platform/settings" },
 ];
 
 function tenantSections(slug: string): CrumbOption[] {

@@ -33,9 +33,11 @@ See [installation](../deployment.md) before changing listeners or host paths.
 ## Host workspace
 
 Host Overview brings together capacity, Controller and etcd health, CoreDNS and
-Agents. Open each resource for its actions. Controller has separate Overview,
-Updates and Startup configuration sections; saving startup configuration remains
-separate from updating software.
+Agents. Open each resource for its actions. Controller has Overview and Startup
+configuration sections. Platform Settings → Software updates owns Controller-only,
+Agent-only and combined updates, including preparation, Apply, staged Controller
+releases and direct immutable Agent images. Host resource pages link to that
+workspace; runtime configuration remains with each resource.
 
 Host Components lists CoreDNS. Environment routers and tunnels remain in their
 Environment workspace. CoreDNS has Overview, DNS records and Resolver settings

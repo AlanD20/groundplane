@@ -52,7 +52,7 @@ export function PlatformNavigation({
       active: pathname === "/platform/secrets",
     },
     {
-      label: "Preferences",
+      label: "Settings",
       href: "/platform/settings",
       icon: Settings,
       active: pathname.startsWith("/platform/settings"),
