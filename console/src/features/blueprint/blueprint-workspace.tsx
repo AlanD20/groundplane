@@ -288,8 +288,8 @@ export function BlueprintWorkspace({
   return (
     <>
       <Card>
-        <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        <CardHeader className="gap-4">
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2">
               <FileCode2 className="size-4 text-primary" />{" "}
               {serviceName ? "Service Blueprint" : "Blueprint"}
@@ -300,7 +300,11 @@ export function BlueprintWorkspace({
                 : "Edit the Environment’s Compose YAML, then review and apply changes to one Service or the entire Environment. Secret values stay private."}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="Blueprint file actions"
+            className="flex flex-wrap items-center gap-2"
+          >
             {!serviceName && (
               <BlueprintApplyAction
                 environment={environment}
@@ -329,11 +333,12 @@ export function BlueprintWorkspace({
               size="sm"
               disabled={!snapshot || loading}
               onClick={exportDocument}
+              title="Download the saved Blueprint as YAML"
             >
-              <Download /> Export saved
+              <Download /> Export YAML
             </Button>
             {snapshot && (
-              <CopyButton value={draft} label="copy displayed Blueprint" />
+              <CopyButton value={draft} label="Copy YAML" className="h-7" />
             )}
           </div>
         </CardHeader>

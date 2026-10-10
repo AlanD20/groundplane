@@ -191,6 +191,9 @@ editors, selections or unsaved drafts when replacing read models.
 Large structured documents use the shared code editor with fold gutters and
 explicit Fold all / Expand all controls. Folding must work in read-only views,
 must not change document content, and must remain independent of saving or Apply.
+The shared editor provides Find (Ctrl/Command+F), match navigation and replacement
+in editable mode. Read-only views retain search without replacement controls.
+Search fields and match highlights use theme tokens in both light and dark modes.
 
 ## Workspace presentation
 

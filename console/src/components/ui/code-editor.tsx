@@ -9,6 +9,14 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import {
+  search,
+  searchKeymap,
+  openSearchPanel,
+  closeSearchPanel,
+  searchPanelOpen,
+} from "@codemirror/search";
+import { Search } from "lucide-react";
+import {
   HighlightStyle,
   syntaxHighlighting,
   StreamLanguage,
@@ -72,6 +80,53 @@ const editorTheme = EditorView.theme({
       backgroundColor: "color-mix(in srgb, var(--primary) 22%, transparent)",
     },
   ".cm-cursor": { borderLeftColor: "var(--primary)" },
+  ".cm-panels": {
+    backgroundColor: "var(--surface)",
+    color: "var(--foreground)",
+  },
+  ".cm-panels-top": { borderBottom: "1px solid var(--border)" },
+  ".cm-search": {
+    padding: "8px 32px 8px 8px",
+    fontFamily: "var(--font-sans)",
+    lineHeight: "2",
+    fontSize: "12px",
+  },
+  ".cm-search .cm-textfield": {
+    background: "var(--background)",
+    color: "var(--foreground)",
+    border: "1px solid var(--input)",
+    borderRadius: "6px",
+    padding: "4px 8px",
+    maxWidth: "100%",
+    minWidth: "0",
+    boxSizing: "border-box",
+    fontSize: "12px",
+  },
+  ".cm-search .cm-button": {
+    background: "var(--background)",
+    color: "var(--foreground)",
+    border: "1px solid var(--border)",
+    borderRadius: "6px",
+    padding: "3px 8px",
+    fontSize: "12px",
+    textTransform: "none",
+    cursor: "pointer",
+  },
+  ".cm-search button:hover": { background: "var(--accent)" },
+  ".cm-search input:focus-visible, .cm-search button:focus-visible": {
+    outline: "2px solid var(--ring)",
+    outlineOffset: "2px",
+  },
+  ".cm-search input[type=checkbox]": { accentColor: "var(--primary)" },
+  ".cm-search label": { whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "4px", marginRight: "8px" },
+  ".cm-searchMatch": {
+    backgroundColor: "color-mix(in srgb, var(--warning) 30%, transparent)",
+    outline: "1px solid var(--warning)",
+  },
+  ".cm-searchMatch-selected": {
+    backgroundColor: "color-mix(in srgb, var(--primary) 30%, transparent)",
+    outline: "1px solid var(--primary)",
+  },
 });
 
 const highlightStyle = HighlightStyle.define([
@@ -122,7 +177,9 @@ export function CodeEditor({
         highlightActiveLineGutter(),
         drawSelection(),
         history(),
+        search({ top: true }),
         keymap.of([
+          ...searchKeymap,
           ...foldKeymap.map((binding) =>
             binding.run === foldAll
               ? {
@@ -174,6 +231,7 @@ export function CodeEditor({
         attributes.current.reconfigure(
           EditorView.contentAttributes.of({
             id,
+            tabindex: "0",
             "aria-label": label,
             "aria-readonly": String(readOnly || disabled || preview),
             ...(aria["aria-describedby"]
@@ -184,6 +242,12 @@ export function CodeEditor({
         ),
       ],
     });
+    // Rebuild the search panel when editability changes so replacement controls
+    // match the current mode, including Preview and externally disabled editors.
+    if (searchPanelOpen(instance.state)) {
+      closeSearchPanel(instance);
+      openSearchPanel(instance);
+    }
   }, [
     id,
     label,
@@ -287,6 +351,18 @@ export function CodeEditor({
           {label} <span className="ml-2 font-mono uppercase">{language}</span>
         </span>
         <div className="flex flex-wrap gap-1">
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            title="Find in document (Ctrl/⌘ F)"
+            onClick={() => {
+              if (view.current) openSearchPanel(view.current);
+            }}
+          >
+            <Search aria-hidden="true" />{" "}
+            {readOnly || disabled || preview ? "Find" : "Find / replace"}
+          </Button>
           {(language === "yaml" || language === "json") && (
             <>
               <Button
