@@ -46,11 +46,6 @@ func (service *Service) prepareAuthoredServiceRemovalChild(
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	if acknowledged.Revision <= 0 {
-		return blueprintcoordinator.PreparedChild{}, errs.New(
-			errs.KindStateConflict, "Blueprint Service acknowledged runtime is unavailable",
-		)
-	}
 	head, found, err := service.repository.GetEnvironmentBlueprintHead(ctx, parent.Owner.EnvironmentID)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err

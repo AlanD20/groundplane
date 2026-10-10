@@ -25,6 +25,16 @@ func (repository *TaskRepository) recoveryAcknowledgementAtRevision(
 	if assignment.ComponentRecoveryProcedureSHA256 != "" {
 		return repository.componentRecoveryAcknowledgementAtRevision(ctx, task, assignment, status, result, revision)
 	}
+	if assignment.ServiceAbsenceProcedureSHA256 != "" {
+		return repository.serviceAbsenceRecoveryAcknowledgementAtRevision(
+			ctx,
+			task,
+			assignment,
+			status,
+			result,
+			revision,
+		)
+	}
 	return repository.releaseRecoveryAcknowledgementAtRevision(ctx, task, assignment, status, result, revision)
 }
 
@@ -38,6 +48,11 @@ func (repository *TaskRepository) normalizeRecoveryTerminalReplay(
 	assignmentID string,
 	revision int64,
 ) (taskjournal.TaskStatus, *taskjournal.TaskResultRecord, bool, error) {
+	if result.ServiceAbsenceEvidence != nil {
+		return repository.normalizeServiceAbsenceTerminalReplay(
+			ctx, task, status, result, agentID, agentGeneration, assignmentID, revision,
+		)
+	}
 	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] == "" {
 		return repository.normalizeReleaseRecoveryTerminalReplay(
 			ctx, task, status, result, agentID, agentGeneration, assignmentID, revision,
@@ -56,7 +71,10 @@ func (repository *TaskRepository) normalizeRecoveryTerminalReplay(
 		!taskjournal.TaskComponentRestorationEvidenceEqual(
 			task.Result.ComponentRestorationEvidence, result.ComponentRestorationEvidence,
 		) {
-		return status, nil, true, errs.New(errs.KindStateConflict, "terminal Component recovery replay authority changed")
+		return status, nil, true, errs.New(
+			errs.KindStateConflict,
+			"terminal Component recovery replay authority changed",
+		)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskassignments.ComponentRecoveryKey(task.ID), taskjournal.TaskActiveOperationKey(task.OperationID),
@@ -91,7 +109,10 @@ func (repository *TaskRepository) transitionComponentAcknowledgementToRecovery(
 		result.ExecutionEpoch != assignment.ExecutionEpoch || result.ReleaseRecoveryRecordSHA256 != "" ||
 		assignment.ExecutionEpoch == math.MaxUint32 || assignment.ComponentRecoveryProcedureSHA256 == "" ||
 		assignment.RestorationAuthority != nil {
-		return etcdstore.Versioned[TaskRecord]{}, true, errs.New(errs.KindStateConflict, "Component recovery acknowledgement authority changed")
+		return etcdstore.Versioned[TaskRecord]{}, true, errs.New(
+			errs.KindStateConflict,
+			"Component recovery acknowledgement authority changed",
+		)
 	}
 	_, procedure, childCondition, err := repository.componentRecoveryProcedureAtRevision(ctx, task, revision)
 	if err != nil {
@@ -135,17 +156,25 @@ func (repository *TaskRepository) transitionComponentAcknowledgementToRecovery(
 	}
 	defer clear(nextValue)
 	timeoutKey := taskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline)
-	timeoutRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{timeoutKey}, Revision: revision})
+	timeoutRead, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{timeoutKey}, Revision: revision},
+	)
 	if err != nil || timeoutRead == nil || timeoutRead.ReadRevision != revision || len(timeoutRead.Values) != 1 ||
 		timeoutRead.Values[0] == nil || timeoutRead.Values[0].ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(timeoutRead.Values[0].Value, assignmentValue.Value) {
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, true, err
 		}
-		return etcdstore.Versioned[TaskRecord]{}, true, errs.New(errs.KindStateConflict, "Component recovery timeout authority changed")
+		return etcdstore.Versioned[TaskRecord]{}, true, errs.New(
+			errs.KindStateConflict,
+			"Component recovery timeout authority changed",
+		)
 	}
 	conditions := []etcdstore.Condition{
-		{Key: taskClosingReportKey(task)}, {Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
+		{
+			Key: taskClosingReportKey(task),
+		}, {Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 		{Key: assignmentValue.Key, ModRevision: assignmentValue.ModRevision},
 		{Key: assignmentIndexValue.Key, ModRevision: assignmentIndexValue.ModRevision},
 		{Key: timeoutKey, ModRevision: timeoutRead.Values[0].ModRevision}, childCondition,
@@ -164,7 +193,11 @@ func (repository *TaskRepository) transitionComponentAcknowledgementToRecovery(
 		{Type: etcdstore.MutationPut, Key: assignmentValue.Key, Value: nextValue},
 		{Type: etcdstore.MutationPut, Key: assignmentIndexValue.Key, Value: nextValue},
 		{Type: etcdstore.MutationDelete, Key: timeoutKey},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline), Value: nextValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline),
+			Value: nextValue,
+		},
 		{Type: etcdstore.MutationPut, Key: taskassignments.ComponentRecoveryKey(task.ID), Value: recoveryValue},
 	}
 	mutations = append(mutations, claim.Mutations()...)
@@ -176,7 +209,11 @@ func (repository *TaskRepository) transitionComponentAcknowledgementToRecovery(
 	if !transaction.Succeeded {
 		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
-	return etcdstore.Versioned[TaskRecord]{Record: task, Revision: transaction.Revision, ReadRevision: transaction.Revision}, true, nil
+	return etcdstore.Versioned[TaskRecord]{
+		Record:       task,
+		Revision:     transaction.Revision,
+		ReadRevision: transaction.Revision,
+	}, true, nil
 }
 
 func (repository *TaskRepository) componentMutationEvidenceAtRevision(
@@ -316,22 +353,33 @@ func (repository *TaskRepository) componentRecoveryAcknowledgementAtRevision(
 	if result.ExecutionEpoch < assignment.ExecutionEpoch && result.ReleaseRecoveryRecordSHA256 == "" {
 		replayDigest, replayErr := taskassignments.CanonicalPrimaryReportSHA256(status, result)
 		if replayErr != nil || replayDigest != record.PrimaryReportSHA256 {
-			return releaseRecoveryAcknowledgement{}, errs.New(errs.KindStateConflict, "old Component recovery acknowledgement changed")
+			return releaseRecoveryAcknowledgement{}, errs.New(
+				errs.KindStateConflict,
+				"old Component recovery acknowledgement changed",
+			)
 		}
 		return resolved, nil
 	}
-	if result.ExecutionEpoch != assignment.ExecutionEpoch || result.ReleaseRecoveryRecordSHA256 != assignment.ReleaseRecoveryRecordSHA256 {
-		return releaseRecoveryAcknowledgement{}, errs.New(errs.KindStateConflict, "Component recovery acknowledgement epoch changed")
+	if result.ExecutionEpoch != assignment.ExecutionEpoch ||
+		result.ReleaseRecoveryRecordSHA256 != assignment.ReleaseRecoveryRecordSHA256 {
+		return releaseRecoveryAcknowledgement{}, errs.New(
+			errs.KindStateConflict,
+			"Component recovery acknowledgement epoch changed",
+		)
 	}
 	if status != taskjournal.TaskStatusCompleted || result.ReconciliationRequired {
 		return resolved, nil
 	}
 	if record.Phase != taskassignments.ReleaseRecoveryPhaseProven || int(record.Cursor) != len(record.RecoveryStepIDs) {
-		return releaseRecoveryAcknowledgement{}, errs.New(errs.KindStateConflict, "Component recovery proof is incomplete")
+		return releaseRecoveryAcknowledgement{}, errs.New(
+			errs.KindStateConflict,
+			"Component recovery proof is incomplete",
+		)
 	}
 	plan, procedure, childCondition, err := repository.componentRecoveryProcedureAtRevision(ctx, task, revision)
 	_, evidenceErr := componentApplicableCompensationStepIDs(procedure, record.MutationEvidence)
-	if err != nil || componentRecoveryAuthorityDigestMatches(procedure, assignment.ComponentRecoveryProcedureSHA256) != nil ||
+	if err != nil ||
+		componentRecoveryAuthorityDigestMatches(procedure, assignment.ComponentRecoveryProcedureSHA256) != nil ||
 		evidenceErr != nil ||
 		validateComponentRecoveryProof(plan, procedure, result) != nil {
 		return releaseRecoveryAcknowledgement{}, errs.New(errs.KindStateConflict, "Component recovery proof is invalid")
@@ -342,7 +390,9 @@ func (repository *TaskRepository) componentRecoveryAcknowledgementAtRevision(
 	}
 	primary.ReconciliationRequired = false
 	primary.Projects = slices.Clone(result.Projects)
-	primary.ComponentRestorationEvidence = taskjournal.CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence)
+	primary.ComponentRestorationEvidence = taskjournal.CloneTaskComponentRestorationEvidence(
+		result.ComponentRestorationEvidence,
+	)
 	primary.ExecutionEpoch = assignment.ExecutionEpoch
 	primary.ReleaseRecoveryRecordSHA256 = assignment.ReleaseRecoveryRecordSHA256
 	resolved.final, resolved.status, resolved.result = true, record.PrimaryStatus, *primary
@@ -384,7 +434,8 @@ func validateComponentRecoveryProof(
 		expectedArtifact, expectedService = procedure.GetCandidateArtifactId(), absence.GetServiceId()
 		expectedProject, expectedTarget = absence.GetComposeProjectName(), "candidate_absence"
 	}
-	if evidence.ArtifactID != expectedArtifact || evidence.ServiceID != expectedService || evidence.Target != expectedTarget {
+	if evidence.ArtifactID != expectedArtifact || evidence.ServiceID != expectedService ||
+		evidence.Target != expectedTarget {
 		return taskassignments.CorruptTaskAssignment()
 	}
 	if expectedProject == "" || evidence.ComposeProjectName != expectedProject {

@@ -3,10 +3,11 @@ package etcd
 import (
 	"context"
 	"errors"
+	"math"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -37,6 +38,83 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 		}
 		if assignment.ExecutionEpoch == math.MaxUint32 {
 			return TaskAssignment{}, errs.New(errs.KindStateConflict, "Agent reconnect assignment authority changed")
+		}
+		if assignment.ServiceAbsenceProcedureSHA256 != "" {
+			procedure, _, _, found, procedureErr := repository.serviceAbsenceProcedureAtRevision(
+				ctx, task, current.Task.ReadRevision,
+			)
+			digest, digestErr := serviceAbsenceAuthorityDigest(procedure)
+			if procedureErr != nil || !found || digestErr != nil || digest != assignment.ServiceAbsenceProcedureSHA256 {
+				return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
+			}
+			if assignment.ExecutionMode == taskassignments.TaskExecutionModeForward {
+				evidence, evidenceErr := repository.serviceAbsenceMutationEvidenceAtRevision(
+					ctx, task, assignment, procedure, current.Task.ReadRevision,
+				)
+				if evidenceErr != nil {
+					return TaskAssignment{}, evidenceErr
+				}
+				if len(evidence) != 0 {
+					result := taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultCompose,
+						ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch}
+					taskBytes, _ := EncodeTaskRecord(task)
+					assignmentBytes, _ := taskassignments.EncodeTaskAssignment(assignment)
+					transitioned, processed, transitionErr := repository.transitionServiceAbsenceAcknowledgementToRecovery(
+						ctx,
+						task,
+						&etcdstore.KeyValue{
+							Key:         taskjournal.TaskStorageKey(task.ID),
+							Value:       taskBytes,
+							ModRevision: current.Task.Revision,
+						},
+						assignment,
+						&etcdstore.KeyValue{
+							Key: taskjournal.TaskExecutionClaimKey(
+								assignment.Executor,
+								assignment.AgentID,
+								task.ID,
+							),
+							Value:       assignmentBytes,
+							ModRevision: current.Assignment.Revision,
+						},
+						&etcdstore.KeyValue{
+							Key:         taskjournal.TaskAssignmentIndexKey(task.ID),
+							Value:       assignmentBytes,
+							ModRevision: current.Assignment.Revision,
+						},
+						taskjournal.TaskStatusFailed,
+						result,
+						current.Task.ReadRevision,
+					)
+					clear(taskBytes)
+					clear(assignmentBytes)
+					if transitionErr != nil {
+						return TaskAssignment{}, transitionErr
+					}
+					if !processed || transitioned.ReadRevision == 0 {
+						if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts+1); err != nil {
+							return TaskAssignment{}, err
+						}
+						continue
+					}
+					return repository.GetTaskAssignment(ctx, task.ID)
+				}
+				return TaskAssignment{}, errs.New(
+					errs.KindStateConflict,
+					"Service absence assignment has no durable mutation effect to recover",
+				)
+			}
+			if assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly ||
+				current.ServiceAbsenceRecovery == nil {
+				return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
+			}
+			if err := repository.incrementAssignmentEpoch(ctx, current, nil); err != nil {
+				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+					return TaskAssignment{}, err
+				}
+				continue
+			}
+			return repository.GetTaskAssignment(ctx, task.ID)
 		}
 		if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
 			_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(

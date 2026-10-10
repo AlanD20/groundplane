@@ -1,8 +1,9 @@
 package taskjournal
 
 import (
-	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 )
 
 type TaskObservedProjectSummary struct {
@@ -55,6 +56,14 @@ type TaskComponentRestorationEvidence struct {
 	Restored           bool   `json:"restored"`
 }
 
+type TaskServiceAbsenceEvidence struct {
+	ServiceID          string   `json:"service_id"`
+	ArtifactID         string   `json:"artifact_id"`
+	ComposeProjectName string   `json:"compose_project_name"`
+	ComposeNames       []string `json:"compose_names"`
+	AbsenceProven      bool     `json:"absence_proven"`
+}
+
 type TaskResultRecord struct {
 	Kind                            TaskResultKind                      `json:"kind"`
 	ExitCode                        int32                               `json:"exit_code"`
@@ -67,6 +76,7 @@ type TaskResultRecord struct {
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
 	ComponentRestorationEvidence    *TaskComponentRestorationEvidence   `json:"component_restoration_evidence,omitempty"`
+	ServiceAbsenceEvidence          *TaskServiceAbsenceEvidence         `json:"service_absence_evidence,omitempty"`
 	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
 	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
 	ExecutionEpoch                  uint32                              `json:"-"`

@@ -2,11 +2,12 @@ package executionplan
 
 import (
 	"crypto/sha256"
+	"strings"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"strings"
 )
 
 func validateStep(
@@ -87,6 +88,13 @@ func validateStep(
 	case *agentpb.ExecutionStep_ComponentRestorationCompensate:
 		value := payload.ComponentRestorationCompensate
 		return validateComponentRestorationStep(operation, value.GetComponentId(), value.GetCandidateArtifactId(), artifacts)
+	case *agentpb.ExecutionStep_ServiceAbsenceProbe:
+		value := payload.ServiceAbsenceProbe
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
+			ids.Validate(ids.KindService, value.GetServiceId()) != nil || artifacts[value.GetArtifactId()] == nil {
+			return errs.New(errs.KindValidationFailed, "Service absence probe authority is invalid")
+		}
+		return nil
 	case *agentpb.ExecutionStep_EnvironmentDirectoryCreate:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE ||
 			payload.EnvironmentDirectoryCreate == nil ||

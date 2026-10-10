@@ -30,6 +30,7 @@ type TaskAssignmentRecord struct {
 	RestorationAuthority             *ReleaseRestorationAuthority
 	RestorationAuthoritySHA256       string
 	ComponentRecoveryProcedureSHA256 string
+	ServiceAbsenceProcedureSHA256    string
 	ReleaseRecoveryRecordSHA256      string
 	BackupAuthorityFence             *BackupAuthorityFence
 }
@@ -59,6 +60,7 @@ type taskAssignmentJSON struct {
 	RestorationAuthority             *ReleaseRestorationAuthority `json:"restoration_authority,omitempty"`
 	RestorationAuthoritySHA256       string                       `json:"restoration_authority_sha256,omitempty"`
 	ComponentRecoveryProcedureSHA256 string                       `json:"component_recovery_procedure_sha256,omitempty"`
+	ServiceAbsenceProcedureSHA256    string                       `json:"service_absence_procedure_sha256,omitempty"`
 	ReleaseRecoveryRecordSHA256      string                       `json:"release_recovery_record_sha256,omitempty"`
 	BackupAuthorityFence             *BackupAuthorityFence        `json:"backup_authority_fence,omitempty"`
 }
@@ -84,6 +86,7 @@ func EncodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 		RestorationAuthority:             cloneReleaseRestorationAuthority(record.RestorationAuthority),
 		RestorationAuthoritySHA256:       record.RestorationAuthoritySHA256,
 		ComponentRecoveryProcedureSHA256: record.ComponentRecoveryProcedureSHA256,
+		ServiceAbsenceProcedureSHA256:    record.ServiceAbsenceProcedureSHA256,
 		ReleaseRecoveryRecordSHA256:      record.ReleaseRecoveryRecordSHA256,
 		BackupAuthorityFence:             cloneBackupAuthorityFence(record.BackupAuthorityFence),
 	})
@@ -127,6 +130,7 @@ func DecodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 		RestorationAuthority:             cloneReleaseRestorationAuthority(data.RestorationAuthority),
 		RestorationAuthoritySHA256:       data.RestorationAuthoritySHA256,
 		ComponentRecoveryProcedureSHA256: data.ComponentRecoveryProcedureSHA256,
+		ServiceAbsenceProcedureSHA256:    data.ServiceAbsenceProcedureSHA256,
 		ReleaseRecoveryRecordSHA256:      data.ReleaseRecoveryRecordSHA256,
 		BackupAuthorityFence:             cloneBackupAuthorityFence(data.BackupAuthorityFence),
 	}
@@ -180,9 +184,14 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 		}
 	}
 	component := record.ComponentRecoveryProcedureSHA256 != ""
+	serviceAbsence := record.ServiceAbsenceProcedureSHA256 != ""
 	if component && !recordcodec.ValidSHA256(record.ComponentRecoveryProcedureSHA256) ||
+		serviceAbsence && !recordcodec.ValidSHA256(record.ServiceAbsenceProcedureSHA256) ||
+		component && serviceAbsence ||
 		component && record.RestorationAuthority != nil ||
-		record.ExecutionMode == TaskExecutionModeRecoveryOnly && !component && record.RestorationAuthority == nil {
+		serviceAbsence && record.RestorationAuthority != nil ||
+		record.ExecutionMode == TaskExecutionModeRecoveryOnly && !component && !serviceAbsence &&
+			record.RestorationAuthority == nil {
 		return CorruptTaskAssignment()
 	}
 	return validateBackupAuthorityFence(record.BackupAuthorityFence)

@@ -380,6 +380,19 @@ func (repository *TaskRepository) candidateReleaseTimeoutResult(
 		record.ExecutionMode != taskassignments.TaskExecutionModeForward {
 		return taskjournal.TaskResultRecord{}, false, nil
 	}
+	if record.ServiceAbsenceProcedureSHA256 != "" {
+		procedure, _, _, found, procedureErr := repository.serviceAbsenceProcedureAtRevision(
+			ctx, assignment.Task.Record, assignment.Task.ReadRevision,
+		)
+		digest, digestErr := serviceAbsenceAuthorityDigest(procedure)
+		if procedureErr != nil || !found || digestErr != nil || digest != record.ServiceAbsenceProcedureSHA256 {
+			return taskjournal.TaskResultRecord{}, true, taskassignments.CorruptTaskAssignment()
+		}
+		return taskjournal.TaskResultRecord{
+			Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticTimeoutBeforeEffect,
+			ExecutionEpoch: record.ExecutionEpoch,
+		}, true, nil
+	}
 	procedure, _, err := repository.releaseRecoveryProcedureAtRevision(
 		ctx,
 		assignment.Task.Record,

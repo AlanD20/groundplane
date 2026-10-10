@@ -14,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type serviceRemovalPlanReader interface {
@@ -72,12 +73,12 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 				ID:   ids.DeriveAt(ids.KindStep, task.CreatedAt, task.ID, artifacts[index].Services[0].ComposeName),
 			})
 		}
-		if intent.Authored != nil {
-			prepared.Steps = append(prepared.Steps,
-				taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
-				taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
-			)
-		}
+	}
+	if intent.Authored != nil {
+		prepared.Steps = append(prepared.Steps,
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+		)
 	}
 	plan, err := resolver.buildServiceRemovalPlan(ctx, prepared, intent)
 	if err != nil {
@@ -118,6 +119,20 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 	if intent.AcknowledgedRuntime != nil {
 		return resolver.buildAcknowledgedServiceRemovalPlan(task, intent)
 	}
+	artifactID := task.Params[taskjournal.TaskComposeArtifactParam]
+	if intent.Authored != nil {
+		artifact := new(agentpb.ComposeArtifact)
+		if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(
+			intent.CurrentProjection.ComposeArtifact,
+			artifact,
+		) != nil ||
+			artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+			artifact.GetOwnerId() != intent.EnvironmentID {
+			return nil, errs.New(errs.KindStateConflict, "authored Service applied artifact is invalid")
+		}
+		artifact.ArtifactId = artifactID
+		return buildAuthoredServiceAbsencePlan(resolver.volumeRoot, task, intent, artifact)
+	}
 	environment, err := resolver.blueprints.GetEnvironment(ctx, intent.EnvironmentID)
 	if err != nil {
 		return nil, err
@@ -130,7 +145,6 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
-	artifactID := task.Params[taskjournal.TaskComposeArtifactParam]
 	artifact, err := resolver.renderPinnedEnvironmentArtifact(
 		ctx, task,
 		pinnedEnvironmentIdentity{
@@ -170,7 +184,7 @@ func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent environmentchan
 		len(task.Params) != wantParams ||
 		len(
 			task.Steps,
-		) == 0 || len(task.Steps) > wantSteps || intent.AcknowledgedRuntime == nil && len(task.Steps) != 1 ||
+		) == 0 || len(task.Steps) > wantSteps || intent.AcknowledgedRuntime == nil && intent.Authored == nil && len(task.Steps) != 1 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != desiredRevision ||
@@ -181,7 +195,8 @@ func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent environmentchan
 		return errs.New(errs.KindInternal, "durable Service removal Task changed")
 	}
 	if intent.Authored != nil && (task.Params[taskjournal.TaskBlueprintParentParam] != intent.Authored.ParentTaskID ||
-		task.Params[taskjournal.TaskBlueprintServiceUnitParam] != intent.ServiceID || len(task.Steps) < 3) {
+		task.Params[taskjournal.TaskBlueprintServiceUnitParam] != intent.ServiceID ||
+		intent.AcknowledgedRuntime == nil && len(task.Steps) != 3 || intent.AcknowledgedRuntime != nil && len(task.Steps) < 3) {
 		return errs.New(errs.KindInternal, "durable authored Service removal Task changed")
 	}
 	return nil

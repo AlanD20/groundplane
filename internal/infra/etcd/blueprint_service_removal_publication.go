@@ -77,7 +77,7 @@ func (publication BlueprintServiceRemovalPublication) prepare(
 		return nil, nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
-		read.Values[0] == nil || read.Values[2] == nil || read.Values[3] == nil ||
+		read.Values[0] == nil || read.Values[3] == nil ||
 		read.Values[4] != nil || read.Values[5] != nil || read.Values[6] != nil {
 		return nil, nil, errs.New(errs.KindResourceInUse, "Blueprint Service removal authority is unavailable")
 	}
@@ -99,7 +99,7 @@ func (publication BlueprintServiceRemovalPublication) prepare(
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Service removal predecessor changed")
 	}
 	if !keyvalue.ConditionMatchesRead(servicerecord.ServiceRuntimeCondition(current), read.Values[1]) ||
-		read.Values[2].ModRevision != intent.AcknowledgedRuntimeRevision ||
+		keyvalue.RevisionOf(read.Values[2]) != intent.AcknowledgedRuntimeRevision ||
 		read.Values[3].ModRevision != intent.ExpectedHeadRevision {
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Service runtime changed")
 	}
@@ -107,12 +107,16 @@ func (publication BlueprintServiceRemovalPublication) prepare(
 	if err != nil || headTaskID != intent.Authored.ParentTaskID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Service removal head changed")
 	}
-	wantRuntime, err := releases.EncodeReleaseRecord("service-acknowledged-runtime", *intent.AcknowledgedRuntime)
-	if err != nil || !bytes.Equal(wantRuntime, read.Values[2].Value) {
+	if intent.AcknowledgedRuntime != nil {
+		wantRuntime, err := releases.EncodeReleaseRecord("service-acknowledged-runtime", *intent.AcknowledgedRuntime)
+		if err != nil || read.Values[2] == nil || !bytes.Equal(wantRuntime, read.Values[2].Value) {
+			clear(wantRuntime)
+			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Service acknowledged runtime changed")
+		}
 		clear(wantRuntime)
-		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Service acknowledged runtime changed")
+	} else if read.Values[2] != nil {
+		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Service acknowledged runtime appeared")
 	}
-	clear(wantRuntime)
 	guards, err := serviceremovalreferences.Validate(ctx, repository.store, current, applied)
 	if err != nil {
 		return nil, nil, err
@@ -155,7 +159,7 @@ func (publication BlueprintServiceRemovalPublication) prepare(
 	conditions := []keyvalue.Condition{
 		{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: keyvalue.RevisionOf(read.Values[1])},
-		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
+		{Key: keys[2], ModRevision: keyvalue.RevisionOf(read.Values[2])},
 		{Key: keys[3], ModRevision: read.Values[3].ModRevision},
 		{Key: keys[4]}, {Key: keys[5]}, {Key: keys[6]},
 		{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)},

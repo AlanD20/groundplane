@@ -82,8 +82,7 @@ func NewAuthoredServiceRemovalIntent(
 	candidate projectionrecord.EnvironmentComposeProjection,
 	createdAt time.Time,
 ) (ServiceRemovalIntent, error) {
-	if service.ReadRevision != projection.ReadRevision || acknowledged.ReadRevision != projection.ReadRevision ||
-		acknowledged.Revision <= 0 {
+	if service.ReadRevision != projection.ReadRevision || acknowledged.ReadRevision != projection.ReadRevision {
 		return ServiceRemovalIntent{}, errs.New(
 			errs.KindStateConflict, "authored Service removal sources are not one fixed revision",
 		)
@@ -175,8 +174,7 @@ func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		intent.CandidateProjection.RenderGeneration != intent.Authored.RenderGeneration ||
 		intent.Authored.RenderGeneration < intent.CurrentProjection.RenderGeneration ||
 		intent.Authored.RenderGeneration == intent.CurrentProjection.RenderGeneration &&
-			intent.CurrentProjection.RevisionID != intent.Authored.ParentTaskID ||
-		intent.AcknowledgedRuntime == nil || intent.AcknowledgedRuntimeRevision <= 0 {
+			intent.CurrentProjection.RevisionID != intent.Authored.ParentTaskID {
 		return errs.New(errs.KindValidationFailed, "Service removal authored revision is invalid")
 	}
 	if intent.Status == taskjournal.TaskStatusPending {
@@ -215,7 +213,7 @@ func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 	if !removedDesired || !SameServiceRemovalProjection(expected, intent.CandidateProjection) {
 		return errs.New(errs.KindValidationFailed, "Service removal candidate projection changed")
 	}
-	if intent.Authored != nil {
+	if intent.Authored != nil && intent.AcknowledgedRuntime != nil {
 		if _, err := ResolveAuthoredServiceRemovalRecovery(intent); err != nil {
 			return err
 		}

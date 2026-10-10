@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -47,6 +48,29 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 			conditions = append(conditions, etcdstore.Condition{Key: blueprintClosingReportKey(task.ID)})
 		}
 		return conditions, nil
+	}
+	if assignment.ServiceAbsenceProcedureSHA256 != "" {
+		procedure, _, sourceConditions, found, procedureErr := repository.serviceAbsenceProcedureAtRevision(
+			ctx, task, current.Task.ReadRevision,
+		)
+		digest, digestErr := serviceAbsenceAuthorityDigest(procedure)
+		if procedureErr != nil || !found || digestErr != nil || digest != assignment.ServiceAbsenceProcedureSHA256 {
+			return nil, taskassignments.CorruptTaskAssignment()
+		}
+		evidence, evidenceErr := repository.serviceAbsenceMutationEvidenceAtRevision(
+			ctx, task, assignment, procedure, current.Task.ReadRevision,
+		)
+		if evidenceErr != nil {
+			return nil, evidenceErr
+		}
+		if len(evidence) != 0 {
+			result.Diagnostic = taskjournal.TaskResultDiagnosticNone
+			result.ReconciliationRequired = true
+		}
+		if err := taskjournal.ValidateTaskResult(*result, task.Steps, status); err != nil {
+			return nil, err
+		}
+		return append(conditions, sourceConditions...), nil
 	}
 	procedure, sourceConditions, err := repository.releaseRecoveryProcedureAtRevision(
 		ctx,

@@ -19,7 +19,10 @@ func (repository *TaskRepository) componentRecoveryProcedureAtRevision(
 	revision int64,
 ) (*agentpb.ExecutionPlan, *agentpb.ComponentRecoveryProcedure, etcdstore.Condition, error) {
 	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] == "" {
-		return nil, nil, etcdstore.Condition{}, errs.New(errs.KindStateConflict, "Task is not a Blueprint Component child")
+		return nil, nil, etcdstore.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Task is not a Blueprint Component child",
+		)
 	}
 	child, err := componentplanning.ReadChildExecution(ctx, repository.store, task.ID, revision)
 	if err != nil || child.Record.ParentTaskID != task.Params[taskjournal.TaskBlueprintParentParam] ||
@@ -27,14 +30,20 @@ func (repository *TaskRepository) componentRecoveryProcedureAtRevision(
 		if err != nil {
 			return nil, nil, etcdstore.Condition{}, err
 		}
-		return nil, nil, etcdstore.Condition{}, errs.New(errs.KindStateConflict, "Blueprint Component execution authority changed")
+		return nil, nil, etcdstore.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component execution authority changed",
+		)
 	}
 	plan, err := child.Record.ExecutionPlan()
 	if err != nil || plan.GetPlanId() != task.PlanID || plan.GetComponentRecoveryProcedure() == nil {
 		if err != nil {
 			return nil, nil, etcdstore.Condition{}, err
 		}
-		return nil, nil, etcdstore.Condition{}, errs.New(errs.KindStateConflict, "Blueprint Component recovery procedure is unavailable")
+		return nil, nil, etcdstore.Condition{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component recovery procedure is unavailable",
+		)
 	}
 	return plan, plan.GetComponentRecoveryProcedure(), etcdstore.Condition{
 		Key: componentplanning.ChildExecutionKey(task.ID), ModRevision: child.Revision,
@@ -86,12 +95,18 @@ func assignmentRecoveryKey(taskID string, assignment taskassignments.TaskAssignm
 	if assignment.ComponentRecoveryProcedureSHA256 != "" {
 		return taskassignments.ComponentRecoveryKey(taskID)
 	}
+	if assignment.ServiceAbsenceProcedureSHA256 != "" {
+		return taskassignments.ServiceAbsenceRecoveryKey(taskID)
+	}
 	return taskassignments.ReleaseRecoveryKey(taskID)
 }
 
 func assignmentRecoveryAuthorityDigest(assignment taskassignments.TaskAssignmentRecord) string {
 	if assignment.ComponentRecoveryProcedureSHA256 != "" {
 		return assignment.ComponentRecoveryProcedureSHA256
+	}
+	if assignment.ServiceAbsenceProcedureSHA256 != "" {
+		return assignment.ServiceAbsenceProcedureSHA256
 	}
 	return assignment.RestorationAuthoritySHA256
 }

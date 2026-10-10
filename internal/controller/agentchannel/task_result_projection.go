@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/healthcheckfailure"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -97,6 +98,15 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) taskjournal.Task
 			ComposeProjectName: evidence.GetComposeProjectName(), Target: target, Restored: evidence.GetRestored(),
 		}
 	}
+	if evidence := result.GetServiceAbsenceEvidence(); evidence != nil {
+		durable.ServiceAbsenceEvidence = &taskjournal.TaskServiceAbsenceEvidence{
+			ServiceID: evidence.GetServiceId(), ArtifactID: evidence.GetArtifactId(),
+			ComposeProjectName: evidence.GetComposeProjectName(),
+			ComposeNames: append(
+				[]string(nil),
+				evidence.GetComposeNames()...), AbsenceProven: evidence.GetAbsenceProven(),
+		}
+	}
 	for index, project := range result.GetProjects() {
 		durable.Projects[index] = taskjournal.TaskObservedProjectSummary{
 			ProjectName: project.GetProjectName(),
@@ -172,6 +182,18 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 			return errs.New(errs.KindValidationFailed, "Agent Component restoration evidence is invalid")
 		}
 	}
+	if evidence := result.GetServiceAbsenceEvidence(); evidence != nil {
+		if ids.Validate(ids.KindService, evidence.GetServiceId()) != nil ||
+			ids.Validate(ids.KindConfig, evidence.GetArtifactId()) != nil || evidence.GetComposeProjectName() == "" ||
+			len(evidence.GetComposeNames()) == 0 || len(evidence.GetComposeNames()) > 8 {
+			return errs.New(errs.KindValidationFailed, "Agent Service absence evidence is invalid")
+		}
+		for index, name := range evidence.GetComposeNames() {
+			if name == "" || index > 0 && evidence.GetComposeNames()[index-1] >= name {
+				return errs.New(errs.KindValidationFailed, "Agent Service absence evidence is invalid or unsorted")
+			}
+		}
+	}
 	if !validComposeTaskDiagnostic(result.GetDiagnostic()) {
 		return errs.New(errs.KindValidationFailed, "Agent Compose Task diagnostic is invalid")
 	}
@@ -202,8 +224,9 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 			}
 		}
 		for _, observed := range project.GetContainers() {
-			if observed == nil || (observed.GetHealthcheckDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED &&
-				healthcheckfailure.Detail(observed.GetHealthcheckDiagnostic()) == "") {
+			if observed == nil ||
+				(observed.GetHealthcheckDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED &&
+					healthcheckfailure.Detail(observed.GetHealthcheckDiagnostic()) == "") {
 				return errs.New(errs.KindValidationFailed, "Agent healthcheck failure classification is invalid")
 			}
 		}

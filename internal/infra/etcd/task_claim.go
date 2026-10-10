@@ -307,13 +307,35 @@ func (repository *TaskRepository) claimNextTask(
 			}
 		}
 		if authoredBlueprintServiceRemovalTask(task) {
-			authority, authorityDigest, authorityConditions, authorityErr :=
-				repository.prepareAuthoredServiceRestorationAuthority(ctx, task, candidate.readRevision)
-			if authorityErr != nil {
+			procedure, _, absenceConditions, absence, absenceErr := repository.serviceAbsenceProcedureAtRevision(
+				ctx, task, candidate.readRevision,
+			)
+			if absenceErr != nil {
 				etcdstore.ClearMutationValues(mutations)
-				return TaskAssignment{}, false, authorityErr
+				return TaskAssignment{}, false, absenceErr
 			}
-			assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
+			if absence {
+				assignment.ServiceAbsenceProcedureSHA256, err = serviceAbsenceAuthorityDigest(procedure)
+				if err != nil {
+					etcdstore.ClearMutationValues(mutations)
+					return TaskAssignment{}, false, err
+				}
+				conditions = append(conditions, absenceConditions...)
+				conditions = append(
+					conditions,
+					etcdstore.Condition{Key: taskassignments.ServiceAbsenceRecoveryKey(task.ID)},
+				)
+			} else {
+				authority, authorityDigest, authorityConditions, authorityErr :=
+					repository.prepareAuthoredServiceRestorationAuthority(ctx, task, candidate.readRevision)
+				if authorityErr != nil {
+					etcdstore.ClearMutationValues(mutations)
+					return TaskAssignment{}, false, authorityErr
+				}
+				assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
+				conditions = append(conditions, authorityConditions...)
+				conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(task.ID)})
+			}
 			updatedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
 			if encodeErr != nil {
 				etcdstore.ClearMutationValues(mutations)
@@ -322,8 +344,6 @@ func (repository *TaskRepository) claimNextTask(
 			clear(assignmentValue)
 			assignmentValue = updatedAssignmentValue
 			mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
-			conditions = append(conditions, authorityConditions...)
-			conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(task.ID)})
 		}
 		if !taskHasBlueprintCandidateAppliedAuthority(task) &&
 			task.Params[releaserender.TaskReleasePublicationParam] != "" {

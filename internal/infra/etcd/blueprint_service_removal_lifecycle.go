@@ -30,11 +30,12 @@ func (repository *TaskRepository) prepareAuthoredServiceRemovalAcknowledgement(
 		return routeTaskChange{}, err
 	}
 	if state == nil || state.ReadRevision != revision || len(state.Values) != len(keys) ||
-		state.Values[1] == nil || state.Values[2] == nil || state.Values[3] == nil ||
+		state.Values[2] == nil || state.Values[3] == nil ||
 		state.Values[4] == nil || state.Values[5] == nil || state.Values[6] != nil ||
 		!keyvalue.ConditionMatchesRead(
 			keyvalue.Condition{Key: keys[0], ModRevision: intent.RuntimeRevision}, state.Values[0],
 		) || state.Values[1].ModRevision != intent.AcknowledgedRuntimeRevision ||
+		keyvalue.RevisionOf(state.Values[1]) != intent.AcknowledgedRuntimeRevision ||
 		state.Values[4].ModRevision != intent.CurrentProjectionRevision ||
 		string(state.Values[5].Value) != task.ID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "authored Service removal terminal state changed")
@@ -51,12 +52,16 @@ func (repository *TaskRepository) prepareAuthoredServiceRemovalAcknowledgement(
 	if err != nil || !environmentchanges.SameServiceRemovalProjection(applied, intent.CurrentProjection) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "authored Service removal projection changed")
 	}
-	wantRuntime, err := releases.EncodeReleaseRecord("service-acknowledged-runtime", *intent.AcknowledgedRuntime)
-	if err != nil || !bytes.Equal(wantRuntime, state.Values[1].Value) {
+	if intent.AcknowledgedRuntime != nil {
+		wantRuntime, err := releases.EncodeReleaseRecord("service-acknowledged-runtime", *intent.AcknowledgedRuntime)
+		if err != nil || state.Values[1] == nil || !bytes.Equal(wantRuntime, state.Values[1].Value) {
+			clear(wantRuntime)
+			return routeTaskChange{}, errs.New(errs.KindStateConflict, "authored Service removal runtime changed")
+		}
 		clear(wantRuntime)
-		return routeTaskChange{}, errs.New(errs.KindStateConflict, "authored Service removal runtime changed")
+	} else if state.Values[1] != nil {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "authored Service acknowledged runtime appeared")
 	}
-	clear(wantRuntime)
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[2].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetService ||
 		tombstone.TargetID != intent.ServiceID || tombstone.TargetRevision != intent.ServiceRevision ||
@@ -76,7 +81,7 @@ func (repository *TaskRepository) prepareAuthoredServiceRemovalAcknowledgement(
 		conditions: []keyvalue.Condition{
 			{Key: environmentchanges.ServiceRemovalIntentKey(task.ID), ModRevision: intentRevision},
 			{Key: keys[0], ModRevision: keyvalue.RevisionOf(state.Values[0])},
-			{Key: keys[1], ModRevision: state.Values[1].ModRevision},
+			{Key: keys[1], ModRevision: keyvalue.RevisionOf(state.Values[1])},
 			{Key: keys[2], ModRevision: state.Values[2].ModRevision},
 			{Key: keys[3], ModRevision: state.Values[3].ModRevision},
 			{Key: keys[4], ModRevision: state.Values[4].ModRevision},
@@ -150,7 +155,7 @@ func (repository *TaskRepository) validateAuthoredServiceRemovalAcknowledgementR
 		}
 	} else if !keyvalue.ConditionMatchesRead(
 		keyvalue.Condition{Key: keys[0], ModRevision: intent.RuntimeRevision}, state.Values[0],
-	) || state.Values[1] == nil || state.Values[1].ModRevision != intent.AcknowledgedRuntimeRevision {
+	) || keyvalue.RevisionOf(state.Values[1]) != intent.AcknowledgedRuntimeRevision {
 		return errs.New(errs.KindStateConflict, "failed authored Service removal lost runtime")
 	}
 	if state.Values[4] == nil {

@@ -30,6 +30,7 @@ func validateEntryMutationPlan(plan *agentpb.ExecutionPlan) error {
 		ids.Validate(ids.KindEnvironment, plan.TargetId) != nil ||
 		plan.GetCandidateReleaseProcedure() != nil || plan.GetServiceLifecycleProcedure() != nil ||
 		plan.GetManagedComponentProcedure() != nil || plan.GetComponentRollbackObservation() != nil ||
+		plan.GetServiceAbsenceRecoveryProcedure() != nil ||
 		len(plan.Artifacts) != 2 || len(plan.Steps) == 0 ||
 		procedure.BaselineArtifactId == procedure.CandidateArtifactId {
 		return invalid()

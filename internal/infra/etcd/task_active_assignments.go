@@ -3,13 +3,14 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"time"
 )
 
 // ListAgentAssignments restores the complete bounded assignment set for one
@@ -140,7 +141,24 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 		var recovery *taskassignments.ReleaseRecoveryDirective
 		var componentRecovery *taskassignments.ReleaseRecoveryDirective
-		if releaseRecoveryTask(task) {
+		var serviceAbsenceRecovery *taskassignments.ReleaseRecoveryDirective
+		if record.ServiceAbsenceProcedureSHA256 != "" {
+			procedure, _, _, found, procedureErr := repository.serviceAbsenceProcedureAtRevision(
+				ctx, task, assignments.ReadRevision,
+			)
+			digest, digestErr := serviceAbsenceAuthorityDigest(procedure)
+			if procedureErr != nil || !found || digestErr != nil || digest != record.ServiceAbsenceProcedureSHA256 {
+				return nil, taskassignments.CorruptTaskAssignment()
+			}
+			if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
+				serviceAbsenceRecovery, err = repository.serviceAbsenceDirectiveAtRevision(
+					ctx, task, record, procedure, assignments.ReadRevision,
+				)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else if releaseRecoveryTask(task) {
 			procedure, _, descriptorErr := repository.releaseRecoveryProcedureAtRevision(
 				ctx, task, assignments.ReadRevision,
 			)
@@ -188,9 +206,10 @@ func (repository *TaskRepository) ListAgentAssignments(
 				Record: task, Revision: taskValue.ModRevision,
 				ReadRevision: assignments.ReadRevision,
 			},
-			ReleaseRecovery:       recovery,
-			ComponentRecovery:     componentRecovery,
-			RecoveryProofRequired: proofRequired,
+			ReleaseRecovery:        recovery,
+			ComponentRecovery:      componentRecovery,
+			ServiceAbsenceRecovery: serviceAbsenceRecovery,
+			RecoveryProofRequired:  proofRequired,
 		}
 	}
 	return result, nil

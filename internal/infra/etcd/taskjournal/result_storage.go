@@ -1,8 +1,9 @@
 package taskjournal
 
 import (
-	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
+
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
@@ -24,6 +25,7 @@ type TaskResultData struct {
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
 	ComponentRestorationEvidence    *TaskComponentRestorationEvidence   `json:"component_restoration_evidence,omitempty"`
+	ServiceAbsenceEvidence          *TaskServiceAbsenceEvidence         `json:"service_absence_evidence,omitempty"`
 	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
 	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
 }
@@ -52,6 +54,7 @@ func TaskResultToData(result *TaskResultRecord) *TaskResultData {
 		RecreateEvidence:             append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
 		CandidateAbsenceEvidence:     CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence),
 		ComponentRestorationEvidence: CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence),
+		ServiceAbsenceEvidence:       CloneTaskServiceAbsenceEvidence(result.ServiceAbsenceEvidence),
 	}
 	data.DNSResolverCandidateObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,
@@ -82,6 +85,7 @@ func TaskResultFromData(data *TaskResultData) (*TaskResultRecord, error) {
 		RecreateEvidence:             append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
 		CandidateAbsenceEvidence:     CloneTaskCandidateAbsenceEvidence(data.CandidateAbsenceEvidence),
 		ComponentRestorationEvidence: CloneTaskComponentRestorationEvidence(data.ComponentRestorationEvidence),
+		ServiceAbsenceEvidence:       CloneTaskServiceAbsenceEvidence(data.ServiceAbsenceEvidence),
 	}
 	if data.DNSResolverCandidateObservation != nil {
 		evidence := *data.DNSResolverCandidateObservation

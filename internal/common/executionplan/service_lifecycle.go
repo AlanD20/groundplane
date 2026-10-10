@@ -42,6 +42,9 @@ func validateServiceLifecyclePlan(plan *agentpb.ExecutionPlan) error {
 		return nil
 	}
 	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+		if plan.GetServiceAbsenceRecoveryProcedure() != nil {
+			return validateServiceAbsenceLifecyclePlan(plan)
+		}
 		return validateBlueprintServiceRemovalLifecyclePlan(plan)
 	}
 	if ids.Validate(ids.KindService, plan.GetTargetId()) != nil ||
@@ -106,6 +109,7 @@ func validateBlueprintServiceRemovalLifecyclePlan(plan *agentpb.ExecutionPlan) e
 	if ids.Validate(ids.KindService, plan.GetTargetId()) != nil || procedure == nil || candidate == nil ||
 		candidate.GetConfigurationRestoration() != nil || len(candidate.GetMembers()) != 1 ||
 		plan.GetManagedComponentProcedure() != nil || plan.GetComponentRecoveryProcedure() != nil ||
+		plan.GetServiceAbsenceRecoveryProcedure() != nil ||
 		plan.GetEntryMutationProcedure() != nil || plan.GetComponentRollbackObservation() != nil ||
 		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > 3 ||
 		len(plan.GetSteps()) != len(procedure.GetSources())+2 {

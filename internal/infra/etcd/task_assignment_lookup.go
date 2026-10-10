@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -78,7 +79,26 @@ func (repository *TaskRepository) GetTaskAssignment(
 	}
 	var recovery *taskassignments.ReleaseRecoveryDirective
 	var componentRecovery *taskassignments.ReleaseRecoveryDirective
-	if releaseRecoveryTask(task) {
+	var serviceAbsenceRecovery *taskassignments.ReleaseRecoveryDirective
+	if assignment.ServiceAbsenceProcedureSHA256 != "" {
+		procedure, _, _, found, procedureErr := repository.serviceAbsenceProcedureAtRevision(
+			ctx,
+			task,
+			indexed.ReadRevision,
+		)
+		digest, digestErr := serviceAbsenceAuthorityDigest(procedure)
+		if procedureErr != nil || !found || digestErr != nil || digest != assignment.ServiceAbsenceProcedureSHA256 {
+			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
+		}
+		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
+			serviceAbsenceRecovery, err = repository.serviceAbsenceDirectiveAtRevision(
+				ctx, task, assignment, procedure, indexed.ReadRevision,
+			)
+			if err != nil {
+				return TaskAssignment{}, err
+			}
+		}
+	} else if releaseRecoveryTask(task) {
 		procedure, _, descriptorErr := repository.releaseRecoveryProcedureAtRevision(ctx, task, indexed.ReadRevision)
 		if descriptorErr != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
 			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
@@ -122,8 +142,9 @@ func (repository *TaskRepository) GetTaskAssignment(
 		Task: etcdstore.Versioned[TaskRecord]{
 			Record: task, Revision: taskValue.ModRevision, ReadRevision: indexed.ReadRevision,
 		},
-		ReleaseRecovery:       recovery,
-		ComponentRecovery:     componentRecovery,
-		RecoveryProofRequired: proofRequired,
+		ReleaseRecovery:        recovery,
+		ComponentRecovery:      componentRecovery,
+		ServiceAbsenceRecovery: serviceAbsenceRecovery,
+		RecoveryProofRequired:  proofRequired,
 	}, nil
 }

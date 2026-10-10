@@ -6,18 +6,19 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"fmt"
+	"path"
+	"strings"
+	"unicode/utf8"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"path"
-	"strings"
-	"unicode/utf8"
 )
 
 const (
-	SchemaVersion                        = 2
+	SchemaVersion                        = 3
 	MaximumArtifacts                     = 16
 	MaximumArtifactYAMLBytes             = 1024 * 1024
 	MaximumPlanBytes                     = 4 * 1024 * 1024
@@ -221,6 +222,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		return err
 	}
 	if err := validateComponentRecoveryPlan(plan, artifacts); err != nil {
+		return err
+	}
+	if err := validateServiceAbsenceRecoveryPlan(plan, artifacts); err != nil {
 		return err
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {

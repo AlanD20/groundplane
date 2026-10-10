@@ -54,7 +54,8 @@ func validateComponentRecoveryPlan(
 		ids.Validate(ids.KindComponent, procedure.GetComponentId()) != nil ||
 		ids.Validate(ids.KindConfig, procedure.GetCandidateArtifactId()) != nil ||
 		plan.GetCandidateReleaseProcedure() != nil || plan.GetServiceLifecycleProcedure() != nil ||
-		plan.GetEntryMutationProcedure() != nil || len(procedure.GetForwardStepIds()) == 0 {
+		plan.GetEntryMutationProcedure() != nil || plan.GetServiceAbsenceRecoveryProcedure() != nil ||
+		len(procedure.GetForwardStepIds()) == 0 {
 		return invalidComponentRecovery("procedure scope is invalid")
 	}
 	candidate := artifacts[procedure.GetCandidateArtifactId()]
@@ -94,7 +95,9 @@ func validateComponentRecoveryPlan(
 		probe[0].GetComponentRestorationProbe().GetComponentId() != procedure.GetComponentId() ||
 		probe[0].GetComponentRestorationProbe().GetCandidateArtifactId() != procedure.GetCandidateArtifactId() ||
 		compensate[0].GetComponentRestorationCompensate().GetComponentId() != procedure.GetComponentId() ||
-		compensate[0].GetComponentRestorationCompensate().GetCandidateArtifactId() != procedure.GetCandidateArtifactId() {
+		compensate[0].GetComponentRestorationCompensate().
+			GetCandidateArtifactId() !=
+			procedure.GetCandidateArtifactId() {
 		return invalidComponentRecovery("runtime restoration pair is invalid")
 	}
 	if err := validateComponentRecoveryTarget(plan, procedure, candidate, artifacts); err != nil {

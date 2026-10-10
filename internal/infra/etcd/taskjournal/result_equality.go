@@ -14,6 +14,10 @@ func TaskResultsEqual(left, right TaskResultRecord) bool {
 		len(left.RecreateEvidence) != len(right.RecreateEvidence) ||
 		!TaskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) ||
 		!TaskComponentRestorationEvidenceEqual(left.ComponentRestorationEvidence, right.ComponentRestorationEvidence) {
+
+		return false
+	}
+	if !TaskServiceAbsenceEvidenceEqual(left.ServiceAbsenceEvidence, right.ServiceAbsenceEvidence) {
 		return false
 	}
 	for index := range left.Projects {
@@ -33,6 +37,15 @@ func TaskResultsEqual(left, right TaskResultRecord) bool {
 	}
 	return TaskDNSResolverEvidenceEqual(left.DNSResolverCandidateObservation, right.DNSResolverCandidateObservation) &&
 		TaskDNSResolverEvidenceEqual(left.DNSResolverRollbackObservation, right.DNSResolverRollbackObservation)
+}
+
+func TaskServiceAbsenceEvidenceEqual(left, right *TaskServiceAbsenceEvidence) bool {
+	if (left == nil) != (right == nil) {
+		return false
+	}
+	return left == nil || left.ServiceID == right.ServiceID && left.ArtifactID == right.ArtifactID &&
+		left.ComposeProjectName == right.ComposeProjectName && left.AbsenceProven == right.AbsenceProven &&
+		slices.Equal(left.ComposeNames, right.ComposeNames)
 }
 
 func TaskComponentRestorationEvidenceEqual(left, right *TaskComponentRestorationEvidence) bool {

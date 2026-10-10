@@ -344,6 +344,18 @@ message ComposeTaskResult {
   DNSResolverObservationEvidence dns_resolver_rollback_observation = 8;
   CandidateAbsenceEvidence candidate_absence_evidence = 9;
   ComponentRestorationEvidence component_restoration_evidence = 10;
+  ServiceAbsenceEvidence service_absence_evidence = 11;
+}
+
+// ServiceAbsenceEvidence proves that every exact Compose identity captured by
+// an authored Service omission is absent. It never infers absence from desired
+// state or from missing Controller runtime metadata.
+message ServiceAbsenceEvidence {
+  string service_id = 1;
+  string artifact_id = 2;
+  string compose_project_name = 3;
+  repeated string compose_names = 4;
+  bool absence_proven = 5;
 }
 
 message ComponentRestorationEvidence {
@@ -907,6 +919,18 @@ message ExecutionPlan {
   EntryMutationProcedure entry_mutation_procedure = 17;
   BackupPlanScope backup_scope = 18;
   ComponentRecoveryProcedure component_recovery_procedure = 19;
+  ServiceAbsenceRecoveryProcedure service_absence_recovery_procedure = 20;
+}
+
+// ServiceAbsenceRecoveryProcedure is the immutable recovery-only authority for
+// one authored Service omission without an acknowledged native runtime. Its
+// artifact is the exact applied projection that supplied the physical names.
+message ServiceAbsenceRecoveryProcedure {
+  string service_id = 1;
+  string artifact_id = 2;
+  repeated string forward_step_ids = 3;
+  string probe_step_id = 4;
+  string compensate_step_id = 5;
 }
 
 // ComponentRecoveryProcedure is the immutable recovery-only authority for one
@@ -1186,9 +1210,15 @@ message ExecutionStep {
     BackupStepAuthority backup_step = 37;
     ComponentRestorationProbe component_restoration_probe = 38;
     ComponentRestorationCompensate component_restoration_compensate = 39;
+    ServiceAbsenceProbe service_absence_probe = 40;
   }
   ExecutionStepPolicy policy = 30;
   string prerequisite_step_id = 31;
+}
+
+message ServiceAbsenceProbe {
+  string artifact_id = 1;
+  string service_id = 2;
 }
 
 // Resource-only preparation of one owned network from an immutable artifact.

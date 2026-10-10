@@ -2,11 +2,12 @@ package etcd
 
 import (
 	"context"
+	"time"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"time"
 )
 
 func (repository *TaskRepository) acknowledgeTask(
@@ -69,6 +70,11 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
+		if err := repository.validateCompletedServiceAbsenceReport(
+			ctx, task, assignment, terminalStatus, result, primaryAndAssignment.ReadRevision,
+		); err != nil {
+			return etcdstore.Versioned[TaskRecord]{}, err
+		}
 		terminalAt, err = nextTaskControllerTimestamp(task.UpdatedAt, terminalAt)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -124,32 +130,14 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 			defer terminalScriptSourceRelease.clear()
 		}
-		if executor == taskjournal.TaskExecutorAgent && result != nil &&
-			task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" &&
-			assignment.ExecutionMode == taskassignments.TaskExecutionModeForward &&
-			result.ReconciliationRequired {
-			transitioned, processed, transitionErr := repository.transitionComponentAcknowledgementToRecovery(
-				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
-				terminalStatus, *result, primaryAndAssignment.ReadRevision,
-			)
-			if transitionErr != nil {
-				return etcdstore.Versioned[TaskRecord]{}, transitionErr
-			}
-			if processed {
-				return transitioned, nil
-			}
-			continue
+		transitioned, applies, processed, transitionErr := repository.transitionAcknowledgementToRecovery(
+			ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
+			terminalStatus, result, primaryAndAssignment.ReadRevision, timeoutEvidenceConditions,
+		)
+		if transitionErr != nil {
+			return etcdstore.Versioned[TaskRecord]{}, transitionErr
 		}
-		if executor == taskjournal.TaskExecutorAgent && result != nil &&
-			releaseRecoveryTask(task) &&
-			result.ReconciliationRequired {
-			transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
-				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
-				terminalStatus, *result, primaryAndAssignment.ReadRevision, timeoutEvidenceConditions...,
-			)
-			if transitionErr != nil {
-				return etcdstore.Versioned[TaskRecord]{}, transitionErr
-			}
+		if applies {
 			if processed {
 				return transitioned, nil
 			}

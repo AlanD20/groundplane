@@ -3,10 +3,11 @@ package agent
 import (
 	"context"
 	"errors"
-	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"sort"
 	"time"
+
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,6 +26,7 @@ type releaseExecutionState struct {
 	recreate             map[string]*agentpb.ServiceRecreateEvidence
 	absence              map[string]*agentpb.CandidateAbsenceEvidence
 	componentRestoration *agentpb.ComponentRestorationEvidence
+	serviceAbsence       *agentpb.ServiceAbsenceEvidence
 	probeRequired        map[string]bool
 	completed            map[string]struct{}
 	recoveryClosed       bool
@@ -97,7 +99,8 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	if terminal != TaskTerminalCompleted &&
 		reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
 		(reservation.assignment.Plan.GetCandidateReleaseProcedure() != nil ||
-			reservation.assignment.Plan.GetComponentRecoveryProcedure() != nil) &&
+			reservation.assignment.Plan.GetComponentRecoveryProcedure() != nil ||
+			reservation.assignment.Plan.GetServiceAbsenceRecoveryProcedure() != nil) &&
 		!state.restored {
 		// Even a pre-hook failure needs an exact predecessor/absence probe.
 		// Reporting terminal failure first can release Script sources that the
@@ -328,12 +331,16 @@ func (p *WorkerPool) runReleaseStep(
 	if result.ComponentRestorationEvidence != nil {
 		state.componentRestoration = proto.CloneOf(result.ComponentRestorationEvidence)
 	}
+	if result.ServiceAbsenceEvidence != nil {
+		state.serviceAbsence = proto.CloneOf(result.ServiceAbsenceEvidence)
+	}
 	err = state.recordAbsenceResult(&result, err)
 	pair := executionplan.ConfigurationFilePair(reservation.assignment.Plan, step.GetStepId())
 	if err == nil && step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
 		state.restored = pair != nil ||
 			composeruntime.ReleaseRestorationEvidenceProven(reservation.assignment, step, result) ||
-			composeruntime.ComponentRestorationEvidenceProven(reservation.assignment, result)
+			composeruntime.ComponentRestorationEvidenceProven(reservation.assignment, result) ||
+			composeruntime.ServiceAbsenceEvidenceProven(reservation.assignment, result)
 		if !state.restored {
 			err = errs.New(errs.KindInternal, "agent: release compensation returned no exact restoration proof")
 			result.ReconciliationRequired = true
@@ -346,6 +353,8 @@ func (p *WorkerPool) runReleaseStep(
 		} else {
 			if step.GetComponentRestorationProbe() != nil {
 				required, err = composeruntime.ComponentRestorationProbeStatus(reservation.assignment, result)
+			} else if step.GetServiceAbsenceProbe() != nil {
+				required, err = composeruntime.ServiceAbsenceProbeStatus(reservation.assignment, result)
 			} else {
 				required, err = composeruntime.ReleaseProbeEvidenceStatus(reservation.assignment, step, result)
 			}
@@ -464,6 +473,7 @@ func releaseComposeTaskResult(state *releaseExecutionState) *agentpb.ComposeTask
 	}
 	result.CandidateAbsenceEvidence = state.aggregateAbsenceEvidence()
 	result.ComponentRestorationEvidence = state.componentRestoration
+	result.ServiceAbsenceEvidence = state.serviceAbsence
 	return result
 }
 
@@ -478,6 +488,9 @@ func releaseCompensationEnabled(step *agentpb.ExecutionStep) bool {
 		return true
 	}
 	if step.GetComponentRestorationCompensate() != nil {
+		return true
+	}
+	if procedure := step.GetComposeRemove(); procedure != nil {
 		return true
 	}
 	return false

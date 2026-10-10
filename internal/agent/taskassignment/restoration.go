@@ -20,6 +20,9 @@ func HasServingPredecessorAuthority(authority *agentpb.ReleaseRestorationAuthori
 func ValidateCandidateReleaseAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
 	procedure := plan.GetCandidateReleaseProcedure()
 	if procedure == nil {
+		if plan.GetServiceAbsenceRecoveryProcedure() != nil {
+			return ValidateServiceAbsenceRecoveryAuthority(assignment, plan)
+		}
 		if assignment.RestorationAuthority != nil || assignment.ReleaseRecoveryDirective != nil ||
 			len(assignment.ReleaseRecoveryRecordSHA256) != 0 {
 			return errs.New(errs.KindInternal, "agent: non-release assignment carries restoration authority")
@@ -67,6 +70,52 @@ func ValidateCandidateReleaseAuthority(assignment Assignment, plan *agentpb.Exec
 		return nil
 	}
 	return validateReleaseRecoveryDirective(procedure, assignment.ReleaseRecoveryDirective)
+}
+
+func ValidateServiceAbsenceRecoveryAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
+	if assignment.RestorationAuthority != nil || assignment.ComponentRecoveryDirective != nil ||
+		len(assignment.ComponentRecoveryRecordSHA256) != 0 {
+		return errs.New(errs.KindInternal, "agent: Service absence assignment carries foreign restoration authority")
+	}
+	if assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
+		if assignment.ReleaseRecoveryDirective != nil || len(assignment.ReleaseRecoveryRecordSHA256) != 0 {
+			return errs.New(errs.KindInternal, "agent: forward Service absence assignment carries recovery authority")
+		}
+		return nil
+	}
+	directive := assignment.ReleaseRecoveryDirective
+	steps := executionplan.ServiceAbsenceRecoveryStepIDs(plan.GetServiceAbsenceRecoveryProcedure())
+	if directive == nil || len(assignment.ReleaseRecoveryRecordSHA256) != 32 ||
+		!bytes.Equal(directive.GetReleaseRecoveryRecordSha256(), assignment.ReleaseRecoveryRecordSHA256) ||
+		directive.GetCursor() > uint32(len(steps)) || len(directive.GetStepIds()) != len(steps) {
+		return errs.New(errs.KindInternal, "agent: Service absence recovery cursor is invalid")
+	}
+	for index := range steps {
+		if directive.GetStepIds()[index] != steps[index] {
+			return errs.New(errs.KindInternal, "agent: Service absence recovery procedure diverges")
+		}
+	}
+	applicable := directive.GetApplicableCompensationStepIds()
+	if len(applicable) > 1 || len(applicable) == 1 && applicable[0] != steps[1] {
+		return errs.New(errs.KindInternal, "agent: Service absence compensation obligation is invalid")
+	}
+	switch directive.GetPhase() {
+	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE:
+		if directive.GetCursor() != 0 {
+			return errs.New(errs.KindInternal, "agent: Service absence probe cursor is invalid")
+		}
+	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_COMPENSATE:
+		if directive.GetCursor() != 1 {
+			return errs.New(errs.KindInternal, "agent: Service absence compensation cursor is invalid")
+		}
+	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN:
+		if directive.GetCursor() != 2 {
+			return errs.New(errs.KindInternal, "agent: Service absence proof cursor is invalid")
+		}
+	default:
+		return errs.New(errs.KindInternal, "agent: Service absence recovery phase is invalid")
+	}
+	return nil
 }
 
 func ValidateComponentRecoveryAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {

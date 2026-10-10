@@ -3,12 +3,13 @@ package taskjournal
 import (
 	"crypto/sha512"
 	"encoding/hex"
+	"strings"
+	"unicode/utf8"
+
 	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"strings"
-	"unicode/utf8"
 )
 
 func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
@@ -53,7 +54,8 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			result.ReleaseRecoveryRecordSHA256 != "" || result.Diagnostic != TaskResultDiagnosticNone ||
 			len(result.Projects) != 0 || len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 ||
 			result.CandidateAbsenceEvidence != nil || result.DNSResolverCandidateObservation != nil ||
-			result.DNSResolverRollbackObservation != nil || result.ComponentRestorationEvidence != nil {
+			result.DNSResolverRollbackObservation != nil || result.ComponentRestorationEvidence != nil ||
+			result.ServiceAbsenceEvidence != nil {
 			return errs.New(
 				errs.KindValidationFailed,
 				"backup task result carries invalid or unrelated execution evidence",
@@ -123,9 +125,24 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 	}
 	if evidence := result.ComponentRestorationEvidence; evidence != nil {
 		if result.Kind != TaskResultCompose || ids.Validate(ids.KindComponent, evidence.ComponentID) != nil ||
-			ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil || ids.Validate(ids.KindService, evidence.ServiceID) != nil ||
+			ids.Validate(
+				ids.KindConfig,
+				evidence.ArtifactID,
+			) != nil || ids.Validate(ids.KindService, evidence.ServiceID) != nil ||
 			evidence.ComposeProjectName == "" || (evidence.Target != "predecessor" && evidence.Target != "candidate_absence") {
 			return errs.New(errs.KindValidationFailed, "task Component restoration evidence is invalid")
+		}
+	}
+	if evidence := result.ServiceAbsenceEvidence; evidence != nil {
+		if result.Kind != TaskResultCompose || ids.Validate(ids.KindService, evidence.ServiceID) != nil ||
+			ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil || evidence.ComposeProjectName == "" ||
+			len(evidence.ComposeNames) == 0 || len(evidence.ComposeNames) > 8 {
+			return errs.New(errs.KindValidationFailed, "task Service absence evidence is invalid")
+		}
+		for index, name := range evidence.ComposeNames {
+			if name == "" || index > 0 && evidence.ComposeNames[index-1] >= name {
+				return errs.New(errs.KindValidationFailed, "task Service absence evidence is invalid or unsorted")
+			}
 		}
 	}
 	for _, candidate := range []*TaskDNSResolverObservationEvidence{
@@ -173,12 +190,22 @@ func CloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
 	cloned.CandidateAbsenceEvidence = CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence)
 	cloned.ComponentRestorationEvidence = CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence)
+	cloned.ServiceAbsenceEvidence = CloneTaskServiceAbsenceEvidence(result.ServiceAbsenceEvidence)
 	cloned.DNSResolverCandidateObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,
 	)
 	cloned.DNSResolverRollbackObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverRollbackObservation,
 	)
+	return &cloned
+}
+
+func CloneTaskServiceAbsenceEvidence(evidence *TaskServiceAbsenceEvidence) *TaskServiceAbsenceEvidence {
+	if evidence == nil {
+		return nil
+	}
+	cloned := *evidence
+	cloned.ComposeNames = append([]string(nil), evidence.ComposeNames...)
 	return &cloned
 }
 

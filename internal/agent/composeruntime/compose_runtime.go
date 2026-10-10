@@ -3,9 +3,10 @@ package composeruntime
 import (
 	"context"
 	"errors"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"sort"
 	"time"
+
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -45,6 +46,7 @@ type StepResult struct {
 	RecreateEvidence             *agentpb.ServiceRecreateEvidence
 	CandidateAbsenceEvidence     *agentpb.CandidateAbsenceEvidence
 	ComponentRestorationEvidence *agentpb.ComponentRestorationEvidence
+	ServiceAbsenceEvidence       *agentpb.ServiceAbsenceEvidence
 }
 
 func New(helper Helper, observer Observer) (*Runtime, error) {
@@ -86,6 +88,9 @@ func (runtime *Runtime) ExecuteStep(
 			},
 		)
 	case *agentpb.ExecutionStep_ComposeRemove:
+		if assignment.Plan.GetServiceAbsenceRecoveryProcedure() != nil {
+			return runtime.serviceAbsence(ctx, assignment, step)
+		}
 		if assignment.Plan.GetServiceLifecycleProcedure() != nil {
 			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeRemove.GetArtifactId())
 		}
@@ -133,6 +138,8 @@ func (runtime *Runtime) ExecuteStep(
 		return runtime.candidateRestoration(ctx, assignment, step)
 	case *agentpb.ExecutionStep_ComponentRestorationProbe, *agentpb.ExecutionStep_ComponentRestorationCompensate:
 		return runtime.componentRestoration(ctx, assignment, step)
+	case *agentpb.ExecutionStep_ServiceAbsenceProbe:
+		return runtime.serviceAbsence(ctx, assignment, step)
 	default:
 		return StepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}
