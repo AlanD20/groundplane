@@ -2,8 +2,11 @@
 
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import {
+  ResourceForm,
+  ResourceFormHeader,
+  ResourceFormTitle,
+} from "@/components/common/resource-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -15,38 +18,32 @@ import { useDraftField } from "@/lib/use-draft-field";
 import { ArrowUpCircle, History } from "lucide-react";
 import { useState } from "react";
 
-// Deploy / Rollback live in their own component so opening a dialog only
-// re-renders this small subtree, not the whole environment page.
 export function DeployControls({
   env,
   disabled,
+  onDeploy,
+  onRollback,
 }: {
   env: Environment;
   disabled?: boolean;
+  onDeploy: () => void;
+  onRollback: () => void;
 }) {
-  const [deployOpen, setDeployOpen] = useState(false);
-  const [rollbackOpen, setRollbackOpen] = useState(false);
   return (
     <>
       <Button
         variant="outline"
         disabled={disabled || env.services.length === 0}
-        onClick={() => setRollbackOpen(true)}
+        onClick={onRollback}
       >
         <History className="size-4" /> Rollback
       </Button>
       <Button
         disabled={disabled || env.services.length === 0}
-        onClick={() => setDeployOpen(true)}
+        onClick={onDeploy}
       >
         <ArrowUpCircle className="size-4" /> Deploy
       </Button>
-      {deployOpen && (
-        <DeployDialog env={env} open onOpenChange={setDeployOpen} />
-      )}
-      {rollbackOpen && (
-        <RollbackDialog env={env} open onOpenChange={setRollbackOpen} />
-      )}
     </>
   );
 }
@@ -59,18 +56,16 @@ function MissingServiceDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DialogHeader>
-          <DialogTitle>Service no longer available</DialogTitle>
-        </DialogHeader>
-        <p role="alert">
-          The selected Service was removed. Close and reopen this action to
-          select a current Service.
-        </p>
-        <Button onClick={() => onOpenChange(false)}>Close</Button>
-      </DrawerContent>
-    </Drawer>
+    <ResourceForm open={open} onOpenChange={onOpenChange} editing={false}>
+      <ResourceFormHeader>
+        <ResourceFormTitle>Service no longer available</ResourceFormTitle>
+      </ResourceFormHeader>
+      <p role="alert">
+        The selected Service was removed. Close and reopen this action to select
+        a current Service.
+      </p>
+      <Button onClick={() => onOpenChange(false)}>Close</Button>
+    </ResourceForm>
   );
 }
 
@@ -108,7 +103,7 @@ export function DeployDialog({
     <TaskRunnerDialog
       open={open}
       onOpenChange={onOpenChange}
-      variant="drawer"
+      variant="inline"
       title={`Deploy ${svc.name} · ${env.name}`}
       description="Use an image already on this host."
       type="deploy"
@@ -228,7 +223,7 @@ export function RollbackDialog({
     <TaskRunnerDialog
       open={open}
       onOpenChange={onOpenChange}
-      variant="drawer"
+      variant="inline"
       title={`Roll back ${svc.name} · ${env.name}`}
       description="Switch to a previous release. Database migrations are not reversed."
       type="rollback"

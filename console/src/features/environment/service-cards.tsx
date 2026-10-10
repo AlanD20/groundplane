@@ -77,6 +77,15 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
           />
         </div>
       )}
+      {deployService && (
+        <DeployDialog
+          key={deployService}
+          env={env}
+          serviceId={deployService}
+          open
+          onOpenChange={(open) => !open && setDeployService(null)}
+        />
+      )}
       {services.length ? (
         <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {services.map((s) => {
@@ -161,6 +170,7 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
                     variant="ghost"
                     size="sm"
                     className="gap-1 px-0 text-xs text-primary"
+                    disabled={deployService !== null}
                     onClick={() => setDeployService(s.id)}
                   >
                     <Play className="size-3" />
@@ -195,15 +205,6 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
               </Button>
             ) : undefined
           }
-        />
-      )}
-      {deployService && (
-        <DeployDialog
-          key={deployService}
-          env={env}
-          serviceId={deployService}
-          open
-          onOpenChange={(open) => !open && setDeployService(null)}
         />
       )}
     </div>

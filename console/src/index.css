@@ -312,8 +312,7 @@
     padding: 1.5rem 3rem 1rem 1.5rem;
     border-bottom: 1px solid var(--border);
   }
-  [data-slot="drawer-content"] [data-slot="dialog-footer"],
-  [data-slot="dialog-content"] [data-slot="dialog-footer"] {
+  [data-slot="drawer-content"] [data-slot="dialog-footer"] {
     position: sticky;
     bottom: -1.5rem;
     z-index: 10;

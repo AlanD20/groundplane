@@ -1,3 +1,4 @@
+import { ArrowUpCircle } from "lucide-react";
 import { ServiceMetadata } from "@/features/service/service-metadata";
 import { EmptyState } from "@/components/common/empty-state";
 import { DetailRow } from "@/components/common/detail-row";
@@ -34,6 +35,7 @@ export default function BackingServiceDetailPage() {
   const env = g?.environments?.[0];
   const svc = env?.services[0];
   const [search, setSearch] = useSearchParams();
+  const [updatingImage, setUpdatingImage] = useState(false);
   const requested = search.get("tab");
   const tab =
     backingDestinations.find((item) => item.key === requested)?.key ??
@@ -272,9 +274,24 @@ export default function BackingServiceDetailPage() {
               env={env}
               service={svc}
               workspace="platform"
+              imageEditor={
+                updatingImage && svc.adapter && svc.adapter !== "custom" ? (
+                  <ManagedImageUpdate
+                    env={env}
+                    service={svc}
+                    open
+                    onOpenChange={setUpdatingImage}
+                  />
+                ) : undefined
+              }
               imageAction={
                 svc.adapter && svc.adapter !== "custom" ? (
-                  <ManagedImageUpdate env={env} service={svc} />
+                  <Button
+                    variant="outline"
+                    onClick={() => setUpdatingImage(true)}
+                  >
+                    <ArrowUpCircle /> Update image
+                  </Button>
                 ) : undefined
               }
             />

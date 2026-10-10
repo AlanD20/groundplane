@@ -99,8 +99,11 @@ reference. State the affected scope before saving a shared change. Follow actual
 [Secret resolution and exposure](features/secrets-and-connectors.md); never
 label a value “inherited” merely because it came from another scope.
 
-Use inline controls for small independent changes with a clear effect, and a
-focused drawer or dialog for a bounded edit. Use a workspace for extended work
+Use inline forms for creation, editing and operation review, including deployment,
+rollback and image actions. Place the form below the page or section heading,
+above its collection. Right-side drawers are reserved for Task and Runner
+inspection and notifications. Small confirmation dialogs remain centered.
+Use a workspace for extended work
 with multiple resources or substantial history. Do not turn each toggle into a
 separate page or put an entire resource's configuration into one large modal.
 Avoid nested modal chains; dependent creation must retain or restore the original
@@ -250,6 +253,14 @@ Refine shared primitives when a common pattern needs improvement instead of
 copying their classes into page-specific variants. Specialized surfaces such as
 logs retain the structure needed for their task while sharing typography, tokens
 and controls.
+
+Deployment history expands in place in both Environment and Service views. Reuse
+the same row and detail components, show the execution log first and disclose
+configuration and execution metadata below it. Fetch details only while expanded
+and stop polling and event streams when the row closes. Direct links remain valid.
+
+Small popup actions use a normal footer with a spaced divider, without sticky
+positioning or a shadow. Viewport-pinned actions belong to inline forms.
 
 ## Language and shared presentation
 

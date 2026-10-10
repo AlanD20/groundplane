@@ -11,7 +11,12 @@ import { BlueprintState } from "@/features/blueprint/environment-blueprint-state
 import { EnvVarsCard } from "@/features/entry/environment-entries";
 import { LogViewer, LogStream } from "@/features/logs/log-viewer";
 import { ReleaseGroupsPanel } from "@/features/release-group/release-group-surface";
-import { DeployControls } from "@/features/release/environment-deploy-controls";
+import { useState } from "react";
+import {
+  DeployControls,
+  DeployDialog,
+  RollbackDialog,
+} from "@/features/release/environment-deploy-controls";
 import { ReleasesCard } from "@/features/release/environment-releases-card";
 import { ScriptsCard } from "@/features/script/scripts-card";
 import { EnvironmentServiceForm } from "@/features/service/environment-service-form";
@@ -38,6 +43,9 @@ export default function EnvironmentPage() {
   const env = store.getEnvironment(params.tenant, params.project, params.env);
   const project = store.getProject(params.tenant, params.project);
   const [search, setSearch] = useSearchParams();
+  const [releaseAction, setReleaseAction] = useState<
+    "deploy" | "rollback" | null
+  >(null);
   function setAddingService(open: boolean) {
     setSearch((current) => {
       const next = new URLSearchParams(current);
@@ -192,7 +200,12 @@ export default function EnvironmentPage() {
               target={{ kind: "environment", id: env.id }}
               label="Logs"
             />
-            <DeployControls env={env} disabled={deleting} />
+            <DeployControls
+              env={env}
+              disabled={deleting || releaseAction !== null}
+              onDeploy={() => setReleaseAction("deploy")}
+              onRollback={() => setReleaseAction("rollback")}
+            />
           </>
         }
         meta={
@@ -235,6 +248,24 @@ export default function EnvironmentPage() {
           deleting ? "Environment deletion in progress" : section.label
         }
       >
+        {releaseAction === "deploy" && (
+          <DeployDialog
+            env={env}
+            open
+            onOpenChange={(open) => {
+              if (!open) setReleaseAction(null);
+            }}
+          />
+        )}
+        {releaseAction === "rollback" && (
+          <RollbackDialog
+            env={env}
+            open
+            onOpenChange={(open) => {
+              if (!open) setReleaseAction(null);
+            }}
+          />
+        )}
         {panel.key === "overview" && search.get("create") === "service" && (
           <EnvironmentServiceForm
             key={env.id}

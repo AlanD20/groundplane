@@ -1,13 +1,11 @@
 import { TaskLink } from "@/components/common/task-link";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { operations } from "@/lib/api.generated";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { newULID } from "@/lib/utils";
-import { Download } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 type Accepted =
@@ -15,11 +13,14 @@ type Accepted =
 
 export function ImageFetchAction({
   onSettled,
+  open,
+  onOpenChange: setOpen,
 }: {
   onSettled?: () => Promise<void>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const [search] = useSearchParams();
-  const [open, setOpen] = useState(false);
   const [image, setImage] = useState(search.get("fetch") ?? "");
   const [accepted, setAccepted] = useState<Accepted | null>(null);
   const [completed, setCompleted] = useState(false);
@@ -29,12 +30,9 @@ export function ImageFetchAction({
     accepted: Accepted | null;
   } | null>(null);
 
-  function openFetch() {
-    // A known acceptance can be followed in Activity. A new explicit fetch may
-    // select a moved tag; unresolved acceptance must keep its original key.
-    if (intent.current?.accepted) intent.current = null;
-    setOpen(true);
-  }
+  useEffect(() => {
+    if (open && intent.current?.accepted) intent.current = null;
+  }, [open]);
 
   async function dispatch() {
     const requested = image.trim();
@@ -57,9 +55,6 @@ export function ImageFetchAction({
 
   return (
     <>
-      <Button onClick={openFetch}>
-        <Download className="size-4" /> Fetch image
-      </Button>
       {accepted && (
         <TaskLink taskId={accepted.task_id}>
           {completed ? "Fetch completed" : "View Fetch Task"}
@@ -68,7 +63,7 @@ export function ImageFetchAction({
       <TaskRunnerDialog
         open={open}
         onOpenChange={setOpen}
-        variant="drawer"
+        variant="inline"
         title="Fetch image"
         type="fetch"
         target={image.trim() || "Registry image"}

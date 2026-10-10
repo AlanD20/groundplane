@@ -223,7 +223,7 @@ export function ZoneColumn({
         {attaches.map((a) => (
           <div
             key={a.id}
-            className="flex items-start gap-1 rounded-lg border border-dashed border-border bg-surface/40 px-2 py-1.5"
+            className="flex flex-wrap items-start gap-1 rounded-lg border border-dashed border-border bg-surface/40 px-2 py-1.5"
           >
             <Link
               to={`/platform/backing-services/${a.projectId}`}
@@ -243,10 +243,8 @@ export function ZoneColumn({
                 </span>
               </div>
             </Link>
-            <div className="flex items-center gap-1">
-              <RenameAttach env={env} attach={a} />
-              <DetachAttach env={env} attach={a} />
-            </div>
+            <RenameAttach env={env} attach={a} inline />
+            <DetachAttach env={env} attach={a} />
           </div>
         ))}
       </div>

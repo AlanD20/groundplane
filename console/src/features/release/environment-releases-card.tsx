@@ -1,10 +1,7 @@
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
-import { Badge } from "@/components/ui/badge";
+import { ReleaseHistoryRow } from "./release-history-row";
 import { useState } from "react";
 ("use client");
 
-import { Link } from "react-router-dom";
-import { useRequiredParams } from "@/lib/router";
 import { History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Environment, Service } from "@/lib/types";
@@ -13,11 +10,8 @@ import {
   ListToolbar,
   useTableView,
 } from "@/components/common/table-controls";
-import { ImageReference } from "@/components/common/image-reference";
-import { formatTimestamp } from "@/lib/format-timestamp";
 
 export function ReleasesCard({ env }: { env: Environment }) {
-  const params = useRequiredParams("tenant", "project", "env");
   const [query, setQuery] = useState("");
   const table = useTableView(
     env.deploys.filter((release) =>
@@ -59,36 +53,7 @@ export function ReleasesCard({ env }: { env: Environment }) {
         />
         <div className="space-y-3">
           {table.rows.map((release) => (
-            <article
-              key={release.id}
-              className={workspaceSectionClassName(false, "space-y-3")}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <Link
-                  className="min-w-0 break-all text-sm font-medium text-primary hover:underline"
-                  to={`/t/${params.tenant}/${params.project}/${params.env}/releases/${release.id}`}
-                >
-                  {release.service}
-                </Link>
-                <Badge
-                  variant={release.status === "active" ? "success" : "outline"}
-                >
-                  {release.status}
-                </Badge>
-              </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
-                <ImageReference value={release.tag} />
-                <StrategyPill strategy={release.strategy} />
-              </div>
-              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground">
-                {release.digest ? (
-                  <ImageReference value={release.digest} />
-                ) : (
-                  <span>Digest not recorded</span>
-                )}
-                <span>{formatTimestamp(release.when, "Time unavailable")}</span>
-              </div>
-            </article>
+            <ReleaseHistoryRow key={release.id} release={release} env={env} />
           ))}
           {!table.total && (
             <p className="py-4 text-sm text-muted-foreground">

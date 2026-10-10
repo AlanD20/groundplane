@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { SummaryStrip, SummaryItem } from "@/components/common/resource-panel";
 import { HelpHint } from "@/components/common/resource-panel";
@@ -38,6 +39,7 @@ import { useImageInventory } from "./use-image-inventory";
 export default function ImagesPage() {
   const { inventory, loading, error, refresh } = useImageInventory();
   const [params, setParams] = useSearchParams();
+  const [fetchOpen, setFetchOpen] = useState(false);
   const search = params.get("q") ?? "";
   const usage = params.get("usage") ?? "all";
   const selected = params.get("image");
@@ -135,9 +137,23 @@ export default function ImagesPage() {
                 >
                   <RefreshCw className="size-4" />
                 </Button>
-                <ImageFetchAction onSettled={refresh} />
+                <Button onClick={() => setFetchOpen(true)}>
+                  <Download /> Fetch image
+                </Button>
               </>
             }
+          />
+          {removing && (
+            <RemoveImageDialog
+              image={removing}
+              onClose={() => setRemoving(null)}
+              onSettled={refresh}
+            />
+          )}
+          <ImageFetchAction
+            open={fetchOpen}
+            onOpenChange={setFetchOpen}
+            onSettled={refresh}
           />
           {inventory && (
             <SummaryStrip>
@@ -366,6 +382,7 @@ export default function ImagesPage() {
                                   }
                                   disabled={
                                     !!image.removal_blocked ||
+                                    !!removing ||
                                     !!error ||
                                     loading
                                   }
@@ -419,6 +436,15 @@ export default function ImagesPage() {
       )}
       {detail && (
         <ImageDetails
+          actionForm={
+            removing && (
+              <RemoveImageDialog
+                image={removing}
+                onClose={() => setRemoving(null)}
+                onSettled={refresh}
+              />
+            )
+          }
           image={detail}
           observedAt={inventory?.observed_at}
           unavailable={!!error || loading}
@@ -426,13 +452,6 @@ export default function ImagesPage() {
           onRemove={() => {
             setRemoving(detail);
           }}
-        />
-      )}
-      {removing && (
-        <RemoveImageDialog
-          image={removing}
-          onClose={() => setRemoving(null)}
-          onSettled={refresh}
         />
       )}
     </div>

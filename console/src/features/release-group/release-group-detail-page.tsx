@@ -109,6 +109,25 @@ export default function ReleaseGroupDetailPage() {
           </>
         }
       />
+      <ReleaseGroupFormDrawer
+        env={environment}
+        group={group}
+        open={editing}
+        onOpenChange={setEditing}
+      />
+      <DeployReleaseGroupDialog
+        env={environment}
+        group={group}
+        open={deploying}
+        onOpenChange={setDeploying}
+      />
+      <RollbackReleaseGroupDialog
+        env={environment}
+        group={group}
+        open={rollingBack}
+        onOpenChange={setRollingBack}
+      />
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.7fr)]">
         <Card>
           <CardHeader>
@@ -186,24 +205,6 @@ export default function ReleaseGroupDetailPage() {
           </Card>
         </div>
       </div>
-      <ReleaseGroupFormDrawer
-        env={environment}
-        group={group}
-        open={editing}
-        onOpenChange={setEditing}
-      />
-      <DeployReleaseGroupDialog
-        env={environment}
-        group={group}
-        open={deploying}
-        onOpenChange={setDeploying}
-      />
-      <RollbackReleaseGroupDialog
-        env={environment}
-        group={group}
-        open={rollingBack}
-        onOpenChange={setRollingBack}
-      />
       <TaskRunnerDialog
         open={removing}
         onOpenChange={setRemoving}

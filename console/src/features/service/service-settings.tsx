@@ -17,6 +17,7 @@ export function ServiceSettings({
   service,
   workspace,
   imageAction,
+  imageEditor,
   onSaved,
   sections,
 }: {
@@ -24,6 +25,7 @@ export function ServiceSettings({
   service: Service;
   workspace: string;
   imageAction?: ReactNode;
+  imageEditor?: ReactNode;
   onSaved?: () => void;
   sections?: ServiceFormSection[];
 }) {
@@ -241,6 +243,7 @@ export function ServiceSettings({
           : "Runtime & image"
       }
     >
+      {imageEditor}
       <p className="text-sm text-muted-foreground">
         Changes apply on the next deploy.
       </p>

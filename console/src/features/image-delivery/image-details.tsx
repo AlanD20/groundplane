@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { CopyButton } from "@/components/common/copy-button";
 import { PageHeader } from "@/components/common/page-header";
 import { CompactReference } from "@/components/common/compact-reference";
@@ -22,7 +23,9 @@ export function ImageDetails({
   observedAt,
   onClose,
   onRemove,
+  actionForm,
 }: {
+  actionForm?: ReactNode;
   image: HostImage;
   unavailable: boolean;
   observedAt?: string;
@@ -58,6 +61,7 @@ export function ImageDetails({
           </Button>
         }
       />
+      {actionForm}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-border bg-card p-4 text-xs text-muted-foreground">
         <CompactReference value={image.id} label="Image ID" />
         <span>Created {new Date(image.created_at).toLocaleString()}</span>

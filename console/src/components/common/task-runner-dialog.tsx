@@ -13,7 +13,6 @@ import {
 import { TaskLink } from "@/components/common/task-link";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { TaskResponse } from "@/features/task/api";
@@ -60,9 +59,9 @@ export function TaskRunnerDialog({
   onCommit?: () => void;
   onSettled?: () => Promise<void>;
   onDispatch: () => Promise<string | null>;
-  // "drawer" for anything that takes inputs (deploy, rollback), "dialog"
+  // "inline" for operations with inputs (deploy, rollback), "dialog"
   // for plain confirmations (restore, run, start/stop/destroy).
-  variant?: "drawer" | "dialog" | "inline" | "embedded";
+  variant?: "dialog" | "inline" | "embedded";
 }) {
   const { abortTask, getTask, watchTaskEvents } = useStore();
   const [phase, setPhase] = useState<Phase>("review");
@@ -477,13 +476,6 @@ export function TaskRunnerDialog({
         {Body}
       </ResourceForm>
     );
-  if (variant === "drawer") {
-    return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent>{Body}</DrawerContent>
-      </Drawer>
-    );
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

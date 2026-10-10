@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ArrowUpCircle } from "lucide-react";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,12 +17,15 @@ import type { Environment, Service } from "@/lib/types";
 export function ManagedImageUpdate({
   env,
   service,
+  open,
+  onOpenChange: setOpen,
 }: {
   env: Environment;
   service: Service;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const store = useStore();
-  const [open, setOpen] = useState(false);
   const [image, setImage] = useState(service.image);
   const catalog = useAdapterCatalog(open);
   const adapter = catalog.catalog?.items?.find(
@@ -35,20 +37,11 @@ export function ManagedImageUpdate({
   const imagePattern = version ? new RegExp(version.image_pattern) : null;
   return (
     <>
-      <Button
-        variant="outline"
-        onClick={() => {
-          setImage(service.image);
-          setOpen(true);
-        }}
-      >
-        <ArrowUpCircle className="size-4" /> Update image
-      </Button>
       {open && (
         <TaskRunnerDialog
           open
           onOpenChange={setOpen}
-          variant="drawer"
+          variant="inline"
           title={`Update ${adapter?.label ?? service.adapter} image`}
           type="deploy"
           target={service.name}

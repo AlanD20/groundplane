@@ -46,7 +46,7 @@ export function DeployReleaseGroupDialog({
     <TaskRunnerDialog
       open={open}
       onOpenChange={onOpenChange}
-      variant="drawer"
+      variant="inline"
       title={`Deploy ${group.name} · ${env.name}`}
       description="Deploy this tag to all members in order."
       type="deploy"
@@ -184,7 +184,7 @@ export function RollbackReleaseGroupDialog({
         if (!nextOpen) invalidatePreview();
         onOpenChange(nextOpen);
       }}
-      variant="drawer"
+      variant="inline"
       title={`Roll back ${group.name} · ${env.name}`}
       description="Roll back all members in order. Database migrations are not reversed."
       type="rollback"

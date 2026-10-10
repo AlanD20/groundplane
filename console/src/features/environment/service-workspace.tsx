@@ -1,11 +1,9 @@
-import { ContextLink } from "@/components/common/context-link";
+import { ReleaseHistoryRow } from "@/features/release/release-history-row";
 import { ServiceMetadata } from "@/features/service/service-metadata";
 import { ServiceStorage } from "@/features/service/service-storage";
-import { ImageReference } from "@/components/common/image-reference";
 import { PageHeader } from "@/components/common/page-header";
 import { ResourcePanel } from "@/components/common/resource-panel";
 
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ServiceSettings } from "@/features/service/service-settings";
 import {
@@ -33,7 +31,6 @@ import {
   type ServiceOperation,
 } from "@/features/service/service-runtime-actions";
 import { useVisibleServiceObservations } from "@/features/service/use-service-observation-refresh";
-import { formatTimestamp } from "@/lib/format-timestamp";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, Service } from "@/lib/types";
@@ -43,7 +40,6 @@ import {
   Ban,
   Boxes,
   ChevronDown,
-  ChevronRight,
   CirclePlay,
   CircleStop,
   History,
@@ -196,13 +192,37 @@ export function ServiceWorkspace({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button onClick={() => setReleaseAction("deploy")}>
+              <Button
+                disabled={releaseAction !== null}
+                onClick={() => setReleaseAction("deploy")}
+              >
                 <ArrowUpCircle />
                 Deploy
               </Button>
             </>
           }
         />
+        {releaseAction === "deploy" && (
+          <DeployDialog
+            env={env}
+            serviceId={service.id}
+            open
+            onOpenChange={(value) => {
+              if (!value) setReleaseAction(null);
+            }}
+          />
+        )}
+        {releaseAction === "rollback" && (
+          <RollbackDialog
+            env={env}
+            serviceId={service.id}
+            open
+            onOpenChange={(value) => {
+              if (!value) setReleaseAction(null);
+            }}
+          />
+        )}
+
         <ServiceMetadata service={service} now={now} />
         {detailError && (
           <p
@@ -239,6 +259,7 @@ export function ServiceWorkspace({
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={releaseAction !== null}
                     onClick={() => setReleaseAction("rollback")}
                   >
                     <History className="size-3.5" />
@@ -247,44 +268,13 @@ export function ServiceWorkspace({
                 }
               >
                 {service.releaseLedger?.length ? (
-                  <div className="divide-y divide-border rounded-xl border border-border">
+                  <div className="space-y-3">
                     {service.releaseLedger.map((release) => (
-                      <ContextLink
+                      <ReleaseHistoryRow
                         key={release.id}
-                        to={`/t/${params.tenant}/${params.project}/${params.env}/releases/${release.id}?service=${service.id}`}
-                        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-4 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                      >
-                        <span className="flex size-9 items-center justify-center rounded-lg bg-accent text-primary">
-                          <History className="size-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block font-medium">
-                            <ImageReference value={release.tag} />
-                          </span>
-                          <span className="mt-1 block text-xs text-muted-foreground">
-                            {formatTimestamp(release.when, "Time unavailable")}{" "}
-                            · {release.strategy}
-                          </span>
-                          <span
-                            className="mt-1 block truncate font-mono text-xs text-muted-foreground"
-                            title={release.digest || release.id}
-                          >
-                            {release.digest || release.id}
-                          </span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <Badge
-                            variant={
-                              release.status === "active"
-                                ? "primary"
-                                : "outline"
-                            }
-                          >
-                            {release.status}
-                          </Badge>
-                          <ChevronRight className="size-4 text-muted-foreground" />
-                        </span>
-                      </ContextLink>
+                        release={release}
+                        env={env}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -351,26 +341,6 @@ export function ServiceWorkspace({
           )}
         </div>
       </section>
-      {releaseAction === "deploy" && (
-        <DeployDialog
-          env={env}
-          serviceId={service.id}
-          open
-          onOpenChange={(value) => {
-            if (!value) setReleaseAction(null);
-          }}
-        />
-      )}
-      {releaseAction === "rollback" && (
-        <RollbackDialog
-          env={env}
-          serviceId={service.id}
-          open
-          onOpenChange={(value) => {
-            if (!value) setReleaseAction(null);
-          }}
-        />
-      )}
       <ServiceOperationDialog
         env={env}
         service={service}

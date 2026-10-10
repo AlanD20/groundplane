@@ -21,7 +21,7 @@ export function RemoveImageDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      variant="drawer"
+      variant="inline"
       title="Remove host image"
       type="remove"
       target={`${imageName(image)} · ${shortImageId(image.id)}`}
