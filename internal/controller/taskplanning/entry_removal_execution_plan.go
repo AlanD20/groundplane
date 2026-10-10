@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -38,11 +39,47 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	task etcd.TaskRecord,
 	intent environmentchanges.EntryRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
+	var recovery configurationrecovery.Prepared
+	if intent.Authored != nil {
+		if resolver.configurationRecovery == nil {
+			return nil, errs.New(errs.KindInternal, "authored Entry recovery sources are unavailable")
+		}
+		var err error
+		recovery, err = resolver.configurationRecovery.Prepare(ctx, task)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return resolver.buildEntryRemovalPlanWithRecovery(ctx, task, intent, recovery)
+}
+
+func (resolver *TaskPlanResolver) BuildBlueprintEntryRemovalPlan(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	intent environmentchanges.EntryRemovalIntent,
+	recovery configurationrecovery.Prepared,
+) (*agentpb.ExecutionPlan, error) {
+	if intent.Authored == nil {
+		return nil, errs.New(errs.KindValidationFailed, "authored Entry removal recovery is absent")
+	}
+	return resolver.buildEntryRemovalPlanWithRecovery(ctx, task, intent, recovery)
+}
+
+func (resolver *TaskPlanResolver) buildEntryRemovalPlanWithRecovery(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	intent environmentchanges.EntryRemovalIntent,
+	recovery configurationrecovery.Prepared,
+) (*agentpb.ExecutionPlan, error) {
+	parameterCount := 8
+	if intent.Authored != nil {
+		parameterCount = 10
+	}
 	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
 		task.ID != intent.TaskID || task.Target != intent.EntryID || !task.CreatedAt.Equal(intent.CreatedAt) ||
 		intent.Status != taskjournal.TaskStatusPending || intent.CurrentProjection == nil || intent.CandidateProjection == nil ||
-		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 8 {
+		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != parameterCount {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task shape is invalid")
 	}
 	candidate := *intent.CandidateProjection
@@ -54,8 +91,14 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		ids.Validate(ids.KindConfig, artifactID) != nil || uint64(task.RenderGeneration) != candidate.RenderGeneration {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task parameters are invalid")
 	}
+	if intent.Authored != nil && (task.Actor != taskjournal.TaskActorSystem ||
+		task.Params[taskjournal.TaskBlueprintParentParam] != intent.Authored.ParentTaskID ||
+		task.Params[taskjournal.TaskBlueprintEntryUnitParam] != intent.EntryID ||
+		intent.Authored.RenderGeneration != uint64(task.RenderGeneration)) {
+		return nil, errs.New(errs.KindInternal, "durable authored Entry removal identity is invalid")
+	}
 	templates, err := entryRemovalMaterializationTemplates(intent)
-	if err != nil || len(task.Steps) != len(templates) || len(task.Materializations) != len(templates) {
+	if err != nil || len(task.Materializations) != len(templates) {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal materialization count changed")
 	}
 	references := make(map[string]materializationrecord.Record, len(task.Materializations))
@@ -65,13 +108,17 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		}
 		references[reference.StepID] = reference
 	}
-	steps := make([]*agentpb.ExecutionStep, len(task.Steps))
-	for index, step := range task.Steps {
+	forwardCount := len(templates)
+	if len(task.Steps) < forwardCount {
+		return nil, errs.New(errs.KindInternal, "durable Entry removal steps are incomplete")
+	}
+	steps := make([]*agentpb.ExecutionStep, 0, len(task.Steps))
+	for index, step := range task.Steps[:forwardCount] {
 		reference, found := references[step.ID]
 		if !found || !sameEntryRemovalMaterializationTemplate(reference, templates[index]) {
 			return nil, errs.New(errs.KindInternal, "durable Entry removal materialization changed")
 		}
-		steps[index], err = taskmaterialization.BuildTaskMaterializationStep(
+		built, err := taskmaterialization.BuildTaskMaterializationStep(
 			reference,
 			artifactID,
 			uint32(task.TimeoutSeconds),
@@ -79,6 +126,45 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		if err != nil {
 			return nil, err
 		}
+		if intent.Authored != nil {
+			built.Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD
+		}
+		steps = append(steps, built)
+	}
+	var releaseProcedure *agentpb.CandidateReleaseProcedure
+	operation := agentpb.PlanOperation_PLAN_OPERATION_REMOVE
+	if intent.Authored != nil {
+		if recovery.Procedure == nil || len(recovery.Files) != len(templates) ||
+			len(task.Steps) != forwardCount+len(recovery.Files)*2 {
+			return nil, errs.New(errs.KindInternal, "durable authored Entry recovery is incomplete")
+		}
+		for index, file := range recovery.Files {
+			probe, buildErr := taskmaterialization.BuildTaskMaterializationStep(
+				file.Probe, artifactID, uint32(task.TimeoutSeconds),
+			)
+			if buildErr != nil {
+				return nil, buildErr
+			}
+			compensate, buildErr := taskmaterialization.BuildTaskMaterializationStep(
+				file.Compensate, artifactID, uint32(task.TimeoutSeconds),
+			)
+			if buildErr != nil {
+				return nil, buildErr
+			}
+			probe.Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE
+			compensate.Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE
+			compensate.PrerequisiteStepId = recovery.Procedure.Files[index].ForwardStepId
+			wantProbe := task.Steps[forwardCount+index*2]
+			wantCompensate := task.Steps[forwardCount+index*2+1]
+			if wantProbe.ID != probe.GetStepId() || wantCompensate.ID != compensate.GetStepId() {
+				return nil, errs.New(errs.KindInternal, "durable authored Entry recovery order changed")
+			}
+			steps = append(steps, probe, compensate)
+		}
+		releaseProcedure = &agentpb.CandidateReleaseProcedure{ConfigurationRestoration: recovery.Procedure}
+		operation = agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
+	} else if len(task.Steps) != forwardCount {
+		return nil, errs.New(errs.KindInternal, "durable Entry removal step count changed")
 	}
 
 	identity, err := pinnedEntryRemovalIdentity(task, intent)
@@ -100,8 +186,9 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
-		Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: task.Target,
+		Operation:        operation, TargetID: task.Target,
 		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
+		CandidateReleaseProcedure: releaseProcedure,
 	})
 }
 

@@ -102,8 +102,17 @@ func ReleaseRestorationAuthoritySHA256(authority ReleaseRestorationAuthority) (s
 func ValidateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) error {
 	if authority.Schema != 1 || ids.Validate(ids.KindTask, authority.TaskID) != nil ||
 		ids.Validate(ids.KindOperation, authority.OperationID) != nil || !recordcodec.ValidSHA256(authority.PlanHash) ||
-		ids.Validate(ids.KindEnvironment, authority.EnvironmentID) != nil ||
-		ids.Validate(ids.KindConfig, authority.CandidateArtifactID) != nil || len(authority.Candidates) == 0 {
+		ids.Validate(ids.KindEnvironment, authority.EnvironmentID) != nil {
+		return CorruptTaskAssignment()
+	}
+	if len(authority.Candidates) == 0 {
+		if authority.CandidateArtifactID != "" || authority.AppliedPredecessor != nil ||
+			len(authority.NativePredecessors) != 0 {
+			return CorruptTaskAssignment()
+		}
+		return nil
+	}
+	if ids.Validate(ids.KindConfig, authority.CandidateArtifactID) != nil {
 		return CorruptTaskAssignment()
 	}
 	previous := ""

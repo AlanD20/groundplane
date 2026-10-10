@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -141,8 +140,8 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 		var recovery *taskassignments.ReleaseRecoveryDirective
 		var componentRecovery *taskassignments.ReleaseRecoveryDirective
-		if task.Params[releaserender.TaskReleasePublicationParam] != "" {
-			_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(
+		if releaseRecoveryTask(task) {
+			procedure, _, descriptorErr := repository.releaseRecoveryProcedureAtRevision(
 				ctx, task, assignments.ReadRevision,
 			)
 			if descriptorErr != nil || validateAssignmentRestorationDescriptor(task, record, procedure) != nil {
@@ -158,13 +157,23 @@ func (repository *TaskRepository) ListAgentAssignments(
 			}
 		}
 		if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
-			_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(ctx, task, assignments.ReadRevision)
+			_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(
+				ctx,
+				task,
+				assignments.ReadRevision,
+			)
 			digest, digestErr := componentRecoveryAuthorityDigest(procedure)
 			if procedureErr != nil || digestErr != nil || digest != record.ComponentRecoveryProcedureSHA256 {
 				return nil, taskassignments.CorruptTaskAssignment()
 			}
 			if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
-				componentRecovery, err = repository.componentRecoveryDirectiveAtRevision(ctx, task, record, procedure, assignments.ReadRevision)
+				componentRecovery, err = repository.componentRecoveryDirectiveAtRevision(
+					ctx,
+					task,
+					record,
+					procedure,
+					assignments.ReadRevision,
+				)
 				if err != nil {
 					return nil, err
 				}

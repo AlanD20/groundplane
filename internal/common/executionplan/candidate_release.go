@@ -36,7 +36,8 @@ func DescribeCandidateRelease(plan *agentpb.ExecutionPlan) (CandidateReleaseDesc
 		return CandidateReleaseDescriptor{}, err
 	}
 	procedure := sealed.GetCandidateReleaseProcedure()
-	if procedure == nil || len(procedure.GetMembers()) > maximumCandidateReleaseMembers {
+	if procedure == nil || len(procedure.GetMembers()) == 0 ||
+		len(procedure.GetMembers()) > maximumCandidateReleaseMembers {
 		return CandidateReleaseDescriptor{}, errs.New(
 			errs.KindValidationFailed,
 			"candidate Release descriptor member bound is invalid",
@@ -215,7 +216,10 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 	procedure := plan.GetCandidateReleaseProcedure()
 	if len(mutations) == 0 {
 		if procedure != nil {
-			return errs.New(errs.KindValidationFailed, "candidate Release procedure has no candidate mutation")
+			if len(procedure.GetMembers()) != 0 || procedure.GetConfigurationRestoration() == nil {
+				return errs.New(errs.KindValidationFailed, "candidate Release procedure has no candidate mutation")
+			}
+			return validateConfigurationRestorationPlan(plan)
 		}
 		for _, step := range plan.GetSteps() {
 			if step.GetCandidateRestorationProbe() != nil || step.GetCandidateRestorationCompensate() != nil {

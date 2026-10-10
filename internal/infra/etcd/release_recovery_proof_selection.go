@@ -169,6 +169,13 @@ const (
 func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 	ctx context.Context, task TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (*agentpb.CandidateReleaseProcedure, []releaseRecoveryProofExpectation, []etcdstore.Condition, error) {
+	if authoredBlueprintEntryRemovalTask(task) {
+		procedure, conditions, err := repository.authoredEntryRecoveryProcedureAtRevision(ctx, task, revision)
+		if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
+			return nil, nil, nil, taskassignments.CorruptTaskAssignment()
+		}
+		return procedure, []releaseRecoveryProofExpectation{}, conditions, nil
+	}
 	publication := task.Params[releaserender.TaskReleasePublicationParam]
 	keys := []string{releases.ReleasePublicationKey(publication), releases.ReleaseManifestStagingKey(publication)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})

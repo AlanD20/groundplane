@@ -12,13 +12,6 @@ func validateReleaseScriptPlan(
 	plan *agentpb.ExecutionPlan,
 	artifacts map[string]*agentpb.ComposeArtifact,
 ) error {
-	releaseOperation := plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
-		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
-	blueprintApply := plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
-		ids.Validate(ids.KindEnvironment, plan.TargetId) == nil
-	if !releaseOperation && !blueprintApply {
-		return errs.New(errs.KindValidationFailed, "release Script plan operation is invalid")
-	}
 	runs := make([]*agentpb.ExecutionStep, 0, len(plan.ScriptBodyArtifacts))
 	for _, step := range plan.Steps {
 		if step.GetRunScript() != nil {
@@ -31,6 +24,13 @@ func validateReleaseScriptPlan(
 			return errs.New(errs.KindValidationFailed, "hook-free release plan carries Script material")
 		}
 		return nil
+	}
+	releaseOperation := plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
+	blueprintApply := plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
+		ids.Validate(ids.KindEnvironment, plan.TargetId) == nil
+	if !releaseOperation && !blueprintApply {
+		return errs.New(errs.KindValidationFailed, "release Script plan operation is invalid")
 	}
 	if blueprintApply {
 		if err := validateBlueprintHookPhases(plan); err != nil {

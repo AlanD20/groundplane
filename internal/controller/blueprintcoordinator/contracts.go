@@ -71,9 +71,10 @@ type ChildPreparer interface {
 }
 
 type PreparedChild struct {
-	Task                 etcd.TaskRecord
-	ReleasePublication   etcd.BlueprintReleasePublication
-	ComponentPublication componentplanning.Publication
+	Task                    etcd.TaskRecord
+	ReleasePublication      etcd.BlueprintReleasePublication
+	ComponentPublication    componentplanning.Publication
+	EntryRemovalPublication etcd.BlueprintEntryRemovalPublication
 }
 
 // Clear releases prepared publication bytes after publication.
@@ -83,6 +84,7 @@ func (prepared *PreparedChild) Clear() {
 	}
 	prepared.ReleasePublication.Clear()
 	prepared.ComponentPublication.Clear()
+	prepared.EntryRemovalPublication.Clear()
 }
 
 type taskStore interface {
@@ -100,6 +102,7 @@ type taskStore interface {
 		blueprintunits.Unit,
 		etcd.BlueprintReleasePublication,
 		componentplanning.Publication,
+		etcd.BlueprintEntryRemovalPublication,
 	) (keyvalue.Versioned[etcd.TaskRecord], error)
 	AbortPendingTask(context.Context, string, time.Time) (keyvalue.Versioned[etcd.TaskRecord], error)
 	GetTask(context.Context, string) (keyvalue.Versioned[etcd.TaskRecord], error)

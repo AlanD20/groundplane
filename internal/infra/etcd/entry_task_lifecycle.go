@@ -5,7 +5,6 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -385,12 +384,27 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 		})
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
+		retirementConditions, retirementMutations, err := entryrecord.PrepareProjectedEntryRetirement(
+			ctx,
+			repository.store,
+			entry,
+			revision,
+		)
+		if err != nil {
+			clearRouteTaskChange(change)
+			return routeTaskChange{}, err
+		}
 		scriptConditions, err := entryrecord.PrepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
 		if err != nil {
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, err
 		}
+		change.conditions = append(change.conditions, retirementConditions...)
 		change.conditions = append(change.conditions, scriptConditions...)
+		change.mutations = append(
+			change.mutations,
+			retirementMutations...,
+		)
 		change.mutations = append(
 			change.mutations,
 			etcdstore.Mutation{
@@ -398,16 +412,6 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 				Key:  entryrecord.EntryOwnerKey(entry.EnvironmentID, entry.Entry.ID),
 			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryrecord.RecordKey(intent.EntryID)},
-			etcdstore.Mutation{
-				Type:   etcdstore.MutationDelete,
-				Key:    entryvalues.PlainPrefix + intent.EntryID + "/",
-				Prefix: true,
-			},
-			etcdstore.Mutation{
-				Type:   etcdstore.MutationDelete,
-				Key:    entryvalues.SecretPrefix + intent.EntryID + "/",
-				Prefix: true,
-			},
 		)
 		if intent.CandidateProjection != nil {
 			projectionValue, encodeErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(
@@ -509,7 +513,11 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent environmentchanges.En
 	}
 	if intent.CurrentProjection != nil {
 		expectedExecutor = taskjournal.TaskExecutorAgent
-		validParams = intent.CandidateProjection != nil && len(task.Params) == 8 &&
+		parameterCount := 8
+		if intent.Authored != nil {
+			parameterCount = 10
+		}
+		validParams = intent.CandidateProjection != nil && len(task.Params) == parameterCount &&
 			task.Params[taskjournal.TaskEntryEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[taskjournal.TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[blueprints.EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&
@@ -521,6 +529,13 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent environmentchanges.En
 	}
 	if intent.Desired != nil && (task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Desired.RevisionID ||
 		uint64(task.RenderGeneration) != intent.Desired.RenderGeneration) {
+		validParams = false
+	}
+	if intent.Authored != nil && (task.Actor != taskjournal.TaskActorSystem ||
+		task.Params[taskjournal.TaskBlueprintParentParam] != intent.Authored.ParentTaskID ||
+		task.Params[taskjournal.TaskBlueprintEntryUnitParam] != intent.EntryID ||
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Authored.ParentTaskID ||
+		uint64(task.RenderGeneration) != intent.Authored.RenderGeneration) {
 		validParams = false
 	}
 	if task.ID != intent.TaskID || task.Executor != expectedExecutor || task.Type != taskjournal.TaskRemove ||

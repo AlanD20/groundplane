@@ -18,7 +18,7 @@ func ValidateNativeRestorationAuthority(
 	authority *agentpb.ReleaseRestorationAuthority,
 ) error {
 	members := plan.GetCandidateReleaseProcedure().GetMembers()
-	if authority == nil || len(members) == 0 || len(members) != len(authority.GetCandidates()) ||
+	if authority == nil || len(members) != len(authority.GetCandidates()) ||
 		len(authority.GetPlanHash()) != sha256.Size || !bytes.Equal(authority.GetPlanHash(), plan.GetPlanHash()) ||
 		len(authority.GetAuthoritySha256()) != sha256.Size ||
 		ids.Validate(
@@ -26,6 +26,14 @@ func ValidateNativeRestorationAuthority(
 			authority.GetTaskId(),
 		) != nil || ids.Validate(ids.KindOperation, authority.GetOperationId()) != nil {
 		return invalidNativeRestorationAuthority()
+	}
+	if len(members) == 0 {
+		if plan.GetCandidateReleaseProcedure().GetConfigurationRestoration() == nil ||
+			authority.GetCandidateArtifactId() != "" || authority.GetAppliedPredecessor() != nil ||
+			len(authority.GetNativePredecessors()) != 0 {
+			return invalidNativeRestorationAuthority()
+		}
+		return validateRestorationMemberSelection(authority)
 	}
 	if err := validateRestorationMemberSelection(authority); err != nil {
 		return err

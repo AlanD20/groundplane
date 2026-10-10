@@ -141,7 +141,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			continue
 		}
 		if executor == taskjournal.TaskExecutorAgent && result != nil &&
-			task.Params[releaserender.TaskReleasePublicationParam] != "" &&
+			releaseRecoveryTask(task) &&
 			result.ReconciliationRequired {
 			transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
 				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,

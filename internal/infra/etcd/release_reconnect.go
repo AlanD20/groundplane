@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
@@ -40,7 +39,11 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 			return TaskAssignment{}, errs.New(errs.KindStateConflict, "Agent reconnect assignment authority changed")
 		}
 		if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
-			_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(ctx, task, current.Task.ReadRevision)
+			_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(
+				ctx,
+				task,
+				current.Task.ReadRevision,
+			)
 			digest, digestErr := componentRecoveryAuthorityDigest(procedure)
 			if procedureErr != nil || digestErr != nil || digest != assignment.ComponentRecoveryProcedureSHA256 {
 				return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
@@ -51,12 +54,31 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 				taskBytes, _ := EncodeTaskRecord(task)
 				assignmentBytes, _ := taskassignments.EncodeTaskAssignment(assignment)
 				transitioned, processed, transitionErr := repository.transitionComponentAcknowledgementToRecovery(
-					ctx, task,
-					&etcdstore.KeyValue{Key: taskjournal.TaskStorageKey(task.ID), Value: taskBytes, ModRevision: current.Task.Revision},
+					ctx,
+					task,
+					&etcdstore.KeyValue{
+						Key:         taskjournal.TaskStorageKey(task.ID),
+						Value:       taskBytes,
+						ModRevision: current.Task.Revision,
+					},
 					assignment,
-					&etcdstore.KeyValue{Key: taskjournal.TaskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID), Value: assignmentBytes, ModRevision: current.Assignment.Revision},
-					&etcdstore.KeyValue{Key: taskjournal.TaskAssignmentIndexKey(task.ID), Value: assignmentBytes, ModRevision: current.Assignment.Revision},
-					taskjournal.TaskStatusFailed, result, current.Task.ReadRevision,
+					&etcdstore.KeyValue{
+						Key: taskjournal.TaskExecutionClaimKey(
+							assignment.Executor,
+							assignment.AgentID,
+							task.ID,
+						),
+						Value:       assignmentBytes,
+						ModRevision: current.Assignment.Revision,
+					},
+					&etcdstore.KeyValue{
+						Key:         taskjournal.TaskAssignmentIndexKey(task.ID),
+						Value:       assignmentBytes,
+						ModRevision: current.Assignment.Revision,
+					},
+					taskjournal.TaskStatusFailed,
+					result,
+					current.Task.ReadRevision,
 				)
 				clear(taskBytes)
 				clear(assignmentBytes)
@@ -71,7 +93,8 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 				}
 				return repository.GetTaskAssignment(ctx, task.ID)
 			}
-			if assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly || current.ComponentRecovery == nil {
+			if assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly ||
+				current.ComponentRecovery == nil {
 				return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
 			}
 			if err := repository.incrementAssignmentEpoch(ctx, current, nil); err != nil {
@@ -82,10 +105,14 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 			}
 			return repository.GetTaskAssignment(ctx, task.ID)
 		}
-		if task.Params[releaserender.TaskReleasePublicationParam] == "" {
+		if !releaseRecoveryTask(task) {
 			return current, nil
 		}
-		_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, current.Task.ReadRevision)
+		procedure, sourceConditions, err := repository.releaseRecoveryProcedureAtRevision(
+			ctx,
+			task,
+			current.Task.ReadRevision,
+		)
 		if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
 			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
 		}
@@ -129,7 +156,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 					taskjournal.TaskStatusFailed,
 					result,
 					current.Task.ReadRevision,
-					evidenceConditions...,
+					append(sourceConditions, evidenceConditions...)...,
 				)
 				clear(taskBytes)
 				clear(assignmentBytes)
@@ -144,7 +171,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 				}
 				return repository.GetTaskAssignment(ctx, task.ID)
 			}
-			if err := repository.incrementAssignmentEpoch(ctx, current, evidenceConditions); err != nil {
+			if err := repository.incrementAssignmentEpoch(ctx, current, append(sourceConditions, evidenceConditions...)); err != nil {
 				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 					return TaskAssignment{}, err
 				}

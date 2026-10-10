@@ -73,6 +73,11 @@ type environmentBlueprintRepository interface {
 	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
 	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
+	GetEntry(context.Context, string) (etcdstore.Versioned[entryrecord.Record], error)
+	GetEnvironmentAppliedComposeProjection(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	ResolveBackingProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	ResolveEnvironment(context.Context, string, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
@@ -105,9 +110,22 @@ type environmentBlueprintRepository interface {
 		string,
 		int64,
 	) (componentplanning.FrozenProjectionAuthority, error)
-	PrepareFrozenProjectionAuthority(context.Context, componentplanning.FrozenProjectionAuthorityInput) (componentplanning.FrozenProjectionAuthority, error)
-	PrepareFrozenComponentUnitAuthority(context.Context, componentplanning.FrozenProjectionAuthorityInput, etcdstore.Versioned[componentrecord.Record]) (componentplanning.FrozenProjectionAuthority, error)
-	PrepareComponentTaskPublication(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], componentplanning.TaskIdentity, []blueprints.EnvironmentBlueprintZoneChange, componentplanning.ComponentTaskPreparation) (componentplanning.Publication, error)
+	PrepareFrozenProjectionAuthority(
+		context.Context,
+		componentplanning.FrozenProjectionAuthorityInput,
+	) (componentplanning.FrozenProjectionAuthority, error)
+	PrepareFrozenComponentUnitAuthority(
+		context.Context,
+		componentplanning.FrozenProjectionAuthorityInput,
+		etcdstore.Versioned[componentrecord.Record],
+	) (componentplanning.FrozenProjectionAuthority, error)
+	PrepareComponentTaskPublication(
+		context.Context,
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		componentplanning.TaskIdentity,
+		[]blueprints.EnvironmentBlueprintZoneChange,
+		componentplanning.ComponentTaskPreparation,
+	) (componentplanning.Publication, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageClaimRequest,
@@ -283,6 +301,11 @@ func (repository *durableRepository) ListEntries(
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[entryrecord.Record], error) {
 	return repository.entries.ListEntries(ctx, environmentID, request)
+}
+func (repository *durableRepository) GetEntry(
+	ctx context.Context, entryID string,
+) (etcdstore.Versioned[entryrecord.Record], error) {
+	return repository.entries.GetEntry(ctx, entryID)
 }
 func (repository *durableRepository) ListAttaches(
 	ctx context.Context,

@@ -27,9 +27,17 @@ type EntryRemovalIntent struct {
 	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
 	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
 	Desired                   *EntryRemovalDesiredRevision                   `json:"desired,omitempty"`
+	Authored                  *EntryRemovalAuthoredRevision                  `json:"authored,omitempty"`
 	Status                    taskjournal.TaskStatus                         `json:"status"`
 	CreatedAt                 time.Time                                      `json:"created_at"`
 	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
+}
+
+// EntryRemovalAuthoredRevision binds hidden cleanup to the one visible
+// Blueprint parent whose desired unit omitted the Entry.
+type EntryRemovalAuthoredRevision struct {
+	ParentTaskID     string `json:"parent_task_id"`
+	RenderGeneration uint64 `json:"render_generation"`
 }
 
 // EntryRemovalDesiredRevision binds the existing staged desired revision to
@@ -63,6 +71,34 @@ func NewDesiredEntryRemovalIntent(
 		return EntryRemovalIntent{}, err
 	}
 	return intent, nil
+}
+
+func NewAuthoredEntryRemovalIntent(
+	taskID, environmentID, entryID string,
+	entryRevision int64,
+	parentTaskID string,
+	renderGeneration uint64,
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	createdAt time.Time,
+) (EntryRemovalIntent, error) {
+	intent, err := NewEntryRemovalIntent(
+		taskID, environmentID, entryID, entryRevision, &projection, createdAt,
+	)
+	if err != nil {
+		return EntryRemovalIntent{}, err
+	}
+	if intent.CandidateProjection == nil {
+		return EntryRemovalIntent{}, errs.New(errs.KindStateConflict, "authored Entry removal has no applied target")
+	}
+	intent.Authored = &EntryRemovalAuthoredRevision{
+		ParentTaskID: parentTaskID, RenderGeneration: renderGeneration,
+	}
+	intent.CandidateProjection.RevisionID = parentTaskID
+	intent.CandidateProjection.RenderGeneration = renderGeneration
+	if err := ValidateEntryRemovalIntent(intent); err != nil {
+		return EntryRemovalIntent{}, err
+	}
+	return CloneEntryRemovalIntent(intent), nil
 }
 
 func NewEntryRemovalIntent(
@@ -143,12 +179,20 @@ func ValidateEntryRemovalIntent(intent EntryRemovalIntent) error {
 	if err := recordcodec.ValidateTimestamp("Entry removal intent created_at", intent.CreatedAt); err != nil {
 		return err
 	}
+	if intent.Desired != nil && intent.Authored != nil {
+		return errs.New(errs.KindValidationFailed, "Entry removal revision authority is ambiguous")
+	}
 	if desired := intent.Desired; desired != nil {
 		if ids.Validate(ids.KindTask, "task_"+desired.DescriptorID) != nil ||
 			ids.Validate(ids.KindTask, desired.BaseRevisionID) != nil ||
 			ids.Validate(ids.KindTask, desired.RevisionID) != nil || desired.RenderGeneration == 0 ||
 			desired.RevisionID == desired.BaseRevisionID {
 			return errs.New(errs.KindValidationFailed, "Entry removal desired revision is invalid")
+		}
+	}
+	if authored := intent.Authored; authored != nil {
+		if ids.Validate(ids.KindTask, authored.ParentTaskID) != nil || authored.RenderGeneration == 0 {
+			return errs.New(errs.KindValidationFailed, "Entry removal authored revision is invalid")
 		}
 	}
 	if intent.Status == taskjournal.TaskStatusPending {
@@ -185,6 +229,14 @@ func ValidateEntryRemovalIntent(intent EntryRemovalIntent) error {
 		}
 		expected.RevisionID, expected.RenderGeneration = desired.RevisionID, desired.RenderGeneration
 	}
+	if authored := intent.Authored; authored != nil {
+		if authored.RenderGeneration < intent.CurrentProjection.RenderGeneration ||
+			(authored.RenderGeneration == intent.CurrentProjection.RenderGeneration &&
+				intent.CurrentProjection.RevisionID != authored.ParentTaskID) {
+			return errs.New(errs.KindValidationFailed, "Entry removal authored generation does not advance")
+		}
+		expected.RevisionID, expected.RenderGeneration = authored.ParentTaskID, authored.RenderGeneration
+	}
 	if err != nil || !changed || !SameEntryRemovalProjection(expected, *intent.CandidateProjection) {
 		return errs.New(errs.KindValidationFailed, "Entry removal candidate projection changed")
 	}
@@ -205,6 +257,10 @@ func CloneEntryRemovalIntent(source EntryRemovalIntent) EntryRemovalIntent {
 	if source.Desired != nil {
 		value := *source.Desired
 		clone.Desired = &value
+	}
+	if source.Authored != nil {
+		value := *source.Authored
+		clone.Authored = &value
 	}
 	if source.CurrentProjection != nil {
 		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CurrentProjection)

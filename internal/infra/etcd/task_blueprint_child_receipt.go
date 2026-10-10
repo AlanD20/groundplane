@@ -31,6 +31,10 @@ func blueprintChildTerminalResultVerified(
 		return verifiedComponent && result != nil &&
 			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
 	}
+	if task.Params[taskjournal.TaskBlueprintEntryUnitParam] != "" {
+		return authoredBlueprintEntryRemovalTask(task) && result != nil &&
+			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
+	}
 	if verifiedCandidate {
 		return true
 	}
@@ -89,8 +93,11 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	verifiedComponentEffect := verifiedResult &&
 		execution.Unit.Target.Kind == ids.KindComponent &&
 		task.Params[taskjournal.TaskBlueprintComponentUnitParam] == execution.Unit.Target.ID
+	verifiedEntryEffect := verifiedResult && execution.Unit.Removal &&
+		execution.Unit.Target.Kind == ids.KindEnvEntry && authoredBlueprintEntryRemovalTask(task) &&
+		task.Params[taskjournal.TaskBlueprintEntryUnitParam] == execution.Unit.Target.ID
 	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect ||
-		verifiedAttachEffect || verifiedComponentEffect
+		verifiedAttachEffect || verifiedComponentEffect || verifiedEntryEffect
 	if status != taskjournal.TaskStatusCompleted &&
 		(!taskassignments.ValidTerminalTaskStatus(status) || !verifiedEffect) {
 		if execution.State == blueprintunits.Draining {

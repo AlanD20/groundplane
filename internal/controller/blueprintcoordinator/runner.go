@@ -273,7 +273,10 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 		if unit.Target.Kind == ids.KindComponent {
 			settler, ok := runner.planner.(DisabledComponentSettler)
 			if !ok {
-				return planChanged, errs.New(errs.KindInternal, "Blueprint disabled Component settler is not configured")
+				return planChanged, errs.New(
+					errs.KindInternal,
+					"Blueprint disabled Component settler is not configured",
+				)
 			}
 			settled, err := settler.TrySettleDisabledComponent(ctx, parent, unit, snapshot)
 			if err != nil {
@@ -298,6 +301,7 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 			unit,
 			prepared.ReleasePublication,
 			prepared.ComponentPublication,
+			prepared.EntryRemovalPublication,
 		); err != nil {
 			if !unknownBlueprintChildPublication(err) {
 				if cleanupErr := prepared.ReleasePublication.Abandon(ctx); cleanupErr != nil {

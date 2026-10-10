@@ -33,13 +33,18 @@ func (service *Service) Prepare(
 	unit blueprintunits.Unit,
 ) (blueprintcoordinator.PreparedChild, error) {
 	if service == nil || ctx == nil || parent.Executor != taskjournal.TaskExecutorBlueprint ||
-		parent.Status != taskjournal.TaskStatusRunning || unit.Removal && unit.Target.Kind != ids.KindComponent {
+		parent.Status != taskjournal.TaskStatusRunning || unit.Removal &&
+		(unit.Target.Kind != ids.KindComponent && unit.Target.Kind != ids.KindEnvEntry) {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindValidationFailed, "Blueprint child request is invalid",
 		)
 	}
-	if parent.StartedAt == nil || parent.TimeoutSeconds <= 0 || parent.TimeoutSeconds > int64(24*time.Hour/time.Second) {
-		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint parent execution deadline is unavailable")
+	if parent.StartedAt == nil || parent.TimeoutSeconds <= 0 ||
+		parent.TimeoutSeconds > int64(24*time.Hour/time.Second) {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint parent execution deadline is unavailable",
+		)
 	}
 	elapsed := service.now().UTC().Sub(*parent.StartedAt)
 	timeoutSeconds := parent.TimeoutSeconds - int64(elapsed/time.Second)
@@ -47,7 +52,10 @@ func (service *Service) Prepare(
 		timeoutSeconds--
 	}
 	if elapsed < 0 || timeoutSeconds <= 0 {
-		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint parent has no execution time remaining")
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint parent has no execution time remaining",
+		)
 	}
 	if unit.Target.Kind == ids.KindNetwork {
 		return service.prepareAuthoredNetworkChild(ctx, parent, unit, timeoutSeconds)
@@ -60,6 +68,9 @@ func (service *Service) Prepare(
 	}
 	if unit.Target.Kind == ids.KindComponent {
 		return service.prepareAuthoredComponentChild(ctx, parent, unit, timeoutSeconds)
+	}
+	if unit.Target.Kind == ids.KindEnvEntry && unit.Removal {
+		return service.prepareAuthoredEntryRemovalChild(ctx, parent, unit, timeoutSeconds)
 	}
 	if unit.Target.Kind != ids.KindService {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
@@ -101,7 +112,10 @@ func (service *Service) Prepare(
 	scripts := make([]scriptrecord.Record, 0)
 	for _, versioned := range allScripts {
 		if versioned.Record.ScriptSetGeneration != parent.ID {
-			return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint Script set has been superseded")
+			return blueprintcoordinator.PreparedChild{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Script set has been superseded",
+			)
 		}
 		if versioned.Record.ServiceID == unit.Target.ID {
 			scripts = append(scripts, versioned.Record)

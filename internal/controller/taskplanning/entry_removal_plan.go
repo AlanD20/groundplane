@@ -97,6 +97,27 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 	materials EntryRemovalMaterializationResolver,
 	identity entrycapability.RemovalEnvironmentIdentity,
 ) (etcd.TaskRecord, error) {
+	prepared, err := resolver.prepareEntryRemovalMaterializations(ctx, task, intent, procedure, materials, identity)
+	if err != nil {
+		return etcd.TaskRecord{}, err
+	}
+	plan, err := resolver.buildEntryRemovalPlan(ctx, prepared, intent)
+	if err != nil {
+		return etcd.TaskRecord{}, err
+	}
+	prepared.PlanHash = hex.EncodeToString(plan.PlanHash)
+	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps)
+	return prepared, nil
+}
+
+func (resolver *TaskPlanResolver) prepareEntryRemovalMaterializations(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	intent environmentchanges.EntryRemovalIntent,
+	procedure entryRemovalTaskProcedureIDs,
+	materials EntryRemovalMaterializationResolver,
+	identity entrycapability.RemovalEnvironmentIdentity,
+) (etcd.TaskRecord, error) {
 	templates, err := entryRemovalMaterializationTemplates(intent)
 	if err != nil {
 		return etcd.TaskRecord{}, err
@@ -105,6 +126,7 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 		intent.CandidateProjection.RenderGeneration > math.MaxInt32 {
 		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "entry removal procedure ids are invalid")
 	}
+	parentID := task.Params[taskjournal.TaskBlueprintParentParam]
 	task.Params = map[string]string{
 		taskjournal.TaskEntryEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
@@ -114,6 +136,10 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 		taskjournal.TaskEntryProjectSlugParam:           identity.ProjectSlug,
 		taskjournal.TaskEntryEnvironmentNameParam:       identity.EnvironmentName,
 		taskjournal.TaskEntryAuthorizedVolumeDirParam:   identity.AuthorizedVolumeDir,
+	}
+	if intent.Authored != nil {
+		task.Params[taskjournal.TaskBlueprintParentParam] = parentID
+		task.Params[taskjournal.TaskBlueprintEntryUnitParam] = intent.EntryID
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Steps = make([]taskjournal.TaskStepRecord, len(templates))
@@ -164,11 +190,21 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 	sort.Slice(task.Materializations, func(left int, right int) bool {
 		return task.Materializations[left].StepID < task.Materializations[right].StepID
 	})
-	plan, err := resolver.buildEntryRemovalPlan(ctx, task, intent)
-	if err != nil {
-		return etcd.TaskRecord{}, err
-	}
-	task.PlanHash = hex.EncodeToString(plan.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
 	return task, nil
+}
+
+func (resolver *TaskPlanResolver) PrepareBlueprintEntryRemovalMaterializations(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	intent environmentchanges.EntryRemovalIntent,
+	artifactID string,
+	materials EntryRemovalMaterializationResolver,
+	identity entrycapability.RemovalEnvironmentIdentity,
+) (etcd.TaskRecord, error) {
+	if intent.Authored == nil || task.Params[taskjournal.TaskBlueprintParentParam] != intent.Authored.ParentTaskID {
+		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "authored Entry removal authority is invalid")
+	}
+	return resolver.prepareEntryRemovalMaterializations(
+		ctx, task, intent, entryRemovalTaskProcedureIDs{ArtifactID: artifactID}, materials, identity,
+	)
 }

@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -18,10 +17,10 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 ) ([]etcdstore.Condition, error) {
 	task, assignment := current.Task.Record, current.Assignment.Record
 	if task.Executor != taskjournal.TaskExecutorAgent || result == nil ||
-		(task.Type != taskjournal.TaskScript && task.Params[releaserender.TaskReleasePublicationParam] == "") {
+		(task.Type != taskjournal.TaskScript && !releaseRecoveryTask(task)) {
 		return nil, nil
 	}
-	if task.Params[releaserender.TaskReleasePublicationParam] != "" &&
+	if releaseRecoveryTask(task) &&
 		assignment.ExecutionMode == taskassignments.TaskExecutionModeForward &&
 		(result.ExecutionEpoch != assignment.ExecutionEpoch || result.ReleaseRecoveryRecordSHA256 != "") {
 		return nil, errs.New(errs.KindStateConflict, "release terminal execution epoch changed")
@@ -49,7 +48,11 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 		}
 		return conditions, nil
 	}
-	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, current.Task.ReadRevision)
+	procedure, sourceConditions, err := repository.releaseRecoveryProcedureAtRevision(
+		ctx,
+		task,
+		current.Task.ReadRevision,
+	)
 	if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
 		return nil, taskassignments.CorruptTaskAssignment()
 	}
@@ -73,5 +76,6 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 	if err := taskjournal.ValidateTaskResult(*result, task.Steps, status); err != nil {
 		return nil, err
 	}
+	conditions = append(conditions, sourceConditions...)
 	return append(conditions, evidence...), nil
 }

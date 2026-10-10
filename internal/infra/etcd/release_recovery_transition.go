@@ -9,7 +9,6 @@ import (
 
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -32,7 +31,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	revision int64,
 	evidenceConditions ...etcdstore.Condition,
 ) (etcdstore.Versioned[TaskRecord], bool, error) {
-	if task.Params[releaserender.TaskReleasePublicationParam] == "" || !result.ReconciliationRequired {
+	if !releaseRecoveryTask(task) || !result.ReconciliationRequired {
 		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
 	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
@@ -45,7 +44,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 			"release recovery acknowledgement authority changed",
 		)
 	}
-	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, revision)
+	procedure, sourceConditions, err := repository.releaseRecoveryProcedureAtRevision(ctx, task, revision)
 	if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, taskassignments.CorruptTaskAssignment()
 	}
@@ -119,6 +118,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 		{Key: taskjournal.TaskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline)},
 		{Key: taskjournal.TaskRecoveryProofRequiredKey(task.ID)},
 	}
+	conditions = append(conditions, sourceConditions...)
 	conditions = append(conditions, evidenceConditions...)
 	claim, err := repository.prepareBlueprintChildAssignmentEpoch(ctx, task, assignment.ExecutionEpoch, true)
 	if err != nil {
@@ -376,12 +376,14 @@ func (repository *TaskRepository) candidateReleaseTimeoutResult(
 	assignment TaskAssignment,
 ) (taskjournal.TaskResultRecord, bool, error) {
 	record := assignment.Assignment.Record
-	if assignment.Task.Record.Params[releaserender.TaskReleasePublicationParam] == "" ||
+	if !releaseRecoveryTask(assignment.Task.Record) ||
 		record.ExecutionMode != taskassignments.TaskExecutionModeForward {
 		return taskjournal.TaskResultRecord{}, false, nil
 	}
-	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(
-		ctx, assignment.Task.Record, assignment.Task.ReadRevision,
+	procedure, _, err := repository.releaseRecoveryProcedureAtRevision(
+		ctx,
+		assignment.Task.Record,
+		assignment.Task.ReadRevision,
 	)
 	if err != nil || validateAssignmentRestorationDescriptor(assignment.Task.Record, record, procedure) != nil {
 		return taskjournal.TaskResultRecord{}, true, taskassignments.CorruptTaskAssignment()
