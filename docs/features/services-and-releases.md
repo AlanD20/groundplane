@@ -69,7 +69,7 @@ explicit positive count.
 
 | Strategy | Behavior and limits |
 | --- | --- |
-| `blue-green` | One replica and an addressable internal TCP port are required. GP starts the inactive slot, waits for candidate health and switches the stable proxy. The old healthy slot is retained. Live and restart proxy configuration must agree. |
+| `blue-green` | One replica, an addressable internal TCP port and an enabled explicit healthcheck are required before a Task can be published. GP starts the inactive slot, waits for candidate health and switches the stable proxy. The old healthy slot is retained. Live and restart proxy configuration must agree. |
 | `recreate` | Stops the previous set before starting the requested replica count. Downtime is expected. Every selected container must be running; configured healthchecks must also pass. Without a healthcheck, GP reports running, not healthy. |
 | `rolling` | Not implemented; rejected. |
 
@@ -140,6 +140,27 @@ Agent is connected. GP must report the conflict instead of declaring success or
 touching unrelated workloads. See [Task status](tasks-and-logs.md).
 
 ## Reading health
+
+The shared Service editor offers HTTP, TCP, Process, Custom command and None.
+HTTP requires an explicit container port, HTTP/HTTPS and path; TCP requires a
+host and container port. These run inside the workload, not against its proxy.
+Custom checks use either literal executable/arguments or one shell command.
+Exit 0 means ready. None emits native `test: [NONE]`, disabling image checks too.
+
+Blueprints use native Compose `healthcheck`. Direct API edits use the same
+`test`, `disable`, `interval`, `timeout`, `start_period`, `start_interval` and
+`retries` fields. Importing a Blueprint retains these fields for later editing.
+CLI `service add` and `service edit` accept `--healthcheck-file` with a JSON
+object (or `-` for stdin), for example:
+
+```json
+{"test":["CMD","curl","-fsS","--","http://127.0.0.1:8080/health"],"interval":"15s","timeout":"3s","start_period":"20s","retries":3}
+```
+
+Omitted or zero interval, timeout and startup interval values use Docker defaults.
+Durations must be nonnegative and are bounded to 24 hours. Startup grace may be
+zero. Retries accept 0 for Docker's default or 1–100. These fields
+change desired state only; Deploy applies them using the selected strategy.
 
 GP's built-in process, HTTP and TCP checks run inside the workload container and
 require `pgrep`, `curl` and `nc`, respectively. GP does not install these tools into

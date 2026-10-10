@@ -1,4 +1,5 @@
 import { BlueprintWorkspace } from "@/features/blueprint/blueprint-workspace";
+import { describeHealthcheck } from "./healthcheck";
 import { useRequiredParams } from "@/lib/router";
 import { DetailRow } from "@/components/common/detail-row";
 import { ImageReference } from "@/components/common/image-reference";
@@ -135,7 +136,7 @@ export function ServiceConfiguration({
             <>
               <DetailRow
                 label="Check"
-                value={`${service.healthcheck.kind.toUpperCase()} ${service.healthcheck.target}`}
+                value={describeHealthcheck(service.healthcheck)}
                 mono
               />
               <DetailRow

@@ -99,6 +99,7 @@ func assertRestorationStartupScope(t *testing.T, task etcd.TaskRecord, plan *age
 			if addressable {
 				api := project.Services["api"]
 				api.Expose = []string{"8080"}
+				api.HealthCheck = &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}}
 				project.Services["api"] = api
 				identity.Strategy, identity.Target, identity.ServingTarget = domain.StrategyBlueGreen, domain.WorkloadBlue, domain.WorkloadBlue
 				identity.ProxyImage = testServiceProxyImage()

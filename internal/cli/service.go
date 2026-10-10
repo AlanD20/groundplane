@@ -65,6 +65,7 @@ func newServiceCmd() *cobra.Command {
 	var zones, expose []string
 	var cpus float64
 	var replicas int
+	var healthcheckFile string
 	add := &cobra.Command{
 		Use:   "add <name>",
 		Short: "Add a service to the environment",
@@ -75,11 +76,19 @@ func newServiceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			var healthcheck apiTypes.ServiceHealthcheck
+			if cmd.Flags().Changed("healthcheck-file") {
+				healthcheck, err = loadServiceHealthcheck(cmd, healthcheckFile)
+				if err != nil {
+					return err
+				}
+			}
 			created, err := app.Client.CreateService(cmd.Context(), apiTypes.ServiceCreate{
 				EnvironmentID: environmentID, Name: args[0], Image: image, Zones: zones,
 				Strategy: strategy, OnFailure: apiTypes.OnFailure(onFailure),
 				Resources: apiTypes.ServiceResources{Mem: memory, CPUs: cpus}, Expose: expose,
 				Restart: restart, Replicas: replicas,
+				Healthcheck: healthcheck,
 			})
 			if err != nil {
 				return err
@@ -97,6 +106,8 @@ func newServiceCmd() *cobra.Command {
 	add.Flags().StringSliceVar(&expose, "expose", nil, "internal exposed port (repeatable)")
 	add.Flags().StringVar(&restart, "restart", "unless-stopped", "unless-stopped | always | no")
 	add.Flags().IntVar(&replicas, "replicas", 1, "desired replica count")
+	add.Flags().
+		StringVar(&healthcheckFile, "healthcheck-file", "", "native Compose healthcheck JSON object; - reads stdin")
 	_ = add.MarkFlagRequired("image")
 	cmd.AddCommand(add)
 
@@ -105,6 +116,7 @@ func newServiceCmd() *cobra.Command {
 	var editLogMaxSize string
 	var editZones, editExpose, editCommand, editEntrypoint []string
 	var editMountsFile string
+	var editHealthcheckFile string
 	var editCPUs float64
 	var editReplicas, editLogMaxFile int
 	var resetCommand, resetEntrypoint, resetLogging bool
@@ -134,6 +146,12 @@ func newServiceCmd() *cobra.Command {
 			}
 			if current.Healthcheck != nil {
 				input.Healthcheck = *current.Healthcheck
+			}
+			if cmd.Flags().Changed("healthcheck-file") {
+				input.Healthcheck, err = loadServiceHealthcheck(cmd, editHealthcheckFile)
+				if err != nil {
+					return err
+				}
 			}
 			if cmd.Flags().Changed("image") {
 				input.Image = editImage
@@ -237,6 +255,8 @@ func newServiceCmd() *cobra.Command {
 	}
 	edit.Flags().
 		StringVar(&editMountsFile, "mounts-file", "", "replacement Volume mounts JSON array using Volume slugs (--id for ids); [] unmounts all; - reads stdin")
+	edit.Flags().
+		StringVar(&editHealthcheckFile, "healthcheck-file", "", "replacement native Compose healthcheck JSON object; omission preserves; test [NONE] disables; - reads stdin")
 	edit.Flags().StringVar(&editImage, "image", "", "container image")
 	edit.Flags().
 		StringVar(&editHooksFile, "hooks-file", "", "replacement custom hook configuration JSON; {} clears, omission preserves; - reads stdin")

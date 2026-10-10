@@ -105,7 +105,7 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 func TestRenderComposeSealsBlueGreenWorkloadImages(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 39)
 	project := &composetypes.Project{Services: composetypes.Services{"api": {
-		Image: "example/api:previous", Expose: []string{"8080"}, HealthCheck: &composetypes.HealthCheckConfig{},
+		Image: "example/api:previous", Expose: []string{"8080"}, HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}},
 	}}}
 	input := composeRenderTestInput(project)
 	input.Identities.Services = []composeidentity.Resource{{ID: serviceID, Name: "api"}}
@@ -187,7 +187,7 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 			"api": composetypes.ServiceConfig{
 				Image:       "example/api:1",
 				Labels:      composetypes.Labels{"example.owner": "operator"},
-				HealthCheck: &composetypes.HealthCheckConfig{},
+				HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}},
 			},
 		},
 		DisabledServices: composetypes.Services{

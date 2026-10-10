@@ -489,6 +489,13 @@ func (service *Service) deployCandidate(
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
+	if strategy == domain.StrategyBlueGreen && !planning.Service.Record.Desired.Healthcheck.Enabled() {
+		return releaseCandidateInput{}, errs.Newf(
+			errs.KindValidationFailed,
+			"Service %q: blue-green requires an enabled healthcheck with an explicit command; configure one or select recreate",
+			planning.Service.Record.Desired.Name,
+		)
+	}
 	onFailure, err := releaseFailurePolicy(requestedFailure, planning.Service.Record.Desired.OnFailure)
 	if err != nil {
 		return releaseCandidateInput{}, err

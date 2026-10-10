@@ -178,7 +178,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	}
 	healthServiceID, hasHealthStep := creation.Task.Params[taskjournal.TaskBackingServiceHealthParam]
 	desiredHealth := creation.Service.Desired.Healthcheck
-	hasDesiredHealth := desiredHealth.HTTP != "" || desiredHealth.TCP != "" || desiredHealth.Pgrep != ""
+	hasDesiredHealth := desiredHealth.Enabled()
 	afterStartServiceID, hasAfterStartStep := creation.Task.Params[taskconfiguration.TaskBackingServiceAfterStartParam]
 	hasDesiredAfterStart := creation.Service.Desired.Hooks != nil &&
 		creation.Service.Desired.Hooks.AfterStart != nil

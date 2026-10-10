@@ -176,19 +176,8 @@ func (s Service) Validate() error {
 	default:
 		return fmt.Errorf("unknown on_failure %q", s.OnFailure)
 	}
-	hc := s.Healthcheck
-	set := 0
-	if hc.HTTP != "" {
-		set++
-	}
-	if hc.TCP != "" {
-		set++
-	}
-	if hc.Pgrep != "" {
-		set++
-	}
-	if set > 1 {
-		return fmt.Errorf("healthcheck must set exactly one of http/tcp/pgrep, got %d", set)
+	if err := s.Healthcheck.Validate(); err != nil {
+		return err
 	}
 	for _, m := range s.Mounts {
 		if m.Mount == "" {

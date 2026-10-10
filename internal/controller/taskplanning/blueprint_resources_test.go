@@ -19,10 +19,23 @@ func TestProjectServiceProjectionPreservesStableTopology(t *testing.T) {
 	// retaining the topology fields needed by Routes and operator reads.
 	t.Parallel()
 	serviceID := blueprintResourceID(ids.KindService, 1)
+	interval := composetypes.Duration(13 * time.Second)
+	start := composetypes.Duration(23 * time.Second)
+	startupInterval := composetypes.Duration(2 * time.Second)
+	timeout := composetypes.Duration(4 * time.Second)
+	retries := uint64(5)
 	project := &composetypes.Project{Services: composetypes.Services{
 		"api": {
 			Image: "example/api:1", Command: composetypes.ShellCommand{"serve"}, Restart: "unless-stopped",
 			Expose: []string{"8080"},
+			HealthCheck: &composetypes.HealthCheckConfig{
+				Test:          composetypes.HealthCheckTest{"CMD", "/app/check", "--ready"},
+				Interval:      &interval,
+				Timeout:       &timeout,
+				StartPeriod:   &start,
+				StartInterval: &startupInterval,
+				Retries:       &retries,
+			},
 			Networks: map[string]*composetypes.ServiceNetworkConfig{
 				"backend": {Aliases: []string{"api.internal"}}, "frontend": {},
 			},
@@ -39,6 +52,14 @@ func TestProjectServiceProjectionPreservesStableTopology(t *testing.T) {
 		ID: serviceID, Name: "api", Image: "example/api:1", Zones: []string{"backend", "frontend"},
 		Command: []string{"serve"}, Aliases: map[string][]string{"backend": {"api.internal"}},
 		Expose: []string{"8080"}, Restart: "unless-stopped", Replicas: 1,
+		Healthcheck: core.Healthcheck{
+			Test:          []string{"CMD", "/app/check", "--ready"},
+			Interval:      "13s",
+			Timeout:       "4s",
+			StartPeriod:   "23s",
+			StartInterval: "2s",
+			Retries:       5,
+		},
 	}}
 	if !reflect.DeepEqual(services, want) {
 		t.Fatalf("ProjectServiceProjection() = %#v, want %#v", services, want)

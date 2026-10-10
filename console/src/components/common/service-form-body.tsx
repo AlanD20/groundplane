@@ -4,10 +4,7 @@ import { editorFooterClassName } from "./workspace-section";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DrawerContent } from "@/components/ui/drawer";
 import { FormSection } from "@/components/ui/form-section";
 import { Input } from "@/components/ui/input";
@@ -16,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import type { BackingHooks } from "@/features/backing-service/api";
 import { BackingHookFields } from "@/features/backing-service/hook-fields";
 import { ImagePicker } from "@/features/image-delivery/image-picker";
+import { HealthcheckFields } from "@/features/service/healthcheck-fields";
 import { useStore } from "@/lib/store";
 import type { Service } from "@/lib/types";
 import { useState } from "react";
@@ -65,21 +63,9 @@ export function ServiceFormBody({
     initial?.onFailure ?? "switch_back",
   );
   const [zones, setZones] = useState<string[]>(initial?.zones ?? []);
-  const [hcKind, setHcKind] = useState<"http" | "tcp" | "pgrep" | "none">(
-    initial?.healthcheck?.kind ?? (isBacking ? "tcp" : "none"),
-  );
-  const [hcTarget, setHcTarget] = useState(
-    initial?.healthcheck?.target ?? (isBacking ? "5432" : ""),
-  );
-  const [hcInterval, setHcInterval] = useState(
-    initial?.healthcheck?.interval ?? "15s",
-  );
-  const [hcTimeout, setHcTimeout] = useState(
-    initial?.healthcheck?.timeout ?? "3s",
-  );
-  const [hcStart, setHcStart] = useState(
-    initial?.healthcheck?.startPeriod ?? "20s",
-  );
+  const [healthcheck, setHealthcheck] = useState(initial?.healthcheck ?? null);
+  const [healthcheckError, setHealthcheckError] = useState<string | null>(null);
+  const [healthcheckDirty, setHealthcheckDirty] = useState(false);
   const [mem, setMem] = useState(
     initial?.resources.mem ?? (isBacking ? "1g" : ""),
   );
@@ -95,7 +81,25 @@ export function ServiceFormBody({
   );
   const [replicas, setReplicas] = useState(String(initial?.replicas ?? 1));
   const [hooks, setHooks] = useState<BackingHooks>(initial?.hooks ?? {});
-  useDraftDirty([name, image, role, strategy, onFailure, zones, hcKind, hcTarget, hcInterval, hcTimeout, hcStart, mem, cpus, expose, restart, replicas, hooks], onDirtyChange);
+  useDraftDirty(
+    [
+      name,
+      image,
+      role,
+      strategy,
+      onFailure,
+      zones,
+      healthcheck,
+      healthcheckDirty,
+      mem,
+      cpus,
+      expose,
+      restart,
+      replicas,
+      hooks,
+    ],
+    onDirtyChange,
+  );
   const [hookError, setHookError] = useState<string | null>(null);
   // A backing service owns its own network: the zone named after it is
   // created with it, and consumers join it as `external` when they attach —
@@ -109,7 +113,6 @@ export function ServiceFormBody({
     if (isBacking) {
       backing?.onAdapterChange(key);
       backing?.onPrefixChange(a.prefix);
-      setHcTarget(port);
       if (!exposeEdited)
         setExpose(`${name.trim().toLowerCase() || "svc"}:${port}`);
     }
@@ -125,17 +128,15 @@ export function ServiceFormBody({
       zones: isBacking ? [backingZone] : zones,
       strategy,
       onFailure,
-      healthcheck:
-        hcKind === "none"
-          ? null
-          : {
-              kind: hcKind,
-              target: hcTarget.trim() || (hcKind === "tcp" ? "8080" : "/up"),
-              interval: hcInterval,
-              timeout: hcTimeout,
-              startPeriod: hcStart,
-              retries: initial?.healthcheck?.retries ?? 3,
-            },
+      healthcheck: healthcheck ?? {
+        test: ["NONE"],
+        disable: false,
+        interval: "",
+        timeout: "",
+        startPeriod: "",
+        startInterval: "",
+        retries: 0,
+      },
       resources: { mem: mem.trim() || "128m", cpus: cpus.trim() || "0.25" },
       expose: expose
         .split(",")
@@ -153,10 +154,11 @@ export function ServiceFormBody({
     !!name.trim() &&
     (isBacking ? !!backing.adapterKey : !!image.trim()) &&
     !submitting &&
-    !hookError;
+    !hookError &&
+    !healthcheckError;
 
   async function save() {
-    if (hookError) return;
+    if (hookError || healthcheckError) return;
     if (isBacking && onCreateBacking) {
       onCreateBacking(buildPatch(), backing.adapterKey, backing.prefix);
       return;
@@ -466,76 +468,22 @@ export function ServiceFormBody({
                 }
                 title="Health check"
               >
-                <div className="flex flex-col gap-4 sm:col-span-2">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="sv-healthcheck-kind">Healthcheck</Label>
-                      <Select
-                        id="sv-healthcheck-kind"
-                        value={hcKind}
-                        onValueChange={(v) =>
-                          setHcKind(v as "http" | "tcp" | "pgrep" | "none")
-                        }
-                        options={[
-                          { value: "http", label: "http" },
-                          { value: "tcp", label: "tcp" },
-                          { value: "pgrep", label: "pgrep" },
-                          { value: "none", label: "none" },
-                        ]}
-                      />
-                    </div>
-                    {hcKind !== "none" && (
-                      <>
-                        <div className="sm:col-span-2 flex flex-col gap-1.5">
-                          <Label htmlFor="sv-healthcheck-target">
-                            {hcKind === "http"
-                              ? "Healthcheck path"
-                              : hcKind === "tcp"
-                                ? "Healthcheck host:port"
-                                : hcKind === "pgrep"
-                                  ? "Healthcheck cmd"
-                                  : "—"}
-                          </Label>
-                          <Input
-                            id="sv-healthcheck-target"
-                            value={hcTarget}
-                            onChange={(e) => setHcTarget(e.target.value)}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="sv-healthcheck-interval">
-                            Interval
-                          </Label>
-                          <Input
-                            id="sv-healthcheck-interval"
-                            value={hcInterval}
-                            onChange={(e) => setHcInterval(e.target.value)}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="sv-healthcheck-timeout">
-                            Timeout
-                          </Label>
-                          <Input
-                            id="sv-healthcheck-timeout"
-                            value={hcTimeout}
-                            onChange={(e) => setHcTimeout(e.target.value)}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="sv-healthcheck-start">
-                            Start period
-                          </Label>
-                          <Input
-                            id="sv-healthcheck-start"
-                            value={hcStart}
-                            onChange={(e) => setHcStart(e.target.value)}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
+                <div className="sm:col-span-2">
+                  <HealthcheckFields
+                    value={healthcheck}
+                    onChange={setHealthcheck}
+                    onError={setHealthcheckError}
+                    onDirtyChange={setHealthcheckDirty}
+                  />
                 </div>
+                {healthcheckError && (
+                  <p
+                    className="sm:col-span-2 text-sm text-destructive"
+                    role="alert"
+                  >
+                    {healthcheckError}
+                  </p>
+                )}
               </FormSection>
             )}
           </div>
@@ -556,7 +504,9 @@ export function ServiceFormBody({
               {submitError}
             </p>
           )}
-          <DialogFooter onDiscard={onDiscard ?? onClose} pinned={inline}
+          <DialogFooter
+            onDiscard={onDiscard ?? onClose}
+            pinned={inline}
             className={inline ? editorFooterClassName : undefined}
           >
             <Button

@@ -3440,13 +3440,15 @@ type ServiceEdit struct {
 
 // ServiceHealthcheck defines model for ServiceHealthcheck.
 type ServiceHealthcheck struct {
-	Http        *string `json:"http,omitempty"`
-	Interval    *string `json:"interval,omitempty"`
-	Pgrep       *string `json:"pgrep,omitempty"`
-	Retries     *int64  `json:"retries,omitempty"`
-	StartPeriod *string `json:"start_period,omitempty"`
-	Tcp         *string `json:"tcp,omitempty"`
-	Timeout     *string `json:"timeout,omitempty"`
+	Disable       *bool   `json:"disable,omitempty"`
+	Interval      *string `json:"interval,omitempty"`
+	Retries       *int64  `json:"retries,omitempty"`
+	StartInterval *string `json:"start_interval,omitempty"`
+	StartPeriod   *string `json:"start_period,omitempty"`
+
+	// Test Native Compose check: CMD and literal arguments, CMD-SHELL and one shell command, or NONE
+	Test    *[]string `json:"test,omitempty"`
+	Timeout *string   `json:"timeout,omitempty"`
 }
 
 // ServiceLogging defines model for ServiceLogging.

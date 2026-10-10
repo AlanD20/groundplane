@@ -9,6 +9,7 @@ import { ResourcePanel } from "@/components/common/resource-panel";
 import { ImageReference } from "@/components/common/image-reference";
 import type { Environment, Service } from "@/lib/types";
 import { ServiceWorkloadSettingsForm } from "./service-workload-settings";
+import { describeHealthcheck } from "./healthcheck";
 
 type ServiceSettingsSection = ServiceFormSection | "process" | "relationships";
 
@@ -133,7 +134,7 @@ export function ServiceSettings({
       label: "Healthcheck",
       description: "How Groundplane checks readiness.",
       value: service.healthcheck
-        ? `${service.healthcheck.kind} · ${service.healthcheck.target}`
+        ? describeHealthcheck(service.healthcheck)
         : "Not configured",
     },
     {

@@ -1,4 +1,5 @@
 import { CompactReference } from "@/components/common/compact-reference";
+import { describeHealthcheck } from "@/features/service/healthcheck";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { Button } from "@/components/ui/button";
 import { useSearchParams } from "react-router-dom";
@@ -138,7 +139,7 @@ export function ServiceTab({
             <>
               <Row
                 label="Check"
-                value={`${svc.healthcheck.kind.toUpperCase()} ${svc.healthcheck.target}`}
+                value={describeHealthcheck(svc.healthcheck)}
                 mono
               />
               <Row

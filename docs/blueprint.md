@@ -345,6 +345,11 @@ services:
       on_failure: switch_back
 ```
 
+Healthchecks remain native Compose input: `CMD` with executable/arguments,
+`CMD-SHELL` with one shell command, or `NONE` to disable. Timing fields also
+include `start_period`, `start_interval` and `retries`; direct Service editing
+uses this same representation. Blue-green requires an enabled explicit check.
+
 When authored, `default_strategy` is `blue-green` or `recreate`; `rolling`
 remains deferred.
 When the extension is present, `default_strategy` is required. Blue-green supports one

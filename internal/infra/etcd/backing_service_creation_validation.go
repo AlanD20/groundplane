@@ -15,7 +15,7 @@ func validateBackingServiceAdapterCreationShape(service core.Service, custom boo
 	health := service.Healthcheck
 	if service.Authentication != "" || service.FactsPrefix != "" || len(service.Mounts) != 0 ||
 		len(service.Command) != 0 || len(service.Expose) != 0 ||
-		health.HTTP != "" || health.TCP != "" || health.Pgrep != "" {
+		!health.Empty() {
 		return errs.New(errs.KindValidationFailed, "custom backing-service creation must be network-only")
 	}
 	return nil

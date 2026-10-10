@@ -3624,13 +3624,14 @@ export interface components {
             zones: string[] | null;
         };
         ServiceHealthcheck: {
-            http?: string;
+            disable?: boolean;
             interval?: string;
-            pgrep?: string;
             /** Format: int64 */
             retries?: number;
+            start_interval?: string;
             start_period?: string;
-            tcp?: string;
+            /** @description Native Compose check: CMD and literal arguments, CMD-SHELL and one shell command, or NONE */
+            test?: string[] | null;
             timeout?: string;
         };
         ServiceLogging: {

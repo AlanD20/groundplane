@@ -16,8 +16,10 @@ func TestRenderedBlueGreenLeavesOppositeSlotUninstantiated(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 39)
 	releaseID := composeIdentityTestID(ids.KindDeployment, 40)
 	input := composeRenderTestInput(&composetypes.Project{Services: composetypes.Services{"api": {
-		Image:  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		Expose: []string{"8080"}, HealthCheck: &composetypes.HealthCheckConfig{},
+		Image: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Expose: []string{
+			"8080",
+		}, HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}},
 	}}})
 	input.Identities.Services = []composeidentity.Resource{{ID: serviceID, Name: "api"}}
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {

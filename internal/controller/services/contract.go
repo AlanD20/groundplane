@@ -161,13 +161,12 @@ func applyServiceEdit(current core.Service, input apiTypes.ServiceEdit) core.Ser
 
 func serviceHealthcheckToCore(input apiTypes.ServiceHealthcheck) core.Healthcheck {
 	return core.Healthcheck{
-		HTTP:        input.HTTP,
-		TCP:         input.TCP,
-		Pgrep:       input.Pgrep,
-		Interval:    input.Interval,
-		Timeout:     input.Timeout,
-		StartPeriod: input.StartPeriod,
-		Retries:     input.Retries,
+		Test: append([]string(nil), input.Test...), Disable: input.Disable,
+		Interval:      input.Interval,
+		Timeout:       input.Timeout,
+		StartPeriod:   input.StartPeriod,
+		StartInterval: input.StartInterval,
+		Retries:       input.Retries,
 	}
 }
 
@@ -180,6 +179,11 @@ func validateDirectServiceDesired(environmentID string, desired core.Service) er
 	}
 	if desired.Replicas < 1 {
 		return errs.New(errs.KindValidationFailed, "Service replicas must be positive")
+	}
+	if err := desired.Healthcheck.Validate(); err != nil {
+		// Healthcheck validation describes only closed field names and limits,
+		// never the command contents or a provider response.
+		return errs.New(errs.KindValidationFailed, err.Error())
 	}
 	if err := desired.Validate(); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)
@@ -465,12 +469,12 @@ func serviceStringListIntentValue(values []string) requestidempotency.Value {
 
 func serviceHealthcheckIntentValue(value apiTypes.ServiceHealthcheck) requestidempotency.Value {
 	return requestidempotency.Object(
-		requestidempotency.Field{Name: "http", Value: requestidempotency.String(value.HTTP)},
+		requestidempotency.Field{Name: "test", Value: serviceStringListIntentValue(value.Test)},
+		requestidempotency.Field{Name: "disable", Value: requestidempotency.Bool(value.Disable)},
 		requestidempotency.Field{Name: "interval", Value: requestidempotency.String(value.Interval)},
-		requestidempotency.Field{Name: "pgrep", Value: requestidempotency.String(value.Pgrep)},
 		requestidempotency.Field{Name: "retries", Value: requestidempotency.Integer(int64(value.Retries))},
 		requestidempotency.Field{Name: "start_period", Value: requestidempotency.String(value.StartPeriod)},
-		requestidempotency.Field{Name: "tcp", Value: requestidempotency.String(value.TCP)},
+		requestidempotency.Field{Name: "start_interval", Value: requestidempotency.String(value.StartInterval)},
 		requestidempotency.Field{Name: "timeout", Value: requestidempotency.String(value.Timeout)},
 	)
 }

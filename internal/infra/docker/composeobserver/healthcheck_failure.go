@@ -1,6 +1,7 @@
 package composeobserver
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -18,13 +19,39 @@ func healthcheckDiagnostic(config *container.Config, state *container.State) age
 	if latest == nil {
 		return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED
 	}
+	test := config.Healthcheck.Test
+	// A direct CMD that cannot start has no process exit status. Docker records
+	// -1 and the runtime error; do not confuse it with a probe timeout (also -1).
+	if latest.ExitCode == -1 && len(test) > 1 && test[0] == "CMD" {
+		command := "exec: " + strconv.Quote(test[1]) + ": "
+		if strings.Contains(latest.Output, command+"executable file not found in $PATH") ||
+			strings.Contains(latest.Output, command+"stat "+test[1]+": no such file or directory") {
+			return missingHealthcheckExecutable(test)
+		}
+		if strings.Contains(latest.Output, command+"permission denied") {
+			return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_NOT_EXECUTABLE
+		}
+	}
 	if latest.ExitCode == 126 {
 		return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_NOT_EXECUTABLE
 	}
 	if latest.ExitCode != 127 {
 		return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED
 	}
-	test := config.Healthcheck.Test
+	return missingHealthcheckExecutable(test)
+}
+
+func missingHealthcheckExecutable(test []string) agentpb.ComposeHelperDiagnostic {
+	if len(test) > 1 && test[0] == "CMD" {
+		switch test[1] {
+		case "pgrep":
+			return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_PGREP_MISSING
+		case "curl":
+			return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_CURL_MISSING
+		case "nc":
+			return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_NC_MISSING
+		}
+	}
 	if len(test) == 2 && test[0] == "CMD-SHELL" {
 		switch {
 		case quotedHealthcheckArgument(test[1], "pgrep -f -- ", " >/dev/null"):

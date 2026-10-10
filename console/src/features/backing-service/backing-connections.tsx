@@ -1,4 +1,5 @@
 import { Disclosure } from "@/components/common/disclosure";
+import { describeHealthcheck } from "@/features/service/healthcheck";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -351,7 +352,7 @@ export function ConnectionsTab({
                 <span className="text-muted-foreground">Healthcheck</span>
                 <span className="font-mono text-xs">
                   {svc.healthcheck
-                    ? `${svc.healthcheck.kind} ${svc.healthcheck.target} · every ${svc.healthcheck.interval}`
+                    ? `${describeHealthcheck(svc.healthcheck)} · every ${svc.healthcheck.interval || "Docker default"}`
                     : "none"}
                 </span>
               </div>

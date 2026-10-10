@@ -27,21 +27,20 @@ func TestServiceValidate_AcceptsImplementedStrategies(t *testing.T) {
 	}
 }
 
-func TestServiceValidate_HealthcheckExactlyOneKind(t *testing.T) {
-	// Rationale: mvp.md's environment-document mapping table locks
-	// healthcheck to exactly one of http/tcp/pgrep — zero or two+ set is
-	// ambiguous and must be rejected before it ever reaches a render.
+func TestServiceValidate_HealthcheckCommand(t *testing.T) {
+	// Rationale: a shell check must be one command; a second payload would be
+	// ignored by Docker and must be rejected before rendering.
 	base := Service{ID: "svc_x", Name: "app-api", Image: "app:latest"}
 
 	none := base
 	if err := none.Validate(); err != nil {
-		t.Errorf("zero healthcheck kinds should be valid (optional): %v", err)
+		t.Errorf("absent healthcheck should be valid: %v", err)
 	}
 
 	both := base
-	both.Healthcheck = Healthcheck{HTTP: "/up", TCP: "localhost:5432"}
+	both.Healthcheck = Healthcheck{Test: []string{"CMD-SHELL", "curl localhost", "pgrep worker"}}
 	if err := both.Validate(); err == nil {
-		t.Error("expected Validate() to reject two healthcheck kinds set at once, got nil")
+		t.Error("expected rejection of a shell check with two commands")
 	}
 }
 

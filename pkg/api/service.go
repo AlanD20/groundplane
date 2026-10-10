@@ -13,13 +13,13 @@ const (
 )
 
 type ServiceHealthcheck struct {
-	HTTP        string `json:"http,omitempty"`
-	TCP         string `json:"tcp,omitempty"`
-	Pgrep       string `json:"pgrep,omitempty"`
-	Interval    string `json:"interval,omitempty"`
-	Timeout     string `json:"timeout,omitempty"`
-	StartPeriod string `json:"start_period,omitempty"`
-	Retries     int    `json:"retries,omitempty"`
+	Test          []string `json:"test,omitempty" doc:"Native Compose check: CMD and literal arguments, CMD-SHELL and one shell command, or NONE"`
+	Disable       bool     `json:"disable,omitempty"`
+	Interval      string   `json:"interval,omitempty"`
+	Timeout       string   `json:"timeout,omitempty"`
+	StartPeriod   string   `json:"start_period,omitempty"`
+	StartInterval string   `json:"start_interval,omitempty"`
+	Retries       int      `json:"retries,omitempty"`
 }
 
 type ServiceResources struct {

@@ -76,7 +76,7 @@ func renderServiceProxyTopology(
 				ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected,
 				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
-				HasHealthcheck:   authored.HealthCheck != nil && !authored.HealthCheck.Disable,
+				HasHealthcheck:   ProjectServiceHealthcheck(authored.HealthCheck).Enabled(),
 				ImageReference:   authored.Image,
 			}
 			if err := bindEnvironmentComponentImage(input.Identities.Services, authored, service); err != nil {
@@ -84,6 +84,13 @@ func renderServiceProxyTopology(
 			}
 			result = append(result, service)
 			continue
+		}
+		if identity.Strategy == domain.StrategyBlueGreen && !ProjectServiceHealthcheck(authored.HealthCheck).Enabled() {
+			return nil, errs.Newf(
+				errs.KindValidationFailed,
+				"Service %q: blue-green requires an enabled healthcheck with an explicit command; configure one or select recreate",
+				name,
+			)
 		}
 		if len(exposures) == 0 {
 			if identity.Strategy == domain.StrategyBlueGreen {
@@ -129,7 +136,7 @@ func renderServiceProxyTopology(
 				result = append(result, &agentpb.ComposeService{
 					ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected,
 					ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
-					HasHealthcheck:   authored.HealthCheck != nil && !authored.HealthCheck.Disable,
+					HasHealthcheck:   ProjectServiceHealthcheck(authored.HealthCheck).Enabled(),
 					ImageReference:   authored.Image,
 					Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
 					OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
@@ -286,7 +293,7 @@ func renderServiceProxyTopology(
 				ServiceId: serviceID, ComposeName: workloadName, ExpectedLabels: expected,
 				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
-				HasHealthcheck:   workload.HealthCheck != nil && !workload.HealthCheck.Disable,
+				HasHealthcheck:   ProjectServiceHealthcheck(workload.HealthCheck).Enabled(),
 				ImageReference:   workload.Image,
 				Role:             serviceRole, Slot: slot,
 			})

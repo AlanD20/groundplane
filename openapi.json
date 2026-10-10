@@ -6316,24 +6316,31 @@
       "ServiceHealthcheck": {
         "additionalProperties": false,
         "properties": {
-          "http": {
-            "type": "string"
+          "disable": {
+            "type": "boolean"
           },
           "interval": {
-            "type": "string"
-          },
-          "pgrep": {
             "type": "string"
           },
           "retries": {
             "format": "int64",
             "type": "integer"
           },
+          "start_interval": {
+            "type": "string"
+          },
           "start_period": {
             "type": "string"
           },
-          "tcp": {
-            "type": "string"
+          "test": {
+            "description": "Native Compose check: CMD and literal arguments, CMD-SHELL and one shell command, or NONE",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "timeout": {
             "type": "string"

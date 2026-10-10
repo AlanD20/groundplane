@@ -75,16 +75,20 @@ func TestShowServiceProjectsStableOwnerAndFullDesiredState(t *testing.T) {
 	record := testservices.ServiceRecord{
 		EnvironmentID: environmentID,
 		Desired: core.Service{
-			ID:          serviceID,
-			Name:        "api",
-			Image:       "app:stable",
-			Zones:       []string{"backend"},
-			Strategy:    core.StrategyRecreate,
-			OnFailure:   core.OnFailureSwitchBack,
-			Healthcheck: core.Healthcheck{HTTP: "/up", Interval: "10s", Retries: 3},
-			Resources:   core.Resources{Mem: "512m", CPUs: 0.5},
-			Expose:      []string{"8080"},
-			Replicas:    2,
+			ID:        serviceID,
+			Name:      "api",
+			Image:     "app:stable",
+			Zones:     []string{"backend"},
+			Strategy:  core.StrategyRecreate,
+			OnFailure: core.OnFailureSwitchBack,
+			Healthcheck: core.Healthcheck{
+				Test:     []string{"CMD", "curl", "-fsS", "--", "http://127.0.0.1/up"},
+				Interval: "10s",
+				Retries:  3,
+			},
+			Resources: core.Resources{Mem: "512m", CPUs: 0.5},
+			Expose:    []string{"8080"},
+			Replicas:  2,
 		},
 		Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
 	}
@@ -95,7 +99,7 @@ func TestShowServiceProjectsStableOwnerAndFullDesiredState(t *testing.T) {
 	}, releases: releases}
 	output, err := server.showService(context.Background(), &serviceShowInput{ID: serviceID})
 	if err != nil || output.Body.EnvironmentID != environmentID || output.Body.Healthcheck == nil ||
-		output.Body.Healthcheck.HTTP != "/up" ||
+		len(output.Body.Healthcheck.Test) != 5 || output.Body.Healthcheck.Test[4] != "http://127.0.0.1/up" ||
 		output.Body.Resources.CPUs != 0.5 || output.Body.NativeCompose == "" ||
 		output.Body.ReleaseLedger.Revision != 73 || releases.request.EnvironmentID != environmentID ||
 		releases.request.ServiceID != serviceID || releases.request.Limit != 50 {

@@ -147,12 +147,13 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		t.Fatal(err)
 	}
 	desired := core.Service{
-		ID:       serviceID,
-		Name:     "api",
-		Image:    "api:first",
-		Strategy: core.StrategyBlueGreen,
-		Replicas: 1,
-		Expose:   []string{"8080"},
+		ID:          serviceID,
+		Name:        "api",
+		Image:       "api:first",
+		Strategy:    core.StrategyBlueGreen,
+		Healthcheck: core.Healthcheck{Test: []string{"CMD", "true"}},
+		Replicas:    1,
+		Expose:      []string{"8080"},
 	}
 	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:     environmentID,

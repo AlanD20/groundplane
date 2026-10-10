@@ -75,6 +75,13 @@ func (service *Service) prepareSelectedWorkloads(
 			return WorkloadPreparation{}, strategyErr
 		}
 		if strategy == domain.StrategyBlueGreen {
+			if !desired.Healthcheck.Enabled() {
+				return WorkloadPreparation{}, errs.Newf(
+					errs.KindValidationFailed,
+					"Service %q: blue-green requires an enabled healthcheck with an explicit command; configure one or select recreate",
+					desired.Name,
+				)
+			}
 			if desired.Replicas != 1 {
 				return WorkloadPreparation{}, errs.New(
 					errs.KindValidationFailed,

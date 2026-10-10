@@ -42,9 +42,10 @@ func serviceRollbackBody(input apiTypes.RollbackRequest) generated.ServiceRollba
 
 func serviceHealthcheckBody(input apiTypes.ServiceHealthcheck) generated.ServiceHealthcheck {
 	result := generated.ServiceHealthcheck{
-		Http: optionalServiceString(input.HTTP), Tcp: optionalServiceString(input.TCP),
-		Pgrep: optionalServiceString(input.Pgrep), Interval: optionalServiceString(input.Interval),
-		Timeout: optionalServiceString(input.Timeout), StartPeriod: optionalServiceString(input.StartPeriod),
+		Test: optionalServiceStrings(input.Test), Disable: &input.Disable,
+		Interval: optionalServiceString(input.Interval),
+		Timeout:  optionalServiceString(input.Timeout), StartPeriod: optionalServiceString(input.StartPeriod),
+		StartInterval: optionalServiceString(input.StartInterval),
 	}
 	if input.Retries != 0 {
 		value := int64(input.Retries)

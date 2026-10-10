@@ -337,17 +337,16 @@ func serviceResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 }
 
 func serviceHealthcheckResponse(value core.Healthcheck) *apiTypes.ServiceHealthcheck {
-	if value == (core.Healthcheck{}) {
+	if value.Empty() {
 		return nil
 	}
 	return &apiTypes.ServiceHealthcheck{
-		HTTP:        value.HTTP,
-		TCP:         value.TCP,
-		Pgrep:       value.Pgrep,
-		Interval:    value.Interval,
-		Timeout:     value.Timeout,
-		StartPeriod: value.StartPeriod,
-		Retries:     value.Retries,
+		Test: append([]string(nil), value.Test...), Disable: value.Disable,
+		Interval:      value.Interval,
+		Timeout:       value.Timeout,
+		StartPeriod:   value.StartPeriod,
+		StartInterval: value.StartInterval,
+		Retries:       value.Retries,
 	}
 }
 

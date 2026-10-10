@@ -2,7 +2,6 @@ package services
 
 import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
-	"github.com/AlanD20/groundplane/internal/core"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -20,15 +19,16 @@ func serviceAPIResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 		FactsPrefix: record.Desired.FactsPrefix, Label: record.Desired.Label, BackingNetworkID: record.BackingNetworkID,
 		Hooks: taskplanning.BackingHookConfigurationToAPI(record.Desired.Hooks),
 	}
-	if record.Desired.Healthcheck != (core.Healthcheck{}) {
+	if !record.Desired.Healthcheck.Empty() {
 		response.Healthcheck = &apiTypes.ServiceHealthcheck{
-			HTTP:        record.Desired.Healthcheck.HTTP,
-			TCP:         record.Desired.Healthcheck.TCP,
-			Pgrep:       record.Desired.Healthcheck.Pgrep,
-			Interval:    record.Desired.Healthcheck.Interval,
-			Timeout:     record.Desired.Healthcheck.Timeout,
-			StartPeriod: record.Desired.Healthcheck.StartPeriod,
-			Retries:     record.Desired.Healthcheck.Retries,
+			Test: append(
+				[]string(nil),
+				record.Desired.Healthcheck.Test...), Disable: record.Desired.Healthcheck.Disable,
+			Interval:      record.Desired.Healthcheck.Interval,
+			Timeout:       record.Desired.Healthcheck.Timeout,
+			StartPeriod:   record.Desired.Healthcheck.StartPeriod,
+			StartInterval: record.Desired.Healthcheck.StartInterval,
+			Retries:       record.Desired.Healthcheck.Retries,
 		}
 	}
 	response.Command = append([]string(nil), record.Desired.Command...)

@@ -89,19 +89,17 @@ const (
 	ZoneOwnerBackingProject ZoneOwnerKind = "backing_project"
 )
 
-// Healthcheck matches exactly one of the three declared kinds. The
-// renderer compiles this to native Compose `healthcheck.test` (see
-// blueprint.md's Compose base document example: `test: [CMD, curl, -f,
-// http://localhost/up]`).
+// Healthcheck is the native Compose check, shared by authored Blueprints and
+// direct Service edits. Test starts with CMD, CMD-SHELL, or NONE.
 type Healthcheck struct {
-	HTTP  string `yaml:"http,omitempty"  json:"http,omitempty"`  // path, e.g. "/up"
-	TCP   string `yaml:"tcp,omitempty"   json:"tcp,omitempty"`   // host:port
-	Pgrep string `yaml:"pgrep,omitempty" json:"pgrep,omitempty"` // process name/cmd
+	Test    []string `yaml:"test,omitempty" json:"test,omitempty"`
+	Disable bool     `yaml:"disable,omitempty" json:"disable,omitempty"`
 
-	Interval    string `yaml:"interval,omitempty"     json:"interval,omitempty"`
-	Timeout     string `yaml:"timeout,omitempty"      json:"timeout,omitempty"`
-	StartPeriod string `yaml:"start_period,omitempty" json:"start_period,omitempty"`
-	Retries     int    `yaml:"retries,omitempty"      json:"retries,omitempty"`
+	Interval      string `yaml:"interval,omitempty"     json:"interval,omitempty"`
+	Timeout       string `yaml:"timeout,omitempty"      json:"timeout,omitempty"`
+	StartPeriod   string `yaml:"start_period,omitempty" json:"start_period,omitempty"`
+	StartInterval string `yaml:"start_interval,omitempty" json:"start_interval,omitempty"`
+	Retries       int    `yaml:"retries,omitempty"      json:"retries,omitempty"`
 }
 
 type Resources struct {

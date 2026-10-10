@@ -1,115 +1,64 @@
 package composerender
 
 import (
-	"github.com/AlanD20/groundplane/internal/core"
-	"gopkg.in/yaml.v3"
 	"strconv"
-	"strings"
+
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/compose-spec/compose-go/v2/types"
+	"gopkg.in/yaml.v3"
 )
 
 func serviceNodeHasHealthcheck(service *yaml.Node) bool {
 	index := MappingIndex(service, "healthcheck")
-	if index < 0 || service.Content[index+1].Kind != yaml.MappingNode {
+	if index < 0 {
 		return false
 	}
-	health := service.Content[index+1]
-	if disabled := MappingIndex(health, "disable"); disabled >= 0 {
-		var value bool
-		if health.Content[disabled+1].Decode(&value) != nil || value {
-			return false
-		}
+	var health core.Healthcheck
+	if service.Content[index+1].Decode(&health) != nil {
+		return false
 	}
-	if test := MappingIndex(health, "test"); test >= 0 {
-		value := health.Content[test+1]
-		return value.Kind != yaml.SequenceNode || len(value.Content) == 0 || value.Content[0].Value != "NONE"
-	}
-	return true
+	return health.Enabled()
 }
 
-// Only the exact typed rendering is editable through the typed healthcheck
-// control. Extra native fields and arbitrary commands retain Blueprint authority.
-func typedServiceHealthcheck(node *yaml.Node) bool {
-	var native struct {
-		Test        []string `yaml:"test"`
-		Interval    string   `yaml:"interval"`
-		Timeout     string   `yaml:"timeout"`
-		StartPeriod string   `yaml:"start_period"`
-		Retries     int      `yaml:"retries"`
+// ProjectServiceHealthcheck retains every native check field in the editable
+// desired model; Blueprint imports and direct edits use the same representation.
+func ProjectServiceHealthcheck(value *types.HealthCheckConfig) core.Healthcheck {
+	if value == nil {
+		return core.Healthcheck{}
 	}
-	if node.Kind != yaml.MappingNode || node.Decode(&native) != nil ||
-		len(native.Test) != 2 || native.Test[0] != "CMD-SHELL" {
-		return false
-	}
-	health := core.Healthcheck{
-		Interval: native.Interval, Timeout: native.Timeout, StartPeriod: native.StartPeriod, Retries: native.Retries,
-	}
-	command := native.Test[1]
-	switch {
-	case strings.HasPrefix(command, "curl -fsS -- ") && strings.HasSuffix(command, " >/dev/null"):
-		url := unquoteHealthcheckValue(strings.TrimSuffix(strings.TrimPrefix(command, "curl -fsS -- "), " >/dev/null"))
-		health.HTTP = strings.TrimPrefix(url, "http://127.0.0.1")
-	case strings.HasPrefix(command, "nc -z -- "):
-		host, port, ok := strings.Cut(strings.TrimPrefix(command, "nc -z -- "), "' '")
-		if !ok {
-			return false
-		}
-		health.TCP = unquoteHealthcheckValue(host+"'") + ":" + unquoteHealthcheckValue("'"+port)
-	case strings.HasPrefix(command, "pgrep -f -- ") && strings.HasSuffix(command, " >/dev/null"):
-		health.Pgrep = unquoteHealthcheckValue(
-			strings.TrimSuffix(strings.TrimPrefix(command, "pgrep -f -- "), " >/dev/null"),
-		)
-	default:
-		return false
-	}
-	return equalHealthcheckNodes(node, serviceHealthcheckNode(health))
-}
-
-func unquoteHealthcheckValue(value string) string {
-	if len(value) < 2 || value[0] != '\'' || value[len(value)-1] != '\'' {
-		return ""
-	}
-	return strings.ReplaceAll(value[1:len(value)-1], "'\"'\"'", "'")
-}
-
-func equalHealthcheckNodes(left, right *yaml.Node) bool {
-	if left.Kind != right.Kind || left.Tag != right.Tag || left.Value != right.Value ||
-		len(left.Content) != len(right.Content) {
-		return false
-	}
-	if left.Kind == yaml.MappingNode {
-		for index := 0; index < len(left.Content); index += 2 {
-			other := MappingIndex(right, left.Content[index].Value)
-			if other < 0 || !equalHealthcheckNodes(left.Content[index+1], right.Content[other+1]) {
-				return false
-			}
-		}
-		return true
-	}
-	for index := range left.Content {
-		if !equalHealthcheckNodes(left.Content[index], right.Content[index]) {
-			return false
+	result := core.Healthcheck{Test: append([]string(nil), value.Test...), Disable: value.Disable}
+	for _, field := range []struct {
+		source *types.Duration
+		target *string
+	}{
+		{value.Interval, &result.Interval}, {value.Timeout, &result.Timeout},
+		{value.StartPeriod, &result.StartPeriod}, {value.StartInterval, &result.StartInterval},
+	} {
+		if field.source != nil {
+			*field.target = field.source.String()
 		}
 	}
-	return true
+	if value.Retries != nil {
+		result.Retries = int(*value.Retries)
+	}
+	return result
 }
 
 func serviceHealthcheckNode(health core.Healthcheck) *yaml.Node {
 	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	command := ""
-	switch {
-	case health.HTTP != "":
-		command = "curl -fsS -- " + shellQuote("http://127.0.0.1"+health.HTTP) + " >/dev/null"
-	case health.TCP != "":
-		host, port, _ := strings.Cut(health.TCP, ":")
-		command = "nc -z -- " + shellQuote(host) + " " + shellQuote(port)
-	default:
-		command = "pgrep -f -- " + shellQuote(health.Pgrep) + " >/dev/null"
+	if len(health.Test) > 0 {
+		test := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		for _, arg := range health.Test {
+			test.Content = append(test.Content, scalarNode(arg))
+		}
+		AppendMappingValue(node, "test", test)
 	}
-	test := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-	test.Content = append(test.Content, scalarNode("CMD-SHELL"), scalarNode(command))
-	AppendMappingValue(node, "test", test)
+	if health.Disable {
+		AppendMappingValue(node, "disable", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
+	}
 	for _, field := range []struct{ key, value string }{
-		{"interval", health.Interval}, {"timeout", health.Timeout}, {"start_period", health.StartPeriod},
+		{"interval", health.Interval}, {"timeout", health.Timeout},
+		{"start_period", health.StartPeriod}, {"start_interval", health.StartInterval},
 	} {
 		if field.value != "" {
 			AppendMappingValue(node, field.key, scalarNode(field.value))

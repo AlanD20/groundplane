@@ -77,6 +77,7 @@ func ProjectServiceProjection(
 			WorkingDir: config.WorkingDir, User: config.User, Aliases: aliases,
 			DependsOn: dependsOn, Expose: append([]string(nil), config.Expose...),
 			Restart: config.Restart, Replicas: config.GetScale(),
+			Healthcheck: composerender.ProjectServiceHealthcheck(config.HealthCheck),
 		}
 		if config.Logging != nil {
 			service.Logging.MaxSize = config.Logging.Options["max-size"]
@@ -90,6 +91,9 @@ func ProjectServiceProjection(
 		if extension.Release != nil {
 			service.Strategy = extension.Release.DefaultStrategy
 			service.OnFailure = extension.Release.OnFailure
+		}
+		if err := service.Healthcheck.Validate(); err != nil {
+			return nil, errs.Newf(errs.KindValidationFailed, "Service %q: %s", name, err.Error())
 		}
 		if err := service.Validate(); err != nil {
 			return nil, errs.Wrap(errs.KindValidationFailed, err)

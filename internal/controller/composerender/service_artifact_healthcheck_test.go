@@ -11,11 +11,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Rationale: the CLI's replicas-only edit round-trips the typed Service, which
-// cannot represent an authored custom CMD healthcheck. Replica edits must retain
-// that native check for the next sealed Release acknowledgement.
-func TestServiceReplicaEditPreservesUnrepresentedComposeHealthcheck(t *testing.T) {
-	mutated := mutateReplicaHealthcheck(t, "    healthcheck:\n      test: [CMD, php, probe.php]\n", core.Healthcheck{})
+// Rationale: replica edits round-trip native custom healthchecks without dropping
+// the check needed for sealed Release acknowledgement.
+func TestServiceReplicaEditPreservesComposeHealthcheck(t *testing.T) {
+	mutated := mutateReplicaHealthcheck(
+		t,
+		"    healthcheck:\n      test: [CMD, php, probe.php]\n",
+		core.Healthcheck{Test: []string{"CMD", "php", "probe.php"}},
+	)
 	var document struct {
 		Services map[string]struct {
 			Healthcheck *struct {
@@ -53,13 +56,13 @@ func TestServiceHealthcheckEditBoundaries(t *testing.T) {
       test: [CMD-SHELL, "pgrep -f -- 'worker' >/dev/null"]
 `},
 		{name: "replace custom", native: "    healthcheck:\n      test: [CMD, php, probe.php]\n",
-			typed: core.Healthcheck{HTTP: "/up"}, wantHealth: true, wantNode: true},
+			typed: core.Healthcheck{Test: []string{"CMD", "curl", "-fsS", "--", "http://127.0.0.1/up"}}, wantHealth: true, wantNode: true},
 		{name: "native timing", native: `    healthcheck:
       test: [CMD-SHELL, "curl -fsS -- 'http://127.0.0.1/up' >/dev/null"]
       start_interval: 1s
-`, wantHealth: true, wantNode: true},
-		{name: "disabled", native: "    healthcheck:\n      disable: true\n      test: [CMD, php, probe.php]\n", wantNode: true},
-		{name: "NONE", native: "    healthcheck:\n      test: [NONE]\n", wantNode: true},
+`, typed: core.Healthcheck{Test: []string{"CMD-SHELL", "curl -fsS -- 'http://127.0.0.1/up' >/dev/null"}, StartInterval: "1s"}, wantHealth: true, wantNode: true},
+		{name: "disabled", native: "    healthcheck:\n      disable: true\n      test: [CMD, php, probe.php]\n", typed: core.Healthcheck{Disable: true, Test: []string{"CMD", "php", "probe.php"}}, wantNode: true},
+		{name: "NONE", native: "    healthcheck:\n      test: [NONE]\n", typed: core.Healthcheck{Test: []string{"NONE"}}, wantNode: true},
 		{name: "absent"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -88,7 +91,7 @@ func TestServiceHealthcheckEditBoundaries(t *testing.T) {
 				if err := service.Content[index+1].Decode(&health); err != nil {
 					t.Fatal(err)
 				}
-				if !slices.Equal(health.Test, []string{"CMD-SHELL", "curl -fsS -- 'http://127.0.0.1/up' >/dev/null"}) {
+				if !slices.Equal(health.Test, []string{"CMD", "curl", "-fsS", "--", "http://127.0.0.1/up"}) {
 					t.Fatalf("replacement healthcheck = %v", health.Test)
 				}
 			}

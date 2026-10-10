@@ -67,7 +67,15 @@ export function DesiredStateTab({
             ? []
             : (adapter?.envVars ?? []),
       healthcheck: svc.healthcheck
-        ? { kind: svc.healthcheck.kind, target: svc.healthcheck.target }
+        ? {
+            test: svc.healthcheck.test,
+            disable: svc.healthcheck.disable,
+            interval: svc.healthcheck.interval,
+            timeout: svc.healthcheck.timeout,
+            start_period: svc.healthcheck.startPeriod,
+            start_interval: svc.healthcheck.startInterval,
+            retries: svc.healthcheck.retries,
+          }
         : undefined,
       volume: adapter?.custom ? undefined : "volumes/data",
     },

@@ -67,34 +67,15 @@ export function serviceFromAPI(service: ServiceDocument): Service {
     );
   }
   const healthcheck = service.healthcheck
-    ? service.healthcheck.http
-      ? {
-          kind: "http" as const,
-          target: service.healthcheck.http,
-          interval: service.healthcheck.interval ?? "",
-          timeout: service.healthcheck.timeout ?? "",
-          startPeriod: service.healthcheck.start_period ?? "",
-          retries: service.healthcheck.retries ?? 0,
-        }
-      : service.healthcheck.tcp
-        ? {
-            kind: "tcp" as const,
-            target: service.healthcheck.tcp,
-            interval: service.healthcheck.interval ?? "",
-            timeout: service.healthcheck.timeout ?? "",
-            startPeriod: service.healthcheck.start_period ?? "",
-            retries: service.healthcheck.retries ?? 0,
-          }
-        : service.healthcheck.pgrep
-          ? {
-              kind: "pgrep" as const,
-              target: service.healthcheck.pgrep,
-              interval: service.healthcheck.interval ?? "",
-              timeout: service.healthcheck.timeout ?? "",
-              startPeriod: service.healthcheck.start_period ?? "",
-              retries: service.healthcheck.retries ?? 0,
-            }
-          : null
+    ? {
+        test: [...(service.healthcheck.test ?? [])],
+        disable: service.healthcheck.disable ?? false,
+        interval: service.healthcheck.interval ?? "",
+        timeout: service.healthcheck.timeout ?? "",
+        startPeriod: service.healthcheck.start_period ?? "",
+        startInterval: service.healthcheck.start_interval ?? "",
+        retries: service.healthcheck.retries ?? 0,
+      }
     : null;
   const restart =
     service.restart === "always" || service.restart === "unless-stopped"
@@ -206,21 +187,12 @@ function serviceDependenciesFromAPI(
 export function serviceMutationBody(input: ServiceMutationInput) {
   const healthcheck = input.healthcheck
     ? {
-        http:
-          input.healthcheck.kind === "http"
-            ? input.healthcheck.target
-            : undefined,
-        tcp:
-          input.healthcheck.kind === "tcp"
-            ? input.healthcheck.target
-            : undefined,
-        pgrep:
-          input.healthcheck.kind === "pgrep"
-            ? input.healthcheck.target
-            : undefined,
+        test: input.healthcheck.test,
+        disable: input.healthcheck.disable,
         interval: input.healthcheck.interval,
         timeout: input.healthcheck.timeout,
         start_period: input.healthcheck.startPeriod,
+        start_interval: input.healthcheck.startInterval,
         retries: input.healthcheck.retries,
       }
     : {};

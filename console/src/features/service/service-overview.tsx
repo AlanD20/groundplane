@@ -1,4 +1,5 @@
 import { ResourcePanel } from "@/components/common/resource-panel";
+import { healthcheckEnabled } from "./healthcheck";
 import { ImageReference } from "@/components/common/image-reference";
 import { CopyButton } from "@/components/common/copy-button";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -46,7 +47,7 @@ export function ServiceOverview({
     (attach) =>
       attach.serviceId === service.id || attach.service === service.name,
   );
-  const health = !service.healthcheck
+  const health = !healthcheckEnabled(service.healthcheck)
     ? "Not configured"
     : observation.state === "healthy"
       ? "Passing"

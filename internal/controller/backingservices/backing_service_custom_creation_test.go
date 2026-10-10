@@ -122,7 +122,7 @@ func TestCustomBackingServiceCreationPublishesNetworkOnlyRuntime(t *testing.T) {
 	desired := creation.Service.Desired
 	if desired.Name != "search-api" || desired.Image != image || desired.Adapter != "custom" ||
 		len(desired.Mounts) != 0 || len(desired.Command) != 0 || len(desired.Expose) != 0 ||
-		desired.Healthcheck.HTTP != "" || desired.Healthcheck.TCP != "" || desired.Healthcheck.Pgrep != "" {
+		!desired.Healthcheck.Empty() {
 		t.Fatalf("custom desired Service = %#v", desired)
 	}
 	if len(creation.Projection.Volumes) != 0 || len(creation.Projection.VolumeMounts) != 0 ||

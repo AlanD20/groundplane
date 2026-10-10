@@ -422,10 +422,8 @@ func applyDirectServiceDesired(node *yaml.Node, desired core.Service) error {
 		return errs.New(errs.KindInternal, "normalized Compose Service deploy mapping is corrupt")
 	}
 	setMappingTypedScalar(deploy, "replicas", "!!int", strconv.Itoa(desired.Replicas))
-	if desired.Healthcheck == (core.Healthcheck{}) {
-		if index := MappingIndex(node, "healthcheck"); index >= 0 && typedServiceHealthcheck(node.Content[index+1]) {
-			RemoveMappingValue(node, "healthcheck")
-		}
+	if desired.Healthcheck.Empty() {
+		RemoveMappingValue(node, "healthcheck")
 	} else {
 		setMappingNode(node, "healthcheck", serviceHealthcheckNode(desired.Healthcheck))
 	}

@@ -21,11 +21,12 @@ export type ValkeyAuthentication = "username_password" | "password" | "none";
 export type Slot = "blue" | "green";
 
 export type Healthcheck = {
-  kind: "http" | "tcp" | "pgrep";
-  target: string; // path for http, host:port for tcp, cmd for pgrep
+  test: string[];
+  disable: boolean;
   interval: string;
   timeout: string;
   startPeriod: string;
+  startInterval: string;
   retries: number;
 };
 

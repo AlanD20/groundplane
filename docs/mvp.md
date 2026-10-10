@@ -170,7 +170,8 @@ without application interruption. Failure, Abort, reconnect and unknown-outcome
 cases must preserve data and unrelated resources.
 
 Recreate must reach the declared replica count but does not promise zero downtime.
-Blue-green supports one replica; replicated blue-green and rolling are rejected.
+Blue-green supports one replica and requires an enabled explicit healthcheck
+before Task publication; replicated blue-green and rolling are rejected.
 Saving desired Service settings does not change running processes. Deploy and
 Blueprint Apply must honor each affected Service's declared release strategy;
 an incompatible disruptive change is rejected, never silently recreated.
