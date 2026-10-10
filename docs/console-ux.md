@@ -324,7 +324,17 @@ above dimmed unrelated paths, including the complete shared-trunk segment and
 arrowhead. Never highlight unrelated branches of a shared trunk. Use theme tokens.
 Drag empty canvas to pan; wheel pans; Ctrl/Cmd+wheel zooms at the pointer.
 Focused board Ctrl/Cmd +/- zooms, Ctrl/Cmd0 resets, arrows pan. Provide visible
-zoom and fit controls, preserve node clicks and release capture on cancellation.
+zoom and fit controls inside the board frame, preserve node clicks and release
+capture on cancellation. Keep layer visibility and resource-type highlighting in
+compact shared menus. Type highlighting emphasizes matching nodes and complete
+direct paths, including disconnected matching nodes. Fullscreen uses the shared
+workspace expansion behavior, retains navigation, preserves camera/selection, and
+exits with Escape. Zone summary buttons include internal padding.
+
+Use the shared BrandMark and assets in [branding](../branding/README.md) for the
+Console and public site. Keep the mark legible at favicon size and use themed
+primary colors inside the UI. Landing-page illustrative connections retain their
+flow animation; reduced-motion preferences disable it.
 
 ## Language and shared presentation
 

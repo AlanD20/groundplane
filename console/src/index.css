@@ -182,7 +182,7 @@
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
     background: color-mix(in oklab, var(--primary) 8%, var(--card));
   }
-  .console-shell:has(.workspace-fullscreen-editor) [data-workspace-header] {
+  .console-shell:has(.workspace-fullscreen) [data-workspace-header] {
     position: fixed;
     top: 0;
     left: 0;
@@ -190,7 +190,7 @@
     z-index: 30;
     background: var(--background);
   }
-  .workspace-fullscreen-editor {
+  .workspace-fullscreen {
     position: fixed;
     z-index: 25;
     margin: 0;
@@ -200,9 +200,9 @@
     right: 0;
   }
   @media (min-width: 1024px) {
-    .console-shell:has(.workspace-fullscreen-editor) [data-workspace-header],
+    .console-shell:has(.workspace-fullscreen) [data-workspace-header],
     #console-main .form-actions[data-viewport-actions],
-    .workspace-fullscreen-editor {
+    .workspace-fullscreen {
       left: var(--desktop-navigation-width, 64px);
     }
   }

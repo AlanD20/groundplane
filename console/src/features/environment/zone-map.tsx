@@ -117,7 +117,7 @@ export function ZoneMap({
                 size="content"
                 aria-expanded={selectedZone === z.id}
                 onClick={() => select(z.id)}
-                className="min-w-0 flex-col items-start justify-start gap-3 whitespace-normal text-left"
+                className="min-w-0 flex-col items-start justify-start gap-3 whitespace-normal rounded-lg p-4 text-left"
               >
                 <span className="flex items-center gap-2">
                   <Network className="size-4 text-primary" />

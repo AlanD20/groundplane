@@ -1,3 +1,4 @@
+import { useWorkspaceFullscreen } from "@/components/common/use-workspace-fullscreen";
 import { registerEditorDraft } from "@/lib/editor-draft-value";
 import { createEditorSearchPanel } from "./editor-search-panel";
 import { useEffect, useRef, useState } from "react";
@@ -120,24 +121,10 @@ export function CodeEditor({
   className,
   ...aria
 }: CodeEditorProps) {
-  const [fullscreen, setFullscreen] = useState(false);
-  useEffect(() => {
-    view.current?.requestMeasure();
-    if (!fullscreen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) {
-        setFullscreen(false);
-        view.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("keydown", escape);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [fullscreen]);
+  const [fullscreen, setFullscreen] = useWorkspaceFullscreen(
+    () => view.current?.requestMeasure(),
+    () => view.current?.focus(),
+  );
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const latest = useRef({ value, onValueChange });
@@ -337,7 +324,7 @@ export function CodeEditor({
       className={cn(
         "overflow-hidden rounded-xl border border-input bg-card focus-within:border-primary",
         className,
-        fullscreen && "workspace-fullscreen-editor flex flex-col rounded-none",
+        fullscreen && "workspace-fullscreen flex flex-col rounded-none",
       )}
       aria-label={label}
     >

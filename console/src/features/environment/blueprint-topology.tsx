@@ -1,7 +1,16 @@
 import { useId, useMemo, useState } from "react";
 import { TopologyCanvas } from "@/components/common/topology-canvas";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Layers, Highlighter, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { useStore } from "@/lib/store";
 import type { Environment } from "@/lib/types";
 import {
@@ -34,18 +43,25 @@ export function BlueprintTopology({ env }: { env: Environment }) {
     ? selection
     : null;
   const [layers, setLayers] = useState<TopologyLayer[]>([...topologyLayers]);
+  const [highlightKind, setHighlightKind] = useState<string | null>(null);
+  const focused = new Set(
+    graph.nodes
+      .filter((n) => (selected ? n.id === selected : n.kind === highlightKind))
+      .map((n) => n.id),
+  );
+  const hasFocus = focused.size > 0;
   const [onlyRelated, setOnlyRelated] = useState(false);
   const marker = useId().replaceAll(":", "");
   const edges = graph.edges.filter(
     (e) =>
       layers.includes(e.kind) &&
-      (!onlyRelated || !selected || e.from === selected || e.to === selected),
+      (!onlyRelated || !hasFocus || focused.has(e.from) || focused.has(e.to)),
   );
-  const highlighted = selected
-    ? edges.filter((e) => e.from === selected || e.to === selected)
+  const highlighted = hasFocus
+    ? edges.filter((e) => focused.has(e.from) || focused.has(e.to))
     : [];
   const related = new Set([
-    selected,
+    ...focused,
     ...highlighted.flatMap((e) => [e.from, e.to]),
   ]);
   const active = graph.nodes.find((n) => n.id === selected);
@@ -57,43 +73,113 @@ export function BlueprintTopology({ env }: { env: Environment }) {
     );
   return (
     <section className="space-y-3" aria-label="Blueprint topology">
-      <div className="flex flex-wrap items-center gap-4">
-        {topologyLayers.map((layer) => (
-          <label key={layer} className="flex items-center gap-2 text-xs">
-            <Checkbox
-              checked={layers.includes(layer)}
-              onChange={(event) =>
-                setLayers((current) =>
-                  event.target.checked
-                    ? [...current, layer]
-                    : current.filter((l) => l !== layer),
-                )
-              }
-            />
-            {layer}
-            <span className="text-muted-foreground">
-              {graph.edges.filter((e) => e.kind === layer).length}
+      <TopologyCanvas
+        width={graph.width}
+        height={graph.height}
+        controls={
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button variant="outline" size="sm" />}
+              >
+                <Layers />
+                Show
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Connections</DropdownMenuLabel>
+                {topologyLayers.map((layer) => (
+                  <DropdownMenuCheckboxItem
+                    key={layer}
+                    checked={layers.includes(layer)}
+                    closeOnClick={false}
+                    onCheckedChange={(checked) =>
+                      setLayers((current) =>
+                        checked
+                          ? [...current, layer]
+                          : current.filter((l) => l !== layer),
+                      )
+                    }
+                  >
+                    {layer}
+                    <span className="ml-auto text-muted-foreground">
+                      {graph.edges.filter((e) => e.kind === layer).length}
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                  checked={onlyRelated}
+                  disabled={!hasFocus}
+                  closeOnClick={false}
+                  onCheckedChange={setOnlyRelated}
+                >
+                  Highlighted connections only
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant={highlightKind ? "secondary" : "outline"}
+                    size="sm"
+                  />
+                }
+              >
+                <Highlighter />
+                {highlightKind
+                  ? `Highlight: ${highlightKind === "Backing" ? "Backing services" : highlightKind + "s"}`
+                  : "Highlight"}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Highlight resources</DropdownMenuLabel>
+                {[
+                  { kind: "Service", label: "Services" },
+                  { kind: "Route", label: "Routes" },
+                  { kind: "Backing", label: "Backing services" },
+                  { kind: "Volume", label: "Volumes" },
+                ].map(({ kind, label }) => (
+                  <DropdownMenuCheckboxItem
+                    key={kind}
+                    checked={highlightKind === kind}
+                    onCheckedChange={(checked) => {
+                      setSelection(null);
+                      setHighlightKind(checked ? kind : null);
+                    }}
+                  >
+                    {label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelection(null);
+                    setHighlightKind(null);
+                  }}
+                >
+                  Clear highlight
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {selected && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelection(null)}
+              >
+                <X />
+                Clear selection
+              </Button>
+            )}
+            <span
+              role="status"
+              className="ml-auto px-1 text-xs text-muted-foreground"
+            >
+              {edges.length} / {graph.edges.length} connections
             </span>
-          </label>
-        ))}
-        <label className="flex items-center gap-2 text-xs">
-          <Checkbox
-            checked={onlyRelated}
-            disabled={!selected}
-            onChange={(event) => setOnlyRelated(event.target.checked)}
-          />
-          Selected connections only
-        </label>
-        <span role="status" className="text-xs text-muted-foreground">
-          {edges.length} / {graph.edges.length} connections
-        </span>
-        {selected && (
-          <Button size="xs" variant="ghost" onClick={() => setSelection(null)}>
-            Clear selection
-          </Button>
-        )}
-      </div>
-      <TopologyCanvas width={graph.width} height={graph.height}>
+          </>
+        }
+      >
         <defs>
           {topologyLayers.map((layer) => (
             <marker
@@ -149,7 +235,7 @@ export function BlueprintTopology({ env }: { env: Environment }) {
             </g>
           );
         })}
-        <g opacity={selected ? 0.12 : 0.7} aria-hidden="true">
+        <g opacity={hasFocus ? 0.12 : 0.7} aria-hidden="true">
           {edges.map((edge) => (
             <path
               key={edge.id}
@@ -193,18 +279,20 @@ export function BlueprintTopology({ env }: { env: Environment }) {
               y={p.y}
               width="240"
               height="78"
-              opacity={!selected || related.has(node.id) ? 1 : 0.4}
+              opacity={!hasFocus || related.has(node.id) ? 1 : 0.4}
             >
               <button
                 type="button"
                 aria-pressed={selected === node.id}
-                onClick={() =>
-                  setSelection(selected === node.id ? null : node.id)
-                }
+                onClick={() => {
+                  setHighlightKind(null);
+                  setSelection(selected === node.id ? null : node.id);
+                }}
                 className="h-[72px] w-full cursor-pointer rounded-lg border bg-card px-3 py-2 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{
-                  borderColor:
-                    selected === node.id ? "var(--primary)" : "var(--border)",
+                  borderColor: focused.has(node.id)
+                    ? "var(--primary)"
+                    : "var(--border)",
                   borderLeftWidth: 4,
                   borderLeftColor: nodeColors[node.kind],
                 }}

@@ -1,3 +1,4 @@
+import { BrandMark } from "@/components/common/brand-mark";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
@@ -70,7 +71,7 @@ export function PlatformNavigation({
           aria-hidden="true"
           className="mb-5 flex size-10 shrink-0 items-center justify-center text-primary"
         >
-          <Layers className="size-6" />
+          <BrandMark className="size-7" />
         </div>
       )}
       {links.map(({ label, href, icon: Icon, active }) => (

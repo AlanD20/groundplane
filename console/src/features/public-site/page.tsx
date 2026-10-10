@@ -1,7 +1,7 @@
+import { BrandMark } from "@/components/common/brand-mark";
 import {
   ArrowUpRight,
   Boxes,
-  Layers,
   Terminal,
   Server,
   Code2,
@@ -27,7 +27,7 @@ export function LandingPage() {
           href="/"
           className="flex items-center gap-2.5 text-lg font-semibold tracking-tight"
         >
-          <Layers className="size-6 text-primary" strokeWidth={1.6} />
+          <BrandMark className="size-7" />
           Groundplane
         </a>
         <nav
@@ -189,31 +189,20 @@ function Architecture() {
           </div>
         ))}
       </div>
-      <div className="site-join" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </div>
+      <SiteConnections />
       <div className="rounded-xl border border-primary/30 bg-primary/10 p-5 text-center">
-        <Layers
-          className="mx-auto mb-2 size-6 text-primary"
-          strokeWidth={1.6}
-        />
+        <BrandMark className="mx-auto mb-2 block size-8" />
         <span className="text-xs uppercase tracking-widest text-muted-foreground">
           Groundplane
         </span>
         <h2 className="mt-1 text-2xl font-semibold">Controller</h2>
       </div>
-      <div className="site-wire" aria-hidden="true" />
+      <SiteConnections single />
       <div className="mx-auto flex w-fit items-center gap-2 rounded-lg border border-border bg-background px-6 py-3 text-sm font-medium">
         <Server className="size-4 text-primary" />
         Agent
       </div>
-      <div className="site-join site-join-reverse" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </div>
+      <SiteConnections reverse />
       <div className="grid grid-cols-3 gap-3">
         {[
           { icon: Globe, label: "Web app" },
@@ -233,5 +222,42 @@ function Architecture() {
         Many projects. One place to manage them.
       </figcaption>
     </figure>
+  );
+}
+
+function SiteConnections({
+  single = false,
+  reverse = false,
+}: {
+  single?: boolean;
+  reverse?: boolean;
+}) {
+  const paths = single
+    ? ["M300 0V48"]
+    : [
+        "M100 0V16Q100 24 108 24H292Q300 24 300 32V48",
+        "M300 0V48",
+        "M500 0V16Q500 24 492 24H308Q300 24 300 32V48",
+      ];
+  return (
+    <svg
+      className={`site-connections${reverse ? " site-connections-reverse" : ""}${single ? " site-connections-single" : ""}`}
+      viewBox="0 0 600 48"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {paths.map((d, i) => (
+        <g key={d}>
+          <path className="site-path" d={d} vectorEffect="non-scaling-stroke" />
+          <path
+            className="site-signal"
+            d={d}
+            pathLength={100}
+            style={{ animationDelay: `${-i * 1.3}s` }}
+            vectorEffect="non-scaling-stroke"
+          />
+        </g>
+      ))}
+    </svg>
   );
 }

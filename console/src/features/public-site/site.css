@@ -33,45 +33,39 @@
   background-image: radial-gradient(var(--border) 0.75px, transparent 0.75px);
   background-size: 20px 20px;
 }
-.site-wire {
+.site-connections {
+  display: block;
+  width: 100%;
+  height: 48px;
+  overflow: visible;
+}
+.site-connections-single {
   height: 30px;
-  width: 1px;
-  background: var(--primary);
-  opacity: 0.55;
-  margin: auto;
 }
-.site-join {
-  height: 48px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding-inline: 16%;
-}
-.site-join i {
-  border-bottom: 1px solid var(--primary);
-  height: 24px;
-  opacity: 0.55;
-}
-.site-join i:first-child {
-  border-left: 1px solid var(--primary);
-  border-bottom-left-radius: 8px;
-}
-.site-join i:nth-child(2) {
-  position: relative;
-}
-.site-join i:nth-child(2):after {
-  content: "";
-  position: absolute;
-  width: 1px;
-  height: 48px;
-  left: 50%;
-  background: var(--primary);
-}
-.site-join i:last-child {
-  border-right: 1px solid var(--primary);
-  border-bottom-right-radius: 8px;
-}
-.site-join-reverse {
+.site-connections-reverse {
   transform: rotate(180deg);
+}
+.site-path {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1;
+  opacity: 0.35;
+}
+.site-signal {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 8 92;
+  animation: site-flow 4s linear infinite;
+}
+.site-connections-reverse .site-signal {
+  animation-direction: reverse;
+}
+@keyframes site-flow {
+  to {
+    stroke-dashoffset: -100;
+  }
 }
 @keyframes site-enter {
   from {

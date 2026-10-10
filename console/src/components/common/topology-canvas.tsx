@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Maximize, Minimize, Minus, Plus, Scan } from "lucide-react";
+import { useWorkspaceFullscreen } from "./use-workspace-fullscreen";
 import { Button } from "@/components/ui/button";
 
 /** Shared pan/zoom viewport; transforms presentation without changing node state. */
@@ -6,12 +8,17 @@ export function TopologyCanvas({
   width,
   height,
   children,
+  controls,
 }: {
   width: number;
   height: number;
   children: ReactNode;
+  controls?: ReactNode;
 }) {
   const board = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useWorkspaceFullscreen(undefined, () =>
+    board.current?.focus(),
+  );
   const [camera, setCamera] = useState({ x: 16, y: 16, zoom: 0.75 });
   const cameraRef = useRef(camera);
   const [dragging, setDragging] = useState(false);
@@ -45,6 +52,7 @@ export function TopologyCanvas({
     const element = board.current;
     if (!element) return;
     const wheel = (event: WheelEvent) => {
+      if ((event.target as Element).closest("[data-board-controls]")) return;
       event.preventDefault();
       const unit =
         event.deltaMode === 1
@@ -73,8 +81,17 @@ export function TopologyCanvas({
   }, []);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap justify-end gap-2">
+    <div
+      className={
+        fullscreen
+          ? "workspace-fullscreen flex flex-col overflow-hidden bg-card"
+          : "flex h-[65vh] flex-col overflow-hidden rounded-xl border border-border bg-card"
+      }
+    >
+      <div
+        data-board-controls
+        className="relative z-10 flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card p-2"
+      >
         <Button
           variant="outline"
           size="sm"
@@ -91,7 +108,7 @@ export function TopologyCanvas({
               });
           }}
         >
-          Fit width
+          <Scan /> Fit width
         </Button>
         <Button
           variant="outline"
@@ -99,7 +116,7 @@ export function TopologyCanvas({
           aria-label="Zoom out"
           onClick={() => setZoom(zoom / 1.2)}
         >
-          −
+          <Minus />
         </Button>
         <Button
           variant="ghost"
@@ -115,10 +132,21 @@ export function TopologyCanvas({
           aria-label="Zoom in"
           onClick={() => setZoom(zoom * 1.2)}
         >
-          +
+          <Plus />
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={fullscreen ? "Exit fullscreen board" : "Fullscreen board"}
+          aria-pressed={fullscreen}
+          onClick={() => setFullscreen(!fullscreen)}
+        >
+          {fullscreen ? <Minimize /> : <Maximize />}
+        </Button>
+        {controls}
       </div>
       <div
+        className="relative min-h-0 flex-1"
         ref={board}
         data-graph-canvas
         tabIndex={0}
@@ -215,9 +243,6 @@ export function TopologyCanvas({
           touchAction: "none",
           userSelect: "none",
           cursor: dragging ? "grabbing" : "grab",
-          height: "65vh",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
           background: "var(--card)",
           backgroundImage:
             "radial-gradient(var(--border) 1px, transparent 1px)",
