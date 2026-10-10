@@ -17,6 +17,7 @@ import (
 const (
 	supersededAbortReason   = "blueprint_superseded"
 	failedParentAbortReason = "blueprint_parent_failed"
+	deadlineAbortReason     = "blueprint_deadline"
 )
 
 // Run resumes durable parent claims before claiming new work. Every effectful
@@ -81,25 +82,33 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 	if err != nil {
 		return false, err
 	}
-	failureRequested, err := runner.tasks.BlueprintParentFailureRequested(ctx, parent.ID)
+	stopOutcome, err := runner.tasks.BlueprintParentStopRequested(ctx, parent.ID)
 	if err != nil {
 		return false, err
 	}
-	if failureRequested {
+	if stopOutcome != "" {
+		reason := supersededAbortReason
+		if stopOutcome == taskjournal.TaskStatusFailed {
+			reason = failedParentAbortReason
+		} else if stopOutcome == taskjournal.TaskStatusTimedOut {
+			reason = deadlineAbortReason
+		}
 		return runner.reconcileStoppingParent(
 			ctx,
 			parent,
 			snapshot,
-			taskjournal.TaskStatusFailed,
-			failedParentAbortReason,
+			stopOutcome,
+			reason,
 		)
 	}
-	abortRequested, err := runner.tasks.BlueprintParentAbortRequested(ctx, parent.ID)
-	if err != nil {
-		return false, err
-	}
-	if abortRequested {
-		return runner.reconcileAbortingParent(ctx, parent, snapshot)
+	if parent.StartedAt != nil && int64(runner.now().Sub(*parent.StartedAt)/time.Second) >= parent.TimeoutSeconds {
+		if err := runner.tasks.RequestBlueprintParentTimeout(ctx, parent.ID, runner.now().UTC()); err != nil {
+			if isStateRace(err) {
+				return true, nil
+			}
+			return false, err
+		}
+		return true, nil
 	}
 	if snapshot.HeadTaskID != parent.ID {
 		_, err := runner.tasks.RetireSupersededBlueprintParent(
@@ -302,20 +311,6 @@ func (runner *Runner) AbortTask(ctx context.Context, taskID string) error {
 	}
 }
 
-func (runner *Runner) reconcileAbortingParent(
-	ctx context.Context,
-	parent etcd.TaskRecord,
-	snapshot blueprintunits.Snapshot,
-) (bool, error) {
-	return runner.reconcileStoppingParent(
-		ctx,
-		parent,
-		snapshot,
-		taskjournal.TaskStatusAborted,
-		supersededAbortReason,
-	)
-}
-
 func (runner *Runner) reconcileStoppingParent(
 	ctx context.Context,
 	parent etcd.TaskRecord,
@@ -364,6 +359,13 @@ func (runner *Runner) reconcileStoppingParent(
 		)
 	case taskjournal.TaskStatusFailed:
 		_, err = runner.tasks.FailBlueprintParent(
+			ctx,
+			parent.Owner.EnvironmentID,
+			parent.ID,
+			runner.now().UTC(),
+		)
+	case taskjournal.TaskStatusTimedOut:
+		_, err = runner.tasks.TimeoutBlueprintParent(
 			ctx,
 			parent.Owner.EnvironmentID,
 			parent.ID,

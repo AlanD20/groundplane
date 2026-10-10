@@ -76,8 +76,8 @@ type taskStore interface {
 	GetTask(context.Context, string) (keyvalue.Versioned[etcd.TaskRecord], error)
 	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
 	RequestBlueprintParentAbort(context.Context, string, time.Time) error
-	BlueprintParentFailureRequested(context.Context, string) (bool, error)
-	BlueprintParentAbortRequested(context.Context, string) (bool, error)
+	RequestBlueprintParentTimeout(context.Context, string, time.Time) error
+	BlueprintParentStopRequested(context.Context, string) (taskjournal.TaskStatus, error)
 	FailBlueprintParent(
 		context.Context,
 		string,
@@ -85,6 +85,12 @@ type taskStore interface {
 		time.Time,
 	) (keyvalue.Versioned[etcd.TaskRecord], error)
 	AbortBlueprintParent(
+		context.Context,
+		string,
+		string,
+		time.Time,
+	) (keyvalue.Versioned[etcd.TaskRecord], error)
+	TimeoutBlueprintParent(
 		context.Context,
 		string,
 		string,

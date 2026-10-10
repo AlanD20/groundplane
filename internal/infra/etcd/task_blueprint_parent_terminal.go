@@ -135,8 +135,8 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 				"Blueprint parent failure changed",
 			)
 		}
-		request, decodeErr := decodeBlueprintParentAbortRequest(stopValue.Value)
-		if decodeErr != nil || request.TaskID != taskID {
+		request, decodeErr := decodeBlueprintParentStopRequest(stopValue.Value)
+		if decodeErr != nil || request.TaskID != taskID || request.Outcome != status {
 			return keyvalue.Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
 				"Blueprint parent failure stop gate is corrupt",
@@ -155,10 +155,14 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: failureKey})
 		if stopValue == nil {
+			if status == taskjournal.TaskStatusTimedOut {
+				return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict,
+					"Blueprint Apply timeout was not requested")
+			}
 			conditions = append(conditions, keyvalue.Condition{Key: stopKey})
 		} else {
-			request, decodeErr := decodeBlueprintParentAbortRequest(stopValue.Value)
-			if decodeErr != nil || request.TaskID != taskID || status != taskjournal.TaskStatusAborted {
+			request, decodeErr := decodeBlueprintParentStopRequest(stopValue.Value)
+			if decodeErr != nil || request.TaskID != taskID || request.Outcome != status {
 				return keyvalue.Versioned[TaskRecord]{}, errs.New(
 					errs.KindStateConflict,
 					"Blueprint parent abort request changed",

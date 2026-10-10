@@ -13,24 +13,32 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type blueprintParentAbortRequest struct {
-	TaskID      string    `json:"task_id"`
-	RequestedAt time.Time `json:"requested_at"`
+type blueprintParentStopRequest struct {
+	TaskID      string                 `json:"task_id"`
+	RequestedAt time.Time              `json:"requested_at"`
+	Outcome     taskjournal.TaskStatus `json:"outcome"`
 }
 
-func encodeBlueprintParentAbortRequest(request blueprintParentAbortRequest) ([]byte, error) {
+func validBlueprintParentStopOutcome(outcome taskjournal.TaskStatus) bool {
+	return outcome == taskjournal.TaskStatusAborted || outcome == taskjournal.TaskStatusFailed ||
+		outcome == taskjournal.TaskStatusTimedOut
+}
+
+func encodeBlueprintParentStopRequest(request blueprintParentStopRequest) ([]byte, error) {
 	if ids.Validate(ids.KindTask, request.TaskID) != nil ||
+		!validBlueprintParentStopOutcome(request.Outcome) ||
 		recordcodec.ValidateTimestamp("Blueprint parent abort", request.RequestedAt) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Blueprint parent abort request is invalid")
 	}
-	return recordcodec.Encode("blueprint-parent-abort", request)
+	return recordcodec.Encode("blueprint-parent-stop", request)
 }
 
-func decodeBlueprintParentAbortRequest(value []byte) (blueprintParentAbortRequest, error) {
-	request, err := recordcodec.Decode[blueprintParentAbortRequest](value, "blueprint-parent-abort")
+func decodeBlueprintParentStopRequest(value []byte) (blueprintParentStopRequest, error) {
+	request, err := recordcodec.Decode[blueprintParentStopRequest](value, "blueprint-parent-stop")
 	if err != nil || ids.Validate(ids.KindTask, request.TaskID) != nil ||
+		!validBlueprintParentStopOutcome(request.Outcome) ||
 		recordcodec.ValidateTimestamp("Blueprint parent abort", request.RequestedAt) != nil {
-		return blueprintParentAbortRequest{}, errs.New(errs.KindInternal, "Blueprint parent abort request is corrupt")
+		return blueprintParentStopRequest{}, errs.New(errs.KindInternal, "Blueprint parent stop request is corrupt")
 	}
 	return request, nil
 }
@@ -40,6 +48,20 @@ func decodeBlueprintParentAbortRequest(value []byte) (blueprintParentAbortReques
 // in their own transactions, closing the pre-read/send race.
 func (repository *TaskRepository) RequestBlueprintParentAbort(
 	ctx context.Context, taskID string, at time.Time,
+) error {
+	return repository.requestBlueprintParentStop(ctx, taskID, taskjournal.TaskStatusAborted, at)
+}
+
+// RequestBlueprintParentTimeout closes the same durable stop gate as Abort.
+// The stored start time is checked again inside the atomic publication fence.
+func (repository *TaskRepository) RequestBlueprintParentTimeout(
+	ctx context.Context, taskID string, at time.Time,
+) error {
+	return repository.requestBlueprintParentStop(ctx, taskID, taskjournal.TaskStatusTimedOut, at)
+}
+
+func (repository *TaskRepository) requestBlueprintParentStop(
+	ctx context.Context, taskID string, outcome taskjournal.TaskStatus, at time.Time,
 ) error {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return err
@@ -67,7 +89,7 @@ func (repository *TaskRepository) RequestBlueprintParentAbort(
 			return errs.New(errs.KindValidationFailed, "Task is not a Blueprint parent")
 		}
 		if read.Values[2] != nil {
-			request, err := decodeBlueprintParentAbortRequest(read.Values[2].Value)
+			request, err := decodeBlueprintParentStopRequest(read.Values[2].Value)
 			if err != nil || request.TaskID != taskID {
 				return errs.New(errs.KindInternal, "Blueprint parent abort request changed")
 			}
@@ -76,11 +98,17 @@ func (repository *TaskRepository) RequestBlueprintParentAbort(
 		if task.Status != taskjournal.TaskStatusRunning || read.Values[1] == nil {
 			return errs.New(errs.KindTaskNotAbortable, "Blueprint parent is not running")
 		}
+		if outcome == taskjournal.TaskStatusTimedOut &&
+			(task.StartedAt == nil || int64(at.Sub(*task.StartedAt)/time.Second) < task.TimeoutSeconds) {
+			return errs.New(errs.KindStateConflict, "Blueprint Apply deadline has not elapsed")
+		}
 		claimed, err := idempotency.DecodeTaskReference(read.Values[1].Value)
 		if err != nil || claimed != taskID {
 			return errs.New(errs.KindInternal, "Blueprint parent claim is inconsistent")
 		}
-		value, err := encodeBlueprintParentAbortRequest(blueprintParentAbortRequest{TaskID: taskID, RequestedAt: at})
+		value, err := encodeBlueprintParentStopRequest(blueprintParentStopRequest{
+			TaskID: taskID, RequestedAt: at, Outcome: outcome,
+		})
 		if err != nil {
 			return err
 		}
@@ -101,33 +129,33 @@ func (repository *TaskRepository) RequestBlueprintParentAbort(
 	return errs.New(errs.KindStateConflict, "Blueprint parent abort request raced repeatedly")
 }
 
-func (repository *TaskRepository) BlueprintParentAbortRequested(
+func (repository *TaskRepository) BlueprintParentStopRequested(
 	ctx context.Context, taskID string,
-) (bool, error) {
+) (taskjournal.TaskStatus, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return false, err
+		return "", err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return false, errs.New(errs.KindValidationFailed, "Blueprint parent id is invalid")
+		return "", errs.New(errs.KindValidationFailed, "Blueprint parent id is invalid")
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
 		Keys: []string{taskjournal.BlueprintParentAbortKey(taskID)},
 	})
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	if read == nil || len(read.Values) != 1 {
-		return false, errs.New(errs.KindInternal, "Blueprint parent abort read is incomplete")
+		return "", errs.New(errs.KindInternal, "Blueprint parent stop read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		return false, nil
+		return "", nil
 	}
-	request, err := decodeBlueprintParentAbortRequest(read.Values[0].Value)
+	request, err := decodeBlueprintParentStopRequest(read.Values[0].Value)
 	if err != nil || request.TaskID != taskID {
-		return false, errs.New(errs.KindInternal, "Blueprint parent abort request is corrupt")
+		return "", errs.New(errs.KindInternal, "Blueprint parent stop request is corrupt")
 	}
-	return true, nil
+	return request.Outcome, nil
 }
 
 // AbortBlueprintParent terminalizes requested work only after every child
@@ -136,14 +164,26 @@ func (repository *TaskRepository) BlueprintParentAbortRequested(
 func (repository *TaskRepository) AbortBlueprintParent(
 	ctx context.Context, environmentID, taskID string, at time.Time,
 ) (keyvalue.Versioned[TaskRecord], error) {
-	requested, err := repository.BlueprintParentAbortRequested(ctx, taskID)
+	return repository.finishStoppedBlueprintParent(ctx, environmentID, taskID, taskjournal.TaskStatusAborted, at)
+}
+
+func (repository *TaskRepository) TimeoutBlueprintParent(
+	ctx context.Context, environmentID, taskID string, at time.Time,
+) (keyvalue.Versioned[TaskRecord], error) {
+	return repository.finishStoppedBlueprintParent(ctx, environmentID, taskID, taskjournal.TaskStatusTimedOut, at)
+}
+
+func (repository *TaskRepository) finishStoppedBlueprintParent(
+	ctx context.Context, environmentID, taskID string, outcome taskjournal.TaskStatus, at time.Time,
+) (keyvalue.Versioned[TaskRecord], error) {
+	requested, err := repository.BlueprintParentStopRequested(ctx, taskID)
 	if err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
-	if !requested {
+	if requested != outcome {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict,
-			"Blueprint parent abort was not requested",
+			"Blueprint parent stop outcome does not match the requested outcome",
 		)
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
@@ -170,5 +210,5 @@ func (repository *TaskRepository) AbortBlueprintParent(
 			)
 		}
 	}
-	return repository.terminalizeBlueprintParent(ctx, snapshot, taskID, taskjournal.TaskStatusAborted, at)
+	return repository.terminalizeBlueprintParent(ctx, snapshot, taskID, outcome, at)
 }

@@ -88,7 +88,7 @@ func (repository *TaskRepository) prepareBlueprintParentFailure(
 		{Key: failureKey, ModRevision: keyvalue.RevisionOf(failure)},
 	}
 	if stop != nil {
-		request, decodeErr := decodeBlueprintParentAbortRequest(stop.Value)
+		request, decodeErr := decodeBlueprintParentStopRequest(stop.Value)
 		if decodeErr != nil || request.TaskID != parentTaskID {
 			return nil, nil, errs.New(errs.KindInternal, "Blueprint parent stop gate is corrupt")
 		}
@@ -106,8 +106,8 @@ func (repository *TaskRepository) prepareBlueprintParentFailure(
 	if failure != nil {
 		return nil, nil, errs.New(errs.KindInternal, "Blueprint parent failure lacks its stop gate")
 	}
-	stopValue, err := encodeBlueprintParentAbortRequest(blueprintParentAbortRequest{
-		TaskID: parentTaskID, RequestedAt: failedAt,
+	stopValue, err := encodeBlueprintParentStopRequest(blueprintParentStopRequest{
+		TaskID: parentTaskID, RequestedAt: failedAt, Outcome: taskjournal.TaskStatusFailed,
 	})
 	if err != nil {
 		return nil, nil, err

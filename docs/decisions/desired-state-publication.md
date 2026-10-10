@@ -107,6 +107,15 @@ The parent remains nonterminal while any required unit is running or has
 unknown effects. A child terminal status alone cannot mark the parent
 successful or release its resource claims.
 
+The visible parent's deadline starts at its durable claim time, not at a
+Controller process restart or each new child. Expiry atomically closes the same
+selection gate as Abort. The first durable stop outcome wins: deadline expiry
+does not overwrite an earlier Abort or proved child failure. Pending children
+are withdrawn and running children are asked to stop; the parent becomes timed
+out only after exact child settlement proves that no unaccounted effects remain.
+Recovery may therefore outlive the forward-execution deadline without granting
+more forward work.
+
 Some effective inputs depend on facts from a Custom backing Attach created by
 the same Apply. Seal the operator's authored decisions at publication, then
 build dependent runtime files only after that Attach's hook has completed and
