@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export type NavigationGroup = {
   label: string;
@@ -10,9 +11,11 @@ export type NavigationGroup = {
 export function WorkspaceNavigation({
   label,
   groups,
+  collapsed = false,
 }: {
   label: string;
   groups: NavigationGroup[];
+  collapsed?: boolean;
 }) {
   return (
     <nav aria-label={label} className="space-y-6">
@@ -21,27 +24,37 @@ export function WorkspaceNavigation({
           key={group.label}
           className="space-y-1 border-t border-border pt-5 first:border-t-0 first:pt-0"
         >
-          <h2 className="px-3 pb-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground [overflow-wrap:anywhere]">
+          <h2
+            className={cn(
+              "px-3 pb-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground [overflow-wrap:anywhere]",
+              collapsed && "sr-only",
+            )}
+          >
             {group.label}
           </h2>
           {group.items.map((item) => (
-            <Link
-              key={item.href}
-              to={item.href}
-              aria-current={item.active ? "page" : undefined}
-              className={cn(
-                "flex min-h-10 items-start gap-3 rounded-r-md rounded-l-sm border-l-2 border-transparent px-3 py-2.5 text-sm leading-5 outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]",
-                item.active
-                  ? "border-l-primary bg-accent font-semibold text-accent-foreground"
-                  : "text-sidebar-foreground hover:text-foreground",
-              )}
-            >
-              <item.icon
-                aria-hidden="true"
-                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-              />
-              <span className="min-w-0">{item.label}</span>
-            </Link>
+            <Tooltip key={item.href} content={item.label} side="right">
+              <Link
+                to={item.href}
+                aria-label={collapsed ? item.label : undefined}
+                aria-current={item.active ? "page" : undefined}
+                className={cn(
+                  "flex min-h-10 items-start gap-3 rounded-r-md rounded-l-sm border-l-2 border-transparent px-3 py-2.5 text-sm leading-5 outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]",
+                  collapsed && "justify-center px-2",
+                  item.active
+                    ? "border-l-primary bg-accent font-semibold text-accent-foreground"
+                    : "text-sidebar-foreground hover:text-foreground",
+                )}
+              >
+                <item.icon
+                  aria-hidden="true"
+                  className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                />
+                <span className={collapsed ? "sr-only" : "min-w-0"}>
+                  {item.label}
+                </span>
+              </Link>
+            </Tooltip>
           ))}
         </section>
       ))}

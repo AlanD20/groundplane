@@ -15,7 +15,6 @@ import {
   useTableView,
 } from "@/components/common/table-controls";
 import { TaskLink } from "@/components/common/task-link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DialogDescription,
@@ -33,7 +32,7 @@ import {
 } from "@/components/ui/table";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import type { Runner } from "@/lib/types";
-import { ArrowRight, GitBranch, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { GitBranch, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 function runnerStatus(runner: Runner) {
@@ -266,23 +265,6 @@ export function RunnerInventory({
             <TablePagination table={table} label="Runners" />
           </>
         )}
-      </ResourcePanel>
-      <ResourcePanel title="Build and delivery">
-        <div className="flex flex-wrap items-center gap-2">
-          {[
-            "Rootless Docker build",
-            "GP TLS registry push",
-            "Agent image fetch",
-            "Service Deploy",
-          ].map((step, index) => (
-            <span key={step} className="inline-flex items-center gap-2">
-              {index > 0 && (
-                <ArrowRight className="size-3.5 text-muted-foreground" />
-              )}
-              <Badge variant="muted">{step}</Badge>
-            </span>
-          ))}
-        </div>
       </ResourcePanel>
       <Drawer
         open={!!inspected}

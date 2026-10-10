@@ -63,6 +63,11 @@ Resource links out of a Service retain an explicit return to that Service and
 destination, including when following a Task to its affected resource. Keep this
 return distinct from hierarchical breadcrumbs and preserve it across local tabs.
 
+Secondary navigation supports expanded labels or an icon-only desktop rail, with
+accessible labels, hover/focus tooltips and the active destination preserved.
+Remember the preference; mobile navigation retains full labels. Editor expansion
+and viewport form actions use the same navigation width.
+
 ## Grouping and discoverability
 
 A proposed group must pass two questions: can an operator predict what is inside
@@ -273,9 +278,10 @@ changes reverted to the baseline do not prompt. Editor search, folding, preview
 and fullscreen are viewing state, not edits. Cancel/save ends draft ownership.
 
 Editor workspaces use the shared CodeEditor, including bulk variable editing.
-Provide fullscreen without remounting the document or losing undo/selection, with
-an explicit exit and Escape support. Fullscreen changes viewing space, never saves
-or applies changes. Preview, search and read-only rules are identical in both sizes.
+Expand editors within the browser tab workspace, retaining the left navigation,
+header and active form actions. Do not use native browser fullscreen. Preserve
+the document, undo and selection, with an explicit exit and Escape support.
+Fullscreen changes viewing space, never saves or applies changes. Preview, search and read-only rules are identical in both sizes.
 
 Forms group related fields and use two columns when space permits; stack on narrow
 screens. Give multiline editors, long values and multi-select exposure full rows.

@@ -52,10 +52,12 @@ export function Sidebar({
   workspace,
   projectSlug,
   pathname,
+  collapsed = false,
 }: {
   workspace: { kind: "platform" | "tenant"; slug: string };
   projectSlug?: string;
   pathname: string;
+  collapsed?: boolean;
 }) {
   const store = useStore();
   const [search] = useSearchParams();
@@ -248,17 +250,25 @@ export function Sidebar({
     ];
   } else return null;
   return (
-    <div className="space-y-5 px-3 py-4">
+    <div className={collapsed ? "space-y-5 px-2 py-4" : "space-y-5 px-3 py-4"}>
       {parent && (
         <Link
           to={parent.href}
+          aria-label={parent.label}
+          title={collapsed ? parent.label : undefined}
           className="flex items-start gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ArrowLeft className="size-3.5 shrink-0" />
-          <span className="[overflow-wrap:anywhere]">{parent.label}</span>
+          <span className={collapsed ? "sr-only" : "[overflow-wrap:anywhere]"}>
+            {parent.label}
+          </span>
         </Link>
       )}
-      <WorkspaceNavigation label="Selected workspace" groups={groups} />
+      <WorkspaceNavigation
+        label="Selected workspace"
+        groups={groups}
+        collapsed={collapsed}
+      />
     </div>
   );
 }

@@ -120,16 +120,24 @@ export function CodeEditor({
   className,
   ...aria
 }: CodeEditorProps) {
-  const frame = useRef<HTMLElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
-    const sync = () => {
-      setFullscreen(document.fullscreenElement === frame.current);
-      view.current?.requestMeasure();
+    view.current?.requestMeasure();
+    if (!fullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        setFullscreen(false);
+        view.current?.focus();
+      }
     };
-    document.addEventListener("fullscreenchange", sync);
-    return () => document.removeEventListener("fullscreenchange", sync);
-  }, []);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("keydown", escape);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [fullscreen]);
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const latest = useRef({ value, onValueChange });
@@ -320,7 +328,6 @@ export function CodeEditor({
     <section
       data-draft-editor
       ref={(element) => {
-        frame.current = element;
         if (element)
           return registerEditorDraft(
             element,
@@ -330,7 +337,7 @@ export function CodeEditor({
       className={cn(
         "overflow-hidden rounded-xl border border-input bg-card focus-within:border-primary",
         className,
-        fullscreen && "flex h-screen w-screen flex-col rounded-none",
+        fullscreen && "workspace-fullscreen-editor flex flex-col rounded-none",
       )}
       aria-label={label}
     >
@@ -346,14 +353,8 @@ export function CodeEditor({
             aria-label={
               fullscreen ? "Exit fullscreen editor" : "Fullscreen editor"
             }
-            onClick={() => {
-              const request = fullscreen
-                ? document.exitFullscreen()
-                : frame.current?.requestFullscreen();
-              void request?.catch(() =>
-                setNotice("Fullscreen is unavailable in this browser."),
-              );
-            }}
+            aria-pressed={fullscreen}
+            onClick={() => setFullscreen((current) => !current)}
           >
             {fullscreen ? <Minimize /> : <Maximize />}
             {fullscreen ? "Exit fullscreen" : "Fullscreen"}

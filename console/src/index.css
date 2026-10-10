@@ -182,13 +182,28 @@
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
     background: color-mix(in oklab, var(--primary) 8%, var(--card));
   }
+  .console-shell:has(.workspace-fullscreen-editor) [data-workspace-header] {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    background: var(--background);
+  }
+  .workspace-fullscreen-editor {
+    position: fixed;
+    z-index: 25;
+    margin: 0;
+    top: 64px;
+    bottom: var(--viewport-actions-height, 0px);
+    left: 0;
+    right: 0;
+  }
   @media (min-width: 1024px) {
-    #console-main .form-actions[data-viewport-actions] {
-      left: 64px;
-    }
-    #console-main[data-local-navigation="true"]
-      .form-actions[data-viewport-actions] {
-      left: 304px;
+    .console-shell:has(.workspace-fullscreen-editor) [data-workspace-header],
+    #console-main .form-actions[data-viewport-actions],
+    .workspace-fullscreen-editor {
+      left: var(--desktop-navigation-width, 64px);
     }
   }
   :is([data-slot="dialog-content"], [data-slot="drawer-content"]) {

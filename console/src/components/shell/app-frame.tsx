@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useStore } from "@/lib/store";
-import { Menu } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Sidebar, hasWorkspaceNavigation } from "./sidebar";
@@ -60,6 +60,27 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     tenantProjects.map((p) => p.slug),
   );
 
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return (
+        localStorage.getItem("groundplane-secondary-nav-collapsed") === "true"
+      );
+    } catch {
+      return false;
+    }
+  });
+  const toggleNavigation = () =>
+    setCollapsed((current) => {
+      try {
+        localStorage.setItem(
+          "groundplane-secondary-nav-collapsed",
+          String(!current),
+        );
+      } catch {
+        /* Preference storage may be unavailable. */
+      }
+      return !current;
+    });
   const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => setMobileOpen(false), [pathname, search]);
 
@@ -71,30 +92,69 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       >
         Skip to content
       </a>
-      <div className="flex min-h-screen w-full">
+      <div
+        className="console-shell flex min-h-screen w-full"
+        style={
+          {
+            "--desktop-navigation-width": hasLocalNavigation
+              ? collapsed
+                ? "128px"
+                : "304px"
+              : "64px",
+          } as CSSProperties
+        }
+      >
         {/* Desktop sidebar */}
         <aside
           className={cn(
             "fixed inset-y-0 left-0 z-30 hidden border-r border-border bg-sidebar lg:flex",
-            hasLocalNavigation ? "w-[304px]" : "w-16",
+            "w-[var(--desktop-navigation-width)]",
           )}
         >
           <PlatformNavigation pathname={pathname} />
           {hasLocalNavigation && (
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
-                <WorkspaceSwitcher
-                  workspace={workspace}
-                  onNewTenant={() =>
-                    navigate("/platform/overview?create=tenant")
+              <div
+                className={cn(
+                  "flex h-16 shrink-0 items-center border-b border-border",
+                  collapsed ? "justify-center px-2" : "gap-1 px-3",
+                )}
+              >
+                {!collapsed && (
+                  <div className="min-w-0 flex-1">
+                    <WorkspaceSwitcher
+                      workspace={workspace}
+                      onNewTenant={() =>
+                        navigate("/platform/overview?create=tenant")
+                      }
+                    />
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={
+                    collapsed
+                      ? "Expand secondary navigation"
+                      : "Collapse secondary navigation"
                   }
-                />
+                  title={
+                    collapsed
+                      ? "Expand secondary navigation"
+                      : "Collapse secondary navigation"
+                  }
+                  aria-expanded={!collapsed}
+                  onClick={toggleNavigation}
+                >
+                  {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+                </Button>
               </div>
               <div className="flex-1 overflow-y-auto">
                 <Sidebar
                   workspace={workspace}
                   projectSlug={projectSlug}
                   pathname={pathname}
+                  collapsed={collapsed}
                 />
               </div>
             </div>
@@ -146,10 +206,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <div
           className={cn(
             "flex min-w-0 flex-1 flex-col",
-            hasLocalNavigation ? "lg:pl-[304px]" : "lg:pl-16",
+            "lg:pl-[var(--desktop-navigation-width)]",
           )}
         >
-          <div className="flex min-h-16 items-center gap-2 border-b border-border px-4 sm:px-6 lg:px-7">
+          <div
+            data-workspace-header
+            className="flex min-h-16 items-center gap-2 border-b border-border px-4 sm:px-6 lg:px-7"
+          >
             <Button
               variant="outline"
               size="sm"
