@@ -29,9 +29,11 @@ export function ScriptVolumeGrants({
   }
   return (
     <fieldset className="flex min-w-0 flex-col gap-3">
-      <legend className="mb-2 text-sm font-medium">
-        Volume grants ({grants.length}/{maximumScriptVolumes})
-      </legend>
+      <legend className="mb-2 text-sm font-medium">Volume mounts</legend>
+      <p className="text-xs text-muted-foreground">
+        {grants.length} mounted · maximum {maximumScriptVolumes}. Choose storage
+        this Script can access.
+      </p>
       {grants.map((grant, index) => {
         const current = volumes.find((volume) => volume.id === grant.volumeId);
         const options = volumes
@@ -65,7 +67,7 @@ export function ScriptVolumeGrants({
             </div>
             <div className="flex min-w-0 flex-col gap-1.5">
               <Label htmlFor={`script-target-${index}`}>
-                Mount target {index + 1}
+                Path in container
               </Label>
               <Input
                 id={`script-target-${index}`}
@@ -96,7 +98,7 @@ export function ScriptVolumeGrants({
               variant="ghost"
               size="sm"
               className="justify-self-end"
-              aria-label={`Remove Volume grant ${index + 1}`}
+              aria-label={`Remove Volume mount ${index + 1}`}
               onClick={() =>
                 onChange(grants.filter((_, position) => position !== index))
               }
@@ -105,7 +107,7 @@ export function ScriptVolumeGrants({
             </Button>
             {!current && (
               <p className="text-xs text-muted-foreground sm:col-span-2">
-                This saved Volume is unavailable. Replace or remove its grant
+                This saved Volume is unavailable. Replace or remove its mount
                 before running the Script.
               </p>
             )}
@@ -128,7 +130,7 @@ export function ScriptVolumeGrants({
           ])
         }
       >
-        <Plus className="size-3.5" /> Volume grant
+        <Plus className="size-3.5" /> Add mount
       </Button>
       <p className="text-xs text-muted-foreground">
         Only selected Volumes are mounted; no image data is copied into them.

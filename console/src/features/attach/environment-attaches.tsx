@@ -74,6 +74,13 @@ export function AttachesCard({
         </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        <AttachFormDialog
+          inline={!service}
+          initialServiceId={service?.id}
+          env={env}
+          open={open}
+          onOpenChange={setOpen}
+        />
         <p className="text-xs text-muted-foreground">
           {service
             ? `Connections used by ${service.name}.`
@@ -133,13 +140,6 @@ export function AttachesCard({
         )}
         <TablePagination table={table} label="Connections" />
       </CardContent>
-      <AttachFormDialog
-        inline={!service}
-        initialServiceId={service?.id}
-        env={env}
-        open={open}
-        onOpenChange={setOpen}
-      />
     </Card>
   );
 }

@@ -181,12 +181,6 @@ export function ScriptEditor({
             {contextError}
           </p>
         )}
-        <p className="text-xs text-muted-foreground">
-          Hooks run automatically for selected deploys and rollbacks. Saving
-          replaces the complete execution choice; published runs keep their
-          captured context. Resource availability is checked before a run is
-          published.
-        </p>
       </fieldset>
       {submitError && (
         <p role="alert" className="text-xs text-destructive">

@@ -108,7 +108,12 @@ secret-bearing output stream.
 The existing Script create, edit and read actions, and the bodyless run action,
 retain matching Console, CLI and API surfaces.
 
-- The Console exposes `order` and inherited or explicit execution controls.
+- The Console exposes `order` and **Service configuration** or **Separate
+  container** execution. Separate containers use the host image picker (digest
+  references only), Linux user/group IDs, Volume mounts and a searchable
+  Variables & files checklist. Entries not exposed to the selected Service remain
+  visible but cannot be selected. The selection limit is separate from the
+  available-entry count.
 - CLI add and edit accept `--order` and `--execution-file`; edit also accepts
   `--inherit-execution`. An execution file contains one Blueprint-shaped YAML
   mapping, is at most 65,536 bytes, and may be read from standard input with `-`.

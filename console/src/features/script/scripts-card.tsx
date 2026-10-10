@@ -138,7 +138,10 @@ export function ScriptsCard({ env }: { env: Environment }) {
                       {script.when}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      order {script.order} · {script.execution.mode}
+                      order {script.order} ·{" "}
+                      {script.execution.mode === "explicit"
+                        ? "Separate container"
+                        : "Service configuration"}
                     </span>
                   </div>
                   <span className="truncate font-mono text-xs text-muted-foreground">
