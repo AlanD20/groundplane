@@ -40,12 +40,20 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		if err != nil {
 			break
 		}
-		p.emitProgress(runCtx, TaskProgress{
+		running := TaskProgress{
 			AssignmentID: reservation.assignment.AssignmentID,
 			TaskID:       reservation.assignment.TaskID, PlanHash: planHash,
 			StepID: step.StepId, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
 			Ordinal: 1, State: TaskProgressRunning,
-		})
+		}
+		if reservation.eventsDurable && blueprintUnitMutationStep(reservation.assignment.Plan, step) {
+			if err = p.emitProgressAndWait(reservation.ctx, running); err != nil {
+				failedStepID = step.GetStepId()
+				break
+			}
+		} else {
+			p.emitProgress(runCtx, running)
+		}
 		stepCtx, cancel := context.WithTimeout(
 			reservation.ctx,
 			time.Duration(step.TimeoutSeconds)*time.Second,
@@ -65,6 +73,11 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 						"agent: materialization runtime is not configured",
 					)
 				} else {
+					if reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+						// Execute may fail after replacing a file. A failed write
+						// cannot prove that the captured predecessor is unchanged.
+						mutationAttempted = true
+					}
 					err = p.materializer.ExecuteStep(stepCtx, reservation.assignment, step, payload)
 				}
 			}
@@ -142,6 +155,11 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 					err = componentaction.CloseSourceWithError(payload.Source, "agent: Component action runtime is not configured")
 				} else {
 					var actionResult *componentaction.ComponentActionResult
+					if reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+						// An action may have taken effect even when its response
+						// is lost and no result object is returned.
+						mutationAttempted = true
+					}
 					actionResult, err = p.componentActions.ExecuteComponentAction(
 						stepCtx, reservation.assignment, step, payload,
 					)
