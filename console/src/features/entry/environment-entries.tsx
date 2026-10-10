@@ -531,6 +531,7 @@ export function EnvVarsCard({
       </ResourceForm>
       <BulkEntryDrawer
         inline={!service}
+        serviceName={service?.name}
         env={env}
         bulkOpen={bulkOpen}
         setBulkOpen={setBulkOpen}

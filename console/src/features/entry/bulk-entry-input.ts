@@ -20,11 +20,29 @@ export function parseBulkEnvironmentEntries(
       if (seen.has(key))
         throw new Error(`Line ${index + 1} duplicates ${key}.`);
       seen.add(key);
-      entries.push({ key, value: line.slice(separator + 1) });
+      let value = line.slice(separator + 1);
+      if (value.startsWith('"')) {
+        try {
+          value = JSON.parse(value);
+          if (typeof value !== "string") throw new Error();
+        } catch {
+          throw new Error(`Line ${index + 1} has an invalid quoted value.`);
+        }
+      }
+      entries.push({ key, value });
     });
   if (entries.length === 0)
     throw new Error("Enter at least one KEY=value line.");
-  if (entries.length > 200)
-    throw new Error("Bulk edit accepts at most 200 variables.");
   return entries;
+}
+
+export function formatBulkEnvironmentEntries(
+  entries: { key: string; value: string }[],
+) {
+  return entries
+    .map(
+      ({ key, value }) =>
+        `${key}=${/[\r\n]/.test(value) || value.startsWith('"') ? JSON.stringify(value) : value}`,
+    )
+    .join("\n");
 }

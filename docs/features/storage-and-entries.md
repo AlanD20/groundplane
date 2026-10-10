@@ -60,6 +60,14 @@ execution and Retry. A later edit must not change an in-flight operation.
 The Entries list marks a secret Entry whose selected value is empty; it does
 not reveal the value or infer emptiness from the redacted source field.
 
+Console Bulk edit loads existing variable values, including secrets, and excludes
+files. From a Service, it loads only variables exposed to that Service. Existing
+keys retain their encryption and exposure; the form's defaults apply to new keys.
+Only changed values are submitted, and omitted keys are kept. Unchanged Secret
+and Attach references remain linked; editing their resolved value replaces the
+Entry source with a literal, with a warning before saving. Multiline values use
+JSON-quoted strings such as `MESSAGE="first\nsecond"`.
+
 Canonical Environment Blueprint export includes every operator-managed Entry,
 including Entries created through Console, CLI or API actions. Secret literal
 values are always blank in that document. An unchanged key-only declaration
