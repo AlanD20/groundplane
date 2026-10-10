@@ -30,6 +30,11 @@ func TestBlueprintScriptReceiptSettlesMetadataAndFencesSupersession(t *testing.T
 			return blueprintunits.PrepareControllerEntrySettlement(snapshot, unit, ids.New(ids.KindOperation), generationID)
 		})
 	})
+	t.Run("Route without runtime projection", func(t *testing.T) {
+		testBlueprintControllerMetadataReceipt(t, ids.KindRoute, func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, revision int64) (blueprintunits.MutationPlan, error) {
+			return blueprintunits.PrepareControllerRouteSettlement(snapshot, unit, ids.New(ids.KindOperation), revision)
+		})
+	})
 }
 
 func testBlueprintControllerMetadataReceipt(
@@ -99,7 +104,11 @@ func testBlueprintControllerMetadataReceipt(
 	}
 	parentID = ids.New(ids.KindTask)
 	publishHead(parentID)
-	unit.Removal, unit.Fingerprint = true, ""
+	if kind == ids.KindRoute {
+		unit.Fingerprint = strings.Repeat("b", 64)
+	} else {
+		unit.Removal, unit.Fingerprint = true, ""
+	}
 	publishPlan(parentID, unit)
 	removal, err := settle(load(), unit, 2)
 	if err != nil {
@@ -109,8 +118,12 @@ func testBlueprintControllerMetadataReceipt(
 	if result, err := store.Transact(ctx, removal.Conditions(), removal.Mutations()); err != nil || !result.Succeeded {
 		t.Fatalf("settle omission = %#v, %v", result, err)
 	}
-	if state := load(); state.Applied[0].Record.State != blueprintunits.Absent || len(state.Executions) != 0 {
-		t.Fatalf("omission did not settle as Controller absence: %#v", state)
+	wantState := blueprintunits.Absent
+	if kind == ids.KindRoute {
+		wantState = blueprintunits.Applied
+	}
+	if state := load(); state.Applied[0].Record.State != wantState || len(state.Executions) != 0 {
+		t.Fatalf("metadata did not settle as %s: %#v", wantState, state)
 	}
 	publishHead(ids.New(ids.KindTask))
 	if result, err := store.Transact(ctx, removal.Conditions(), removal.Mutations()); err != nil || result.Succeeded {

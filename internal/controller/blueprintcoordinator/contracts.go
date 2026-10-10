@@ -38,8 +38,8 @@ type ScriptSettler interface {
 	SettleScript(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
 }
 
-// RouteSettler acknowledges metadata already sealed into the exact runtime
-// projection; its Component dependency owns any subsequent host effect.
+// RouteSettler acknowledges metadata in the immutable authored input; its
+// Component dependency owns any subsequent host effect.
 type RouteSettler interface {
 	SettleRoute(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
 }

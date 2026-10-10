@@ -63,25 +63,38 @@ func (service *Service) sealAuthoredRuntimeProjection(
 	if err != nil {
 		return err
 	}
+	if err := requireAuthoredRuntimeProjectionInputs(
+		source.desired.Record, source.identities.Record, snapshot,
+	); err != nil {
+		return err
+	}
+	components, err := service.loadAuthoredRuntimeComponents(ctx, parent, source, snapshot)
+	if err != nil {
+		return err
+	}
 	attaches, err := service.loadAuthoredRuntimeAttaches(
 		ctx, parent.Owner.EnvironmentID, source.identities.Record, snapshot,
 	)
 	if err != nil {
 		return err
 	}
-	projection, err := compileAuthoredRuntimeProjection(ctx, parent, source, snapshot, attaches)
+	projection, err := service.compileAuthoredRuntimeProjection(
+		ctx, parent, source, snapshot, attaches, components,
+	)
 	if err != nil {
 		return err
 	}
 	return service.repository.SealEnvironmentBlueprintRuntimeProjection(
 		ctx,
 		etcd.BlueprintRuntimeProjectionSeal{
-			Parent: parent, ExpectedHeadRevision: snapshot.HeadRevision,
+			Parent: parent, SnapshotReadRevision: snapshot.ReadRevision,
+			ExpectedHeadRevision:    snapshot.HeadRevision,
 			ExpectedEpochRevision:   snapshot.EpochRevision,
 			DesiredRootRevision:     source.desired.Revision,
 			OwnedIdentitiesRevision: source.identities.Revision,
 			Tenant:                  source.tenant, Project: source.project, Environment: source.environment,
 			Projection: projection, Attaches: attaches,
+			Components: components.authorities, ComponentReceipts: components.receipts,
 		},
 	)
 }
@@ -171,12 +184,13 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 	}, nil
 }
 
-func compileAuthoredRuntimeProjection(
+func (service *Service) compileAuthoredRuntimeProjection(
 	ctx context.Context,
 	parent etcd.TaskRecord,
 	source authoredRuntimeProjectionSource,
 	unitSnapshot blueprintunits.Snapshot,
 	attaches []etcdstore.Versioned[attachrecord.Record],
+	components authoredRuntimeComponents,
 ) (projectionrecord.EnvironmentComposeProjection, error) {
 	desired, identities := source.desired.Record, source.identities.Record
 	if err := requireAuthoredRuntimeProjectionInputs(desired, identities, unitSnapshot); err != nil {
@@ -214,8 +228,23 @@ func compileAuthoredRuntimeProjection(
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
+	componentRoutes := make([]core.Route, len(routes))
+	for index, route := range routes {
+		componentRoutes[index] = route.Desired
+	}
+	componentEnvironment := blueprintComponentEnvironment(
+		source.environment.Record, zones, services, componentRoutes, components.projected, entries,
+	)
+	componentProjection, err := composerender.ProjectEnvironmentComponents(
+		project, componentEnvironment, service.componentCatalog,
+	)
+	if err != nil {
+		return projectionrecord.EnvironmentComposeProjection{}, err
+	}
+	renderIdentities := environmentComponentComposeIdentities(snapshot, componentProjection.Services)
 	entryProjection, err := composerender.ProjectEnvironmentEntries(
-		project, desired.EnvironmentID, source.environment.Record.VolumeDir, snapshot.Services, entries,
+		componentProjection.Project, desired.EnvironmentID, source.environment.Record.VolumeDir,
+		snapshot.Services, entries,
 	)
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
@@ -238,7 +267,7 @@ func compileAuthoredRuntimeProjection(
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
-	volumeMounts, err := environmentBlueprintVolumeMounts(entryProjection.Project, snapshot)
+	volumeMounts, err := environmentBlueprintVolumeMounts(entryProjection.Project, renderIdentities)
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
@@ -259,7 +288,7 @@ func compileAuthoredRuntimeProjection(
 		),
 		RenderGeneration:    desired.RenderGeneration,
 		AuthorizedVolumeDir: source.environment.Record.VolumeDir,
-		Identities:          snapshot, ExternalNetworks: externalNetworks,
+		Identities:          renderIdentities, ExternalNetworks: externalNetworks,
 	})
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
@@ -274,9 +303,12 @@ func compileAuthoredRuntimeProjection(
 	}
 	projection := desiredrevision.ComposeProjection(
 		desired.EnvironmentID, desired.RevisionID, desired.RenderGeneration,
-		snapshot, volumeSlugs, volumeMounts, artifactValue,
+		renderIdentities, volumeSlugs, volumeMounts, artifactValue,
 		desired.Input.NormalizedCompose, desired.Input.RuntimeFiles,
-		desired.Input.ServiceExtensions, nil, nil, entries,
+		desired.Input.ServiceExtensions, nil, components.records, entries,
+	)
+	projection.ManagedComponentRuntimeSources = append(
+		[]projectionrecord.ManagedComponentRuntimeSource(nil), components.sources...,
 	)
 	projection = desiredrevision.WithDesiredTopology(
 		projection, zoneProjection, serviceProjection, routes,
@@ -293,8 +325,7 @@ func requireAuthoredRuntimeProjectionInputs(
 	identities projectionrecord.EnvironmentOwnedIdentities,
 	snapshot blueprintunits.Snapshot,
 ) error {
-	if len(desired.Input.Components) != 0 ||
-		desired.Input.Backup != nil || len(desired.Input.Requires) != 0 {
+	if desired.Input.Backup != nil || len(desired.Input.Requires) != 0 {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime projection prerequisites are pending")
 	}
 	if !sameOwnedNames(sortedAuthoredMapKeys(desired.Input.Attachments), identities.Attaches) ||
@@ -307,6 +338,7 @@ func requireAuthoredRuntimeProjectionInputs(
 		identities []projectionrecord.OwnedIdentity
 	}{
 		{ids.KindAttach, identities.Attaches},
+		{ids.KindComponent, identities.Components},
 		{ids.KindEnvEntry, identities.Entries},
 	} {
 		for _, identity := range group.identities {
@@ -323,22 +355,8 @@ func authoredRuntimeInputApplied(
 	snapshot blueprintunits.Snapshot,
 	target blueprintunits.ResourceKey,
 ) bool {
-	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID {
-		return false
-	}
-	for _, unit := range snapshot.Desired.Record.Units {
-		if unit.Target != target || unit.Removal {
-			continue
-		}
-		for _, applied := range snapshot.Applied {
-			if applied.Record.Target == target && applied.Record.State == blueprintunits.Applied &&
-				applied.Record.Fingerprint == unit.Fingerprint {
-				return true
-			}
-		}
-		return false
-	}
-	return false
+	_, _, found := authoredRuntimeAppliedReceipt(snapshot, target)
+	return found
 }
 
 func projectAuthoredRuntimeRoutes(

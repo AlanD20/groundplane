@@ -9,18 +9,17 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// A Route's authored metadata is already in the immutable runtime projection.
-// Its Controller receipt must compare that exact projection in the same
-// transaction; the HTTP router Component owns any later host configuration.
+// The Route metadata and receipt compare the immutable authored root in one
+// transaction. The router Component owns any later host configuration.
 func PrepareControllerRouteSettlement(
 	snapshot Snapshot,
 	unit Unit,
 	operationID string,
-	projectionRevision int64,
+	authoredRevision int64,
 ) (MutationPlan, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 		unit.Target.Kind != ids.KindRoute || unit.Removal ||
-		ids.Validate(ids.KindOperation, operationID) != nil || projectionRevision <= 0 ||
+		ids.Validate(ids.KindOperation, operationID) != nil || authoredRevision <= 0 ||
 		len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
 		return MutationPlan{}, invalidRecord()
 	}
@@ -39,9 +38,9 @@ func PrepareControllerRouteSettlement(
 	applied := AppliedRecord{
 		EnvironmentID: snapshot.EnvironmentID, Target: unit.Target,
 		State: Applied, Fingerprint: unit.Fingerprint,
-		ParentTaskID:                 snapshot.HeadTaskID,
-		ControllerOperationID:        operationID,
-		ControllerProjectionRevision: projectionRevision,
+		ParentTaskID:               snapshot.HeadTaskID,
+		ControllerOperationID:      operationID,
+		ControllerAuthoredRevision: authoredRevision,
 	}
 	plan, err := PrepareMutation(snapshot, []AppliedChange{{Target: unit.Target, Next: &applied}}, nil)
 	if err != nil {

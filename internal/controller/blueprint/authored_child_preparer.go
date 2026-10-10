@@ -69,10 +69,10 @@ func (service *Service) Prepare(
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	// The runtime projection is sealed only after Entry and Attach unit receipts
-	// match this parent. Other unit effects are still unsupported here.
-	if len(input.desired.Input.Components) != 0 ||
-		len(input.desired.Input.Requires) != 0 {
+	// The runtime projection is sealed only after Entry, Attach and Component
+	// effects match its exact authored inputs. Fact requirements and Backup are
+	// still pending their separate projection authority.
+	if input.desired.Input.Backup != nil || len(input.desired.Input.Requires) != 0 {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindStateConflict, "Blueprint Service child prerequisites are not prepared",
 		)

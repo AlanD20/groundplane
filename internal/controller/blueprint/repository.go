@@ -86,6 +86,11 @@ type environmentBlueprintRepository interface {
 		string,
 		etcdstore.PageRequest,
 	) (etcdstore.Page[componentrecord.Record], error)
+	ReadEnvironmentBlueprintRuntimeComponents(
+		context.Context,
+		string,
+		int64,
+	) ([]etcd.BlueprintRuntimeComponent, error)
 	PrepareEnvironmentComponentTask(
 		context.Context,
 		string,
@@ -292,6 +297,15 @@ func (repository *durableRepository) ListEnvironmentComponents(
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[componentrecord.Record], error) {
 	return repository.components.ListEnvironmentComponents(ctx, environmentID, request)
+}
+func (repository *durableRepository) ReadEnvironmentBlueprintRuntimeComponents(
+	ctx context.Context,
+	environmentID string,
+	revision int64,
+) ([]etcd.BlueprintRuntimeComponent, error) {
+	return repository.EnvironmentBlueprintRepository.ReadEnvironmentBlueprintRuntimeComponents(
+		ctx, environmentID, revision,
+	)
 }
 func (repository *durableRepository) ListZones(
 	ctx context.Context,
