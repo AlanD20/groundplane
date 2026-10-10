@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
@@ -228,6 +229,7 @@ func (service *Service) applyAuthoredOnce(
 	}
 	parent, err := authoredApplyParent(
 		claim, baseline.taskOwner, taskTarget, idempotencyKey, desired, allocator.Named,
+		int64(service.executionTimeout/time.Second),
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

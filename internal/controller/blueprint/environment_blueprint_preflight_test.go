@@ -294,6 +294,7 @@ func TestApplyBlueprintImageFailurePrecedesEveryDurableWrite(t *testing.T) {
 		catalog,
 		nil,
 		nil,
+		40*time.Minute,
 	)
 	if err != nil {
 		t.Fatal(err)

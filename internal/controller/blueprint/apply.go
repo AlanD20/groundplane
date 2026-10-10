@@ -39,6 +39,7 @@ type Service struct {
 	componentCatalog  []componentrender.EnvironmentComponentRegistration
 	backups           environmentBlueprintBackupRepository
 	backupKeys        environmentBlueprintBackupKeyFactory
+	executionTimeout  time.Duration
 	random            io.Reader
 	now               func() time.Time
 }
@@ -56,6 +57,7 @@ func NewService(
 	componentCatalog []componentrender.EnvironmentComponentRegistration,
 	backups environmentBlueprintBackupRepository,
 	backupKeys environmentBlueprintBackupKeyFactory,
+	executionTimeout time.Duration,
 ) (*Service, error) {
 	parsedEnvironmentPool, poolErr := netip.ParsePrefix(environmentPool)
 	if poolErr != nil || !parsedEnvironmentPool.Addr().Is4() ||
@@ -68,6 +70,9 @@ func NewService(
 		attachFacts == nil ||
 		blueprintReleases == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
+	}
+	if executionTimeout < 40*time.Minute || executionTimeout > 24*time.Hour || executionTimeout%time.Second != 0 {
+		return nil, errs.New(errs.KindValidationFailed, "Blueprint execution timeout must be an integral duration from 40m through 24h")
 	}
 	plans, err := taskplanning.NewTaskPlanResolverWithBlueprints(volumeRoot, repository, componentCatalog)
 	if err != nil {
@@ -82,6 +87,7 @@ func NewService(
 		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),
 		backups:          backups,
 		backupKeys:       backupKeys,
+		executionTimeout: executionTimeout,
 		random:           rand.Reader, now: time.Now,
 	}, nil
 }

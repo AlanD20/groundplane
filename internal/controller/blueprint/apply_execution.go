@@ -27,6 +27,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func (service *Service) applyBlueprintOnce(
@@ -430,7 +431,7 @@ func (service *Service) applyBlueprintOnce(
 		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID})
 	}
 	attachSteps, attachStepRecords, err := preparedAttaches.procedureSteps(
-		taskID, desiredrevision.TaskTimeoutSeconds, allocator.Named,
+		taskID, int64(service.executionTimeout/time.Second), allocator.Named,
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -516,7 +517,7 @@ func (service *Service) applyBlueprintOnce(
 		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: int32(generation), Type: taskjournal.TaskUpdate, Target: taskTarget,
-		Params: params, Steps: stepRecords, TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		Params: params, Steps: stepRecords, TimeoutSeconds: int64(service.executionTimeout / time.Second),
 		Materializations: materializations,
 		Status:           taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}

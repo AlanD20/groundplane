@@ -2,11 +2,11 @@ package blueprint
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
-	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -36,14 +36,25 @@ func (service *Service) Prepare(
 			errs.KindValidationFailed, "Blueprint child request is invalid",
 		)
 	}
+	if parent.StartedAt == nil || parent.TimeoutSeconds <= 0 || parent.TimeoutSeconds > int64(24*time.Hour/time.Second) {
+		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint parent execution deadline is unavailable")
+	}
+	elapsed := service.now().UTC().Sub(*parent.StartedAt)
+	timeoutSeconds := parent.TimeoutSeconds - int64(elapsed/time.Second)
+	if elapsed%time.Second > 0 {
+		timeoutSeconds--
+	}
+	if elapsed < 0 || timeoutSeconds <= 0 {
+		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint parent has no execution time remaining")
+	}
 	if unit.Target.Kind == ids.KindNetwork {
-		return service.prepareAuthoredNetworkChild(ctx, parent, unit)
+		return service.prepareAuthoredNetworkChild(ctx, parent, unit, timeoutSeconds)
 	}
 	if unit.Target.Kind == ids.KindVolume {
-		return service.prepareAuthoredVolumeChild(ctx, parent, unit)
+		return service.prepareAuthoredVolumeChild(ctx, parent, unit, timeoutSeconds)
 	}
 	if unit.Target.Kind == ids.KindAttach {
-		return service.prepareAuthoredAttachChild(ctx, parent, unit)
+		return service.prepareAuthoredAttachChild(ctx, parent, unit, timeoutSeconds)
 	}
 	if unit.Target.Kind != ids.KindService {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
@@ -97,7 +108,7 @@ func (service *Service) Prepare(
 			taskcontract.EnvironmentBlueprintArtifactParam:  artifact.GetArtifactId(),
 			taskcontract.EnvironmentBlueprintProcedureParam: string(taskcontract.BlueprintComposeProcedureNone),
 		},
-		TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		TimeoutSeconds: timeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
@@ -121,6 +132,7 @@ func (service *Service) prepareAuthoredAttachChild(
 	ctx context.Context,
 	parent etcd.TaskRecord,
 	unit blueprintunits.Unit,
+	timeoutSeconds int64,
 ) (blueprintcoordinator.PreparedChild, error) {
 	reader, ok := service.repository.(authoredAttachGenerationReader)
 	if !ok || service.attachFacts == nil || ids.Validate(ids.KindAttach, unit.Target.ID) != nil {
@@ -150,14 +162,10 @@ func (service *Service) prepareAuthoredAttachChild(
 			taskjournal.TaskBlueprintParentParam:       parent.ID,
 			attachinputs.TaskAttachIDParam:             unit.Target.ID,
 		},
-		TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		TimeoutSeconds: timeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
-	child.TimeoutSeconds = max(
-		child.TimeoutSeconds,
-		int64(versioned.Record.Hook.Attach.TimeoutSeconds)+15,
-	)
 	transferred, err := attachinputs.TransferToChild(versioned.Record, child.ID)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
@@ -200,6 +208,7 @@ func (service *Service) prepareAuthoredVolumeChild(
 	ctx context.Context,
 	parent etcd.TaskRecord,
 	unit blueprintunits.Unit,
+	timeoutSeconds int64,
 ) (blueprintcoordinator.PreparedChild, error) {
 	if service.plans == nil || ids.Validate(ids.KindVolume, unit.Target.ID) != nil {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
@@ -240,7 +249,7 @@ func (service *Service) prepareAuthoredVolumeChild(
 			taskjournal.TaskBlueprintVolumeModeParam:   mode,
 			taskjournal.TaskBlueprintVolumeIntentParam: intentSHA256,
 		},
-		TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		TimeoutSeconds: timeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
@@ -255,6 +264,7 @@ func (service *Service) prepareAuthoredNetworkChild(
 	ctx context.Context,
 	parent etcd.TaskRecord,
 	unit blueprintunits.Unit,
+	timeoutSeconds int64,
 ) (blueprintcoordinator.PreparedChild, error) {
 	if service.plans == nil || ids.Validate(ids.KindNetwork, unit.Target.ID) != nil {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
@@ -273,7 +283,7 @@ func (service *Service) prepareAuthoredNetworkChild(
 			taskjournal.TaskBlueprintParentParam:       parent.ID,
 			taskjournal.TaskBlueprintNetworkUnitParam:  unit.Target.ID,
 		},
-		TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		TimeoutSeconds: timeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}

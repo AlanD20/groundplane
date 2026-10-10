@@ -107,6 +107,10 @@ The parent remains nonterminal while any required unit is running or has
 unknown effects. A child terminal status alone cannot mark the parent
 successful or release its resource claims.
 
+Apply uses the Controller's configured release execution timeout. Each private
+child receives only the parent's remaining forward-work budget; it does not
+restart the whole timeout for each resource.
+
 The visible parent's deadline starts at its durable claim time, not at a
 Controller process restart or each new child. Expiry atomically closes the same
 selection gate as Abort. The first durable stop outcome wins: deadline expiry

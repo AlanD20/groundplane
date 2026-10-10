@@ -439,7 +439,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		entryGeneration,
 		execution.attachFactValues,
 		bootstrap.componentCatalog,
-		environmentBlueprintRepository, backups.policyKeys,
+		environmentBlueprintRepository, backups.policyKeys, releaseExecutionTimeout,
 	)
 	if err != nil {
 		_ = store.Close()

@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -23,6 +22,7 @@ func authoredApplyParent(
 	target, idempotencyKey string,
 	desired projectionrecord.EnvironmentDesiredInput,
 	allocateNamed func(ids.Kind, string) string,
+	timeoutSeconds int64,
 ) (etcd.TaskRecord, error) {
 	if allocateNamed == nil || claim.TaskID != claim.RevisionID ||
 		claim.EnvironmentID != owner.EnvironmentID || target != owner.EnvironmentID ||
@@ -47,7 +47,7 @@ func authoredApplyParent(
 		RenderGeneration: int32(claim.RenderGeneration),
 		Type:             taskjournal.TaskUpdate, Target: target,
 		Params:         map[string]string{blueprints.EnvironmentDesiredRevisionParam: claim.RevisionID},
-		TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		TimeoutSeconds: timeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
