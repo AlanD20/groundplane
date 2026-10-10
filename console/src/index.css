@@ -170,8 +170,7 @@
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     background: var(--workspace-editor-bg, var(--form-actions-bg, var(--card)));
-    box-shadow: 0 -8px 16px -12px
-      color-mix(in srgb, var(--foreground) 25%, transparent);
+    box-shadow: none;
   }
   .form-actions[data-viewport-actions] {
     position: fixed;

@@ -1,4 +1,6 @@
 import { Disclosure } from "@/components/common/disclosure";
+import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   CollectionToolbar,
   TablePagination,
@@ -47,10 +49,33 @@ export function ConnectionsTab({
     (svc.adapter !== "valkey" || svc.authentication === "username_password");
 
   const [query, setQuery] = useState("");
-  const rows = (g.consumers || []).filter((c) =>
-    `${c.project} ${c.environment} ${c.service} ${c.database} ${c.role}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
+  const [tenant, setTenant] = useState("");
+  const [project, setProject] = useState("");
+  const [environment, setEnvironment] = useState("");
+  const consumers = g.consumers ?? [];
+  const projectKey = (c: ConsumerLink) => JSON.stringify([c.tenant, c.project]);
+  const environmentKey = (c: ConsumerLink) =>
+    JSON.stringify([c.tenant, c.project, c.environment]);
+  const tenantRows = consumers.filter((c) => !tenant || c.tenant === tenant);
+  const projectRows = tenantRows.filter(
+    (c) => !project || projectKey(c) === project,
+  );
+  const options = (
+    items: ConsumerLink[],
+    value: (c: ConsumerLink) => string,
+    label: (c: ConsumerLink) => string,
+  ) =>
+    Array.from(
+      new Map(
+        items.map((c) => [value(c), { value: value(c), label: label(c) }]),
+      ).values(),
+    ).sort((a, b) => a.label.localeCompare(b.label));
+  const rows = projectRows.filter(
+    (c) =>
+      (!environment || environmentKey(c) === environment) &&
+      `${c.tenant} ${c.project} ${c.environment} ${c.service} ${c.database} ${c.role}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
   );
   const table = useTableView(
     rows,
@@ -61,7 +86,7 @@ export function ConnectionsTab({
     },
     "service",
     "asc",
-    query,
+    JSON.stringify([query, tenant, project, environment]),
   );
   return (
     <>
@@ -70,7 +95,69 @@ export function ConnectionsTab({
           query={query}
           onQueryChange={setQuery}
           label="Consumers"
-        />
+        >
+          <SearchableSelect
+            aria-label="Filter consumers by tenant"
+            className="w-full sm:w-44"
+            value={tenant}
+            onValueChange={(value) => {
+              setTenant(value);
+              setProject("");
+              setEnvironment("");
+            }}
+            options={[
+              { value: "", label: "All tenants" },
+              ...options(
+                consumers,
+                (c) => c.tenant,
+                (c) => c.tenant,
+              ),
+            ]}
+          />
+          <SearchableSelect
+            aria-label="Filter consumers by project"
+            className="w-full sm:w-52"
+            value={project}
+            onValueChange={(value) => {
+              setProject(value);
+              setEnvironment("");
+            }}
+            options={[
+              { value: "", label: "All projects" },
+              ...options(tenantRows, projectKey, (c) =>
+                tenant ? c.project : `${c.tenant} / ${c.project}`,
+              ),
+            ]}
+          />
+          <SearchableSelect
+            aria-label="Filter consumers by environment"
+            className="w-full sm:w-60"
+            value={environment}
+            onValueChange={setEnvironment}
+            options={[
+              { value: "", label: "All environments" },
+              ...options(projectRows, environmentKey, (c) =>
+                project
+                  ? c.environment
+                  : `${tenant ? "" : `${c.tenant} / `}${c.project} / ${c.environment}`,
+              ),
+            ]}
+          />
+          {(query || tenant || project || environment) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setQuery("");
+                setTenant("");
+                setProject("");
+                setEnvironment("");
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </CollectionToolbar>
         <div className="space-y-3">
           {table.rows.map((c) => (
             <Disclosure

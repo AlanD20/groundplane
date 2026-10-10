@@ -124,6 +124,10 @@ actions that actually open an editor.
 Use the shared searchable selector for resource references; use the regular
 custom selector for short fixed choices. Native browser autocomplete is not a
 resource picker. Secret reference pickers retain explicit manual reference entry.
+Backing Service consumers offer searchable Tenant, Project and Environment
+filters alongside text search. Parent selections narrow child choices and clear
+their selections; labels disambiguate identically named resources by scope.
+Filter changes reset pagination, with a single action to clear all filters.
 Value rows provide labeled copy actions and a stable empty-value placeholder;
 copying an empty value copies the empty string, never its placeholder.
 Present variables and files as readable entries: key or path and value first,
@@ -231,7 +235,7 @@ content; it does not need its own visual treatment for ordinary fields and edits
   Keep editing preserves the current draft and cancels the attempted editor.
   Never stack viewport action bars.
   Keep the sidebar clear on desktop and wrap controls on narrow screens. Use the
-  opaque editing tint, a top divider/shadow, 16px padding and mobile safe-area
+  opaque editing tint, a top divider without shadow, 16px padding and mobile safe-area
   padding in both themes. Resting settings and modal confirmations keep their
   local actions; saving or closing an editor removes its viewport bar.
 - **Resource rows:** establish a clear hierarchy of identity, primary value and
