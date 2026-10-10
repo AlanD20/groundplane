@@ -314,6 +314,18 @@ Do not imply traffic reachability from membership edges. Custom hook examples mu
 be valid command arrays; shell comments belong inside the shell argument, never
 JSON comments. Inserting a sample is explicit and must not overwrite existing code.
 
+Topology uses the shared pan/zoom board with Zone-membership groups, Routes,
+Services, declared dependencies, backing connections and mounted Volumes.
+It visualizes saved relationships, not inferred reachability or unsaved YAML.
+Keep Add Zone, Add Service and Manage Zones visible; preserve the existing
+management actions. Relationship layers start enabled and expose their counts.
+Selecting a node highlights each direct connection from endpoint to endpoint
+above dimmed unrelated paths, including the complete shared-trunk segment and
+arrowhead. Never highlight unrelated branches of a shared trunk. Use theme tokens.
+Drag empty canvas to pan; wheel pans; Ctrl/Cmd+wheel zooms at the pointer.
+Focused board Ctrl/Cmd +/- zooms, Ctrl/Cmd0 resets, arrows pan. Provide visible
+zoom and fit controls, preserve node clicks and release capture on cancellation.
+
 ## Language and shared presentation
 
 Use familiar, specific labels with one meaning throughout the Console. Action

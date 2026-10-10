@@ -1,3 +1,4 @@
+import { BlueprintTopology } from "./blueprint-topology";
 import { ResourceForm } from "@/components/common/resource-form";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
@@ -34,43 +35,60 @@ export function Topology({
   onAddService: () => void;
 }) {
   const [zoneOpen, setZoneOpen] = useState(false);
+  const [view, setView] = useState<"graph" | "zones">("graph");
   return (
     <>
-      <ZoneMap
-        env={env}
-        creation={
-          <ZoneFormDialog
-            env={env}
-            open={zoneOpen}
-            onOpenChange={setZoneOpen}
-          />
-        }
-        actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setZoneOpen(true)}
-            >
-              <Plus className="size-3.5" /> Add Zone
-            </Button>
-            <Button variant="outline" size="sm" onClick={onAddService}>
-              <Plus className="size-3.5" /> Add Service
-            </Button>
-          </>
-        }
-        renderZone={(zone, selection) => (
-          <ZoneColumn
-            key={zone.id}
-            zone={zone}
-            env={env}
-            selection={selection}
-          />
-        )}
-        renderUnzoned={(selection) => (
-          <UnzonedColumn env={env} selection={selection} />
-        )}
-      />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={view === "graph" ? "secondary" : "ghost"}
+            aria-pressed={view === "graph"}
+            onClick={() => setView("graph")}
+          >
+            Topology
+          </Button>
+          <Button
+            size="sm"
+            variant={view === "zones" ? "secondary" : "ghost"}
+            aria-pressed={view === "zones"}
+            onClick={() => setView("zones")}
+          >
+            Manage Zones
+          </Button>
+          <span className="self-center font-mono text-xs text-muted-foreground">
+            {env.networkPool}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setZoneOpen(true)}>
+            <Plus className="size-3.5" /> Add Zone
+          </Button>
+          <Button variant="outline" size="sm" onClick={onAddService}>
+            <Plus className="size-3.5" /> Add Service
+          </Button>
+        </div>
+      </div>
+      <ZoneFormDialog env={env} open={zoneOpen} onOpenChange={setZoneOpen} />
+      {view === "graph" ? (
+        <BlueprintTopology key={env.id} env={env} />
+      ) : (
+        <ZoneMap
+          env={env}
+          actions={null}
+          renderZone={(zone, selection) => (
+            <ZoneColumn
+              key={zone.id}
+              zone={zone}
+              env={env}
+              selection={selection}
+            />
+          )}
+          renderUnzoned={(selection) => (
+            <UnzonedColumn env={env} selection={selection} />
+          )}
+        />
+      )}
     </>
   );
 }
