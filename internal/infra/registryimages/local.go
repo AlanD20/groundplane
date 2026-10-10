@@ -34,6 +34,18 @@ func (Local) Fetch(ctx context.Context, plan imagefetch.Plan, report imagefetch.
 	return imageID, errors.Join(err, registryClient.Close())
 }
 
+func (Local) AssignTag(
+	ctx context.Context,
+	plan imagefetch.Plan,
+) (imagefetch.TagAssignmentOutcome, error) {
+	registryClient, err := NewLocal(ctx, strings.HasPrefix(plan.Repository, imagefetch.RegistryAuthority+"/"))
+	if err != nil {
+		return imagefetch.TagAssignmentUnknown, err
+	}
+	outcome, err := registryClient.AssignTag(ctx, plan)
+	return outcome, errors.Join(err, registryClient.Close())
+}
+
 // NewLocal owns the host Docker client and uses only installer-managed registry
 // credentials and trust. Its caller must Close it after the operation finishes.
 func NewLocal(ctx context.Context, managed bool) (*Client, error) {

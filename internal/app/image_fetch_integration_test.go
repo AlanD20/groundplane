@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -44,7 +45,10 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		ManifestDigest: "sha256:" + strings.Repeat("a", 64), ConfigDigest: "sha256:" + strings.Repeat("b", 64),
 		Architecture: "amd64",
 	}
-	registry := &imageFetchRegistry{selected: original, returnedID: "sha256:" + strings.Repeat("c", 64)}
+	registry := &imageFetchRegistry{
+		selected: original, returnedID: "sha256:" + strings.Repeat("c", 64),
+		tagOutcome: imagefetch.TagAssignmentApplied,
+	}
 	service, err := imagedelivery.New(registry, store, tasks, idempotency, coordinator)
 	if err != nil {
 		t.Fatal(err)
@@ -118,6 +122,13 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err := service.Execute(ctx, claim.Task.Record); err != nil {
 		t.Fatal(err)
 	}
+	if tagged := len(registry.tagged); tagged != 1 {
+		t.Fatalf("successful retry assigned tag %d times", tagged)
+	} else if err := service.Execute(ctx, claim.Task.Record); err != nil {
+		t.Fatalf("resume after tag commit before Task acknowledgement: %v", err)
+	} else if len(registry.tagged) != tagged {
+		t.Fatal("resume repeated an already receipted tag effect")
+	}
 	if _, err := tasks.AcknowledgeControllerTask(ctx, retry.TaskID, taskjournal.TaskStatusCompleted, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +141,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		t.Fatal("late progress overwrote a completed Task")
 	}
 	if registry.resolutions != 1 || len(registry.fetched) != 2 || registry.fetched[0] != original ||
-		registry.fetched[1] != original {
+		registry.fetched[1] != original || len(registry.tagged) != 1 || registry.tagged[0] != original {
 		t.Fatalf("retry changed selected content: %#v", registry)
 	}
 	if _, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC()); err != nil || found {
@@ -188,6 +199,118 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		inventory.Images[1].Fetches[0].Requested != "nginx:latest" || inventory.Images[1].Fetches[0].Status != "completed" {
 		t.Fatalf("moved tag history: %#v", inventory.Images)
 	}
+	if len(registry.tagged) != 2 || registry.tagged[1] != registry.selected {
+		t.Fatalf("fresh Fetch did not move its explicit tag: %#v", registry.tagged)
+	}
+
+	// A failed accepted selection has no tag receipt. Once a newer Fetch is
+	// accepted and committed, retrying that older plan may still verify its
+	// pinned bytes, but it must not move the tag backward.
+	stale := imagefetch.Plan{
+		Requested: "nginx:latest", Repository: "docker.io/library/nginx",
+		ManifestDigest: "sha256:" + strings.Repeat("1", 64),
+		ConfigDigest:   "sha256:" + strings.Repeat("2", 64), Architecture: "amd64",
+	}
+	registry.selected, registry.returnedID = stale, "sha256:"+strings.Repeat("3", 64)
+	staleResponse, err := service.FetchImage(ctx, stale.Requested, "image-fetch-stale-selection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var staleAccepted api.ImageFetchAccepted
+	if err := json.Unmarshal(staleResponse.Body, &staleAccepted); err != nil {
+		t.Fatal(err)
+	}
+	staleClaim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
+	if err != nil || !found || staleClaim.Task.Record.ID != staleAccepted.TaskID {
+		t.Fatalf("claim stale selection: found=%t, error=%v", found, err)
+	}
+	if err := service.Execute(ctx, staleClaim.Task.Record); err == nil {
+		t.Fatal("mismatched stale content was accepted")
+	}
+	if _, err := tasks.AcknowledgeControllerTask(
+		ctx, staleAccepted.TaskID, taskjournal.TaskStatusFailed, time.Now().UTC(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	latest := imagefetch.Plan{
+		Requested: "nginx:latest", Repository: "docker.io/library/nginx",
+		ManifestDigest: "sha256:" + strings.Repeat("4", 64),
+		ConfigDigest:   "sha256:" + strings.Repeat("5", 64), Architecture: "amd64",
+	}
+	registry.selected = latest
+	latestResponse, err := service.FetchImage(ctx, latest.Requested, "image-fetch-latest-selection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var latestAccepted api.ImageFetchAccepted
+	if err := json.Unmarshal(latestResponse.Body, &latestAccepted); err != nil {
+		t.Fatal(err)
+	}
+	staleRetryResponse, err := retries.RetryTask(ctx, staleAccepted.TaskID, "image-fetch-stale-retry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var staleRetry api.TaskAccepted
+	if err := json.Unmarshal(staleRetryResponse.Body, &staleRetry); err != nil {
+		t.Fatal(err)
+	}
+	latestClaim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
+	if err != nil || !found || latestClaim.Task.Record.ID != latestAccepted.TaskID {
+		t.Fatalf("claim latest selection: found=%t, error=%v", found, err)
+	}
+	registry.returnedID = latest.ConfigDigest
+	if err := service.Execute(ctx, latestClaim.Task.Record); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tasks.AcknowledgeControllerTask(
+		ctx, latestAccepted.TaskID, taskjournal.TaskStatusCompleted, time.Now().UTC(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	taggedBeforeStaleRetry := len(registry.tagged)
+	staleRetryClaim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
+	if err != nil || !found || staleRetryClaim.Task.Record.ID != staleRetry.TaskID {
+		t.Fatalf("claim stale retry: found=%t, error=%v", found, err)
+	}
+	registry.returnedID = stale.ConfigDigest
+	if err := service.Execute(ctx, staleRetryClaim.Task.Record); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
+		t.Fatalf("stale retry = %v, want state conflict", err)
+	}
+	if len(registry.tagged) != taggedBeforeStaleRetry || registry.tagged[len(registry.tagged)-1] != latest {
+		t.Fatalf("stale retry moved the newer tag: %#v", registry.tagged)
+	}
+	if _, err := tasks.AcknowledgeControllerTask(
+		ctx, staleRetry.TaskID, taskjournal.TaskStatusFailed, time.Now().UTC(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	digestOnly := imagefetch.Plan{
+		Requested: "nginx@sha256:" + strings.Repeat("6", 64), Repository: "docker.io/library/nginx",
+		ManifestDigest: "sha256:" + strings.Repeat("6", 64),
+		ConfigDigest:   "sha256:" + strings.Repeat("7", 64), Architecture: "amd64",
+	}
+	registry.selected, registry.returnedID = digestOnly, digestOnly.ConfigDigest
+	digestResponse, err := service.FetchImage(ctx, digestOnly.Requested, "image-fetch-digest-only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var digestAccepted api.ImageFetchAccepted
+	if err := json.Unmarshal(digestResponse.Body, &digestAccepted); err != nil {
+		t.Fatal(err)
+	}
+	digestClaim, found, err := tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
+	if err != nil || !found || digestClaim.Task.Record.ID != digestAccepted.TaskID {
+		t.Fatalf("claim digest-only Fetch: found=%t, error=%v", found, err)
+	}
+	if err := service.Execute(ctx, digestClaim.Task.Record); err != nil {
+		t.Fatal(err)
+	}
+	if len(registry.tagged) != taggedBeforeStaleRetry {
+		t.Fatalf("digest-only Fetch invented a tag assignment: %#v", registry.tagged)
+	}
 }
 
 type imageFetchRegistry struct {
@@ -195,6 +318,9 @@ type imageFetchRegistry struct {
 	returnedID  string
 	resolutions int
 	fetched     []imagefetch.Plan
+	tagged      []imagefetch.Plan
+	tagOutcome  imagefetch.TagAssignmentOutcome
+	tagErr      error
 	images      []imagefetch.LocalImage
 }
 
@@ -220,6 +346,14 @@ func (registry *imageFetchRegistry) Fetch(
 	}
 	registry.fetched = append(registry.fetched, plan)
 	return registry.returnedID, nil
+}
+
+func (registry *imageFetchRegistry) AssignTag(
+	_ context.Context,
+	plan imagefetch.Plan,
+) (imagefetch.TagAssignmentOutcome, error) {
+	registry.tagged = append(registry.tagged, plan)
+	return registry.tagOutcome, registry.tagErr
 }
 
 type imageFetchUnexpectedBackup struct{}

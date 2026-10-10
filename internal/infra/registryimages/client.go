@@ -27,6 +27,7 @@ const maximumDocumentBytes = 4 << 20
 type Engine interface {
 	ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error)
 	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
+	ImageTag(context.Context, client.ImageTagOptions) (client.ImageTagResult, error)
 }
 
 type Client struct {

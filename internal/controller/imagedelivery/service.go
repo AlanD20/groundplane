@@ -25,6 +25,7 @@ const RemoveRoute = "/images/{id}"
 type Registry interface {
 	Resolve(context.Context, string) (imagefetch.Plan, error)
 	Fetch(context.Context, imagefetch.Plan, imagefetch.Reporter) (string, error)
+	AssignTag(context.Context, imagefetch.Plan) (imagefetch.TagAssignmentOutcome, error)
 	List(context.Context) ([]imagefetch.LocalImage, error)
 	Remove(context.Context, string) error
 }
@@ -35,6 +36,15 @@ type TaskStore interface {
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
+	CreateImageFetchTask(
+		context.Context,
+		etcd.TaskRecord,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+	ImageTagCommitCompleted(context.Context, etcd.TaskRecord) (bool, error)
+	BeginImageTagCommit(context.Context, etcd.TaskRecord) (bool, error)
+	CompleteImageTagCommit(context.Context, etcd.TaskRecord, time.Time) error
+	AbandonImageTagCommit(context.Context, etcd.TaskRecord) error
 }
 
 type Service struct {
@@ -136,10 +146,17 @@ func (service *Service) accept(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(intent.Ciphertext)
-	result, publicationErr := service.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: intent, Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
-	})
+	}
+	var result etcd.IdempotencyTransactionResult
+	var publicationErr error
+	if remove {
+		result, publicationErr = service.tasks.CreateTask(ctx, task, marker)
+	} else {
+		result, publicationErr = service.tasks.CreateImageFetchTask(ctx, task, marker)
+	}
 	var resolution requestidempotency.Resolution
 	if publicationErr != nil {
 		if !errors.Is(publicationErr, context.DeadlineExceeded) &&

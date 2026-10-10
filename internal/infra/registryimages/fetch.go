@@ -15,8 +15,9 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// Fetch uses only pinned manifest content. It neither changes a Service nor
-// moves a local mutable tag. It returns the verified OCI configuration digest,
+// Fetch uses only pinned manifest content and does not assign a mutable tag.
+// The Controller performs that separate effect only while holding the durable
+// selection fence. Fetch returns the verified OCI configuration digest,
 // independent of the host Docker store's local identifier representation.
 func (registryClient *Client) Fetch(
 	ctx context.Context,
@@ -122,6 +123,100 @@ func verifyImage(observed client.ImageInspectResult, plan imagefetch.Plan) (stri
 }
 
 func hasRepositoryDigest(values []string, selected string) bool {
+	for _, value := range values {
+		named, err := reference.ParseNormalizedNamed(value)
+		if err == nil && named.String() == selected {
+			return true
+		}
+	}
+	return false
+}
+
+// AssignTag changes only the explicit normalized tag captured by the accepted
+// plan. The pinned source has already been fetched, but the post-write inspect
+// independently proves that Docker resolved the tag to those exact bytes.
+func (registryClient *Client) AssignTag(
+	ctx context.Context,
+	plan imagefetch.Plan,
+) (imagefetch.TagAssignmentOutcome, error) {
+	if err := plan.Validate(); err != nil {
+		return imagefetch.TagAssignmentUnknown, err
+	}
+	if plan.Architecture != registryClient.architecture {
+		return imagefetch.TagAssignmentUnknown, errs.New(
+			errs.KindStateConflict,
+			"image tag plan belongs to another host platform",
+		)
+	}
+	tag, err := plan.TagReference()
+	if err != nil {
+		return imagefetch.TagAssignmentUnknown, err
+	}
+	if tag == "" {
+		return imagefetch.TagAssignmentUnknown, errs.New(
+			errs.KindValidationFailed,
+			"digest-only image fetch has no local tag to assign",
+		)
+	}
+	before := registryClient.observeTag(ctx, tag, plan)
+	_, tagErr := registryClient.engine.ImageTag(ctx, client.ImageTagOptions{Source: plan.Reference(), Target: tag})
+	after := registryClient.observeTag(ctx, tag, plan)
+	if after.exact {
+		return imagefetch.TagAssignmentApplied, nil
+	}
+	if tagErr != nil && before.same(after) {
+		return imagefetch.TagAssignmentUnchanged, errs.Wrap(errs.KindInternal, tagErr)
+	}
+	problem := errs.New(
+		errs.KindStateConflict,
+		"Docker tag outcome could not be verified; retry this Fetch Task before selecting the tag again",
+	)
+	if tagErr != nil {
+		return imagefetch.TagAssignmentUnknown, errors.Join(problem, errs.Wrap(errs.KindInternal, tagErr), after.err)
+	}
+	return imagefetch.TagAssignmentUnknown, errors.Join(problem, after.err)
+}
+
+type tagObservation struct {
+	known      bool
+	present    bool
+	exact      bool
+	localID    string
+	descriptor string
+	err        error
+}
+
+func (registryClient *Client) observeTag(ctx context.Context, tag string, plan imagefetch.Plan) tagObservation {
+	observed, err := registryClient.engine.ImageInspect(ctx, tag)
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return tagObservation{known: true}
+		}
+		return tagObservation{err: errs.Wrap(errs.KindInternal, err)}
+	}
+	observation := tagObservation{known: true, present: true, localID: observed.ID}
+	if observed.Descriptor != nil {
+		observation.descriptor = observed.Descriptor.Digest.String()
+	}
+	if managedimage.Verify(
+		observed.ID,
+		observed.Descriptor,
+		plan.ManifestDigest,
+		plan.ConfigDigest,
+		ocispec.Platform{OS: "linux", Architecture: plan.Architecture, Variant: plan.Variant},
+	) == nil && observed.Os == "linux" && observed.Architecture == plan.Architecture &&
+		observed.Variant == plan.Variant && hasRepositoryTag(observed.RepoTags, tag) {
+		observation.exact = true
+	}
+	return observation
+}
+
+func (observed tagObservation) same(other tagObservation) bool {
+	return observed.known && other.known && observed.present == other.present &&
+		(!observed.present || observed.localID == other.localID && observed.descriptor == other.descriptor)
+}
+
+func hasRepositoryTag(values []string, selected string) bool {
 	for _, value := range values {
 		named, err := reference.ParseNormalizedNamed(value)
 		if err == nil && named.String() == selected {

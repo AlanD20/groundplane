@@ -110,17 +110,26 @@ its installer-managed credentials; external private-registry logins are not
 supported.
 
 Fetch returns an immutable reference and a Task. Wait for completion, then select
-that reference when creating a Service or deploying it. Fetch does not move local
-tags, change a Service or start containers. Retry retains the accepted content;
-a new Fetch can select newer tag content. Deploy's optional `--image` chooses a
+the current local tag or that exact reference when creating a Service or deploying
+it. A successful tagged Fetch assigns that local Docker tag to its verified
+content; a new successful Fetch can move the tag. It does not change a Service
+or start containers. Retry retains the accepted content and cannot move a tag
+backward over a newer accepted selection. Deploy's optional `--image` chooses a
 reference for that Release without editing the Service; it cannot accompany
 `--tag`. Service forms and Deploy offer the images currently on the host.
 
 The inventory also shows Fetch history: the requested tag, exact manifest digest,
 request time and Task status. Only completed Tasks confirm a successful Fetch;
-a failed attempt can leave downloaded content on the host. `nginx:latest` stays associated
-with the digest that Fetch selected even if the registry later moves the tag.
-This history lasts as long as its Task record; it is not a local Docker tag.
+a failed attempt can leave downloaded content on the host without changing the
+previous local tag. History records which digest each Fetch selected; it does
+not imply that an older image still owns a tag moved by a later Fetch. This
+history lasts as long as its Task record. Current tags appear separately, with
+one inventory row and picker choice per image. Older content remains selectable
+by digest. Running containers and retained Releases keep their exact images.
+
+If Docker's tag-write outcome cannot be verified, GP blocks a new selection of
+that tag until the original Fetch Task is retried and its outcome is resolved.
+It never treats an uncertain write as proof that the previous tag survived.
 
 Fetch Task details show the requested image, selected platform, current
 checking/download/verification stage and the recorded failure explanation.

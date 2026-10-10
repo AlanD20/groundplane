@@ -36,6 +36,27 @@ type Plan struct {
 	Variant        string `json:"variant,omitempty"`
 }
 
+// TagReference returns the normalized explicit tag selected by the operator.
+// Digest-only selections deliberately have no mutable local name.
+func (plan Plan) TagReference() (string, error) {
+	named, err := ParseRequested(plan.Requested)
+	if err != nil {
+		return "", err
+	}
+	if _, tagged := named.(reference.NamedTagged); !tagged {
+		return "", nil
+	}
+	return named.String(), nil
+}
+
+type TagAssignmentOutcome uint8
+
+const (
+	TagAssignmentUnknown TagAssignmentOutcome = iota
+	TagAssignmentApplied
+	TagAssignmentUnchanged
+)
+
 func ParseRequested(value string) (reference.Named, error) {
 	named, err := reference.ParseNormalizedNamed(value)
 	if err != nil || len(value) > 512 {
