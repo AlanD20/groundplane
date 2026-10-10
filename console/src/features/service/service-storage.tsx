@@ -1,3 +1,4 @@
+import { FormActions } from "@/components/common/form-actions";
 import { AnimatedSection } from "@/components/common/animated-section";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import {
@@ -253,7 +254,7 @@ export function ServiceStorage({
           {error}
         </p>
       )}
-      <div
+      <FormActions
         className={`${editorFooterClassName} flex flex-wrap items-center justify-between gap-3`}
       >
         <p className="text-xs text-muted-foreground">
@@ -282,7 +283,7 @@ export function ServiceStorage({
                   : "Add mount"}
           </Button>
         </div>
-      </div>
+      </FormActions>
     </form>
   );
   return (

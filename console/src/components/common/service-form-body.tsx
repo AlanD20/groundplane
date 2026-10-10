@@ -1,10 +1,10 @@
+import { FormActions as DialogFooter } from "./form-actions";
 import { editorFooterClassName } from "./workspace-section";
 ("use client");
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -555,7 +555,7 @@ export function ServiceFormBody({
               {submitError}
             </p>
           )}
-          <DialogFooter
+          <DialogFooter pinned={inline}
             className={inline ? editorFooterClassName : undefined}
           >
             <Button

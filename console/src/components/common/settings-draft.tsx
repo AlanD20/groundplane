@@ -1,3 +1,4 @@
+import { FormActions } from "./form-actions";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ export function SettingsDraft({
   pristineLabel?: string;
 }) {
   return (
-    <div className={workspaceSectionClassName(dirty)}>
+    <div data-form-owner className={workspaceSectionClassName(dirty)}>
       <div className="mb-4" role="status">
         <Badge variant={dirty ? "warning" : "outline"}>
           {dirty ? "Editing · Unsaved" : pristineLabel}
@@ -32,14 +33,16 @@ export function SettingsDraft({
       <fieldset disabled={busy} className="min-w-0 space-y-4">
         {children}
       </fieldset>
-      <div
+      <FormActions
+        pinned={dirty}
+        status="Unsaved changes"
         className={`${editorFooterClassName} flex flex-wrap items-center justify-end gap-2`}
       >
         <Button variant="outline" disabled={!dirty || busy} onClick={onCancel}>
           Cancel
         </Button>
         {actions}
-      </div>
+      </FormActions>
     </div>
   );
 }

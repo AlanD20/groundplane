@@ -1,3 +1,4 @@
+import { createEditorSearchPanel } from "./editor-search-panel";
 import { useEffect, useRef, useState } from "react";
 import { Compartment, EditorState } from "@codemirror/state";
 import {
@@ -85,40 +86,6 @@ const editorTheme = EditorView.theme({
     color: "var(--foreground)",
   },
   ".cm-panels-top": { borderBottom: "1px solid var(--border)" },
-  ".cm-search": {
-    padding: "8px 32px 8px 8px",
-    fontFamily: "var(--font-sans)",
-    lineHeight: "2",
-    fontSize: "12px",
-  },
-  ".cm-search .cm-textfield": {
-    background: "var(--background)",
-    color: "var(--foreground)",
-    border: "1px solid var(--input)",
-    borderRadius: "6px",
-    padding: "4px 8px",
-    maxWidth: "100%",
-    minWidth: "0",
-    boxSizing: "border-box",
-    fontSize: "12px",
-  },
-  ".cm-search .cm-button": {
-    background: "var(--background)",
-    color: "var(--foreground)",
-    border: "1px solid var(--border)",
-    borderRadius: "6px",
-    padding: "3px 8px",
-    fontSize: "12px",
-    textTransform: "none",
-    cursor: "pointer",
-  },
-  ".cm-search button:hover": { background: "var(--accent)" },
-  ".cm-search input:focus-visible, .cm-search button:focus-visible": {
-    outline: "2px solid var(--ring)",
-    outlineOffset: "2px",
-  },
-  ".cm-search input[type=checkbox]": { accentColor: "var(--primary)" },
-  ".cm-search label": { whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "4px", marginRight: "8px" },
   ".cm-searchMatch": {
     backgroundColor: "color-mix(in srgb, var(--warning) 30%, transparent)",
     outline: "1px solid var(--warning)",
@@ -177,7 +144,7 @@ export function CodeEditor({
         highlightActiveLineGutter(),
         drawSelection(),
         history(),
-        search({ top: true }),
+        search({ top: true, createPanel: createEditorSearchPanel }),
         keymap.of([
           ...searchKeymap,
           ...foldKeymap.map((binding) =>

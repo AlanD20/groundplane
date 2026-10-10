@@ -1,3 +1,4 @@
+import { FormActions } from "@/components/common/form-actions";
 import { editorFooterClassName } from "@/components/common/workspace-section";
 import { useEffect, useState } from "react";
 import { ResourcePanel } from "@/components/common/resource-panel";
@@ -156,7 +157,11 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
               {releaseError}
             </p>
           )}
-          <div className={editorFooterClassName}>
+          <FormActions
+            pinned={!!ref.trim()}
+            status="Prepare version"
+            className={editorFooterClassName}
+          >
             <Button
               type="submit"
               disabled={
@@ -173,7 +178,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                   ? "Build version"
                   : "Download release"}
             </Button>
-          </div>
+          </FormActions>
         </form>
         {work.pending && (
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border p-3">

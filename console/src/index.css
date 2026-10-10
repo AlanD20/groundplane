@@ -160,8 +160,7 @@
 }
 
 @layer utilities {
-  /* Bottom actions stay inside their owning form and keep their flow space.
-     No fixed overlay: the footer stops at the form boundary. */
+  /* Modal and resting actions stay local; active page editors dock to the viewport. */
   .form-actions.form-actions {
     position: sticky;
     bottom: 0;
@@ -174,11 +173,33 @@
     box-shadow: 0 -8px 16px -12px
       color-mix(in srgb, var(--foreground) 25%, transparent);
   }
+  .form-actions[data-viewport-actions] {
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    margin: 0;
+    padding: 1rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    background: color-mix(in oklab, var(--primary) 8%, var(--card));
+  }
+  @media (min-width: 1024px) {
+    #console-main .form-actions[data-viewport-actions] {
+      left: 64px;
+    }
+    #console-main[data-local-navigation="true"]
+      .form-actions[data-viewport-actions] {
+      left: 304px;
+    }
+  }
   :is([data-slot="dialog-content"], [data-slot="drawer-content"]) {
     --form-actions-bg: var(--popover);
   }
   :is(input, textarea, [role="combobox"], [contenteditable="true"]) {
-    scroll-margin-bottom: 7rem;
+    scroll-margin-bottom: max(
+      7rem,
+      calc(var(--viewport-actions-height, 0px) + 1rem)
+    );
   }
   .workspace-editing {
     --workspace-editor-bg: color-mix(in oklab, var(--primary) 8%, var(--card));

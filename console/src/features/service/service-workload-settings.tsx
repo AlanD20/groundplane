@@ -1,3 +1,4 @@
+import { FormActions } from "@/components/common/form-actions";
 import { editorFooterClassName } from "@/components/common/workspace-section";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -356,7 +357,7 @@ export function ServiceWorkloadSettingsForm({
             {submitError}
           </p>
         )}
-        <div
+        <FormActions
           className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
         >
           <Button
@@ -370,7 +371,7 @@ export function ServiceWorkloadSettingsForm({
           <Button type="submit" disabled={!canSubmit}>
             {submitting ? "Saving…" : "Save desired"}
           </Button>
-        </div>
+        </FormActions>
       </fieldset>
     </form>
   );

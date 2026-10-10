@@ -1,4 +1,5 @@
-"use client";
+import { FormActions } from "@/components/common/form-actions";
+("use client");
 
 import {
   serviceBlueprintDocument,
@@ -460,7 +461,7 @@ export function BlueprintWorkspace({
               onValueChange={setDraft}
             />
             {editing && (
-              <div
+              <FormActions
                 className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
               >
                 <Button
@@ -485,7 +486,7 @@ export function BlueprintWorkspace({
                       ? `Review ${selectedService} changes`
                       : "Review Environment changes"}
                 </Button>
-              </div>
+              </FormActions>
             )}
           </div>
           {error && (

@@ -1,3 +1,4 @@
+import { FormActionsProvider } from "@/components/common/form-actions";
 import { DialogTitle } from "@/components/ui/dialog";
 import { ContextReturnLink } from "@/components/common/context-link";
 ("use client");
@@ -168,6 +169,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           </div>
           <main
             id="console-main"
+            data-local-navigation={hasLocalNavigation}
             tabIndex={-1}
             className="mx-auto w-full max-w-[1580px] flex-1 px-4 pb-12 pt-6 outline-none sm:px-6 lg:px-7 console-content"
           >
@@ -196,7 +198,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   </Button>
                 </div>
               )}
-              {children}
+              <FormActionsProvider>{children}</FormActionsProvider>
             </div>
           </main>
         </div>

@@ -1,3 +1,4 @@
+import { FormActions, FormActionsActive } from "./form-actions";
 import {
   createContext,
   useContext,
@@ -68,27 +69,29 @@ export function ResourceForm({
   return (
     <Inline.Provider value={inline}>
       {inline ? (
-        <AnimatedSection open={open} className="w-full min-w-0 basis-full">
-          <div
-            ref={region}
-            className={cn(
-              "w-full min-w-0 basis-full scroll-mt-24 py-2",
-              className,
-            )}
-          >
-            <div className="w-full">
-              <section
-                onKeyDown={submitFormOnShortcut}
-                className={workspaceSectionClassName(
-                  editing,
-                  "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
-                )}
-              >
-                {children}
-              </section>
+        <FormActionsActive.Provider value={open && editing}>
+          <AnimatedSection open={open} className="w-full min-w-0 basis-full">
+            <div
+              ref={region}
+              className={cn(
+                "w-full min-w-0 basis-full scroll-mt-24 py-2",
+                className,
+              )}
+            >
+              <div className="w-full">
+                <section
+                  onKeyDown={submitFormOnShortcut}
+                  className={workspaceSectionClassName(
+                    editing,
+                    "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
+                  )}
+                >
+                  {children}
+                </section>
+              </div>
             </div>
-          </div>
-        </AnimatedSection>
+          </AnimatedSection>
+        </FormActionsActive.Provider>
       ) : (
         <Drawer open={open} onOpenChange={onOpenChange}>
           <DrawerContent>{children}</DrawerContent>
@@ -136,7 +139,7 @@ export function ResourceFormFooter({
   className?: string;
 }) {
   return useContext(Inline) ? (
-    <div
+    <FormActions
       className={cn(
         editorFooterClassName,
         "flex flex-wrap items-center justify-end gap-2",
@@ -144,7 +147,7 @@ export function ResourceFormFooter({
       )}
     >
       {children}
-    </div>
+    </FormActions>
   ) : (
     <DialogFooter className={className}>{children}</DialogFooter>
   );

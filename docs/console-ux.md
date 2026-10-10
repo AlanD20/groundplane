@@ -193,6 +193,8 @@ explicit Fold all / Expand all controls. Folding must work in read-only views,
 must not change document content, and must remain independent of saving or Apply.
 The shared editor provides Find (Ctrl/Command+F), match navigation and replacement
 in editable mode. Read-only views retain search without replacement controls.
+Find/Replace uses the actual shared Input, Checkbox and Button components;
+third-party default controls must not introduce a second visual system.
 Search fields and match highlights use theme tokens in both light and dark modes.
 
 ## Workspace presentation
@@ -217,12 +219,15 @@ content; it does not need its own visual treatment for ordinary fields and edits
   and a stronger border so they remain identifiable against the tint in both
   themes. Preserve visible focus, validation, disabled and open-selector states.
   A highlighted editor must not camouflage its controls.
-- **Actions:** carry the same highlight through the Save/Cancel footer, including
-  while scrolling. Every form uses the shared sticky action footer, constrained
-  to its owning form or editor. Use an opaque theme surface, a subtle top shadow,
-  wrapping buttons and mobile safe-area padding. Leave 16px above its divider
-  and 16px between the divider and controls. Keep the actions inside their editing boundary; avoid a detached
-  plain-background strip.
+- **Actions:** active page editors use the shared viewport action bar. Keep it
+  visible at the bottom of the browser viewport throughout editing, even when
+  the form scrolls away. Show the owning editor and draft status; changed settings
+  explicitly show Unsaved changes. Reserve page space, retain native form submit
+  and disabled behavior, and stack simultaneous editors without overlapping.
+  Keep the sidebar clear on desktop and wrap controls on narrow screens. Use the
+  opaque editing tint, a top divider/shadow, 16px padding and mobile safe-area
+  padding in both themes. Resting settings and modal confirmations keep their
+  local actions; saving or closing an editor removes its viewport bar.
 - **Resource rows:** establish a clear hierarchy of identity, primary value and
   secondary details. For a mount, show the Volume with an icon, the container
   path on a subtle code surface, then access mode and any saved-state feedback.
