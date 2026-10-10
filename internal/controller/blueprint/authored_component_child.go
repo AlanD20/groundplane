@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
@@ -19,6 +20,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -180,6 +182,10 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	child.Materializations = materializations
+	child, err = service.prepareAuthoredComponentConfiguration(ctx, child, current.ReadRevision)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
 	for _, step := range steps {
 		step.TimeoutSeconds = uint32(timeoutSeconds)
 	}
@@ -257,7 +263,8 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	record := componentplanning.ChildExecution{TaskID: child.ID, ParentTaskID: parent.ID, EnvironmentID: parent.Owner.EnvironmentID,
-		Component: candidateRecord, Plan: encoded}
+		Component: candidateRecord, Plan: encoded, Configuration: taskconfiguration.CloneTaskConfiguration(child.Configuration),
+		Materializations: taskmaterialization.Clone(child.Materializations)}
 	for _, zone := range zoneVersions {
 		record.Zones = append(record.Zones, zone.Record)
 	}

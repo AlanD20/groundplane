@@ -6,10 +6,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -20,12 +23,14 @@ import (
 // Plan contains only the closed machine recipe and materialization metadata;
 // Secret bytes remain in the existing transient materialization channel.
 type ChildExecution struct {
-	TaskID        string                 `json:"task_id"`
-	ParentTaskID  string                 `json:"parent_task_id"`
-	EnvironmentID string                 `json:"environment_id"`
-	Component     componentrecord.Record `json:"component"`
-	Zones         []zonerecord.Record    `json:"zones"`
-	Plan          []byte                 `json:"plan"`
+	TaskID           string                               `json:"task_id"`
+	ParentTaskID     string                               `json:"parent_task_id"`
+	EnvironmentID    string                               `json:"environment_id"`
+	Component        componentrecord.Record               `json:"component"`
+	Zones            []zonerecord.Record                  `json:"zones"`
+	Plan             []byte                               `json:"plan"`
+	Configuration    *taskconfiguration.TaskConfiguration `json:"configuration,omitempty"`
+	Materializations []taskmaterialization.Record         `json:"materializations,omitempty"`
 }
 
 func ChildExecutionKey(taskID string) string {
@@ -36,7 +41,7 @@ func (repository *Planner) GetBlueprintComponentExecution(ctx context.Context, t
 	return ReadChildExecution(ctx, repository.store, taskID, 0)
 }
 
-func (publication Publication) ValidateChildExecution(taskID, parentID, planID, planHash string, generation uint64) error {
+func (publication Publication) ValidateChildExecution(taskID, parentID, planID, planHash string, generation uint64, configuration *taskconfiguration.TaskConfiguration, materializations []taskmaterialization.Record) error {
 	for _, mutation := range publication.mutations {
 		if mutation.Key != ChildExecutionKey(taskID) || mutation.Type != keyvalue.MutationPut {
 			continue
@@ -51,7 +56,7 @@ func (publication Publication) ValidateChildExecution(taskID, parentID, planID, 
 		}
 		if record.TaskID == taskID && record.ParentTaskID == parentID && plan.GetPlanId() == planID &&
 			hex.EncodeToString(plan.GetPlanHash()) == planHash && plan.GetRenderGeneration() == generation {
-			return nil
+			return record.ValidateTaskInputs(configuration, materializations)
 		}
 		return errs.New(errs.KindValidationFailed, "Blueprint Component Task differs from its execution authority")
 	}
@@ -78,6 +83,32 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := record.validateMaterializations(plan); err != nil {
+		return nil, err
+	}
+	fileCount := 0
+	for _, step := range plan.GetSteps() {
+		if step.GetMaterializeFile() != nil {
+			fileCount++
+		}
+	}
+	if (fileCount != 0) != (record.Configuration != nil) {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Component file-source authority is incomplete")
+	}
+	if record.Configuration != nil {
+		configuration := record.Configuration
+		if runtimeconfiguration.ValidateReference(configuration.Current) != nil ||
+			configuration.Current.EnvironmentID != record.EnvironmentID ||
+			configuration.Current.Generation != plan.GetRenderGeneration() ||
+			(configuration.Prior == nil) != (configuration.PriorRevision == 0) || configuration.PriorRevision < 0 ||
+			configuration.SecretPins != nil || configuration.BackingHookInputs != nil {
+			return nil, errs.New(errs.KindStateConflict, "Blueprint Component captured configuration is invalid")
+		}
+		if configuration.Prior != nil && (runtimeconfiguration.ValidateReference(*configuration.Prior) != nil ||
+			configuration.Prior.EnvironmentID != record.EnvironmentID || configuration.Prior.Generation > configuration.Current.Generation) {
+			return nil, errs.New(errs.KindStateConflict, "Blueprint Component configuration predecessor changed")
+		}
+	}
 	if plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
 		plan.GetTargetId() != record.EnvironmentID || plan.GetCandidateReleaseProcedure() != nil ||
 		plan.GetEntryMutationProcedure() != nil || plan.GetServiceLifecycleProcedure() != nil {
@@ -100,7 +131,9 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 		switch {
 		case step.GetMaterializeFile() != nil:
 			artifactID = step.GetMaterializeFile().GetArtifactId()
-			services = []string{step.GetMaterializeFile().GetServiceId()}
+			if serviceID := step.GetMaterializeFile().GetServiceId(); serviceID != "" {
+				services = []string{serviceID}
+			}
 		case step.GetComposeApply() != nil:
 			apply := step.GetComposeApply()
 			if !apply.GetNoDependencies() || apply.GetFullReconcile() || len(apply.GetServiceIds()) != 1 {
@@ -136,6 +169,27 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 		}
 	}
 	return plan, nil
+}
+
+// Task Secret pins are activated during publication. They cannot alter the
+// candidate or predecessor file-source references already sealed in this recipe.
+func (record ChildExecution) ValidateTaskInputs(configuration *taskconfiguration.TaskConfiguration, materializations []taskmaterialization.Record) error {
+	if !taskmaterialization.EqualRecords(record.Materializations, materializations) {
+		return errs.New(errs.KindStateConflict, "Blueprint Component Task file sources changed")
+	}
+	sealed := record.Configuration
+	if (sealed == nil) != (configuration == nil) {
+		return errs.New(errs.KindStateConflict, "Blueprint Component Task configuration changed")
+	}
+	if sealed == nil {
+		return nil
+	}
+	if sealed.Current != configuration.Current || sealed.PriorRevision != configuration.PriorRevision ||
+		(sealed.Prior == nil) != (configuration.Prior == nil) ||
+		sealed.Prior != nil && *sealed.Prior != *configuration.Prior || configuration.BackingHookInputs != nil {
+		return errs.New(errs.KindStateConflict, "Blueprint Component Task file-source selection differs from its recipe")
+	}
+	return nil
 }
 
 func ReadChildExecution(ctx context.Context, store interface {

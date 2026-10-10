@@ -27,6 +27,9 @@ func (resolver *TaskPlanResolver) resolveBlueprintComponentUnitPlan(ctx context.
 		return nil, err
 	}
 	record := stored.Record
+	if err := record.ValidateTaskInputs(task.Configuration, task.Materializations); err != nil {
+		return nil, err
+	}
 	plan, err := record.ExecutionPlan()
 	if err != nil {
 		return nil, err

@@ -28,7 +28,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	ctx context.Context, parentID string, child TaskRecord, unit blueprintunits.Unit,
 	releasePublication BlueprintReleasePublication,
 	componentPublication componentplanning.Publication,
-) (keyvalue.Versioned[TaskRecord], error) {
+) (published keyvalue.Versioned[TaskRecord], resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
@@ -69,7 +69,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		}
 	}
 	if componentChild {
-		if err := componentPublication.ValidateChildExecution(child.ID, parentID, child.PlanID, child.PlanHash, uint64(child.RenderGeneration)); err != nil {
+		if err := componentPublication.ValidateChildExecution(child.ID, parentID, child.PlanID, child.PlanHash, uint64(child.RenderGeneration), child.Configuration, child.Materializations); err != nil {
 			return keyvalue.Versioned[TaskRecord]{}, err
 		}
 		if err := componentPublication.ValidateBlueprintChild(
@@ -107,6 +107,20 @@ func (repository *TaskRepository) PublishBlueprintChild(
 			errs.KindStateConflict,
 			"Blueprint child parent is no longer current",
 		)
+	}
+	configuration := configurationTaskPublication{task: child}
+	if componentChild {
+		configuration, err = prepareConfigurationTaskPublication(ctx, repository.store, child, snapshot.ReadRevision)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+		defer configuration.clear()
+		defer func() {
+			if resultErr != nil {
+				resultErr = configuration.finish(ctx, repository.store, resultErr)
+			}
+		}()
+		child = configuration.task
 	}
 	selected, err := blueprintunits.Select(snapshot)
 	if err != nil {
@@ -326,6 +340,15 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	if componentChild {
 		conditions = append(conditions, componentPublication.Conditions()...)
 		mutations = append(mutations, componentPublication.Mutations()...)
+		condition, present, err := taskConfigurationCondition(child)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+		if present {
+			conditions = append(conditions, condition)
+		}
+		conditions = append(conditions, configuration.pins.conditions...)
+		mutations = append(mutations, configuration.pins.mutations...)
 	}
 	defer keyvalue.ClearMutationValues(mutations)
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
