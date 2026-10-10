@@ -361,9 +361,6 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		}
 		planner.addUnit(identity, fingerprint, reads, after)
 	}
-	if planner.input.desired.Input.Backup != nil {
-		complete = false
-	}
 	units := make([]blueprintunits.Unit, 0, len(planner.units))
 	for _, unit := range planner.units {
 		units = append(units, unit)

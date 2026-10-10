@@ -11,7 +11,6 @@ func (service *Service) prepareRequirementGate(
 	task etcd.TaskRecord,
 	requirements core.BlueprintRequirements,
 ) (etcd.BlueprintRequirementGate, error) {
-	requirementGate := etcd.BlueprintRequirementGate{}
 	if len(requirements.Resolved) != 0 {
 		inherited, gateErr := environmentBlueprintRequirementTaskEdges(
 			ctx, service.repository, task.ID, requirements, requirements.ResolutionRevision,
@@ -19,21 +18,33 @@ func (service *Service) prepareRequirementGate(
 		if gateErr != nil {
 			return etcd.BlueprintRequirementGate{}, gateErr
 		}
-		stepIDs := make([]string, len(task.Steps))
-		for index, step := range task.Steps {
-			stepIDs[index] = step.ID
-		}
-		dag, gateErr := core.BuildBlueprintRequirementDAG(task.ID, requirements, stepIDs, inherited)
-		if gateErr != nil {
-			return etcd.BlueprintRequirementGate{}, gateErr
-		}
-		requirementGate, gateErr = etcd.NewBlueprintRequirementGate(
-			task, requirements.ResolutionRevision, dag,
-		)
-		if gateErr != nil {
-			return etcd.BlueprintRequirementGate{}, gateErr
-		}
-		task.Params[etcd.TaskBlueprintRequirementGateSHA256Param] = requirementGate.DAGDigest
+		return prepareRequirementGateWithEdges(task, requirements, inherited)
 	}
+	return prepareRequirementGateWithEdges(task, requirements, nil)
+}
+
+func prepareRequirementGateWithEdges(
+	task etcd.TaskRecord,
+	requirements core.BlueprintRequirements,
+	inherited []core.BlueprintRequirementTaskEdge,
+) (etcd.BlueprintRequirementGate, error) {
+	if len(requirements.Resolved) == 0 {
+		return etcd.BlueprintRequirementGate{}, nil
+	}
+	stepIDs := make([]string, len(task.Steps))
+	for index, step := range task.Steps {
+		stepIDs[index] = step.ID
+	}
+	dag, err := core.BuildBlueprintRequirementDAG(task.ID, requirements, stepIDs, inherited)
+	if err != nil {
+		return etcd.BlueprintRequirementGate{}, err
+	}
+	requirementGate, err := etcd.NewBlueprintRequirementGate(
+		task, requirements.ResolutionRevision, dag,
+	)
+	if err != nil {
+		return etcd.BlueprintRequirementGate{}, err
+	}
+	task.Params[etcd.TaskBlueprintRequirementGateSHA256Param] = requirementGate.DAGDigest
 	return requirementGate, nil
 }

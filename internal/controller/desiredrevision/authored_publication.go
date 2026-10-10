@@ -67,6 +67,7 @@ type PublishAuthoredInput struct {
 	ExpectedHeadRevision   int64
 	Staged                 StagedPublication
 	OwnedIdentities        projectionrecord.EnvironmentOwnedIdentities
+	PrerequisiteAuthority  etcd.BlueprintPrerequisiteAuthority
 	AttachInputGenerations []etcd.BlueprintAttachInputGenerationPublication
 	Evidence               Evidence
 	Locator                idempotency.IdempotencyLocator
@@ -116,6 +117,7 @@ func PublishAuthored(
 			Project: input.Project, Environment: input.Environment,
 			ExpectedHeadRevision: input.ExpectedHeadRevision,
 			Claim:                claim, DesiredInput: desired, OwnedIdentities: input.OwnedIdentities,
+			PrerequisiteAuthority:  input.PrerequisiteAuthority,
 			AttachInputGenerations: input.AttachInputGenerations,
 			Parent:                 input.Parent, Marker: marker,
 			ScriptPublication: input.ScriptPublication,

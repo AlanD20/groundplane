@@ -103,7 +103,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
 	}
 	if blueprintChild && (!hasBlueprintReleases || len(blueprintReleases.Members) != 1 ||
-		len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 || backingCreation.enabled || hasRequirementGate) {
+		len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 || backingCreation.enabled) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Service child shape is invalid")
 	}
 	if selected := task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam]; selected != "" {
@@ -133,7 +133,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			"durable Blueprint resource preparation count differs from its owned resources",
 		)
 	}
-	if !blueprintChild && hasRequirementGate != (len(pinned.requirements.Resolved) != 0) {
+	if hasRequirementGate != (len(pinned.requirements.Resolved) != 0) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint requirement marker is inconsistent")
 	}
 	var managedConfigApply EnvironmentManagedConfigApply

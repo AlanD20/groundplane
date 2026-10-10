@@ -133,6 +133,7 @@ type BlueprintReleasePublication struct {
 	authority     *scriptsourcepublication.Authority
 	members       []scriptsourceevidence.ScriptSourcePreparationMember
 	retained      *blueprintRuntimeRetention
+	requirements  *BlueprintRequirementGate
 }
 
 type blueprintReleasePublicationInput struct {
@@ -169,10 +170,18 @@ func newBlueprintReleasePublication(input blueprintReleasePublicationInput) (Blu
 
 func (publication BlueprintReleasePublication) IsZero() bool {
 	return publication.environmentID == "" && publication.operationID == "" &&
-		len(publication.conditions) == 0 && len(publication.mutations) == 0 && publication.retained == nil
+		len(publication.conditions) == 0 && len(publication.mutations) == 0 && publication.retained == nil &&
+		publication.requirements == nil
 }
 
 func (publication BlueprintReleasePublication) validate(environmentID string, task TaskRecord) error {
+	marker := task.Params[TaskBlueprintRequirementGateSHA256Param]
+	blueprintChild := task.Params[taskjournal.TaskBlueprintParentParam] != ""
+	if blueprintChild && ((marker == "") != (publication.requirements == nil) ||
+		publication.requirements != nil && publication.requirements.validateForTask(task) != nil) ||
+		!blueprintChild && publication.requirements != nil {
+		return errs.New(errs.KindValidationFailed, "Blueprint Release requirement gate changed")
+	}
 	if publication.retained != nil {
 		if publication.environmentID != environmentID || publication.operationID != task.OperationID ||
 			len(
@@ -245,6 +254,39 @@ func (publication *BlueprintReleasePublication) Clear() {
 	publication.sources.Clear()
 	clearScriptSourcePreparationMembers(publication.members)
 	*publication = BlueprintReleasePublication{}
+}
+
+// WithRequirementGate binds the exact resolved prerequisites to the private
+// Service child publication. The gate and its Attach revision comparisons are
+// committed in the same transaction as the child Task and Release authority.
+func (publication BlueprintReleasePublication) WithRequirementGate(
+	gate BlueprintRequirementGate,
+	task TaskRecord,
+	projection projectionrecord.EnvironmentComposeProjection,
+) (BlueprintReleasePublication, error) {
+	required := len(projection.BlueprintRequirements.Resolved) != 0
+	if task.Params[taskjournal.TaskBlueprintParentParam] == "" {
+		return BlueprintReleasePublication{}, errs.New(
+			errs.KindValidationFailed, "Blueprint Release requirement gate Task is not a child",
+		)
+	}
+	prepared, err := prepareBlueprintRequirementGatePublication(gate, task, projection, required)
+	if err != nil {
+		return BlueprintReleasePublication{}, err
+	}
+	if publication.IsZero() || publication.requirements != nil {
+		prepared.clear()
+		return BlueprintReleasePublication{}, errs.New(
+			errs.KindValidationFailed, "Blueprint Release requirement gate publication is invalid",
+		)
+	}
+	publication.conditions = append(publication.conditions, prepared.conditions...)
+	publication.mutations = append(publication.mutations, prepared.mutations...)
+	if required {
+		sealed := gate.Clone()
+		publication.requirements = &sealed
+	}
+	return publication, nil
 }
 
 type PreparedBlueprintReleaseHooks struct {

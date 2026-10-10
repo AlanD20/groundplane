@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -69,14 +70,8 @@ func (service *Service) Prepare(
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	// The runtime projection is sealed only after Entry, Attach and Component
-	// effects match its exact authored inputs. Fact requirements and Backup are
-	// still pending their separate projection authority.
-	if input.desired.Input.Backup != nil || len(input.desired.Input.Requires) != 0 {
-		return blueprintcoordinator.PreparedChild{}, errs.New(
-			errs.KindStateConflict, "Blueprint Service child prerequisites are not prepared",
-		)
-	}
+	// Runtime inputs and the Backup policy are settled atomically before a
+	// Service child can select this immutable projection.
 	projection, found, err := service.repository.GetEnvironmentComposeProjectionRevision(
 		ctx, parent.Owner.EnvironmentID, parent.ID,
 	)
@@ -141,8 +136,33 @@ func (service *Service) Prepare(
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
+	prerequisites, err := service.loadAuthoredPrerequisiteAuthority(
+		ctx, parent.Owner.EnvironmentID, parent.ID,
+	)
+	if err == nil && !sameBlueprintRequirements(
+		prerequisites.Record.Requirements, projection.Record.BlueprintRequirements,
+	) {
+		err = errs.New(errs.KindStateConflict, "Blueprint Service prerequisite authority changed")
+	}
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, errors.Join(err, prepared.Abandon(ctx))
+	}
+	requirementGate, err := prepareRequirementGateWithEdges(
+		prepared.Task,
+		projection.Record.BlueprintRequirements,
+		prerequisites.Record.InheritedTaskEdges,
+	)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, errors.Join(err, prepared.Abandon(ctx))
+	}
+	publication, err := prepared.Publication.WithRequirementGate(
+		requirementGate, prepared.Task, projection.Record,
+	)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, errors.Join(err, prepared.Abandon(ctx))
+	}
 	return blueprintcoordinator.PreparedChild{
-		Task: prepared.Task, ReleasePublication: prepared.Publication,
+		Task: prepared.Task, ReleasePublication: publication,
 	}, nil
 }
 

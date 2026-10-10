@@ -104,9 +104,16 @@ func (gate BlueprintRequirementGate) validateTaskIdentity(task TaskRecord, requi
 	if err := gate.validate(); err != nil {
 		return err
 	}
+	desiredRevision := task.Params[blueprints.EnvironmentDesiredRevisionParam]
+	parentID := task.Params[taskjournal.TaskBlueprintParentParam]
+	validRoot := desiredRevision == gate.DAG.RootTaskID
+	if parentID != "" {
+		validRoot = ids.Validate(ids.KindTask, parentID) == nil && parentID != task.ID &&
+			parentID == desiredRevision && task.Actor == taskjournal.TaskActorSystem
+	}
 	if gate.TaskID != task.ID || gate.OperationID != task.OperationID || gate.PlanID != task.PlanID ||
 		gate.RetryOf != task.RetryOf || task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent ||
-		task.Params[blueprints.EnvironmentDesiredRevisionParam] != gate.DAG.RootTaskID {
+		!validRoot {
 		return errs.New(errs.KindValidationFailed, "Blueprint requirement gate does not match its Task")
 	}
 	if requireMarker && task.Params[TaskBlueprintRequirementGateSHA256Param] != gate.DAGDigest {

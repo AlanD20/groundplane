@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
@@ -56,6 +57,7 @@ type BlueprintRuntimeProjectionSeal struct {
 	Attaches                []etcdstore.Versioned[attachrecord.Record]
 	Components              []BlueprintRuntimeComponent
 	ComponentReceipts       []BlueprintRuntimeComponentReceipt
+	BackupPreparation       blueprintplanning.BlueprintBackupPolicyPreparation
 }
 
 // ReadEnvironmentBlueprintRuntimeComponents captures the closed pair of
@@ -164,6 +166,17 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 	if err := validateBlueprintRuntimeComponentSeal(input); err != nil {
 		return err
 	}
+	if input.BackupPreparation.IsZero() || projection.Backup == nil {
+		return errs.New(errs.KindValidationFailed, "Blueprint runtime Backup policy authority is missing")
+	}
+	backup, err := blueprintplanning.PrepareBlueprintBackupPolicyPublication(
+		blueprintplanning.TaskIdentity{ID: parent.ID, Target: parent.Owner.EnvironmentID},
+		projection, blueprintplanning.BlueprintAttachTaskPreparation{}, input.BackupPreparation,
+	)
+	if err != nil {
+		return err
+	}
+	defer blueprintplanning.ClearPreparedBlueprintBackupPolicyPublication(backup)
 	expectedOwner, err := taskjournal.EnvironmentTaskOwner(input.Project.Record, input.Environment.Record)
 	if err != nil {
 		return err
@@ -311,6 +324,8 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 		Key:   blueprints.EnvironmentBlueprintEffectiveProjectionKey(projection.EnvironmentID, parent.ID),
 		Value: value,
 	}}
+	conditions = append(conditions, backup.Conditions()...)
+	mutations = append(mutations, backup.Mutations()...)
 	result, err := executeEnvironmentBlueprintTransaction(ctx, repository.transactions, conditions, mutations)
 	etcdstore.ClearValues(result.FailureReads)
 	if err != nil {

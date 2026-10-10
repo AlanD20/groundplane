@@ -28,6 +28,7 @@ type BlueprintAuthoredPublication struct {
 	Claim                  blueprints.EnvironmentBlueprintStageClaim
 	DesiredInput           projectionrecord.EnvironmentDesiredInput
 	OwnedIdentities        projectionrecord.EnvironmentOwnedIdentities
+	PrerequisiteAuthority  BlueprintPrerequisiteAuthority
 	AttachInputGenerations []BlueprintAttachInputGenerationPublication
 	Parent                 TaskRecord
 	Marker                 idempotency.IdempotencyMarker
@@ -112,6 +113,13 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(desiredValue)
+	prerequisites, err := prepareBlueprintPrerequisiteAuthorityPublication(
+		input.PrerequisiteAuthority, input.DesiredInput,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer prerequisites.clear()
 	revision := blueprints.EnvironmentDesiredRevisionIdentity{
 		EnvironmentID: environment.Record.ID, RevisionID: claim.RevisionID,
 	}
@@ -174,7 +182,9 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 			Key:   blueprints.EnvironmentBlueprintOwnedIdentitiesKey(revision.EnvironmentID, revision.RevisionID),
 			Value: ownedIdentityValue,
 		},
+		prerequisites.mutation,
 	}
+	conditions = append(conditions, prerequisites.conditions...)
 	conditions = append(conditions, initialAbsence.Conditions()...)
 	mutations = append(mutations, initialAbsence.Mutations()...)
 	conditions = append(conditions, input.ScriptPublication.conditions...)

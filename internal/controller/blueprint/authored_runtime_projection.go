@@ -31,10 +31,8 @@ type authoredRuntimeProjectionSource struct {
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 }
 
-// sealAuthoredRuntimeProjection compiles and publishes one complete runtime
-// projection. It deliberately supports only revisions whose runtime inputs are
-// already present in immutable authored state; fact-producing dependencies stay
-// pending until their separate authority is available.
+// sealAuthoredRuntimeProjection waits for acknowledged input effects, compiles
+// one complete runtime projection and atomically settles its Backup policy.
 func (service *Service) sealAuthoredRuntimeProjection(
 	ctx context.Context,
 	parent etcd.TaskRecord,
@@ -78,12 +76,24 @@ func (service *Service) sealAuthoredRuntimeProjection(
 	if err != nil {
 		return err
 	}
-	projection, err := service.compileAuthoredRuntimeProjection(
-		ctx, parent, source, snapshot, attaches, components,
+	requirements, err := service.loadAuthoredRuntimeRequirements(
+		ctx, source.desired, snapshot.HeadRevision,
 	)
 	if err != nil {
 		return err
 	}
+	projection, err := service.compileAuthoredRuntimeProjection(
+		ctx, parent, source, snapshot, attaches, components, requirements,
+	)
+	if err != nil {
+		return err
+	}
+	backup, err := service.prepareAuthoredRuntimeBackup(ctx, parent, source, snapshot, projection, attaches)
+	if err != nil {
+		return err
+	}
+	defer backup.Clear()
+	projection.Backup = backup.Projection()
 	return service.repository.SealEnvironmentBlueprintRuntimeProjection(
 		ctx,
 		etcd.BlueprintRuntimeProjectionSeal{
@@ -95,6 +105,7 @@ func (service *Service) sealAuthoredRuntimeProjection(
 			Tenant:                  source.tenant, Project: source.project, Environment: source.environment,
 			Projection: projection, Attaches: attaches,
 			Components: components.authorities, ComponentReceipts: components.receipts,
+			BackupPreparation: backup,
 		},
 	)
 }
@@ -191,6 +202,7 @@ func (service *Service) compileAuthoredRuntimeProjection(
 	unitSnapshot blueprintunits.Snapshot,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 	components authoredRuntimeComponents,
+	requirements core.BlueprintRequirements,
 ) (projectionrecord.EnvironmentComposeProjection, error) {
 	desired, identities := source.desired.Record, source.identities.Record
 	if err := requireAuthoredRuntimeProjectionInputs(desired, identities, unitSnapshot); err != nil {
@@ -314,6 +326,7 @@ func (service *Service) compileAuthoredRuntimeProjection(
 		projection, zoneProjection, serviceProjection, routes,
 	)
 	projection.ServiceDependencyPlans = dependencyPlans
+	projection.BlueprintRequirements = requirements.Clone()
 	if err := projectionrecord.ValidateEnvironmentComposeProjection(projection); err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
@@ -325,8 +338,8 @@ func requireAuthoredRuntimeProjectionInputs(
 	identities projectionrecord.EnvironmentOwnedIdentities,
 	snapshot blueprintunits.Snapshot,
 ) error {
-	if desired.Input.Backup != nil || len(desired.Input.Requires) != 0 {
-		return errs.New(errs.KindStateConflict, "Blueprint runtime projection prerequisites are pending")
+	if err := requireAuthoredBackupInputs(desired, identities, snapshot); err != nil {
+		return err
 	}
 	if !sameOwnedNames(sortedAuthoredMapKeys(desired.Input.Attachments), identities.Attaches) ||
 		!sameOwnedNames(sortedAuthoredMapKeys(desired.Input.Components), identities.Components) ||

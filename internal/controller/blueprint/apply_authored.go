@@ -102,6 +102,12 @@ func (service *Service) applyAuthoredOnce(
 			resultErr = desiredrevision.AbandonClaim(ctx, service.repository, claim, resultErr)
 		}
 	}()
+	prerequisiteAuthority, err := service.prepareAuthoredPrerequisiteAuthority(
+		ctx, environmentID, claim.TaskID, preflight.requirements,
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	allocator, err := desiredrevision.NewBlueprintIdentityAllocator(claim)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -269,8 +275,10 @@ func (service *Service) applyAuthoredOnce(
 		desiredrevision.PublishAuthoredInput{
 			Project: baseline.project, Environment: baseline.environment,
 			ExpectedHeadRevision: baseline.expectedHeadRevision,
-			Staged:               staged, OwnedIdentities: owned, AttachInputGenerations: attachInputGenerations,
-			Evidence: evidence, Locator: locator, Parent: parent,
+			Staged:               staged, OwnedIdentities: owned,
+			PrerequisiteAuthority:  prerequisiteAuthority,
+			AttachInputGenerations: attachInputGenerations,
+			Evidence:               evidence, Locator: locator, Parent: parent,
 			ScriptPublication: scriptPublication,
 		},
 	)
