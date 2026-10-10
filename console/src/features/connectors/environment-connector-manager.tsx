@@ -1,3 +1,4 @@
+import { AnimatedSection } from "@/components/common/animated-section";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
 
@@ -161,6 +162,18 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
+          <ConnectorEditorDrawer
+            mode="create"
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+            env={env}
+            existingNames={connectors.map((connector) => connector.name)}
+            secretOptions={secretOptions}
+            onSave={async (connector, intent) => {
+              await store.addConnector(connector, intent);
+            }}
+          />
+
           {store.connectorsLoading ? (
             <p
               className="rounded-lg border border-border bg-surface px-3 py-4 text-sm text-muted-foreground"
@@ -198,7 +211,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                   key={connector.id}
                   className={workspaceSectionClassName(
                     false,
-                    "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+                    "flex flex-wrap items-center justify-between gap-3",
                   )}
                 >
                   <div className="flex min-w-0 items-start gap-3">
@@ -239,7 +252,12 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      onClick={() => setViewing(connector)}
+                      aria-expanded={viewing?.id === connector.id}
+                      onClick={() =>
+                        setViewing(
+                          viewing?.id === connector.id ? null : connector,
+                        )
+                      }
                       aria-label={`View destination ${connector.name}`}
                       title="View destination"
                     >
@@ -248,6 +266,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                     <Button
                       variant="ghost"
                       size="icon-sm"
+                      disabled={editingId !== null}
                       onClick={() => loadEdit(connector.id)}
                       aria-label={`Edit destination ${connector.name}`}
                       title="Edit destination"
@@ -274,6 +293,54 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
+                  <div className="w-full min-w-0 basis-full empty:hidden">
+                    <ConnectorViewDialog
+                      connector={
+                        viewing?.id === connector.id ? connector : null
+                      }
+                      onOpenChange={(open) => {
+                        if (!open) setViewing(null);
+                      }}
+                      tenantSlug={tenantSlug}
+                      projectSlug={projectSlug}
+                      environmentName={env.name}
+                    />
+
+                    <AnimatedSection open={editingId === connector.id}>
+                      {editingId === connector.id && (
+                        <ConnectorEditorDrawer
+                          mode="edit"
+                          open={editingId !== null}
+                          onOpenChange={(open) => {
+                            if (!open) closeEdit();
+                          }}
+                          env={env}
+                          existingNames={connectors.map(
+                            (connector) => connector.name,
+                          )}
+                          secretOptions={secretOptions}
+                          snapshot={editSnapshot}
+                          loading={editLoading}
+                          loadError={editError}
+                          onReload={() => {
+                            if (editingId) loadEdit(editingId);
+                          }}
+                          onSave={async (input, etag, intent) => {
+                            if (!editSnapshot)
+                              throw new Error(
+                                "Current Connector metadata is unavailable",
+                              );
+                            await store.editConnector(
+                              editSnapshot.connector.id,
+                              input,
+                              etag,
+                              intent,
+                            );
+                          }}
+                        />
+                      )}
+                    </AnimatedSection>
+                  </div>
                 </div>
               );
             })
@@ -292,55 +359,6 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
             )}
         </CardContent>
       </Card>
-
-      <ConnectorEditorDrawer
-        mode="create"
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        env={env}
-        existingNames={connectors.map((connector) => connector.name)}
-        secretOptions={secretOptions}
-        onSave={async (connector, intent) => {
-          await store.addConnector(connector, intent);
-        }}
-      />
-
-      <ConnectorEditorDrawer
-        mode="edit"
-        open={editingId !== null}
-        onOpenChange={(open) => {
-          if (!open) closeEdit();
-        }}
-        env={env}
-        existingNames={connectors.map((connector) => connector.name)}
-        secretOptions={secretOptions}
-        snapshot={editSnapshot}
-        loading={editLoading}
-        loadError={editError}
-        onReload={() => {
-          if (editingId) loadEdit(editingId);
-        }}
-        onSave={async (input, etag, intent) => {
-          if (!editSnapshot)
-            throw new Error("Current Connector metadata is unavailable");
-          await store.editConnector(
-            editSnapshot.connector.id,
-            input,
-            etag,
-            intent,
-          );
-        }}
-      />
-
-      <ConnectorViewDialog
-        connector={viewing}
-        onOpenChange={(open) => {
-          if (!open) setViewing(null);
-        }}
-        tenantSlug={tenantSlug}
-        projectSlug={projectSlug}
-        environmentName={env.name}
-      />
 
       <TaskRunnerDialog
         open={removing !== null}

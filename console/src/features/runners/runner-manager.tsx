@@ -134,6 +134,163 @@ export default function RunnerManager({
       <Plus className="size-4" /> Create Runner
     </Button>
   );
+  const rowEditor = (
+    <>
+      <Dialog
+        open={retrying !== null}
+        onOpenChange={(open) => {
+          if (!open && !submittingRetry) {
+            setRetrying(null);
+            setRetryToken("");
+          }
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Retry Runner creation</DialogTitle>
+          <DialogDescription>
+            Enter a fresh GitHub registration token.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!retrying || !retryToken) return;
+            void (async () => {
+              setSubmittingRetry(true);
+              setRetryError(null);
+              try {
+                const taskId = await store.retryRunner(retrying.id, retryToken);
+                setAcceptedTaskId(taskId);
+                setRetryToken("");
+                setRetrying(null);
+                await store.refreshRunners(tenant.id);
+              } catch (error) {
+                setRetryError(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to retry Runner",
+                );
+              } finally {
+                setSubmittingRetry(false);
+              }
+            })();
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="runner-retry-token">Fresh registration token</Label>
+            <Input
+              id="runner-retry-token"
+              type="password"
+              autoComplete="off"
+              value={retryToken}
+              onChange={(event) => setRetryToken(event.target.value)}
+              autoFocus
+            />
+            {retryError && (
+              <p className="text-sm text-destructive">{retryError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submittingRetry}
+              onClick={() => {
+                setRetrying(null);
+                setRetryToken("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submittingRetry || !retryToken}>
+              {submittingRetry ? "Dispatching..." : "Retry Runner"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      <Dialog
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open && !saving) setEditing(null);
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Edit Runner slug</DialogTitle>
+          <DialogDescription>GitHub name stays unchanged.</DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (
+              !editing ||
+              !validSlug ||
+              slugTaken ||
+              normalizedSlug === editing.slug
+            )
+              return;
+            void (async () => {
+              setSaving(true);
+              setEditError(null);
+              try {
+                await store.renameRunner(editing.id, normalizedSlug);
+                setEditing(null);
+              } catch (error) {
+                setEditError(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to edit Runner slug",
+                );
+              } finally {
+                setSaving(false);
+              }
+            })();
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="runner-slug">Slug</Label>
+            <Input
+              id="runner-slug"
+              value={slug}
+              onChange={(event) => setSlug(event.target.value)}
+              autoFocus
+            />
+            {slugTaken && (
+              <p className="text-sm text-destructive">
+                This Tenant already has a Runner with that slug.
+              </p>
+            )}
+            {editError && (
+              <p className="text-sm text-destructive">{editError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setEditing(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                saving ||
+                !validSlug ||
+                slugTaken ||
+                normalizedSlug === editing?.slug
+              }
+            >
+              {saving ? "Saving..." : "Save slug"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+    </>
+  );
   return (
     <div className="flex flex-col gap-6">
       {embedded ? (
@@ -336,160 +493,9 @@ export default function RunnerManager({
         </form>
       </Dialog>
 
-      <Dialog
-        open={retrying !== null}
-        onOpenChange={(open) => {
-          if (!open && !submittingRetry) {
-            setRetrying(null);
-            setRetryToken("");
-          }
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>Retry Runner creation</DialogTitle>
-          <DialogDescription>
-            Enter a fresh GitHub registration token.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!retrying || !retryToken) return;
-            void (async () => {
-              setSubmittingRetry(true);
-              setRetryError(null);
-              try {
-                const taskId = await store.retryRunner(retrying.id, retryToken);
-                setAcceptedTaskId(taskId);
-                setRetryToken("");
-                setRetrying(null);
-                await store.refreshRunners(tenant.id);
-              } catch (error) {
-                setRetryError(
-                  error instanceof Error
-                    ? error.message
-                    : "Unable to retry Runner",
-                );
-              } finally {
-                setSubmittingRetry(false);
-              }
-            })();
-          }}
-        >
-          <div className="space-y-2">
-            <Label htmlFor="runner-retry-token">Fresh registration token</Label>
-            <Input
-              id="runner-retry-token"
-              type="password"
-              autoComplete="off"
-              value={retryToken}
-              onChange={(event) => setRetryToken(event.target.value)}
-              autoFocus
-            />
-            {retryError && (
-              <p className="text-sm text-destructive">{retryError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={submittingRetry}
-              onClick={() => {
-                setRetrying(null);
-                setRetryToken("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submittingRetry || !retryToken}>
-              {submittingRetry ? "Dispatching..." : "Retry Runner"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Dialog>
-
-      <Dialog
-        open={editing !== null}
-        onOpenChange={(open) => {
-          if (!open && !saving) setEditing(null);
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>Edit Runner slug</DialogTitle>
-          <DialogDescription>GitHub name stays unchanged.</DialogDescription>
-        </DialogHeader>
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (
-              !editing ||
-              !validSlug ||
-              slugTaken ||
-              normalizedSlug === editing.slug
-            )
-              return;
-            void (async () => {
-              setSaving(true);
-              setEditError(null);
-              try {
-                await store.renameRunner(editing.id, normalizedSlug);
-                setEditing(null);
-              } catch (error) {
-                setEditError(
-                  error instanceof Error
-                    ? error.message
-                    : "Unable to edit Runner slug",
-                );
-              } finally {
-                setSaving(false);
-              }
-            })();
-          }}
-        >
-          <div className="space-y-2">
-            <Label htmlFor="runner-slug">Slug</Label>
-            <Input
-              id="runner-slug"
-              value={slug}
-              onChange={(event) => setSlug(event.target.value)}
-              autoFocus
-            />
-            {slugTaken && (
-              <p className="text-sm text-destructive">
-                This Tenant already has a Runner with that slug.
-              </p>
-            )}
-            {editError && (
-              <p className="text-sm text-destructive">{editError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={saving}
-              onClick={() => setEditing(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                saving ||
-                !validSlug ||
-                slugTaken ||
-                normalizedSlug === editing?.slug
-              }
-            >
-              {saving ? "Saving..." : "Save slug"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Dialog>
       <RunnerInventory
+        expandedId={editing?.id ?? retrying?.id}
+        editor={rowEditor}
         runners={visibleRunners}
         tenantCount={runners.length}
         loading={store.runnersLoading}

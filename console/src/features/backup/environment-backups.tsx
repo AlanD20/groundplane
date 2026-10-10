@@ -129,6 +129,13 @@ export function BackupsCard({ env }: { env: Environment }) {
             </div>
           )}
         </CardHeader>
+        <div className="px-4">
+          <BackupPolicyDialog
+            env={env}
+            open={policyOpen}
+            onOpenChange={setPolicyOpen}
+          />
+        </div>
         {policyState.loadError && (
           <p className="mx-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {policyState.loadError}.{" "}
@@ -365,11 +372,6 @@ export function BackupsCard({ env }: { env: Environment }) {
         })}
       </AdvancedDetails>
 
-      <BackupPolicyDialog
-        env={env}
-        open={policyOpen}
-        onOpenChange={setPolicyOpen}
-      />
       {restorePoint && (
         <RestoreDialog
           key={`${env.id}/${restorePoint.id}`}

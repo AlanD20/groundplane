@@ -1,3 +1,4 @@
+import { AnimatedSection } from "@/components/common/animated-section";
 import { EmptyState } from "@/components/common/empty-state";
 import { ImageReference } from "@/components/common/image-reference";
 import { Button } from "@/components/ui/button";
@@ -29,10 +30,11 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
     );
   const services = env.services.filter(
     (s) =>
-      `${s.name} ${s.image}`
+      s.id === deployService ||
+      (`${s.name} ${s.image}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()) &&
-      (!zone || (zone === "none" ? !s.zones.length : inZone(s.zones, zone))),
+        (!zone || (zone === "none" ? !s.zones.length : inZone(s.zones, zone)))),
   );
   const inspect = (id: string, tab = "overview") =>
     setSearch((current) => {
@@ -77,15 +79,6 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
           />
         </div>
       )}
-      {deployService && (
-        <DeployDialog
-          key={deployService}
-          env={env}
-          serviceId={deployService}
-          open
-          onOpenChange={(open) => !open && setDeployService(null)}
-        />
-      )}
       {services.length ? (
         <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {services.map((s) => {
@@ -93,7 +86,7 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
             return (
               <article
                 key={s.id}
-                className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
+                className={`flex min-w-0 flex-col overflow-clip rounded-lg border border-border bg-card ${deployService === s.id ? "col-span-full" : ""}`}
               >
                 <Button
                   variant="ghost"
@@ -177,6 +170,17 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
                     Deploy
                   </Button>
                 </div>
+                <AnimatedSection open={deployService === s.id}>
+                  {deployService === s.id && (
+                    <DeployDialog
+                      key={deployService}
+                      env={env}
+                      serviceId={deployService}
+                      open
+                      onOpenChange={(open) => !open && setDeployService(null)}
+                    />
+                  )}
+                </AnimatedSection>
               </article>
             );
           })}

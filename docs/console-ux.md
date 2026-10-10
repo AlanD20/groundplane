@@ -341,12 +341,26 @@ where applicable. Confirm focus and validation remain visible and that Save/Canc
 affect the section the operator expects. Reuse the shared primitives above;
 document a concrete workflow reason for any different treatment.
 
-List details and editors belong immediately beneath their owning row. The same
+List details and editors expand **inside the same owning card or row**, directly
+below its summary and actions. A panel after the collection, a sibling card, or
+a jump to the bottom of the page is not an inline expansion. Section editors
+(such as Backup policy) open inside their section beneath its header, before
+summary/history content. Page-level actions belong below their page header. The same
 disclosure button opens and closes details, exposes its expanded state, and
 keeps focus; inspection must not scroll to a detached panel after the list.
-New-resource forms appear beneath the section header, before existing rows.
+New-resource forms appear beneath the owning collection header, before existing
+rows. Reuse AnimatedSection/Disclosure for expansion and TableExpansion for table
+rows; keep expanded draft rows mounted through filtering, sorting and pagination.
+Read-only details use a divider within the parent, not a nested editor card or
+sticky action bar. The trigger toggles both ways and exposes aria-expanded.
+Arrange short facts in a responsive two/three-column grid; reserve full-width
+rows for URLs, paths and other potentially long values. Keep long values contained
+and copyable. Put optional YAML or verbose metadata behind a named disclosure.
+Only editing states receive the highlighted surface and viewport action bar;
+Close actions remain local and ordinary.
 Use the shared ResourceForm for ordinary creation and editing; reserve dialogs
-for confirmations and Task review. Scope an open form to its owning navigation
+for confirmations without configuration fields; Task and Runner inspection keep
+their dedicated drawers. Scope an open form to its owning navigation
 destination. Global creation shortcuts navigate there before opening it; they
 must not leave a form hanging above unrelated tabs. Add Service protects an
 unsaved draft when navigating away.

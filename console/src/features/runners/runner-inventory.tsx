@@ -1,3 +1,5 @@
+import { Fragment, type ReactNode } from "react";
+import { TableExpansion } from "@/components/common/table-expansion";
 import { DetailRow } from "@/components/common/detail-row";
 import {
   ResourcePanel,
@@ -40,6 +42,8 @@ function runnerStatus(runner: Runner) {
 }
 
 export function RunnerInventory({
+  expandedId,
+  editor,
   runners,
   tenantCount,
   loading,
@@ -49,6 +53,8 @@ export function RunnerInventory({
   onRetry,
   onRemove,
 }: {
+  expandedId?: string;
+  editor?: ReactNode;
   runners: Runner[];
   tenantCount: number;
   loading: boolean;
@@ -85,7 +91,9 @@ export function RunnerInventory({
         variant="outline"
         size="sm"
         disabled={
-          runner.lifecycle === "provisioning" || runner.lifecycle === "deleting"
+          !!expandedId ||
+          runner.lifecycle === "provisioning" ||
+          runner.lifecycle === "deleting"
         }
         onClick={() => {
           setInspectedId(null);
@@ -103,6 +111,7 @@ export function RunnerInventory({
             setInspectedId(null);
             onRetry(runner);
           }}
+          disabled={!!expandedId}
           aria-label={`Retry ${runner.slug} registration`}
         >
           <RotateCcw className="size-3.5" /> Retry registration
@@ -198,36 +207,48 @@ export function RunnerInventory({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {table.rows.map((runner) => (
-                    <ResourceRow
-                      key={runner.id}
-                      onOpen={() => setInspectedId(runner.id)}
-                    >
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="content"
-                          className="max-w-64 justify-start gap-2 p-0 text-xs"
-                          onClick={() => setInspectedId(runner.id)}
-                        >
-                          <GitBranch className="size-3.5 shrink-0 text-primary" />
-                          <span className="truncate">{runner.slug}</span>
-                        </Button>
-                      </TableCell>
-                      <TableCell>{status(runner)}</TableCell>
-                      <TableCell>{owner(runner).scope}</TableCell>
-                      <TableCell className="max-w-64 break-words">
-                        {owner(runner).name}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        Not reported
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          {actions(runner)}
-                        </div>
-                      </TableCell>
-                    </ResourceRow>
+                  {[
+                    ...runners.filter(
+                      (r) =>
+                        r.id === expandedId &&
+                        !table.rows.some((row) => row.id === r.id),
+                    ),
+                    ...table.rows,
+                  ].map((runner) => (
+                    <Fragment key={runner.id}>
+                      <ResourceRow
+                        key={runner.id}
+                        onOpen={() => setInspectedId(runner.id)}
+                      >
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="content"
+                            className="max-w-64 justify-start gap-2 p-0 text-xs"
+                            onClick={() => setInspectedId(runner.id)}
+                          >
+                            <GitBranch className="size-3.5 shrink-0 text-primary" />
+                            <span className="truncate">{runner.slug}</span>
+                          </Button>
+                        </TableCell>
+                        <TableCell>{status(runner)}</TableCell>
+                        <TableCell>{owner(runner).scope}</TableCell>
+                        <TableCell className="max-w-64 break-words">
+                          {owner(runner).name}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          Not reported
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-2">
+                            {actions(runner)}
+                          </div>
+                        </TableCell>
+                      </ResourceRow>
+                      <TableExpansion columns={6}>
+                        {expandedId === runner.id ? editor : null}
+                      </TableExpansion>
+                    </Fragment>
                   ))}
                 </TableBody>
               </Table>

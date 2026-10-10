@@ -23,6 +23,7 @@ import { submitFormOnShortcut } from "@/components/ui/form-submit-shortcut";
 import { cn } from "@/lib/utils";
 
 const Inline = createContext(false);
+const Editing = createContext(true);
 
 /** Form content inside an existing workspace section that owns its expansion. */
 export function ResourceFormBody({
@@ -76,39 +77,48 @@ export function ResourceForm({
     };
   }, [open, inline, editing]);
   return (
-    <Inline.Provider value={inline}>
-      {inline ? (
-        <EditorDiscard.Provider value={() => onOpenChange(false)}>
-          <FormActionsActive.Provider value={open && editing}>
-            <AnimatedSection open={open} className="w-full min-w-0 basis-full">
-              <div
-                ref={region}
-                className={cn(
-                  "w-full min-w-0 basis-full scroll-mt-24 py-2",
-                  className,
-                )}
+    <Editing.Provider value={editing}>
+      <Inline.Provider value={inline}>
+        {inline ? (
+          <EditorDiscard.Provider value={() => onOpenChange(false)}>
+            <FormActionsActive.Provider value={open && editing}>
+              <AnimatedSection
+                open={open}
+                className="w-full min-w-0 basis-full"
               >
-                <div className="w-full">
-                  <section
-                    onKeyDown={submitFormOnShortcut}
-                    className={workspaceSectionClassName(
-                      editing,
-                      "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
-                    )}
-                  >
-                    {children}
-                  </section>
+                <div
+                  ref={region}
+                  className={cn(
+                    "w-full min-w-0 basis-full scroll-mt-24 py-2",
+                    className,
+                  )}
+                >
+                  <div className="w-full">
+                    <section
+                      onKeyDown={submitFormOnShortcut}
+                      className={
+                        editing
+                          ? workspaceSectionClassName(
+                              true,
+                              "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
+                            )
+                          : "space-y-4 border-t border-border pt-4"
+                      }
+                    >
+                      {children}
+                    </section>
+                  </div>
                 </div>
-              </div>
-            </AnimatedSection>
-          </FormActionsActive.Provider>
-        </EditorDiscard.Provider>
-      ) : (
-        <Drawer open={open} onOpenChange={onOpenChange}>
-          <DrawerContent>{children}</DrawerContent>
-        </Drawer>
-      )}
-    </Inline.Provider>
+              </AnimatedSection>
+            </FormActionsActive.Provider>
+          </EditorDiscard.Provider>
+        ) : (
+          <Drawer open={open} onOpenChange={onOpenChange}>
+            <DrawerContent>{children}</DrawerContent>
+          </Drawer>
+        )}
+      </Inline.Provider>
+    </Editing.Provider>
   );
 }
 
@@ -149,7 +159,9 @@ export function ResourceFormFooter({
   children: ReactNode;
   className?: string;
 }) {
-  return useContext(Inline) ? (
+  const inline = useContext(Inline);
+  const editing = useContext(Editing);
+  return inline && editing ? (
     <FormActions
       className={cn(
         editorFooterClassName,

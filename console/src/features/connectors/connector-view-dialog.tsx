@@ -1,13 +1,7 @@
-"use client";
+import { Disclosure } from "@/components/common/disclosure";
+("use client");
 
-import {
-  ResourceForm,
-  ResourceFormHeader as DialogHeader,
-  ResourceFormTitle as DialogTitle,
-  ResourceFormDescription as DialogDescription,
-  ResourceFormFooter,
-} from "@/components/common/resource-form";
-import { Button } from "@/components/ui/button";
+import { ResourceForm } from "@/components/common/resource-form";
 import { CopyButton } from "@/components/common/copy-button";
 import type { Connector } from "@/lib/types";
 import { toYAML } from "@/lib/yaml";
@@ -31,13 +25,10 @@ export function ConnectorViewDialog({
       open={connector !== null}
       onOpenChange={onOpenChange}
     >
-      <DialogHeader>
-        <DialogTitle>Backup destination · {connector?.name}</DialogTitle>
-      </DialogHeader>
       {connector && (
         <div className="flex flex-col gap-4">
-          <dl className="grid gap-4 divide-y divide-border text-sm [&>div]:pt-3">
-            <Detail label="Endpoint" value={connector.endpoint} />
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3 text-sm">
+            <Detail wide label="Endpoint" value={connector.endpoint} />
             <Detail label="Region" value={connector.region} />
             <Detail label="Bucket" value={connector.bucket} />
             <Detail label="Prefix" value={connector.prefix} />
@@ -58,13 +49,25 @@ export function ConnectorViewDialog({
               copyable={false}
             />
           </dl>
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-xs text-muted-foreground">
-                connector.yaml
-              </span>
-              <CopyButton
-                value={toYAML(
+          <Disclosure summary="YAML" summaryClassName="text-xs font-medium">
+            <div className="mt-3 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs text-muted-foreground">
+                  connector.yaml
+                </span>
+                <CopyButton
+                  value={toYAML(
+                    connectorDocument(
+                      connector,
+                      tenantSlug,
+                      projectSlug,
+                      environmentName,
+                    ),
+                  )}
+                />
+              </div>
+              <pre className="overflow-x-auto rounded-lg border border-border bg-background p-4 font-mono text-xs leading-relaxed">
+                {toYAML(
                   connectorDocument(
                     connector,
                     tenantSlug,
@@ -72,26 +75,11 @@ export function ConnectorViewDialog({
                     environmentName,
                   ),
                 )}
-              />
+              </pre>
             </div>
-            <pre className="overflow-x-auto rounded-lg border border-border bg-background p-4 font-mono text-xs leading-relaxed">
-              {toYAML(
-                connectorDocument(
-                  connector,
-                  tenantSlug,
-                  projectSlug,
-                  environmentName,
-                ),
-              )}
-            </pre>
-          </div>
+          </Disclosure>
         </div>
       )}
-      <ResourceFormFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          Close details
-        </Button>
-      </ResourceFormFooter>
     </ResourceForm>
   );
 }
@@ -100,13 +88,21 @@ function Detail({
   label,
   value,
   copyable = true,
+  wide = false,
 }: {
   label: string;
   value: string;
   copyable?: boolean;
+  wide?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div
+      className={
+        wide
+          ? "col-span-full flex min-w-0 flex-col gap-1"
+          : "flex min-w-0 flex-col gap-1"
+      }
+    >
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-all font-mono text-xs">
         {copyable && value ? (

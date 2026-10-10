@@ -38,6 +38,12 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
         </Button>
       </CardHeader>
       <CardContent>
+        <ReleaseGroupFormDrawer
+          env={env}
+          open={adding}
+          onOpenChange={setAdding}
+        />
+
         {env.services.length < 2 ? (
           <EmptyState
             icon={<Workflow />}
@@ -106,11 +112,6 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
           </div>
         )}
       </CardContent>
-      <ReleaseGroupFormDrawer
-        env={env}
-        open={adding}
-        onOpenChange={setAdding}
-      />
     </Card>
   );
 }

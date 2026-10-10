@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { AnimatedSection } from "@/components/common/animated-section";
 import { Disclosure } from "@/components/common/disclosure";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
@@ -16,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function EntryRow({
+  editor,
   label,
   value,
   source,
@@ -29,6 +32,7 @@ export function EntryRow({
   editing = false,
   onRemove,
 }: {
+  editor?: ReactNode;
   label: string;
   value?: string;
   source: string;
@@ -125,14 +129,17 @@ export function EntryRow({
       {secret && loadValue ? (
         <RevealValue loadValue={loadValue} label={label} />
       ) : file ? (
-        <Disclosure className="min-w-0 rounded-lg border border-border" summaryClassName="cursor-pointer px-3 py-2 text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring" summary={<>
-            Preview file contents
-          </>}>
+        <Disclosure
+          className="min-w-0 rounded-lg border border-border"
+          summaryClassName="cursor-pointer px-3 py-2 text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          summary={<>Preview file contents</>}
+        >
           <div className="min-w-0 border-t border-border p-3">{preview}</div>
         </Disclosure>
       ) : (
         preview
       )}
+      <AnimatedSection open={!!editor}>{editor}</AnimatedSection>
     </li>
   );
 }

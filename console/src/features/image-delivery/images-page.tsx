@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+import { TableExpansion } from "@/components/common/table-expansion";
 import { Download } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { SummaryStrip, SummaryItem } from "@/components/common/resource-panel";
@@ -143,13 +145,6 @@ export default function ImagesPage() {
               </>
             }
           />
-          {removing && (
-            <RemoveImageDialog
-              image={removing}
-              onClose={() => setRemoving(null)}
-              onSettled={refresh}
-            />
-          )}
           <ImageFetchAction
             open={fetchOpen}
             onOpenChange={setFetchOpen}
@@ -273,128 +268,145 @@ export default function ImagesPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {table.rows.map((image) => {
+                        {[
+                          ...(removing &&
+                          !table.rows.some((row) => row.id === removing.id)
+                            ? [removing]
+                            : []),
+                          ...table.rows,
+                        ].map((image) => {
                           const repositories = imageRepositories(image);
                           const tags = [...new Set(image.tags.map(imageTag))];
                           return (
-                            <ResourceRow
-                              key={image.id}
-                              onOpen={() => setSelected(image.id)}
-                            >
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="content"
-                                  className="flex w-full min-w-0 flex-col items-start gap-1 text-left"
-                                  onClick={() => setSelected(image.id)}
-                                  aria-label={`Inspect ${imageName(image)}, image ${shortImageId(image.id)}`}
-                                >
-                                  <span className="w-full truncate text-sm font-medium">
-                                    {imageName(image)}
-                                  </span>
-                                  <span className="w-full truncate text-xs font-normal text-muted-foreground">
-                                    {repositories[0] ?? "No repository"}
-                                    {repositories.length > 1
-                                      ? ` +${repositories.length - 1}`
-                                      : ""}
-                                  </span>
-                                  <code className="text-xs font-normal text-muted-foreground/70">
-                                    {shortImageId(image.id)}
-                                  </code>
-                                </Button>
-                              </TableCell>
-                              <TableCell className="hidden lg:table-cell">
-                                <div className="flex flex-wrap gap-1">
-                                  {tags.slice(0, 2).map((tag) => (
-                                    <Badge
-                                      key={tag}
-                                      variant="outline"
-                                      className="max-w-full"
-                                      title={tag}
-                                    >
-                                      <span className="truncate">{tag}</span>
-                                    </Badge>
-                                  ))}
-                                  {tags.length > 2 && (
-                                    <Badge variant="muted">
-                                      +{tags.length - 2} tags
-                                    </Badge>
-                                  )}
-                                  {!tags.length && (
-                                    <span className="text-xs text-muted-foreground">
-                                      By digest
-                                    </span>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell
-                                className="hidden text-xs text-muted-foreground md:table-cell"
-                                title={new Date(
-                                  image.created_at,
-                                ).toLocaleString()}
+                            <Fragment key={image.id}>
+                              <ResourceRow
+                                key={image.id}
+                                onOpen={() => setSelected(image.id)}
                               >
-                                {new Date(
-                                  image.created_at,
-                                ).toLocaleDateString()}
-                              </TableCell>
-                              <TableCell className="hidden whitespace-nowrap text-xs sm:table-cell">
-                                {imageSize(image.size_bytes)}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="content"
-                                  aria-label={`Show usage of ${imageName(image)}`}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setSelected(image.id, "usage");
-                                  }}
+                                <TableCell>
+                                  <Button
+                                    variant="ghost"
+                                    size="content"
+                                    className="flex w-full min-w-0 flex-col items-start gap-1 text-left"
+                                    onClick={() => setSelected(image.id)}
+                                    aria-label={`Inspect ${imageName(image)}, image ${shortImageId(image.id)}`}
+                                  >
+                                    <span className="w-full truncate text-sm font-medium">
+                                      {imageName(image)}
+                                    </span>
+                                    <span className="w-full truncate text-xs font-normal text-muted-foreground">
+                                      {repositories[0] ?? "No repository"}
+                                      {repositories.length > 1
+                                        ? ` +${repositories.length - 1}`
+                                        : ""}
+                                    </span>
+                                    <code className="text-xs font-normal text-muted-foreground/70">
+                                      {shortImageId(image.id)}
+                                    </code>
+                                  </Button>
+                                </TableCell>
+                                <TableCell className="hidden lg:table-cell">
+                                  <div className="flex flex-wrap gap-1">
+                                    {tags.slice(0, 2).map((tag) => (
+                                      <Badge
+                                        key={tag}
+                                        variant="outline"
+                                        className="max-w-full"
+                                        title={tag}
+                                      >
+                                        <span className="truncate">{tag}</span>
+                                      </Badge>
+                                    ))}
+                                    {tags.length > 2 && (
+                                      <Badge variant="muted">
+                                        +{tags.length - 2} tags
+                                      </Badge>
+                                    )}
+                                    {!tags.length && (
+                                      <span className="text-xs text-muted-foreground">
+                                        By digest
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell
+                                  className="hidden text-xs text-muted-foreground md:table-cell"
+                                  title={new Date(
+                                    image.created_at,
+                                  ).toLocaleString()}
                                 >
-                                  <Badge
-                                    variant={
-                                      image.containers > 0
-                                        ? "primary"
+                                  {new Date(
+                                    image.created_at,
+                                  ).toLocaleDateString()}
+                                </TableCell>
+                                <TableCell className="hidden whitespace-nowrap text-xs sm:table-cell">
+                                  {imageSize(image.size_bytes)}
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="ghost"
+                                    size="content"
+                                    aria-label={`Show usage of ${imageName(image)}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setSelected(image.id, "usage");
+                                    }}
+                                  >
+                                    <Badge
+                                      variant={
+                                        image.containers > 0
+                                          ? "primary"
+                                          : image.removal_blocked
+                                            ? "muted"
+                                            : "success"
+                                      }
+                                      title={
+                                        image.removal_blocked ||
+                                        "No container or retained runtime requires this image"
+                                      }
+                                    >
+                                      {image.containers > 0
+                                        ? `${image.containers} containers`
                                         : image.removal_blocked
-                                          ? "muted"
-                                          : "success"
-                                    }
+                                          ? "Protected"
+                                          : "Unused"}
+                                    </Badge>
+                                  </Button>
+                                </TableCell>
+                                <TableCell className="px-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Remove ${imageName(image)}, image ${shortImageId(image.id)}`}
                                     title={
                                       image.removal_blocked ||
-                                      "No container or retained runtime requires this image"
+                                      "Remove image and its tags"
                                     }
+                                    disabled={
+                                      !!image.removal_blocked ||
+                                      !!removing ||
+                                      !!error ||
+                                      loading
+                                    }
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setRemoving(image);
+                                    }}
                                   >
-                                    {image.containers > 0
-                                      ? `${image.containers} containers`
-                                      : image.removal_blocked
-                                        ? "Protected"
-                                        : "Unused"}
-                                  </Badge>
-                                </Button>
-                              </TableCell>
-                              <TableCell className="px-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label={`Remove ${imageName(image)}, image ${shortImageId(image.id)}`}
-                                  title={
-                                    image.removal_blocked ||
-                                    "Remove image and its tags"
-                                  }
-                                  disabled={
-                                    !!image.removal_blocked ||
-                                    !!removing ||
-                                    !!error ||
-                                    loading
-                                  }
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setRemoving(image);
-                                  }}
-                                >
-                                  <Trash2 className="size-4" />
-                                </Button>
-                              </TableCell>
-                            </ResourceRow>
+                                    <Trash2 className="size-4" />
+                                  </Button>
+                                </TableCell>
+                              </ResourceRow>
+                              <TableExpansion columns={6}>
+                                {removing?.id === image.id && (
+                                  <RemoveImageDialog
+                                    image={removing}
+                                    onClose={() => setRemoving(null)}
+                                    onSettled={refresh}
+                                  />
+                                )}
+                              </TableExpansion>
+                            </Fragment>
                           );
                         })}
                       </TableBody>
