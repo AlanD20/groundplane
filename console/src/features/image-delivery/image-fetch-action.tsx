@@ -1,95 +1,128 @@
-import { TaskLink } from "@/components/common/task-link";
-import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { operations } from "@/lib/api.generated";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { newULID } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 type Accepted =
   operations["image.fetch"]["responses"][202]["content"]["application/json"];
 
 export function ImageFetchAction({
-  onSettled,
   open,
-  onOpenChange: setOpen,
+  onOpenChange,
+  initialImage,
 }: {
-  onSettled?: () => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialImage?: string;
 }) {
   const [search] = useSearchParams();
-  const [image, setImage] = useState(search.get("fetch") ?? "");
-  const [accepted, setAccepted] = useState<Accepted | null>(null);
-  const [completed, setCompleted] = useState(false);
-  const intent = useRef<{
-    image: string;
-    key: string;
-    accepted: Accepted | null;
-  } | null>(null);
-
+  const seed = initialImage ?? search.get("fetch") ?? "";
+  const [image, setImage] = useState(seed);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const inputId = useId();
+  const intent = useRef<{ image: string; key: string } | null>(null);
+  const pending = useRef(false);
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open && intent.current?.accepted) intent.current = null;
-  }, [open]);
+    if (open && !wasOpen.current) {
+      setImage(seed);
+      setError("");
+    }
+    wasOpen.current = open;
+  }, [open, seed]);
 
   async function dispatch() {
     const requested = image.trim();
-    if (!intent.current || intent.current.image !== requested) {
-      intent.current = { image: requested, key: newULID(), accepted: null };
+    if (!requested || pending.current) return;
+    if (!intent.current || intent.current.image !== requested)
+      intent.current = { image: requested, key: newULID() };
+    pending.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await controllerRequest<Accepted>("/images/fetch", 202, {
+        method: "POST",
+        body: { image: requested },
+        idempotencyKey: intent.current.key,
+      });
+      // The transport publishes acceptance to Task notifications. Inventory
+      // refreshes on terminal Task observation, independently of this popup.
+      intent.current = null;
+      onOpenChange(false);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Unable to fetch image",
+      );
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
-    const current = intent.current;
-    if (current.accepted) return current.accepted.task_id;
-    setCompleted(false);
-    setAccepted(null);
-    const response = await controllerRequest<Accepted>("/images/fetch", 202, {
-      method: "POST",
-      body: { image: current.image },
-      idempotencyKey: current.key,
-    });
-    current.accepted = response;
-    if (intent.current === current) setAccepted(response);
-    return response.task_id;
   }
 
   return (
-    <>
-      {accepted && (
-        <TaskLink taskId={accepted.task_id}>
-          {completed ? "Fetch completed" : "View Fetch Task"}
-        </TaskLink>
-      )}
-      <TaskRunnerDialog
-        open={open}
-        onOpenChange={setOpen}
-        variant="inline"
-        title="Fetch image"
-        type="fetch"
-        target={image.trim() || "Registry image"}
-        workspace="platform"
-        startLabel="Fetch image"
-        startDisabled={!image.trim()}
-        onDispatch={dispatch}
-        onCommit={() => setCompleted(true)}
-        onSettled={onSettled}
-        description="Use an image tag or digest."
-        review={
-          <div className="space-y-2">
-            <Label htmlFor="fetch-image">Registry image</Label>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending.current) onOpenChange(next);
+      }}
+    >
+      <DialogContent className="max-w-lg">
+        <form
+          onKeyDown={(event) => event.stopPropagation()}
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void dispatch();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Fetch image</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 space-y-2">
+            <Label htmlFor={inputId}>Registry image</Label>
             <Input
-              id="fetch-image"
+              id={inputId}
               value={image}
+              disabled={busy}
+              autoFocus
               onChange={(event) => setImage(event.target.value)}
-              placeholder="nginx:latest, ghcr.io/org/app:tag or registry.groundplane.internal:5000/project/api:release"
+              placeholder="nginx:latest or ghcr.io/org/app:tag"
             />
-            <p className="text-xs text-muted-foreground">
-              After an uncertain request, keep the same image and retry to
-              resolve its original acceptance.
-            </p>
+            {error && (
+              <p role="alert" className="break-words text-sm text-destructive">
+                {error}
+              </p>
+            )}
           </div>
-        }
-      />
-    </>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || !image.trim()}>
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy ? "Starting…" : "Fetch image"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

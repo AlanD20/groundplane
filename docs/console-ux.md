@@ -233,8 +233,8 @@ content; it does not need its own visual treatment for ordinary fields and edits
   A highlighted editor must not camouflage its controls.
 - **Actions:** active page editors use the shared viewport action bar. Keep it
   visible at the bottom of the browser viewport throughout editing, even when
-  the form scrolls away. Show the owning editor and draft status; changed settings
-  explicitly show Unsaved changes. Reserve page space, retain native form submit
+  the form scrolls away. Show the owning editor; show Unsaved changes only when values differ from
+  their baseline. Reserve page space, retain native form submit
   and disabled behavior. Permit one active editor per page: close an unchanged
   editor when switching, and require explicit discard for a changed draft.
   Keep editing preserves the current draft and cancels the attempted editor.
@@ -270,6 +270,13 @@ and stop polling and event streams when the row closes. Direct links remain vali
 
 Small popup actions use a normal footer with a spaced divider, without sticky
 positioning or a shadow. Viewport-pinned actions belong to inline forms.
+
+Image selectors offer Fetch image beside Refresh. This small request popup
+closes on accepted Task dispatch; Task notifications own background progress and
+terminal observation refreshes the inventory. Preserve the surrounding editor.
+Task dispatch/status/failure is not an unsaved configuration draft. Inline Task
+reviews release editor ownership on submission; returning to review establishes a
+fresh baseline. Small Task popups never inherit a parent inline action bar.
 
 The shared draft owner blocks page/tab navigation when the edited values differ
 from their baseline, offering Keep editing or Discard. Refresh, tab close and

@@ -145,11 +145,7 @@ export default function ImagesPage() {
               </>
             }
           />
-          <ImageFetchAction
-            open={fetchOpen}
-            onOpenChange={setFetchOpen}
-            onSettled={refresh}
-          />
+          <ImageFetchAction open={fetchOpen} onOpenChange={setFetchOpen} />
           {inventory && (
             <SummaryStrip>
               <SummaryItem label="Local images">

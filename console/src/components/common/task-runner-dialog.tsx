@@ -5,6 +5,7 @@ import { CopyButton } from "@/components/common/copy-button";
 import {
   ResourceForm,
   ResourceFormBody,
+  ResourceFormDialogBody,
   ResourceFormHeader as DialogHeader,
   ResourceFormTitle as DialogTitle,
   ResourceFormDescription as DialogDescription,
@@ -466,20 +467,29 @@ export function TaskRunnerDialog({
 
   if (variant === "embedded" && !confirmText)
     return open ? (
-      <ResourceFormBody onDiscard={() => onOpenChange(false)}>
+      <ResourceFormBody
+        editing={phase === "review"}
+        onDiscard={() => onOpenChange(false)}
+      >
         {Body}
       </ResourceFormBody>
     ) : null;
   if (variant === "inline" && !confirmText)
     return (
-      <ResourceForm open={open} onOpenChange={onOpenChange}>
+      <ResourceForm
+        editing={phase === "review"}
+        open={open}
+        onOpenChange={onOpenChange}
+      >
         {Body}
       </ResourceForm>
     );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">{Body}</DialogContent>
+      <DialogContent className="max-w-lg">
+        <ResourceFormDialogBody>{Body}</ResourceFormDialogBody>
+      </DialogContent>
     </Dialog>
   );
 }

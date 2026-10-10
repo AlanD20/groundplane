@@ -29,16 +29,29 @@ const Editing = createContext(true);
 export function ResourceFormBody({
   children,
   onDiscard,
+  editing = true,
 }: {
   children: ReactNode;
   onDiscard: () => void;
+  editing?: boolean;
 }) {
   return (
     <EditorDiscard.Provider value={onDiscard}>
-      <Inline.Provider value>
-        <div className="space-y-4">{children}</div>
-      </Inline.Provider>
+      <Editing.Provider value={editing}>
+        <Inline.Provider value>
+          <div className="space-y-4">{children}</div>
+        </Inline.Provider>
+      </Editing.Provider>
     </EditorDiscard.Provider>
+  );
+}
+
+/** Reset inline form context when a dialog is opened from within an editor. */
+export function ResourceFormDialogBody({ children }: { children: ReactNode }) {
+  return (
+    <Inline.Provider value={false}>
+      <Editing.Provider value={false}>{children}</Editing.Provider>
+    </Inline.Provider>
   );
 }
 

@@ -62,7 +62,7 @@ export function FormActions({
   children,
   className,
   pinned = true,
-  status = "Unsaved draft",
+  status,
   onDiscard,
   dirty,
   ...props
@@ -80,6 +80,7 @@ export function FormActions({
   const discard = onDiscard ?? contextDiscard;
   const contextDirty = useContext(FormDirty);
   const latestDirty = useRef(dirty ?? contextDirty);
+  const [observedDirty, setObservedDirty] = useState(false);
   latestDirty.current = dirty ?? contextDirty;
   const latestDiscard = useRef(discard);
   latestDiscard.current = discard;
@@ -121,8 +122,12 @@ export function FormActions({
       );
     let initial = snapshot();
     let touched = false;
+    setObservedDirty(false);
+    const updateDirty = () =>
+      setObservedDirty(touched && snapshot() !== initial);
     const observer = new MutationObserver(() => {
       if (!touched) initial = snapshot();
+      updateDirty();
     });
     observer.observe(owner, {
       subtree: true,
@@ -137,6 +142,7 @@ export function FormActions({
     owner.addEventListener("keydown", begin, true);
     const changed = () => {
       touched = true;
+      updateDirty();
     };
     owner.addEventListener("input", changed, true);
     owner.addEventListener("change", changed, true);
@@ -192,7 +198,12 @@ export function FormActions({
       {fixed && (
         <div className="mr-auto min-w-0 text-sm">
           {label && <span className="mr-2 font-medium">{label}</span>}
-          <span className="text-muted-foreground">{status}</span>
+          <span className="text-muted-foreground">
+            {status ??
+              ((dirty ?? contextDirty ?? observedDirty)
+                ? "Unsaved changes"
+                : "")}
+          </span>
         </div>
       )}
       {children}

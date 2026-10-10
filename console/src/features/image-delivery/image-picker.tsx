@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { ImageFetchAction } from "./image-fetch-action";
+import { Download, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export function ImagePicker({
   referencesForImage?: (image: HostImage) => string[];
   placeholder?: string;
 }) {
+  const [fetchOpen, setFetchOpen] = useState(false);
   const { inventory, loading, error, refresh } = useImageInventory();
   const references = [
     ...new Set(inventory?.images.flatMap(referencesForImage) ?? []),
@@ -33,7 +35,7 @@ export function ImagePicker({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
       />
-      <div className="flex min-w-0 gap-2">
+      <div className="flex min-w-0 flex-wrap gap-2">
         <SearchableSelect
           aria-label="Choose an image on the Agent host"
           value={references.includes(value) ? value : null}
@@ -48,7 +50,7 @@ export function ImagePicker({
           }))}
           onValueChange={onChange}
           disabled={loading || references.length === 0}
-          className="min-w-0 flex-1 [&>span]:truncate"
+          className="min-w-40 flex-1 [&>span]:truncate"
         />
         <Button
           type="button"
@@ -60,25 +62,24 @@ export function ImagePicker({
         >
           <RefreshCw className="size-4" />
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setFetchOpen(true)}
+        >
+          <Download className="size-4" /> Fetch image
+        </Button>
       </div>
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
-        Missing an image?{" "}
-        <Link
-          to={`/platform/host/images?fetch=${encodeURIComponent(value)}`}
-          target="_blank"
-          rel="noreferrer"
-          className="text-primary hover:underline"
-        >
-          Fetch it in Images
-        </Link>
-        , then refresh this list. Fetch supports public registries and GP's
-        private registry.
-      </p>
+      <ImageFetchAction
+        open={fetchOpen}
+        onOpenChange={setFetchOpen}
+        initialImage={value}
+      />
     </div>
   );
 }
