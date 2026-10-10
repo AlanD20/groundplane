@@ -20,13 +20,16 @@ func healthcheckDiagnostic(config *container.Config, state *container.State) age
 		return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED
 	}
 	test := config.Healthcheck.Test
-	// A direct CMD that cannot start has no process exit status. Docker records
-	// -1 and the runtime error; do not confuse it with a probe timeout (also -1).
-	if latest.ExitCode == -1 && len(test) > 1 && test[0] == "CMD" {
-		command := "exec: " + strconv.Quote(test[1]) + ": "
+	// A command that cannot start has no process exit status. Docker records -1
+	// and the runtime error; do not confuse it with a probe timeout (also -1).
+	if executable := healthcheckStartExecutable(config, test); latest.ExitCode == -1 && executable != "" {
+		command := "exec: " + strconv.Quote(executable) + ": "
 		if strings.Contains(latest.Output, command+"executable file not found in $PATH") ||
-			strings.Contains(latest.Output, command+"stat "+test[1]+": no such file or directory") {
-			return missingHealthcheckExecutable(test)
+			strings.Contains(latest.Output, command+"stat "+executable+": no such file or directory") {
+			if test[0] == "CMD" {
+				return missingHealthcheckExecutable(test)
+			}
+			return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_MISSING
 		}
 		if strings.Contains(latest.Output, command+"permission denied") {
 			return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_NOT_EXECUTABLE
@@ -39,6 +42,23 @@ func healthcheckDiagnostic(config *container.Config, state *container.State) age
 		return agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED
 	}
 	return missingHealthcheckExecutable(test)
+}
+
+func healthcheckStartExecutable(config *container.Config, test []string) string {
+	if len(test) < 2 {
+		return ""
+	}
+	switch test[0] {
+	case "CMD":
+		return test[1]
+	case "CMD-SHELL":
+		if len(config.Shell) > 0 {
+			return config.Shell[0]
+		}
+		return "/bin/sh"
+	default:
+		return ""
+	}
 }
 
 func missingHealthcheckExecutable(test []string) agentpb.ComposeHelperDiagnostic {
