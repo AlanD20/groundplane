@@ -262,7 +262,8 @@ func (observer *Observer) observeContainers(
 			ContainerId: item.ID, Name: name, ServiceId: service.ServiceId,
 			ImageReference: item.Config.Image, ImageId: item.Image,
 			State: state, Health: health, ExitCode: exitCode,
-			Labels: cloneLabels(service.ExpectedLabels),
+			HealthcheckDiagnostic: healthcheckDiagnostic(item.Config, item.State),
+			Labels:                cloneLabels(service.ExpectedLabels),
 		})
 	}
 	return nil

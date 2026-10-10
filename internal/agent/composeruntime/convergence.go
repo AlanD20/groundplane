@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/AlanD20/groundplane/internal/common/healthcheckfailure"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
 type composeConvergence struct {
-	Ready   bool
-	Summary string
+	Ready      bool
+	Summary    string
+	Diagnostic agentpb.ComposeHelperDiagnostic
 }
 
 // Blueprint reapply can reconcile Components without a native candidate Release
@@ -165,6 +168,15 @@ func evaluateSelectedComposeConvergence(
 			)
 		}
 		matching := containersForService(containers, service)
+		for _, container := range matching {
+			if !service.GetHasHealthcheck() || container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING {
+				continue
+			}
+			if detail := healthcheckfailure.Detail(container.GetHealthcheckDiagnostic()); detail != "" {
+				return composeConvergence{Diagnostic: container.GetHealthcheckDiagnostic()},
+					errs.Newf(errs.KindValidationFailed, "service %s container %s: %s", service.GetComposeName(), container.GetName(), detail)
+			}
+		}
 		if len(matching) != int(service.GetExpectedReplicas()) {
 			return composeConvergence{
 				Summary: fmt.Sprintf(

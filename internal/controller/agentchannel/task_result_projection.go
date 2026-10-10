@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
+	"github.com/AlanD20/groundplane/internal/common/healthcheckfailure"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 
@@ -50,6 +51,16 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) taskjournal.Task
 	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED:
 		diagnostic = taskjournal.TaskResultDiagnosticComposeFailed
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_PGREP_MISSING:
+		diagnostic = taskjournal.TaskResultDiagnosticHealthcheckPgrepMissing
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_CURL_MISSING:
+		diagnostic = taskjournal.TaskResultDiagnosticHealthcheckCurlMissing
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_NC_MISSING:
+		diagnostic = taskjournal.TaskResultDiagnosticHealthcheckNCMissing
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_MISSING:
+		diagnostic = taskjournal.TaskResultDiagnosticHealthcheckCommandMissing
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_NOT_EXECUTABLE:
+		diagnostic = taskjournal.TaskResultDiagnosticHealthcheckCommandNotExecutable
 	}
 	durable := taskjournal.TaskResultRecord{
 		Kind: taskjournal.TaskResultCompose, ExitCode: acknowledgement.GetExitCode(),
@@ -166,6 +177,12 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 					errs.KindValidationFailed,
 					"Agent Compose Task collision is invalid",
 				)
+			}
+		}
+		for _, observed := range project.GetContainers() {
+			if observed == nil || (observed.GetHealthcheckDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED &&
+				healthcheckfailure.Detail(observed.GetHealthcheckDiagnostic()) == "") {
+				return errs.New(errs.KindValidationFailed, "Agent healthcheck failure classification is invalid")
 			}
 		}
 	}

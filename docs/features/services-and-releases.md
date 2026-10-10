@@ -141,6 +141,15 @@ touching unrelated workloads. See [Task status](tasks-and-logs.md).
 
 ## Reading health
 
+GP's built-in process, HTTP and TCP checks run inside the workload container and
+require `pgrep`, `curl` and `nc`, respectively. GP does not install these tools into
+your image. A recorded command-not-found or non-executable check fails the wait
+step rather than waiting for its full deadline; the Task keeps a safe failure
+reason even after recovery. Choose a check supported by the image or include its
+required tool. Ordinary failed readiness checks may still recover during the
+bounded startup wait. Raw check output is not published because it can contain
+secrets.
+
 Observed counts describe the serving workload and its expected replicas. A running
 container without a healthcheck is not evidence of application health. Addressable
 Services also require their stable proxy. Observations become stale after 15

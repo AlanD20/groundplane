@@ -160,6 +160,7 @@ func (runtime *Runtime) waitWorkloadHealthy(
 		}
 		result.Observed = observed
 		convergence, err := evaluateReleaseWorkloadConvergence(artifact, observed, []string{name})
+		result.Diagnostic = convergence.Diagnostic
 		if err != nil {
 			result.ReconciliationRequired = true
 			return result, err
@@ -370,6 +371,7 @@ func (runtime *Runtime) waitHealthy(
 			convergence, convergeErr = evaluateComposeConvergence(artifact, observed, selected)
 		}
 		if convergeErr != nil {
+			result.Diagnostic = convergence.Diagnostic
 			result.ReconciliationRequired = true
 			return result, convergeErr
 		}

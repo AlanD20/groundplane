@@ -264,6 +264,8 @@ message ObservedContainer {
   ObservedContainerHealth health = 7;
   optional int32 exit_code = 8;
   repeated LabelPair labels = 9;
+  // Closed, output-free classification of a check that cannot execute.
+  ComposeHelperDiagnostic healthcheck_diagnostic = 10;
 }
 
 enum ObservedContainerState {
@@ -3277,6 +3279,11 @@ enum ComposeHelperDiagnostic {
   COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED = 3;
   COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED = 4;
   COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED = 5;
+  COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_PGREP_MISSING = 6;
+  COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_CURL_MISSING = 7;
+  COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_NC_MISSING = 8;
+  COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_MISSING = 9;
+  COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_COMMAND_NOT_EXECUTABLE = 10;
 }
 
 message TaskAbort {

@@ -30,6 +30,16 @@ func taskFailureSummary(record etcd.TaskRecord) string {
 		summary = "The container operation failed."
 	case taskjournal.TaskResultDiagnosticTimeoutBeforeEffect:
 		summary = "Execution timed out before a workload effect was recorded."
+	case taskjournal.TaskResultDiagnosticHealthcheckPgrepMissing:
+		summary = "Healthcheck cannot run: pgrep is not installed in the container. Use an image with pgrep or choose an available healthcheck."
+	case taskjournal.TaskResultDiagnosticHealthcheckCurlMissing:
+		summary = "Healthcheck cannot run: curl is not installed in the container. Use an image with curl or choose an available healthcheck."
+	case taskjournal.TaskResultDiagnosticHealthcheckNCMissing:
+		summary = "Healthcheck cannot run: nc is not installed in the container. Use an image with nc or choose an available healthcheck."
+	case taskjournal.TaskResultDiagnosticHealthcheckCommandMissing:
+		summary = "Healthcheck cannot run: a required command was not found in the container. Check the image and healthcheck command."
+	case taskjournal.TaskResultDiagnosticHealthcheckCommandNotExecutable:
+		summary = "Healthcheck cannot run: a required command is not executable in the container. Check executable permissions and the healthcheck command."
 	}
 	if record.Result.ExitCode != 0 {
 		summary += fmt.Sprintf(" Executor exit code: %d.", record.Result.ExitCode)

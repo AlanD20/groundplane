@@ -108,8 +108,13 @@ const (
 type TaskResultDiagnostic string
 
 const (
-	TaskResultDiagnosticNone                TaskResultDiagnostic = "none"
-	TaskResultDiagnosticConfigRejected      TaskResultDiagnostic = "config_rejected"
-	TaskResultDiagnosticComposeFailed       TaskResultDiagnostic = "compose_failed"
-	TaskResultDiagnosticTimeoutBeforeEffect TaskResultDiagnostic = "timeout_before_effect"
+	TaskResultDiagnosticNone                            TaskResultDiagnostic = "none"
+	TaskResultDiagnosticConfigRejected                  TaskResultDiagnostic = "config_rejected"
+	TaskResultDiagnosticComposeFailed                   TaskResultDiagnostic = "compose_failed"
+	TaskResultDiagnosticTimeoutBeforeEffect             TaskResultDiagnostic = "timeout_before_effect"
+	TaskResultDiagnosticHealthcheckPgrepMissing         TaskResultDiagnostic = "healthcheck_pgrep_missing"
+	TaskResultDiagnosticHealthcheckCurlMissing          TaskResultDiagnostic = "healthcheck_curl_missing"
+	TaskResultDiagnosticHealthcheckNCMissing            TaskResultDiagnostic = "healthcheck_nc_missing"
+	TaskResultDiagnosticHealthcheckCommandMissing       TaskResultDiagnostic = "healthcheck_command_missing"
+	TaskResultDiagnosticHealthcheckCommandNotExecutable TaskResultDiagnostic = "healthcheck_command_not_executable"
 )
