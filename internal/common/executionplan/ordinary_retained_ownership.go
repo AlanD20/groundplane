@@ -16,6 +16,9 @@ func validRetainedOwnership(
 		return true, ""
 	}
 	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+		if validBlueprintServiceRemovalRetainedOwnership(plan, artifact, serviceID, labels) {
+			return true, ""
+		}
 		return validBlueprintRetainedOwnership(plan, artifact, serviceID, labels)
 	}
 	if validAttachMutationOwnership(plan, artifact, labels) ||
@@ -24,6 +27,50 @@ func validRetainedOwnership(
 		return true, ""
 	}
 	return retainedOwnershipReject(retainedOwnershipInvalidInput)
+}
+
+func validBlueprintServiceRemovalRetainedOwnership(
+	plan *agentpb.ExecutionPlan,
+	artifact *agentpb.ComposeArtifact,
+	serviceID string,
+	labels map[string]string,
+) bool {
+	if !blueprintServiceRemovalPriorArtifact(plan, artifact.GetArtifactId()) ||
+		serviceID != plan.GetTargetId() ||
+		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		labels[labelComponentID] != "" || ids.Validate(ids.KindPlan, labels[labelPlanID]) != nil {
+		return false
+	}
+	generation, err := strconv.ParseUint(labels[labelRenderGen], 10, 64)
+	if err != nil || generation == 0 || generation >= plan.GetRenderGeneration() ||
+		strconv.FormatUint(generation, 10) != labels[labelRenderGen] {
+		return false
+	}
+	found := false
+	for _, service := range artifact.GetServices() {
+		if service.GetServiceId() != serviceID {
+			return false
+		}
+		found = true
+	}
+	if !found {
+		return false
+	}
+	for _, step := range plan.GetSteps() {
+		if apply := step.GetComposeApply(); apply != nil && apply.GetArtifactId() == artifact.GetArtifactId() {
+			return false
+		}
+		if stop := step.GetComposeStop(); stop != nil && stop.GetArtifactId() == artifact.GetArtifactId() {
+			return false
+		}
+		if remove := step.GetComposeRemove(); remove != nil && remove.GetArtifactId() == artifact.GetArtifactId() {
+			return false
+		}
+		if wait := step.GetWaitHealthy(); wait != nil && wait.GetArtifactId() == artifact.GetArtifactId() {
+			return false
+		}
+	}
+	return true
 }
 
 // Historical ownership is lawful only for the exact native predecessor named

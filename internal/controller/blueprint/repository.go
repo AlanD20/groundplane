@@ -2,6 +2,9 @@ package blueprint
 
 import (
 	"context"
+	"net/netip"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
@@ -20,9 +23,8 @@ import (
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"net/netip"
-	"time"
 )
 
 type environmentBlueprintRepository interface {
@@ -73,6 +75,17 @@ type environmentBlueprintRepository interface {
 	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
 	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
+	GetAppliedServiceRemovalSource(
+		context.Context,
+		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+		string,
+	) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
+	GetServiceRemovalRuntime(
+		context.Context,
+		string,
+		string,
+		int64,
+	) (etcdstore.Versioned[serviceruntimerecord.Record], error)
 	GetEntry(context.Context, string) (etcdstore.Versioned[entryrecord.Record], error)
 	GetEnvironmentAppliedComposeProjection(
 		context.Context,

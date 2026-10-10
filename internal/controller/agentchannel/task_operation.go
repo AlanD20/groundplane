@@ -28,7 +28,7 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 	case taskjournal.TaskDestroy:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DESTROY
 	case taskjournal.TaskRemove:
-		if etcd.IsAuthoredBlueprintEntryRemovalTask(task) {
+		if etcd.IsAuthoredBlueprintEntryRemovalTask(task) || etcd.IsAuthoredBlueprintServiceRemovalTask(task) {
 			return operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
 		}
 		if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {

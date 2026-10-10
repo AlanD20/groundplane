@@ -30,6 +30,9 @@ func serviceLifecycleArtifactValidationPlan(
 		validation.RenderGeneration = source.GetSourceRenderGeneration()
 		return validation, true, nil
 	}
+	if blueprintServiceRemovalPriorArtifact(plan, artifact.GetArtifactId()) {
+		return plan, false, nil
+	}
 	return nil, true, errs.New(errs.KindValidationFailed, "service lifecycle artifact source is absent")
 }
 
@@ -37,6 +40,9 @@ func validateServiceLifecyclePlan(plan *agentpb.ExecutionPlan) error {
 	procedure := plan.GetServiceLifecycleProcedure()
 	if procedure == nil {
 		return nil
+	}
+	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+		return validateBlueprintServiceRemovalLifecyclePlan(plan)
 	}
 	if ids.Validate(ids.KindService, plan.GetTargetId()) != nil ||
 		plan.GetCandidateReleaseProcedure() != nil || plan.GetManagedComponentProcedure() != nil ||
@@ -89,6 +95,95 @@ func validateServiceLifecyclePlan(plan *agentpb.ExecutionPlan) error {
 		seenSteps[source.GetStepId()] = true
 	}
 	return nil
+}
+
+func validateBlueprintServiceRemovalLifecyclePlan(plan *agentpb.ExecutionPlan) error {
+	invalid := func() error {
+		return errs.New(errs.KindValidationFailed, "Blueprint Service removal procedure shape is invalid")
+	}
+	procedure := plan.GetServiceLifecycleProcedure()
+	candidate := plan.GetCandidateReleaseProcedure()
+	if ids.Validate(ids.KindService, plan.GetTargetId()) != nil || procedure == nil || candidate == nil ||
+		candidate.GetConfigurationRestoration() != nil || len(candidate.GetMembers()) != 1 ||
+		plan.GetManagedComponentProcedure() != nil || plan.GetComponentRecoveryProcedure() != nil ||
+		plan.GetEntryMutationProcedure() != nil || plan.GetComponentRollbackObservation() != nil ||
+		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > 3 ||
+		len(plan.GetSteps()) != len(procedure.GetSources())+2 {
+		return invalid()
+	}
+	member := candidate.GetMembers()[0]
+	serving, absence := member.GetServingPredecessor(), member.GetCandidateAbsence()
+	if member.GetServiceId() != plan.GetTargetId() || serving == nil || absence == nil ||
+		len(member.GetForwardStepIds()) != len(procedure.GetSources()) ||
+		serving.GetPriorArtifactId() == "" || serving.GetPriorReleaseId() != member.GetCandidateReleaseId() ||
+		absence.GetComposeProjectName() == "" || len(absence.GetServices()) != 1 ||
+		absence.GetServices()[0].GetServiceId() != member.GetServiceId() ||
+		absence.GetServices()[0].GetReleaseId() != member.GetCandidateReleaseId() {
+		return invalid()
+	}
+	artifacts := make(map[string]*agentpb.ComposeArtifact, len(plan.GetArtifacts()))
+	for _, artifact := range plan.GetArtifacts() {
+		if artifact == nil || artifact.GetArtifactId() == "" || artifacts[artifact.GetArtifactId()] != nil {
+			return invalid()
+		}
+		artifacts[artifact.GetArtifactId()] = artifact
+	}
+	wantArtifacts := make(map[string]bool, len(procedure.GetSources())+2)
+	seenSteps := make(map[string]bool, len(procedure.GetSources()))
+	for index, source := range procedure.GetSources() {
+		if source == nil || source.GetServiceId() != plan.GetTargetId() ||
+			member.GetForwardStepIds()[index] != source.GetStepId() || seenSteps[source.GetStepId()] ||
+			len(source.GetComposeNames()) != 1 {
+			return invalid()
+		}
+		artifact, step := artifacts[source.GetArtifactId()], plan.GetSteps()[index]
+		if artifact == nil || len(artifact.GetServices()) != 1 ||
+			artifact.GetServices()[0].GetComposeName() != source.GetComposeNames()[0] ||
+			artifact.GetServices()[0].GetServiceId() != plan.GetTargetId() ||
+			step.GetStepId() != source.GetStepId() ||
+			step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD ||
+			index == 0 && step.GetPrerequisiteStepId() != "" ||
+			index > 0 && step.GetPrerequisiteStepId() != procedure.GetSources()[index-1].GetStepId() ||
+			!serviceLifecycleStepMatches(agentpb.PlanOperation_PLAN_OPERATION_REMOVE, step, source) {
+			return invalid()
+		}
+		wantArtifacts[source.GetArtifactId()] = true
+		seenSteps[source.GetStepId()] = true
+	}
+	probe, compensate := plan.GetSteps()[len(procedure.GetSources())], plan.GetSteps()[len(procedure.GetSources())+1]
+	if probe.GetStepId() != serving.GetProbeStepId() || probe.GetStepId() != absence.GetProbeStepId() ||
+		probe.GetPrerequisiteStepId() != "" ||
+		compensate.GetStepId() != serving.GetCompensateStepId() ||
+		compensate.GetStepId() != absence.GetCompensateStepId() ||
+		compensate.GetPrerequisiteStepId() != procedure.GetSources()[len(procedure.GetSources())-1].GetStepId() ||
+		probe.GetCandidateRestorationProbe() == nil || compensate.GetCandidateRestorationCompensate() == nil {
+		return invalid()
+	}
+	wantArtifacts[serving.GetPriorArtifactId()] = true
+	if serving.GetRetainedPriorArtifactId() != "" {
+		wantArtifacts[serving.GetRetainedPriorArtifactId()] = true
+	}
+	if len(artifacts) != len(wantArtifacts) || artifacts[serving.GetPriorArtifactId()] == nil ||
+		member.GetCandidateArtifactId() == serving.GetPriorArtifactId() ||
+		artifacts[member.GetCandidateArtifactId()] == nil ||
+		artifacts[member.GetCandidateArtifactId()].GetProjectName() != absence.GetComposeProjectName() {
+		return invalid()
+	}
+	for artifactID := range artifacts {
+		if !wantArtifacts[artifactID] {
+			return invalid()
+		}
+	}
+	return nil
+}
+
+func blueprintServiceRemovalPriorArtifact(plan *agentpb.ExecutionPlan, artifactID string) bool {
+	if plan == nil || validateBlueprintServiceRemovalLifecyclePlan(plan) != nil {
+		return false
+	}
+	serving := plan.GetCandidateReleaseProcedure().GetMembers()[0].GetServingPredecessor()
+	return artifactID == serving.GetPriorArtifactId() ||
+		artifactID != "" && artifactID == serving.GetRetainedPriorArtifactId()
 }
 
 func serviceLifecycleLabelsMatch(service *agentpb.ComposeService, source *agentpb.ServiceLifecycleSource) bool {

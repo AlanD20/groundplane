@@ -35,6 +35,10 @@ func blueprintChildTerminalResultVerified(
 		return authoredBlueprintEntryRemovalTask(task) && result != nil &&
 			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
 	}
+	if task.Params[taskjournal.TaskBlueprintServiceUnitParam] != "" {
+		return authoredBlueprintServiceRemovalTask(task) && result != nil &&
+			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
+	}
 	if verifiedCandidate {
 		return true
 	}
@@ -96,8 +100,11 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	verifiedEntryEffect := verifiedResult && execution.Unit.Removal &&
 		execution.Unit.Target.Kind == ids.KindEnvEntry && authoredBlueprintEntryRemovalTask(task) &&
 		task.Params[taskjournal.TaskBlueprintEntryUnitParam] == execution.Unit.Target.ID
+	verifiedServiceRemovalEffect := verifiedResult && execution.Unit.Removal &&
+		execution.Unit.Target.Kind == ids.KindService && authoredBlueprintServiceRemovalTask(task) &&
+		task.Params[taskjournal.TaskBlueprintServiceUnitParam] == execution.Unit.Target.ID
 	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect ||
-		verifiedAttachEffect || verifiedComponentEffect || verifiedEntryEffect
+		verifiedAttachEffect || verifiedComponentEffect || verifiedEntryEffect || verifiedServiceRemovalEffect
 	if status != taskjournal.TaskStatusCompleted &&
 		(!taskassignments.ValidTerminalTaskStatus(status) || !verifiedEffect) {
 		if execution.State == blueprintunits.Draining {

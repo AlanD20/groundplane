@@ -302,6 +302,7 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 			prepared.ReleasePublication,
 			prepared.ComponentPublication,
 			prepared.EntryRemovalPublication,
+			prepared.ServiceRemovalPublication,
 		); err != nil {
 			if !unknownBlueprintChildPublication(err) {
 				if cleanupErr := prepared.ReleasePublication.Abandon(ctx); cleanupErr != nil {

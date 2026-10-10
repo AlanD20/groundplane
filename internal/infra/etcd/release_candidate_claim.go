@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"slices"
+	"sort"
+	"time"
+
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"slices"
-	"sort"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -387,7 +388,8 @@ func validateAssignmentRestorationDescriptor(
 			return taskassignments.CorruptTaskAssignment()
 		}
 	}
-	if taskHasBlueprintCandidateAppliedAuthority(task) || task.Type == taskjournal.TaskDeploy ||
+	if taskHasBlueprintCandidateAppliedAuthority(task) || authoredBlueprintServiceRemovalTask(task) ||
+		task.Type == taskjournal.TaskDeploy ||
 		task.Type == taskjournal.TaskRollback {
 		if err := validateNativeRestorationDescriptor(*authority, procedure); err != nil {
 			return err

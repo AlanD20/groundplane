@@ -39,6 +39,7 @@ const (
 	TaskBlueprintVolumeUnitParam         = "blueprint_volume_unit_id"
 	TaskBlueprintComponentUnitParam      = "blueprint_component_unit_id"
 	TaskBlueprintEntryUnitParam          = "blueprint_entry_unit_id"
+	TaskBlueprintServiceUnitParam        = "blueprint_service_unit_id"
 	TaskBlueprintVolumeModeParam         = "blueprint_volume_mode"
 	TaskBlueprintVolumeIntentParam       = "blueprint_volume_intent_sha256"
 	TaskComposeArtifactParam             = "compose_artifact_id"

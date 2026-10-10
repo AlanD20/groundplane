@@ -85,6 +85,10 @@ func (repository *TaskRepository) releaseRecoveryProcedureAtRevision(
 	if authoredBlueprintEntryRemovalTask(task) {
 		return repository.authoredEntryRecoveryProcedureAtRevision(ctx, task, revision)
 	}
+	if authoredBlueprintServiceRemovalTask(task) {
+		procedure, _, conditions, err := repository.authoredServiceRecoveryProcedureAtRevision(ctx, task, revision)
+		return procedure, conditions, err
+	}
 	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, revision)
 	return procedure, nil, err
 }

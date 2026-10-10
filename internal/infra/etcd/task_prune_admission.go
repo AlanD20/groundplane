@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	attachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
@@ -17,7 +19,6 @@ import (
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"time"
 )
 
 func (repository *TaskRepository) beginTaskPrune(
@@ -89,6 +90,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		environmentchanges.RouteMutationIntentKey(task.ID),
 		environmentchanges.EntryRemovalIntentKey(task.ID),
 		attachments.BlueprintAttachTaskIntentKey(task.ID),
+		environmentchanges.ServiceRemovalIntentKey(task.ID),
 	}
 	environmentDeletionFenceStart := -1
 	var environmentDeletionFenceKeys []string
@@ -224,6 +226,14 @@ func (repository *TaskRepository) beginTaskPrune(
 			attachIntent.TerminalAt == nil ||
 			task.FinishedAt == nil ||
 			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
+		}
+	}
+	if companions.Values[9] != nil {
+		serviceIntent, decodeErr := environmentchanges.DecodeServiceRemovalIntent(companions.Values[9].Value)
+		if decodeErr != nil || validateServiceRemovalTaskOwner(task, serviceIntent) != nil ||
+			serviceIntent.Status != task.Status || serviceIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			!serviceIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
@@ -384,6 +394,14 @@ func (repository *TaskRepository) beginTaskPrune(
 			Type: etcdstore.MutationDelete, Key: attachments.BlueprintAttachTaskIntentKey(task.ID),
 		})
 	}
+	serviceCondition := etcdstore.Condition{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)}
+	if companions.Values[9] != nil {
+		serviceCondition.ModRevision = companions.Values[9].ModRevision
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: environmentchanges.ServiceRemovalIntentKey(task.ID),
+		})
+	}
+	conditions = append(conditions, serviceCondition)
 	if planReferenceIndex >= 0 {
 		planReferenceValue := companions.Values[planReferenceIndex]
 		conditions = append(conditions, etcdstore.Condition{

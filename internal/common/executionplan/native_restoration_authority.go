@@ -33,9 +33,9 @@ func ValidateNativeRestorationAuthority(
 			len(authority.GetNativePredecessors()) != 0 {
 			return invalidNativeRestorationAuthority()
 		}
-		return validateRestorationMemberSelection(authority)
+		return validateRestorationMemberSelection(plan, authority)
 	}
-	if err := validateRestorationMemberSelection(authority); err != nil {
+	if err := validateRestorationMemberSelection(plan, authority); err != nil {
 		return err
 	}
 	for index, member := range members {
@@ -51,7 +51,10 @@ func ValidateNativeRestorationAuthority(
 
 // validateRestorationMemberSelection verifies the received selection against
 // its immutable witness. It neither chooses a target nor queries mutable state.
-func validateRestorationMemberSelection(authority *agentpb.ReleaseRestorationAuthority) error {
+func validateRestorationMemberSelection(
+	plan *agentpb.ExecutionPlan,
+	authority *agentpb.ReleaseRestorationAuthority,
+) error {
 	if RejectUnknown(authority) != nil ||
 		ids.Validate(ids.KindEnvironment, authority.GetEnvironmentId()) != nil {
 		return invalidNativeRestorationAuthority()
@@ -97,6 +100,18 @@ func validateRestorationMemberSelection(authority *agentpb.ReleaseRestorationAut
 		}
 	}
 	selected, err := SelectNativeRestorationMembers(authority.GetEnvironmentId(), identities, witnesses)
+	if err != nil && validateBlueprintServiceRemovalLifecyclePlan(plan) == nil && len(identities) == 1 &&
+		len(witnesses) == 1 && len(witnesses[0].CurrentArtifact) != 0 &&
+		ValidateNativePredecessorWitness(
+			authority.GetEnvironmentId(), witnesses[0].ServiceID,
+			witnesses[0].CurrentArtifact, witnesses[0].RetainedPriorArtifact,
+		) == nil {
+		selected = []CandidateRestorationSelection{{
+			ServiceID: identities[0].ServiceID, ReleaseID: identities[0].ReleaseID,
+			Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
+		}}
+		err = nil
+	}
 	if err != nil || len(selected) != len(authority.GetCandidates()) {
 		return invalidNativeRestorationAuthority()
 	}

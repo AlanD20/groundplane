@@ -29,6 +29,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	releasePublication BlueprintReleasePublication,
 	componentPublication componentplanning.Publication,
 	entryRemovalPublication BlueprintEntryRemovalPublication,
+	serviceRemovalPublication BlueprintServiceRemovalPublication,
 ) (published keyvalue.Versioned[TaskRecord], resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
@@ -44,26 +45,32 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		)
 	}
 	releaseChild := unit.Target.Kind == ids.KindService && !unit.Removal && !releasePublication.IsZero() &&
-		componentPublication.IsZero() && entryRemovalPublication.IsZero() && child.Params[releaserender.TaskReleasePublicationParam] != ""
+		componentPublication.IsZero() && entryRemovalPublication.IsZero() && serviceRemovalPublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] != ""
 	networkChild := blueprintNetworkChildTaskMatches(child, unit) && releasePublication.IsZero() &&
-		componentPublication.IsZero() && entryRemovalPublication.IsZero() &&
+		componentPublication.IsZero() && entryRemovalPublication.IsZero() && serviceRemovalPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
 	volumeChild := blueprintVolumeChildTaskMatches(child, unit) && releasePublication.IsZero() &&
-		componentPublication.IsZero() && entryRemovalPublication.IsZero() &&
+		componentPublication.IsZero() && entryRemovalPublication.IsZero() && serviceRemovalPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
 	attachChild := unit.Target.Kind == ids.KindAttach && !unit.Removal &&
 		child.Params[attachinputs.TaskAttachIDParam] == unit.Target.ID && releasePublication.IsZero() &&
-		componentPublication.IsZero() && entryRemovalPublication.IsZero() &&
+		componentPublication.IsZero() && entryRemovalPublication.IsZero() && serviceRemovalPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
 	componentChild := unit.Target.Kind == ids.KindComponent &&
 		child.Params[taskjournal.TaskBlueprintComponentUnitParam] == unit.Target.ID &&
-		releasePublication.IsZero() && !componentPublication.IsZero() && entryRemovalPublication.IsZero() &&
+		releasePublication.IsZero() && !componentPublication.IsZero() && entryRemovalPublication.IsZero() && serviceRemovalPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
 	entryChild := unit.Target.Kind == ids.KindEnvEntry && unit.Removal &&
 		authoredBlueprintEntryRemovalTask(child) && releasePublication.IsZero() &&
-		componentPublication.IsZero() && !entryRemovalPublication.IsZero() &&
+		componentPublication.IsZero() && !entryRemovalPublication.IsZero() && serviceRemovalPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
-	if !releaseChild && !networkChild && !volumeChild && !attachChild && !componentChild && !entryChild {
+	serviceRemovalChild := unit.Target.Kind == ids.KindService && unit.Removal &&
+		authoredBlueprintServiceRemovalTask(child) && releasePublication.IsZero() &&
+		componentPublication.IsZero() && entryRemovalPublication.IsZero() && !serviceRemovalPublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] == ""
+	if !releaseChild && !networkChild && !volumeChild && !attachChild && !componentChild && !entryChild &&
+		!serviceRemovalChild {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict, "Blueprint child has no supported effect publication",
 		)
@@ -174,6 +181,15 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	entryConditions, entryMutations := []keyvalue.Condition(nil), []keyvalue.Mutation(nil)
 	if entryChild {
 		entryConditions, entryMutations, err = entryRemovalPublication.prepare(
+			ctx, repository, child, unit, snapshot.ReadRevision,
+		)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+	}
+	serviceRemovalConditions, serviceRemovalMutations := []keyvalue.Condition(nil), []keyvalue.Mutation(nil)
+	if serviceRemovalChild {
+		serviceRemovalConditions, serviceRemovalMutations, err = serviceRemovalPublication.prepare(
 			ctx, repository, child, unit, snapshot.ReadRevision,
 		)
 		if err != nil {
@@ -370,6 +386,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		}
 		conditions = append(conditions, configuration.pins.conditions...)
 		mutations = append(mutations, configuration.pins.mutations...)
+	}
+	if serviceRemovalChild {
+		conditions = append(conditions, serviceRemovalConditions...)
+		mutations = append(mutations, serviceRemovalMutations...)
 	}
 	defer keyvalue.ClearMutationValues(mutations)
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)

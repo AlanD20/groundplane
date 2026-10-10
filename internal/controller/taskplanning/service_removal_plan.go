@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	"encoding/hex"
+
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -44,11 +45,20 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 	}
 	prepared := task
 	prepared.RenderGeneration = int32(intent.CurrentProjection.RenderGeneration)
+	desiredRevision := intent.Claim.RevisionID
+	if intent.Authored != nil {
+		prepared.RenderGeneration = int32(intent.Authored.RenderGeneration)
+		desiredRevision = intent.Authored.ParentTaskID
+	}
 	prepared.Params = map[string]string{
 		taskjournal.TaskResourceKindParam:          taskjournal.TaskResourceService,
 		taskjournal.TaskServiceEnvironmentParam:    intent.EnvironmentID,
 		taskjournal.TaskComposeArtifactParam:       artifactID,
-		blueprints.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
+		blueprints.EnvironmentDesiredRevisionParam: desiredRevision,
+	}
+	if intent.Authored != nil {
+		prepared.Params[taskjournal.TaskBlueprintParentParam] = intent.Authored.ParentTaskID
+		prepared.Params[taskjournal.TaskBlueprintServiceUnitParam] = intent.ServiceID
 	}
 	prepared.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}
 	if intent.AcknowledgedRuntime != nil {
@@ -61,6 +71,12 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 				Kind: taskjournal.TaskStepOperation,
 				ID:   ids.DeriveAt(ids.KindStep, task.CreatedAt, task.ID, artifacts[index].Services[0].ComposeName),
 			})
+		}
+		if intent.Authored != nil {
+			prepared.Steps = append(prepared.Steps,
+				taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+				taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			)
 		}
 	}
 	plan, err := resolver.buildServiceRemovalPlan(ctx, prepared, intent)
@@ -142,20 +158,31 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 }
 
 func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent environmentchanges.ServiceRemovalIntent) error {
+	wantParams, wantSteps, desiredRevision, renderGeneration := 4, 3, intent.Claim.RevisionID, intent.CurrentProjection.RenderGeneration
+	if intent.Authored != nil {
+		wantParams, wantSteps = 6, 5
+		desiredRevision, renderGeneration = intent.Authored.ParentTaskID, intent.Authored.RenderGeneration
+	}
 	if task.ID != intent.TaskID ||
 		task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.ServiceID ||
-		len(task.Params) != 4 ||
-		len(task.Steps) == 0 || len(task.Steps) > 3 || intent.AcknowledgedRuntime == nil && len(task.Steps) != 1 ||
+		len(task.Params) != wantParams ||
+		len(
+			task.Steps,
+		) == 0 || len(task.Steps) > wantSteps || intent.AcknowledgedRuntime == nil && len(task.Steps) != 1 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
-		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != desiredRevision ||
 		ids.Validate(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) != nil ||
 		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil ||
 		task.TimeoutSeconds <= 0 ||
-		uint64(task.RenderGeneration) != intent.CurrentProjection.RenderGeneration {
+		uint64(task.RenderGeneration) != renderGeneration {
 		return errs.New(errs.KindInternal, "durable Service removal Task changed")
+	}
+	if intent.Authored != nil && (task.Params[taskjournal.TaskBlueprintParentParam] != intent.Authored.ParentTaskID ||
+		task.Params[taskjournal.TaskBlueprintServiceUnitParam] != intent.ServiceID || len(task.Steps) < 3) {
+		return errs.New(errs.KindInternal, "durable authored Service removal Task changed")
 	}
 	return nil
 }

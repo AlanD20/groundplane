@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"time"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -12,7 +14,6 @@ import (
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -70,6 +71,11 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	}
 	if intent.Status != taskjournal.TaskStatusPending {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
+	}
+	if intent.Authored != nil {
+		return repository.prepareAuthoredServiceRemovalAcknowledgement(
+			ctx, task, intent, intentValue.ModRevision, terminalStatus, terminalAt, revision,
+		)
 	}
 	keys := []string{
 		servicerecord.ServiceRuntimeKey(intent.ServiceID),
@@ -268,6 +274,11 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	if intent.Status != terminalStatus || intent.TerminalAt == nil || task.FinishedAt == nil ||
 		!intent.TerminalAt.Equal(*task.FinishedAt) {
 		return errs.New(errs.KindStateConflict, "Service removal intent does not match terminal Task")
+	}
+	if intent.Authored != nil {
+		return repository.validateAuthoredServiceRemovalAcknowledgementReplay(
+			ctx, task, intent, terminalStatus, revision,
+		)
 	}
 	wantProjection := intent.CurrentProjection
 	if terminalStatus == taskjournal.TaskStatusCompleted {

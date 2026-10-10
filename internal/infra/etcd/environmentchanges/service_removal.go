@@ -1,6 +1,8 @@
 package environmentchanges
 
 import (
+	"time"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -8,7 +10,6 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -30,11 +31,19 @@ type ServiceRemovalIntent struct {
 	CurrentProjectionRevision   int64                                         `json:"current_projection_revision"`
 	ExpectedHeadRevision        int64                                         `json:"expected_head_revision"`
 	Claim                       blueprints.EnvironmentBlueprintStageClaim     `json:"claim"`
+	Authored                    *ServiceRemovalAuthoredRevision               `json:"authored,omitempty"`
 	CurrentProjection           projectionrecord.EnvironmentComposeProjection `json:"current_projection"`
 	CandidateProjection         projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
 	Status                      taskjournal.TaskStatus                        `json:"status"`
 	CreatedAt                   time.Time                                     `json:"created_at"`
 	TerminalAt                  *time.Time                                    `json:"terminal_at,omitempty"`
+}
+
+// ServiceRemovalAuthoredRevision binds private host cleanup to the visible
+// Blueprint parent that omitted this Service.
+type ServiceRemovalAuthoredRevision struct {
+	ParentTaskID     string `json:"parent_task_id"`
+	RenderGeneration uint64 `json:"render_generation"`
 }
 
 func NewServiceRemovalIntent(
@@ -59,7 +68,48 @@ func NewServiceRemovalIntent(
 	if err := ValidateServiceRemovalIntent(intent); err != nil {
 		return ServiceRemovalIntent{}, err
 	}
-	return cloneServiceRemovalIntent(intent), nil
+	return CloneServiceRemovalIntent(intent), nil
+}
+
+func NewAuthoredServiceRemovalIntent(
+	taskID string,
+	service etcdstore.Versioned[servicerecord.ServiceRecord],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	acknowledged etcdstore.Versioned[serviceruntimerecord.Record],
+	expectedHeadRevision int64,
+	parentTaskID string,
+	renderGeneration uint64,
+	candidate projectionrecord.EnvironmentComposeProjection,
+	createdAt time.Time,
+) (ServiceRemovalIntent, error) {
+	if service.ReadRevision != projection.ReadRevision || acknowledged.ReadRevision != projection.ReadRevision ||
+		acknowledged.Revision <= 0 {
+		return ServiceRemovalIntent{}, errs.New(
+			errs.KindStateConflict, "authored Service removal sources are not one fixed revision",
+		)
+	}
+	intent := ServiceRemovalIntent{
+		TaskID: taskID, EnvironmentID: service.Record.EnvironmentID,
+		ServiceID: service.Record.Desired.ID, ServiceName: service.Record.Desired.Name,
+		ServiceRevision: service.Revision, RuntimeRevision: servicerecord.ServiceRuntimeRevision(service),
+		AcknowledgedRuntimeRevision: acknowledged.Revision,
+		CurrentProjectionRevision:   projection.Revision,
+		ExpectedHeadRevision:        expectedHeadRevision,
+		Authored: &ServiceRemovalAuthoredRevision{
+			ParentTaskID: parentTaskID, RenderGeneration: renderGeneration,
+		},
+		CurrentProjection:   projectionrecord.CloneEnvironmentComposeProjection(projection.Record),
+		CandidateProjection: projectionrecord.CloneEnvironmentComposeProjection(candidate),
+		Status:              taskjournal.TaskStatusPending, CreatedAt: createdAt,
+	}
+	if acknowledged.Revision > 0 {
+		runtime := acknowledged.Record
+		intent.AcknowledgedRuntime = &runtime
+	}
+	if err := ValidateServiceRemovalIntent(intent); err != nil {
+		return ServiceRemovalIntent{}, err
+	}
+	return CloneServiceRemovalIntent(intent), nil
 }
 
 func ServiceRemovalIntentKey(taskID string) string { return serviceRemovalIntentPrefix + taskID }
@@ -72,7 +122,7 @@ func TerminalServiceRemovalIntent(
 	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return ServiceRemovalIntent{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
 	}
-	terminal := cloneServiceRemovalIntent(intent)
+	terminal := CloneServiceRemovalIntent(intent)
 	terminal.Status = status
 	terminal.TerminalAt = timePointer(at)
 	if err := ValidateServiceRemovalIntent(terminal); err != nil {
@@ -99,21 +149,35 @@ func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		intent.RuntimeRevision < 0 ||
 		intent.CurrentProjectionRevision <= 0 ||
 		intent.ExpectedHeadRevision <= 0 ||
-		blueprints.ValidateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
-		intent.Claim.EnvironmentID != intent.EnvironmentID ||
-		intent.Claim.RevisionID != intent.Claim.TaskID ||
-		intent.Claim.BaselineHeadRevision != intent.ExpectedHeadRevision ||
-		intent.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID ||
-		intent.CurrentProjection.RevisionID == intent.CandidateProjection.RevisionID ||
-		intent.CandidateProjection.RevisionID != intent.Claim.RevisionID ||
-		intent.CurrentProjection.RenderGeneration+1 != intent.CandidateProjection.RenderGeneration ||
-		intent.CandidateProjection.RenderGeneration != intent.Claim.RenderGeneration ||
 		projectionrecord.ValidateEnvironmentComposeProjection(intent.CurrentProjection) != nil ||
 		projectionrecord.ValidateEnvironmentComposeProjection(intent.CandidateProjection) != nil ||
 		recordcodec.ValidateTimestamp("Service removal created_at", intent.CreatedAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Service removal intent identity is invalid")
+	}
+	if intent.Authored == nil {
+		if blueprints.ValidateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
+			intent.Claim.EnvironmentID != intent.EnvironmentID ||
+			intent.Claim.RevisionID != intent.Claim.TaskID ||
+			intent.Claim.BaselineHeadRevision != intent.ExpectedHeadRevision ||
+			intent.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
+			intent.CurrentProjection.RevisionID == intent.CandidateProjection.RevisionID ||
+			intent.CandidateProjection.RevisionID != intent.Claim.RevisionID ||
+			intent.CurrentProjection.RenderGeneration+1 != intent.CandidateProjection.RenderGeneration ||
+			intent.CandidateProjection.RenderGeneration != intent.Claim.RenderGeneration {
+			return errs.New(errs.KindValidationFailed, "Service removal desired revision is invalid")
+		}
+	} else if intent.Claim.TaskID != "" ||
+		ids.Validate(ids.KindTask, intent.Authored.ParentTaskID) != nil ||
+		intent.Authored.RenderGeneration == 0 ||
+		intent.CandidateProjection.RevisionID != intent.Authored.ParentTaskID ||
+		intent.CandidateProjection.RenderGeneration != intent.Authored.RenderGeneration ||
+		intent.Authored.RenderGeneration < intent.CurrentProjection.RenderGeneration ||
+		intent.Authored.RenderGeneration == intent.CurrentProjection.RenderGeneration &&
+			intent.CurrentProjection.RevisionID != intent.Authored.ParentTaskID ||
+		intent.AcknowledgedRuntime == nil || intent.AcknowledgedRuntimeRevision <= 0 {
+		return errs.New(errs.KindValidationFailed, "Service removal authored revision is invalid")
 	}
 	if intent.Status == taskjournal.TaskStatusPending {
 		if intent.TerminalAt != nil {
@@ -151,6 +215,11 @@ func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 	if !removedDesired || !SameServiceRemovalProjection(expected, intent.CandidateProjection) {
 		return errs.New(errs.KindValidationFailed, "Service removal candidate projection changed")
 	}
+	if intent.Authored != nil {
+		if _, err := ResolveAuthoredServiceRemovalRecovery(intent); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -169,7 +238,11 @@ func DecodeServiceRemovalIntent(value []byte) (ServiceRemovalIntent, error) {
 	return intent, nil
 }
 
-func cloneServiceRemovalIntent(intent ServiceRemovalIntent) ServiceRemovalIntent {
+func CloneServiceRemovalIntent(intent ServiceRemovalIntent) ServiceRemovalIntent {
+	if intent.Authored != nil {
+		authored := *intent.Authored
+		intent.Authored = &authored
+	}
 	if intent.AcknowledgedRuntime != nil {
 		source := *intent.AcknowledgedRuntime
 		source.Runtime.CurrentArtifact = append([]byte(nil), source.Runtime.CurrentArtifact...)

@@ -2,13 +2,15 @@ package blueprint
 
 import (
 	"context"
+	"sort"
+
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"sort"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
@@ -37,6 +39,20 @@ func (repository *durableRepository) GetService(
 	id string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
+}
+
+func (repository *durableRepository) GetAppliedServiceRemovalSource(
+	ctx context.Context,
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	serviceID string,
+) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
+	return repository.services.GetAppliedServiceRemovalSource(ctx, projection, serviceID)
+}
+
+func (repository *durableRepository) GetServiceRemovalRuntime(
+	ctx context.Context, environmentID, serviceID string, revision int64,
+) (etcdstore.Versioned[serviceruntimerecord.Record], error) {
+	return repository.services.GetServiceRemovalRuntime(ctx, environmentID, serviceID, revision)
 }
 
 func (service *Service) GetBlueprint(

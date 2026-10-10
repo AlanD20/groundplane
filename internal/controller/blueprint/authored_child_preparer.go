@@ -34,7 +34,8 @@ func (service *Service) Prepare(
 ) (blueprintcoordinator.PreparedChild, error) {
 	if service == nil || ctx == nil || parent.Executor != taskjournal.TaskExecutorBlueprint ||
 		parent.Status != taskjournal.TaskStatusRunning || unit.Removal &&
-		(unit.Target.Kind != ids.KindComponent && unit.Target.Kind != ids.KindEnvEntry) {
+		(unit.Target.Kind != ids.KindComponent && unit.Target.Kind != ids.KindEnvEntry &&
+			unit.Target.Kind != ids.KindService) {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindValidationFailed, "Blueprint child request is invalid",
 		)
@@ -71,6 +72,9 @@ func (service *Service) Prepare(
 	}
 	if unit.Target.Kind == ids.KindEnvEntry && unit.Removal {
 		return service.prepareAuthoredEntryRemovalChild(ctx, parent, unit, timeoutSeconds)
+	}
+	if unit.Target.Kind == ids.KindService && unit.Removal {
+		return service.prepareAuthoredServiceRemovalChild(ctx, parent, unit, timeoutSeconds)
 	}
 	if unit.Target.Kind != ids.KindService {
 		return blueprintcoordinator.PreparedChild{}, errs.New(

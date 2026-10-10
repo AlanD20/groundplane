@@ -27,5 +27,6 @@ func IsAuthoredBlueprintEntryRemovalTask(task TaskRecord) bool {
 }
 
 func releaseRecoveryTask(task TaskRecord) bool {
-	return task.Params[releaserender.TaskReleasePublicationParam] != "" || authoredBlueprintEntryRemovalTask(task)
+	return task.Params[releaserender.TaskReleasePublicationParam] != "" ||
+		authoredBlueprintEntryRemovalTask(task) || authoredBlueprintServiceRemovalTask(task)
 }

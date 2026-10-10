@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -175,6 +176,16 @@ func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 			return nil, nil, nil, taskassignments.CorruptTaskAssignment()
 		}
 		return procedure, []releaseRecoveryProofExpectation{}, conditions, nil
+	}
+	if authoredBlueprintServiceRemovalTask(task) {
+		procedure, intent, conditions, err := repository.authoredServiceRecoveryProcedureAtRevision(ctx, task, revision)
+		if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
+			return nil, nil, nil, taskassignments.CorruptTaskAssignment()
+		}
+		return procedure, []releaseRecoveryProofExpectation{{
+			kind:           releaseRecoveryProofCaptured,
+			nativeArtifact: slices.Clone(intent.AcknowledgedRuntime.Runtime.CurrentArtifact),
+		}}, conditions, nil
 	}
 	publication := task.Params[releaserender.TaskReleasePublicationParam]
 	keys := []string{releases.ReleasePublicationKey(publication), releases.ReleaseManifestStagingKey(publication)}

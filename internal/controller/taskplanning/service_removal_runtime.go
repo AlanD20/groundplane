@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"strconv"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -72,7 +73,11 @@ func (resolver *TaskPlanResolver) buildAcknowledgedServiceRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
-	if len(artifacts) != len(task.Steps) {
+	forwardCount := len(task.Steps)
+	if intent.Authored != nil {
+		forwardCount -= 2
+	}
+	if len(artifacts) != forwardCount {
 		return nil, errs.New(errs.KindInternal, "Service removal runtime procedure changed")
 	}
 	sources := make([]*agentpb.ServiceLifecycleSource, len(artifacts))
@@ -89,14 +94,78 @@ func (resolver *TaskPlanResolver) buildAcknowledgedServiceRemovalPlan(
 				ArtifactId: artifact.ArtifactId, ServiceIds: []string{intent.ServiceID},
 			}},
 		}
+		if intent.Authored != nil {
+			steps[index].Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD
+		}
 		if index > 0 {
 			steps[index].PrerequisiteStepId = steps[index-1].StepId
 		}
 	}
+	operation := agentpb.PlanOperation_PLAN_OPERATION_REMOVE
+	var procedure *agentpb.CandidateReleaseProcedure
+	if intent.Authored != nil {
+		operation = agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
+		recovery, err := environmentchanges.ResolveAuthoredServiceRemovalRecovery(intent)
+		if err != nil {
+			return nil, err
+		}
+		probeID, compensateID := task.Steps[forwardCount].ID, task.Steps[forwardCount+1].ID
+		forwardIDs := make([]string, len(steps))
+		for index := range steps {
+			forwardIDs[index] = steps[index].GetStepId()
+		}
+		procedure, err = executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
+			Operation: operation,
+			Members: []executionplan.CandidateReleaseMemberInput{{
+				ServiceID: intent.ServiceID, CandidateReleaseID: recovery.CandidateReleaseID,
+				CandidateArtifactID: recovery.CandidateArtifactID, ForwardStepIDs: forwardIDs,
+				ServingPredecessor: &executionplan.ServingPredecessorInput{
+					ProbeStepID: probeID, CompensateStepID: compensateID,
+					PriorArtifactID: recovery.PriorArtifactID, PriorReleaseID: recovery.PriorReleaseID,
+					PriorTarget: recovery.PriorTarget, RetainedPriorArtifactID: recovery.RetainedPriorArtifactID,
+				},
+				CandidateAbsence: &executionplan.CandidateAbsenceInput{
+					ComposeProjectName: recovery.ComposeProjectName,
+					Services: []executionplan.CandidateServiceIdentity{{
+						ServiceID: intent.ServiceID, ReleaseID: recovery.CandidateReleaseID,
+					}},
+					ProbeStepID: probeID, CompensateStepID: compensateID,
+				},
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps,
+			&agentpb.ExecutionStep{
+				StepId: probeID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+				Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{
+					CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
+						CandidateArtifactId: recovery.CandidateArtifactID, ServiceId: intent.ServiceID,
+						CandidateReleaseId: recovery.CandidateReleaseID,
+					},
+				},
+			},
+			&agentpb.ExecutionStep{
+				StepId: compensateID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+				PrerequisiteStepId: forwardIDs[len(forwardIDs)-1],
+				Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
+					CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+						CandidateArtifactId: recovery.CandidateArtifactID, ServiceId: intent.ServiceID,
+						CandidateReleaseId: recovery.CandidateReleaseID,
+					},
+				},
+			},
+		)
+		artifacts = append(artifacts, recovery.PriorArtifacts...)
+	}
 	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: intent.ServiceID,
+		Operation: operation, TargetID: intent.ServiceID,
 		Artifacts: artifacts, Steps: steps, ServiceLifecycleProcedure: &agentpb.ServiceLifecycleProcedure{Sources: sources},
+		CandidateReleaseProcedure: procedure,
 	})
 }
 

@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -10,7 +12,6 @@ import (
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"time"
 )
 
 // ClaimNextTask claims the oldest queued Task by ascending ULID. Queue
@@ -304,6 +305,25 @@ func (repository *TaskRepository) claimNextTask(
 				conditions = append(conditions, authorityConditions...)
 				conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(task.ID)})
 			}
+		}
+		if authoredBlueprintServiceRemovalTask(task) {
+			authority, authorityDigest, authorityConditions, authorityErr :=
+				repository.prepareAuthoredServiceRestorationAuthority(ctx, task, candidate.readRevision)
+			if authorityErr != nil {
+				etcdstore.ClearMutationValues(mutations)
+				return TaskAssignment{}, false, authorityErr
+			}
+			assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
+			updatedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
+			if encodeErr != nil {
+				etcdstore.ClearMutationValues(mutations)
+				return TaskAssignment{}, false, encodeErr
+			}
+			clear(assignmentValue)
+			assignmentValue = updatedAssignmentValue
+			mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
+			conditions = append(conditions, authorityConditions...)
+			conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(task.ID)})
 		}
 		if !taskHasBlueprintCandidateAppliedAuthority(task) &&
 			task.Params[releaserender.TaskReleasePublicationParam] != "" {

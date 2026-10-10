@@ -528,6 +528,11 @@ func restorationStepIDs(
 
 func candidateReleaseMutations(plan *agentpb.ExecutionPlan) (map[string]string, error) {
 	result := make(map[string]string)
+	if validateBlueprintServiceRemovalLifecyclePlan(plan) == nil {
+		member := plan.GetCandidateReleaseProcedure().GetMembers()[0]
+		result[member.GetServiceId()] = member.GetCandidateArtifactId()
+		return result, nil
+	}
 	for _, step := range plan.GetSteps() {
 		serviceID, artifactID := "", ""
 		switch payload := step.GetPayload().(type) {
