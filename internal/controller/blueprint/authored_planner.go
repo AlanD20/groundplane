@@ -90,6 +90,23 @@ func (service *Service) Plan(
 		return blueprintunits.DesiredPlan{}, err
 	}
 	omissions = orderAuthoredRemovalUnits(omissions)
+	componentTargets := make([]blueprintunits.ResourceKey, 0)
+	for _, candidates := range [][]blueprintunits.Unit{units, omissions} {
+		for _, candidate := range candidates {
+			if candidate.Target.Kind == ids.KindComponent {
+				componentTargets = append(componentTargets, candidate.Target)
+			}
+		}
+	}
+	for index := range omissions {
+		if omissions[index].Target.Kind != ids.KindRoute {
+			continue
+		}
+		// The new router configuration withdraws omitted matches before their
+		// Route absence releases a removed Service's dependency.
+		omissions[index].After = append(omissions[index].After, componentTargets...)
+		omissions[index].After = canonicalAuthoredUnitKeys(omissions[index].After)
+	}
 	units = append(units, omissions...)
 	slices.SortFunc(units, func(left, right blueprintunits.Unit) int {
 		return compareBlueprintUnitKeys(left.Target, right.Target)

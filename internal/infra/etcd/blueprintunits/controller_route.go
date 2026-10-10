@@ -9,8 +9,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// The Route metadata and receipt compare the immutable authored root in one
-// transaction. The router Component owns any later host configuration.
+// The Route receipt compares the immutable authored root in one transaction.
+// Ensure settles metadata before router execution; removal requires the caller
+// to join exact acknowledged withdrawal and metadata retirement in that commit.
 func PrepareControllerRouteSettlement(
 	snapshot Snapshot,
 	unit Unit,
@@ -18,7 +19,7 @@ func PrepareControllerRouteSettlement(
 	authoredRevision int64,
 ) (MutationPlan, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
-		unit.Target.Kind != ids.KindRoute || unit.Removal ||
+		unit.Target.Kind != ids.KindRoute ||
 		ids.Validate(ids.KindOperation, operationID) != nil || authoredRevision <= 0 ||
 		len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
 		return MutationPlan{}, invalidRecord()
@@ -35,9 +36,13 @@ func PrepareControllerRouteSettlement(
 	}) {
 		return MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint Route unit is not ready")
 	}
+	state := Applied
+	if unit.Removal {
+		state = Absent
+	}
 	applied := AppliedRecord{
 		EnvironmentID: snapshot.EnvironmentID, Target: unit.Target,
-		State: Applied, Fingerprint: unit.Fingerprint,
+		State: state, Fingerprint: unit.Fingerprint,
 		ParentTaskID:               snapshot.HeadTaskID,
 		ControllerOperationID:      operationID,
 		ControllerAuthoredRevision: authoredRevision,

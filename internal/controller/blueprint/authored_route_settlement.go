@@ -13,6 +13,18 @@ import (
 
 type authoredRouteSettlementRepository interface {
 	SettleBlueprintRoute(context.Context, etcd.TaskRecord, blueprintunits.Unit, projectionrecord.EnvironmentRouteProjection) error
+	SettleBlueprintRouteOmission(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
+}
+
+func (service *Service) SettleRouteOmission(ctx context.Context, parent etcd.TaskRecord, unit blueprintunits.Unit) error {
+	if service == nil || ctx == nil {
+		return errs.New(errs.KindInternal, "Blueprint Route settler is not configured")
+	}
+	settler, ok := service.repository.(authoredRouteSettlementRepository)
+	if !ok {
+		return errs.New(errs.KindInternal, "Blueprint Route settlement repository is not configured")
+	}
+	return settler.SettleBlueprintRouteOmission(ctx, parent, unit)
 }
 
 func (service *Service) SettleRoute(

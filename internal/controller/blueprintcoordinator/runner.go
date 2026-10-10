@@ -235,12 +235,18 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 			}
 			return true, nil
 		}
-		if unit.Target.Kind == ids.KindRoute && !unit.Removal {
+		if unit.Target.Kind == ids.KindRoute {
 			settler, ok := runner.planner.(RouteSettler)
 			if !ok {
 				return planChanged, errs.New(errs.KindInternal, "Blueprint Route settler is not configured")
 			}
-			if err := settler.SettleRoute(ctx, parent, unit); err != nil {
+			var err error
+			if unit.Removal {
+				err = settler.SettleRouteOmission(ctx, parent, unit)
+			} else {
+				err = settler.SettleRoute(ctx, parent, unit)
+			}
+			if err != nil {
 				if isStateRace(err) {
 					return true, nil
 				}

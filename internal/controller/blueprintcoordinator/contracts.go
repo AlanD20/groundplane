@@ -42,6 +42,7 @@ type ScriptSettler interface {
 // Component dependency owns any subsequent host effect.
 type RouteSettler interface {
 	SettleRoute(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
+	SettleRouteOmission(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
 }
 
 // DormantServiceSettler acknowledges desired configuration when a Service's
