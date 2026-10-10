@@ -11,8 +11,11 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Package, Trash2 } from "lucide-react";
 import { imageSize, type HostImage } from "./api";
 import {
+  imageCurrentTags,
   imageName,
   imageRepositories,
+  isDigestReference,
+  previousFetchReference,
   shortImageId,
 } from "./image-presentation";
 import { ImageUsage } from "./image-usage";
@@ -37,6 +40,8 @@ export function ImageDetails({
   const tab = ["usage", "tags", "history"].includes(requestedTab ?? "")
     ? requestedTab
     : "overview";
+  const currentTags = imageCurrentTags(image);
+  const previousFetch = previousFetchReference(image);
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <Button
@@ -50,6 +55,9 @@ export function ImageDetails({
       <PageHeader
         title={imageName(image)}
         eyebrow="Host image"
+        description={
+          previousFetch ? `Previously fetched as ${previousFetch}` : undefined
+        }
         icon={<Package />}
         actions={
           <Button
@@ -81,7 +89,7 @@ export function ImageDetails({
               {imageSize(image.size_bytes)}
             </SummaryItem>
             <SummaryItem label="Containers">{image.containers}</SummaryItem>
-            <SummaryItem label="Tags">{image.tags.length}</SummaryItem>
+            <SummaryItem label="Current tags">{currentTags.length}</SummaryItem>
             <SummaryItem label="Repositories">
               {imageRepositories(image).length}
             </SummaryItem>
@@ -97,13 +105,17 @@ export function ImageDetails({
               </p>
             )}
           </ResourcePanel>
-          <ResourcePanel title="Repositories & tags">
-            {image.tags.length ? (
-              image.tags.map((tag) => <Reference key={tag} value={tag} />)
+          <ResourcePanel title="Current tags">
+            {currentTags.length ? (
+              currentTags.map((tag) => <Reference key={tag} value={tag} />)
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Available by digest only.
-              </p>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  No current Docker tag points to this image. Select it by its
+                  exact digest.
+                </p>
+                {previousFetch && <p>Previously fetched as {previousFetch}.</p>}
+              </div>
             )}
           </ResourcePanel>
         </>
@@ -117,11 +129,11 @@ export function ImageDetails({
         <ResourcePanel title="Tags & digests">
           <section className="space-y-2">
             <h3 className="text-sm font-medium">Local tags</h3>
-            {image.tags.length ? (
-              image.tags.map((tag) => <Reference key={tag} value={tag} />)
+            {currentTags.length ? (
+              currentTags.map((tag) => <Reference key={tag} value={tag} />)
             ) : (
               <p className="text-xs text-muted-foreground">
-                Available by digest only.
+                No current Docker tags. Available by exact digest only.
               </p>
             )}
           </section>
@@ -141,38 +153,47 @@ export function ImageDetails({
               No Fetch history for this image.
             </p>
           )}
-          {image.fetches.map((fetch) => (
-            <div
-              key={fetch.task_id}
-              className="space-y-2 rounded-lg border border-border p-3 text-xs"
-            >
-              <p className="break-all font-medium">{fetch.requested}</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge
-                  status={fetch.status}
-                  label={fetch.status.replaceAll("_", " ")}
-                />
-                <span className="text-muted-foreground">
-                  {new Date(fetch.requested_at).toLocaleString()}
-                </span>
+          {image.fetches.map((fetch) => {
+            const historicalTag =
+              fetch.status === "completed" &&
+              !isDigestReference(fetch.requested) &&
+              !currentTags.includes(fetch.requested);
+            return (
+              <div
+                key={fetch.task_id}
+                className="space-y-2 rounded-lg border border-border p-3 text-xs"
+              >
+                <p className="break-all font-medium">
+                  {historicalTag
+                    ? "Previously fetched as "
+                    : "Fetch requested "}
+                  {fetch.requested}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge
+                    status={fetch.status}
+                    label={fetch.status.replaceAll("_", " ")}
+                  />
+                  <span className="text-muted-foreground">
+                    {new Date(fetch.requested_at).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-muted-foreground">Selected digest</span>
+                  <code>{shortImageId(fetch.image)}</code>
+                  <CopyButton
+                    value={fetch.image}
+                    label="Copy selected image digest"
+                  />
+                </div>
+                <TaskLink taskId={fetch.task_id} />
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-muted-foreground">Selected digest</span>
-                <code>
-                  {shortImageId(fetch.image.split("@")[1] ?? fetch.image)}
-                </code>
-                <CopyButton
-                  value={fetch.image}
-                  label="Copy selected image digest"
-                />
-              </div>
-              <TaskLink taskId={fetch.task_id} />
-            </div>
-          ))}
+            );
+          })}
           {image.fetches.length > 0 && (
             <p className="text-xs text-muted-foreground">
-              Requested tags are historical; only completed Tasks confirm Fetch
-              success.
+              Fetch requests are retained history, not current Docker tags. Only
+              completed Tasks confirm a successful Fetch.
             </p>
           )}
         </ResourcePanel>

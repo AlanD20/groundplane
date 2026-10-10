@@ -30,9 +30,10 @@ import { imageReferences, imageSize, type HostImage } from "./api";
 import { ImageDetails } from "./image-details";
 import { ImageFetchAction } from "./image-fetch-action";
 import {
+  imageCurrentTags,
   imageName,
+  previousFetchReference,
   imageRepositories,
-  imageTag,
   shortImageId,
 } from "./image-presentation";
 import { RemoveImageDialog } from "./remove-image-dialog";
@@ -272,7 +273,8 @@ export default function ImagesPage() {
                           ...table.rows,
                         ].map((image) => {
                           const repositories = imageRepositories(image);
-                          const tags = [...new Set(image.tags.map(imageTag))];
+                          const tags = imageCurrentTags(image);
+                          const previousFetch = previousFetchReference(image);
                           return (
                             <Fragment key={image.id}>
                               <ResourceRow
@@ -291,10 +293,11 @@ export default function ImagesPage() {
                                       {imageName(image)}
                                     </span>
                                     <span className="w-full truncate text-xs font-normal text-muted-foreground">
-                                      {repositories[0] ?? "No repository"}
-                                      {repositories.length > 1
-                                        ? ` +${repositories.length - 1}`
-                                        : ""}
+                                      {tags.length > 1
+                                        ? `${tags.length} current tags`
+                                        : previousFetch
+                                          ? `Previously fetched as ${previousFetch}`
+                                          : (repositories[0] ?? "Digest only")}
                                     </span>
                                     <code className="text-xs font-normal text-muted-foreground/70">
                                       {shortImageId(image.id)}
@@ -320,7 +323,7 @@ export default function ImagesPage() {
                                     )}
                                     {!tags.length && (
                                       <span className="text-xs text-muted-foreground">
-                                        By digest
+                                        No current tag
                                       </span>
                                     )}
                                   </div>

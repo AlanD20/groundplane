@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Button } from "@/components/ui/button";
 import { imageReferences, type HostImage } from "./api";
+import { imageChoice } from "./image-presentation";
 import { useImageInventory } from "./use-image-inventory";
 
 // Authored input remains editable even when Docker cannot be observed. Saving
@@ -13,7 +14,7 @@ export function ImagePicker({
   id,
   value,
   onChange,
-  referencesForImage = imageReferences,
+  referencesForImage,
   placeholder = "nginx:latest or a pinned registry reference",
 }: {
   id: string;
@@ -24,9 +25,18 @@ export function ImagePicker({
 }) {
   const [fetchOpen, setFetchOpen] = useState(false);
   const { inventory, loading, error, refresh } = useImageInventory();
-  const references = [
-    ...new Set(inventory?.images.flatMap(referencesForImage) ?? []),
-  ].sort();
+  const choices = (inventory?.images ?? [])
+    .map((image) =>
+      imageChoice(
+        image,
+        referencesForImage
+          ? referencesForImage(image)
+          : [...imageReferences(image), image.id],
+      ),
+    )
+    .filter((choice) => choice !== null)
+    .sort((left, right) => left.label.localeCompare(right.label));
+  const selected = choices.find((choice) => choice.references.includes(value));
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <Input
@@ -38,18 +48,18 @@ export function ImagePicker({
       <div className="flex min-w-0 flex-wrap gap-2">
         <SearchableSelect
           aria-label="Choose an image on the Agent host"
-          value={references.includes(value) ? value : null}
+          value={selected?.value ?? null}
           searchPlaceholder="Search image names, tags or digests…"
           emptyText="No matching host images. Fetch the image first if it is missing."
           placeholder={
             loading ? "Loading host images…" : "Choose an available image…"
           }
-          options={references.map((reference) => ({
-            value: reference,
-            label: reference,
+          options={choices.map((choice) => ({
+            value: choice.value,
+            label: choice.label,
           }))}
           onValueChange={onChange}
-          disabled={loading || references.length === 0}
+          disabled={loading || choices.length === 0}
           className="min-w-40 flex-1 [&>span]:truncate"
         />
         <Button
