@@ -41,7 +41,7 @@ func (service *Service) loadAuthoredApplyBaseline(
 	if err != nil {
 		return authoredApplyBaseline{}, err
 	}
-	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
+	tenant, err := service.authoredOwnerTenant(ctx, project.Record)
 	if err != nil {
 		return authoredApplyBaseline{}, err
 	}
@@ -49,8 +49,7 @@ func (service *Service) loadAuthoredApplyBaseline(
 	if err != nil {
 		return authoredApplyBaseline{}, err
 	}
-	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID ||
-		project.Record.Kind != hierarchyrecord.ProjectKindTenant {
+	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID {
 		return authoredApplyBaseline{}, errs.New(errs.KindInternal, "Environment hierarchy is inconsistent")
 	}
 	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, environmentID)

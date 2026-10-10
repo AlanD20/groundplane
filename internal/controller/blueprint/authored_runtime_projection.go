@@ -161,28 +161,9 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 			errs.KindStateConflict, "Blueprint runtime projection hierarchy changed",
 		)
 	}
-	var tenant etcdstore.Versioned[hierarchyrecord.TenantRecord]
-	switch project.Record.Kind {
-	case hierarchyrecord.ProjectKindTenant:
-		tenant, err = service.repository.GetTenant(ctx, project.Record.TenantID)
-		if err != nil {
-			return authoredRuntimeProjectionSource{}, err
-		}
-		if project.Record.TenantID != tenant.Record.ID {
-			return authoredRuntimeProjectionSource{}, errs.New(
-				errs.KindStateConflict, "Blueprint runtime projection Tenant changed",
-			)
-		}
-	case hierarchyrecord.ProjectKindBacking:
-		if project.Record.TenantID != "" {
-			return authoredRuntimeProjectionSource{}, errs.New(
-				errs.KindStateConflict, "Blueprint runtime projection backing owner changed",
-			)
-		}
-	default:
-		return authoredRuntimeProjectionSource{}, errs.New(
-			errs.KindStateConflict, "Blueprint runtime projection Project kind changed",
-		)
+	tenant, err := service.authoredOwnerTenant(ctx, project.Record)
+	if err != nil {
+		return authoredRuntimeProjectionSource{}, err
 	}
 	return authoredRuntimeProjectionSource{
 		desired: desired, identities: identities,
