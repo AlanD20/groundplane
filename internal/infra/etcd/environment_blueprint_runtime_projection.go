@@ -421,7 +421,7 @@ func validateBlueprintRuntimeComponentSeal(input BlueprintRuntimeProjectionSeal)
 			receipt.Record.EnvironmentID != projection.EnvironmentID ||
 			receipt.Record.Target != selected.Unit.Target || receipt.Record.State != blueprintunits.Applied ||
 			receipt.Record.Fingerprint != selected.Unit.Fingerprint ||
-			!blueprintRuntimeComponentReceiptMatches(receipt.Record, authority) {
+			!blueprintRuntimeComponentReceiptMatches(receipt, authority) {
 			return errs.New(errs.KindStateConflict, "Blueprint Component receipt authority changed")
 		}
 		if _, duplicate := seenReceipts[selected.Identity.ID]; duplicate {
@@ -433,9 +433,10 @@ func validateBlueprintRuntimeComponentSeal(input BlueprintRuntimeProjectionSeal)
 }
 
 func blueprintRuntimeComponentReceiptMatches(
-	receipt blueprintunits.AppliedRecord,
+	applied etcdstore.Versioned[blueprintunits.AppliedRecord],
 	authority BlueprintRuntimeComponent,
 ) bool {
+	receipt := applied.Record
 	if receipt.SourceTaskID != "" {
 		return authority.RuntimePresent &&
 			receipt.SourceTaskID == authority.Runtime.Record.TaskID &&
@@ -443,14 +444,13 @@ func blueprintRuntimeComponentReceiptMatches(
 			receipt.ParentTaskID == authority.Runtime.Record.RevisionID
 	}
 	component := authority.Component
-	if receipt.ControllerOperationID == "" ||
-		receipt.ControllerComponentRecordRevision != component.Revision ||
-		component.Record.Desired.Enabled || len(component.Record.Runtime.GeneratedServices) != 0 ||
+	if component.Record.Desired.Enabled || len(component.Record.Runtime.GeneratedServices) != 0 ||
 		component.Record.Runtime.PinnedIPv4 != "" || component.Record.Runtime.Healthy {
 		return false
 	}
+	runtimeRevision := int64(0)
 	if authority.RuntimePresent {
-		return receipt.ControllerComponentRuntimeRevision == authority.Runtime.Revision
+		runtimeRevision = authority.Runtime.Revision
 	}
-	return receipt.ControllerComponentRuntimeRevision == 0
+	return blueprintunits.ControllerDisabledComponentPublicationMatches(applied, component.Revision, runtimeRevision)
 }

@@ -72,7 +72,13 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintRouteOmission(
 	}
 	storedParent, parentErr := DecodeTaskRecord(read.Values[0].Value)
 	claimID, claimErr := idempotency.DecodeTaskReference(read.Values[1].Value)
-	desired, found, desiredErr := blueprints.ReadDesiredInputRevision(ctx, repository.store, environmentID, parent.ID, snapshot.ReadRevision)
+	desired, found, desiredErr := blueprints.ReadDesiredInputRevision(
+		ctx,
+		repository.store,
+		environmentID,
+		parent.ID,
+		snapshot.ReadRevision,
+	)
 	owned, ownedErr := environmentprojection.DecodeEnvironmentOwnedIdentities(read.Values[3].Value)
 	if parentErr != nil || claimErr != nil || desiredErr != nil || !found || ownedErr != nil ||
 		claimID != parent.ID || storedParent.ID != parent.ID || storedParent.Owner != parent.Owner ||
@@ -102,15 +108,33 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintRouteOmission(
 	if router == nil || !blueprintRouteWithdrawalAcknowledged(snapshot, owned, *router) {
 		return errs.New(errs.KindStateConflict, "router has not acknowledged the Blueprint without this Route")
 	}
-	conditions = append(conditions,
-		keyvalue.Condition{Key: components.RecordKey(router.Component.Record.Desired.ID), ModRevision: router.Component.Revision},
-		keyvalue.Condition{Key: componentplanning.RuntimeKey(router.Component.Record.Desired.ID), ModRevision: router.Runtime.Revision},
+	conditions = append(
+		conditions,
+		keyvalue.Condition{
+			Key:         components.RecordKey(router.Component.Record.Desired.ID),
+			ModRevision: router.Component.Revision,
+		},
+		keyvalue.Condition{
+			Key:         componentplanning.RuntimeKey(router.Component.Record.Desired.ID),
+			ModRevision: router.Runtime.Revision,
+		},
 	)
-	retirementConditions, mutations, err := routepersistence.PrepareRetirement(ctx, repository.store, environmentID, unit.Target.ID, snapshot.ReadRevision)
+	retirementConditions, mutations, err := routepersistence.PrepareRetirement(
+		ctx,
+		repository.store,
+		environmentID,
+		unit.Target.ID,
+		snapshot.ReadRevision,
+	)
 	if err != nil {
 		return err
 	}
-	receipt, err := blueprintunits.PrepareControllerRouteSettlement(snapshot, unit, ids.New(ids.KindOperation), read.Values[2].ModRevision)
+	receipt, err := blueprintunits.PrepareControllerRouteSettlement(
+		snapshot,
+		unit,
+		ids.New(ids.KindOperation),
+		read.Values[2].ModRevision,
+	)
 	if err != nil {
 		return err
 	}
@@ -141,22 +165,38 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintRouteOmission(
 	return nil
 }
 
-func blueprintRouteWithdrawalAcknowledged(snapshot blueprintunits.Snapshot, owned environmentprojection.EnvironmentOwnedIdentities, router BlueprintRuntimeComponent) bool {
+func blueprintRouteWithdrawalAcknowledged(
+	snapshot blueprintunits.Snapshot,
+	owned environmentprojection.EnvironmentOwnedIdentities,
+	router BlueprintRuntimeComponent,
+) bool {
 	id := router.Component.Record.Desired.ID
-	var receipt *blueprintunits.AppliedRecord
+	var applied *keyvalue.Versioned[blueprintunits.AppliedRecord]
 	for index := range snapshot.Applied {
 		if snapshot.Applied[index].Record.Target == (blueprintunits.ResourceKey{Kind: ids.KindComponent, ID: id}) {
-			receipt = &snapshot.Applied[index].Record
+			applied = &snapshot.Applied[index]
 		}
 	}
+	var receipt *blueprintunits.AppliedRecord
+	if applied != nil {
+		receipt = &applied.Record
+	}
 	if !router.Component.Record.Desired.Enabled {
-		if len(router.Component.Record.Runtime.GeneratedServices) != 0 || router.Component.Record.Runtime.PinnedIPv4 != "" {
+		if len(router.Component.Record.Runtime.GeneratedServices) != 0 ||
+			router.Component.Record.Runtime.PinnedIPv4 != "" {
 			return false
 		}
 		if receipt == nil {
 			return !router.RuntimePresent
 		}
 		if receipt.State == blueprintunits.Absent {
+			if receipt.ControllerOperationID != "" {
+				return blueprintunits.ControllerDisabledComponentPublicationMatches(
+					*applied,
+					router.Component.Revision,
+					router.Runtime.Revision,
+				)
+			}
 			return !router.RuntimePresent || !router.Runtime.Record.Component.Desired.Enabled
 		}
 	}
@@ -172,15 +212,19 @@ func blueprintRouteWithdrawalAcknowledged(snapshot blueprintunits.Snapshot, owne
 	}
 	unitMatches := false
 	for _, candidate := range snapshot.Desired.Record.Units {
-		unitMatches = unitMatches || candidate.Target == receipt.Target && !candidate.Removal && candidate.Fingerprint == receipt.Fingerprint
+		unitMatches = unitMatches ||
+			candidate.Target == receipt.Target && !candidate.Removal && candidate.Fingerprint == receipt.Fingerprint
 	}
 	if !unitMatches {
 		return false
 	}
 	if receipt.ControllerOperationID != "" {
 		return !router.Component.Record.Desired.Enabled &&
-			receipt.ControllerComponentRecordRevision == router.Component.Revision &&
-			receipt.ControllerComponentRuntimeRevision == router.Runtime.Revision
+			blueprintunits.ControllerDisabledComponentPublicationMatches(
+				*applied,
+				router.Component.Revision,
+				router.Runtime.Revision,
+			)
 	}
 	return router.RuntimePresent && receipt.SourceTaskID == router.Runtime.Record.TaskID &&
 		receipt.SourcePlanID == router.Runtime.Record.PlanID && receipt.ParentTaskID == router.Runtime.Record.RevisionID &&

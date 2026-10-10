@@ -74,7 +74,7 @@ func (service *Service) loadAuthoredRuntimeComponents(
 			unit, applied, found := authoredRuntimeAppliedReceipt(
 				snapshot, blueprintunits.ResourceKey{Kind: ids.KindComponent, ID: identity.ID},
 			)
-			if !found || !authoredRuntimeComponentReceiptMatches(applied.Record, authority) {
+			if !found || !authoredRuntimeComponentReceiptMatches(applied, authority) {
 				return authoredRuntimeComponents{}, errs.New(
 					errs.KindStateConflict,
 					"Blueprint Component receipt does not match acknowledged runtime",
@@ -125,9 +125,10 @@ func (service *Service) loadAuthoredRuntimeComponents(
 }
 
 func authoredRuntimeComponentReceiptMatches(
-	receipt blueprintunits.AppliedRecord,
+	applied etcdstore.Versioned[blueprintunits.AppliedRecord],
 	authority etcd.BlueprintRuntimeComponent,
 ) bool {
+	receipt := applied.Record
 	if receipt.SourceTaskID != "" {
 		return authority.RuntimePresent &&
 			receipt.SourceTaskID == authority.Runtime.Record.TaskID &&
@@ -135,16 +136,15 @@ func authoredRuntimeComponentReceiptMatches(
 			receipt.ParentTaskID == authority.Runtime.Record.RevisionID
 	}
 	component := authority.Component
-	if receipt.ControllerOperationID == "" ||
-		receipt.ControllerComponentRecordRevision != component.Revision ||
-		component.Record.Desired.Enabled || len(component.Record.Runtime.GeneratedServices) != 0 ||
+	if component.Record.Desired.Enabled || len(component.Record.Runtime.GeneratedServices) != 0 ||
 		component.Record.Runtime.PinnedIPv4 != "" || component.Record.Runtime.Healthy {
 		return false
 	}
+	runtimeRevision := int64(0)
 	if authority.RuntimePresent {
-		return receipt.ControllerComponentRuntimeRevision == authority.Runtime.Revision
+		runtimeRevision = authority.Runtime.Revision
 	}
-	return receipt.ControllerComponentRuntimeRevision == 0
+	return blueprintunits.ControllerDisabledComponentPublicationMatches(applied, component.Revision, runtimeRevision)
 }
 
 func authoredRuntimeAppliedReceipt(

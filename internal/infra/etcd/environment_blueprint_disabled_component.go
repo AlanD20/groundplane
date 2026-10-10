@@ -28,9 +28,9 @@ type BlueprintDisabledComponentSelection struct {
 	Component  componentrecord.Record
 }
 
-// SettleBlueprintDisabledComponent acknowledges an unchanged disabled singleton
-// without inventing an Agent Task. Omission also accepts its exact acknowledged
-// disabled runtime; uncertain effects never supply absence proof.
+// SettleBlueprintDisabledComponent publishes disabled singleton settings with
+// their Controller receipt. Exact retained absence proof is required; uncertain
+// host effects never authorize this metadata-only operation.
 func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledComponent(
 	ctx context.Context,
 	parent TaskRecord,
@@ -64,9 +64,6 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 	}
 	if snapshot.HeadTaskID != parent.ID {
 		return errs.New(errs.KindStateConflict, "Blueprint disabled Component parent is no longer current")
-	}
-	if !unit.Removal && !blueprintDisabledComponentPriorAbsence(snapshot, unit.Target) {
-		return errs.New(errs.KindStateConflict, "Blueprint Component may retain an earlier effect")
 	}
 	parentKey := taskjournal.TaskStorageKey(parent.ID)
 	claimKey := taskjournal.BlueprintParentClaimKey(parent.ID)
@@ -143,11 +140,25 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 			return errs.New(errs.KindStateConflict, "Blueprint disabled Component runtime changed")
 		}
 	}
-	if unit.Removal && !blueprintDisabledComponentRemovalProven(snapshot, unit.Target, current, read.Values[4].ModRevision, runtime, runtimePresent) {
-		return errs.New(errs.KindStateConflict, "omitted Component may retain an unacknowledged effect")
+	if !blueprintDisabledComponentAbsenceProven(
+		snapshot,
+		unit.Target,
+		current,
+		read.Values[4].ModRevision,
+		runtime,
+		runtimePresent,
+	) {
+		return errs.New(errs.KindStateConflict, "disabled Component may retain an unacknowledged effect")
 	}
+	candidate := current
+	candidate.Desired.Config = core.ComponentConfigForSpec(selection.Spec)
+	if err := componentrecord.ValidateRecord(candidate); err != nil {
+		return err
+	}
+	retireRuntime := runtimePresent &&
+		(unit.Removal || !core.EqualComponentConfig(current.Desired.Config, candidate.Desired.Config))
 	runtimeRevision := int64(0)
-	if runtimePresent {
+	if runtimePresent && !retireRuntime {
 		runtimeRevision = runtime.Revision
 	}
 	receipt, err := blueprintunits.PrepareControllerDisabledComponentSettlement(
@@ -171,30 +182,29 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 		runtimeCondition.ModRevision = runtime.Revision
 	}
 	conditions = append(conditions, runtimeCondition)
-	mutations := receipt.Mutations()
-	if unit.Removal {
-		secretConditions, secretMutations, err := componentplanning.PrepareDisabledComponentSecretRetirement(ctx, repository.store, current, snapshot.ReadRevision)
-		if err != nil {
-			return err
-		}
-		conditions = append(conditions, secretConditions...)
-		mutations = append(mutations, secretMutations...)
-		// The host is already proven absent. Clear obsolete settings without an
-		// Agent no-op and retire its empty runtime record, never fabricate a new
-		// Agent acknowledgement for this Controller-owned metadata effect.
-		if !core.EqualComponentConfig(current.Desired.Config, core.ComponentConfig{}) {
-			current.Desired.Config = core.ComponentConfig{}
-			value, err := componentrecord.EncodeRecord(current)
-			if err != nil {
-				return err
-			}
-			defer clear(value)
-			mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: componentKey, Value: value})
-		}
-		if runtimePresent {
-			mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: runtimeCondition.Key})
-		}
-		mutations = append(mutations, componentrecord.WriteFenceMutation(parent.ID))
+	secretConditions, secretMutations, err := componentplanning.PrepareDisabledComponentSecretReplacement(
+		ctx, repository.store, parent.Owner.ProjectID, current, candidate, snapshot.ReadRevision,
+	)
+	if err != nil {
+		return err
+	}
+	conditions = append(conditions, secretConditions...)
+	value, err := componentrecord.EncodeRecord(candidate)
+	if err != nil {
+		return err
+	}
+	defer clear(value)
+	mutations := append(receipt.Mutations(), secretMutations...)
+	mutations = append(
+		mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: componentKey, Value: value},
+		componentrecord.WriteFenceMutation(parent.ID),
+	)
+	// Rewrite even unchanged metadata: its publication revision must equal the
+	// receipt revision. Retire only the proven-empty runtime when its metadata
+	// no longer matches; no Agent acknowledgement is fabricated.
+	if retireRuntime {
+		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: runtimeCondition.Key})
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(result.FailureReads)
@@ -207,18 +217,6 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 	return nil
 }
 
-func blueprintDisabledComponentPriorAbsence(
-	snapshot blueprintunits.Snapshot,
-	target blueprintunits.ResourceKey,
-) bool {
-	for _, applied := range snapshot.Applied {
-		if applied.Record.Target == target {
-			return applied.Record.State == blueprintunits.Absent
-		}
-	}
-	return false
-}
-
 func blueprintDisabledComponentSelectionMatches(
 	desired projectionrecord.EnvironmentDesiredInput,
 	owned projectionrecord.EnvironmentOwnedIdentities,
@@ -227,7 +225,11 @@ func blueprintDisabledComponentSelectionMatches(
 ) bool {
 	spec, found := desired.Input.Components[string(selection.Capability)]
 	if removal {
-		if found || !equalBlueprintComponentSpec(selection.Spec, core.ComponentSpec{Implementation: selection.Component.Desired.Kind}) {
+		if found ||
+			!equalBlueprintComponentSpec(
+				selection.Spec,
+				core.ComponentSpec{Implementation: selection.Component.Desired.Kind},
+			) {
 			return false
 		}
 		for _, identity := range owned.Components {
@@ -248,23 +250,32 @@ func blueprintDisabledComponentSelectionMatches(
 	return false
 }
 
-func blueprintDisabledComponentRemovalProven(snapshot blueprintunits.Snapshot, target blueprintunits.ResourceKey,
-	current componentrecord.Record, componentRevision int64, runtime keyvalue.Versioned[componentplanning.Runtime], runtimePresent bool,
+func blueprintDisabledComponentAbsenceProven(
+	snapshot blueprintunits.Snapshot,
+	target blueprintunits.ResourceKey,
+	current componentrecord.Record,
+	componentRevision int64,
+	runtime keyvalue.Versioned[componentplanning.Runtime],
+	runtimePresent bool,
 ) bool {
 	for _, applied := range snapshot.Applied {
 		receipt := applied.Record
 		if receipt.Target != target {
 			continue
 		}
-		if receipt.State == blueprintunits.Absent {
-			return !runtimePresent || !runtime.Record.Component.Desired.Enabled
-		}
-		if receipt.State != blueprintunits.Applied || current.Desired.Enabled {
+		if current.Desired.Enabled ||
+			receipt.State != blueprintunits.Applied && receipt.State != blueprintunits.Absent {
 			return false
 		}
 		if receipt.ControllerOperationID != "" {
-			return receipt.ControllerComponentRecordRevision == componentRevision &&
-				receipt.ControllerComponentRuntimeRevision == runtime.Revision
+			return blueprintunits.ControllerDisabledComponentPublicationMatches(
+				applied,
+				componentRevision,
+				runtime.Revision,
+			)
+		}
+		if receipt.State == blueprintunits.Absent {
+			return !runtimePresent || !runtime.Record.Component.Desired.Enabled
 		}
 		return runtimePresent && receipt.SourceTaskID == runtime.Record.TaskID &&
 			receipt.SourcePlanID == runtime.Record.PlanID && receipt.ParentTaskID == runtime.Record.RevisionID

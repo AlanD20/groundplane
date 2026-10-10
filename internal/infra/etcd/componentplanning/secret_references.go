@@ -34,47 +34,6 @@ func componentCandidateSecretReferenceKey(secretID string, taskID string, compon
 	return ComponentSecretReferencePrefix(secretID) + "candidates/" + taskID + "/" + componentID
 }
 
-// PrepareDisabledComponentSecretRetirement releases only active metadata
-// references. The caller must atomically prove runtime absence and clear the
-// disabled Component configuration; candidate and recovery pins are untouched.
-func PrepareDisabledComponentSecretRetirement(ctx context.Context, store interface {
-	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
-}, record componentrecord.Record, revision int64) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return nil, nil, err
-	}
-	if store == nil || componentrecord.ValidateRecord(record) != nil || record.Desired.Enabled ||
-		len(record.Runtime.GeneratedServices) != 0 || record.Runtime.PinnedIPv4 != "" || revision <= 0 {
-		return nil, nil, errs.New(errs.KindValidationFailed, "disabled Component Secret retirement is invalid")
-	}
-	ids, err := componentrecord.SecretReferences(record)
-	if err != nil || len(ids) == 0 {
-		return nil, nil, err
-	}
-	keys := make([]string, len(ids))
-	for index, id := range ids {
-		keys[index] = componentActiveSecretReferenceKey(id, record.Desired.ID)
-	}
-	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
-	if err != nil {
-		return nil, nil, err
-	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return nil, nil, errs.New(errs.KindInternal, "disabled Component Secret references are unavailable")
-	}
-	defer etcdstore.ClearValues(read.Values)
-	conditions := make([]etcdstore.Condition, len(keys))
-	mutations := make([]etcdstore.Mutation, len(keys))
-	for index, value := range read.Values {
-		if value != nil && (value.Key != keys[index] || string(value.Value) != record.Desired.ID) {
-			return nil, nil, errs.New(errs.KindStateConflict, "disabled Component Secret reference changed")
-		}
-		conditions[index] = etcdstore.Condition{Key: keys[index], ModRevision: etcdstore.RevisionOf(value)}
-		mutations[index] = etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[index]}
-	}
-	return conditions, mutations, nil
-}
-
 func PrepareComponentTaskSecretReferences(
 	ctx context.Context,
 	store planningStore,

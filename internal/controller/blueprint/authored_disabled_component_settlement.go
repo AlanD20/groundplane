@@ -22,9 +22,9 @@ type authoredDisabledComponentSettlementRepository interface {
 	) error
 }
 
-// TrySettleDisabledComponent acknowledges an unchanged disabled singleton or
-// its omission only when normalized configuration and retained runtime prove
-// no host change. Other cases use the protected Agent Component path.
+// TrySettleDisabledComponent settles disabled singleton settings or omission
+// only when exact retained authority proves no workload remains. Metadata edits
+// have no Agent effect; other cases use protected Component execution.
 func (service *Service) TrySettleDisabledComponent(
 	ctx context.Context,
 	parent etcd.TaskRecord,
@@ -49,7 +49,7 @@ func (service *Service) TrySettleDisabledComponent(
 	if !found && !unit.Removal || found && unit.Removal {
 		return false, errs.New(errs.KindStateConflict, "Blueprint Component is absent from the sealed input")
 	}
-	if !unit.Removal && (spec.Enabled || authoredRuntimeComponentEffectPossible(snapshot, unit.Target.ID)) {
+	if !unit.Removal && spec.Enabled {
 		return false, nil
 	}
 	authorities, err := service.repository.ReadEnvironmentBlueprintRuntimeComponents(
@@ -74,9 +74,9 @@ func (service *Service) TrySettleDisabledComponent(
 		if err != nil {
 			return false, err
 		}
-		if !authoredDisabledComponentAcknowledged(snapshot, *current) {
-			return false, nil
-		}
+	}
+	if !authoredDisabledComponentAcknowledged(snapshot, *current) {
+		return false, nil
 	}
 	if record.Desired.Enabled || len(record.Runtime.GeneratedServices) != 0 ||
 		record.Runtime.PinnedIPv4 != "" || record.Runtime.Healthy {
@@ -92,15 +92,12 @@ func (service *Service) TrySettleDisabledComponent(
 	if err != nil {
 		return false, err
 	}
-	if len(changes.Effective) != 1 || !unit.Removal && len(changes.Candidates) != 0 {
+	if len(changes.Effective) != 1 {
 		return false, nil
 	}
 	effective, err := componentrecord.NewRecord(changes.Effective[0])
 	if err != nil {
 		return false, err
-	}
-	if !unit.Removal && !componentrecord.EqualRecord(effective, record) {
-		return false, nil
 	}
 	if unit.Removal && (effective.Desired.Enabled || len(effective.Runtime.GeneratedServices) != 0 ||
 		effective.Runtime.PinnedIPv4 != "" || !core.EqualComponentConfig(effective.Desired.Config, core.ComponentConfig{})) {
@@ -130,16 +127,23 @@ func (service *Service) TrySettleDisabledComponent(
 	return true, nil
 }
 
-func authoredDisabledComponentAcknowledged(snapshot blueprintunits.Snapshot, authority etcd.BlueprintRuntimeComponent) bool {
+func authoredDisabledComponentAcknowledged(
+	snapshot blueprintunits.Snapshot,
+	authority etcd.BlueprintRuntimeComponent,
+) bool {
 	if authority.Component.Record.Desired.Enabled {
 		return false
 	}
 	for _, applied := range snapshot.Applied {
-		if applied.Record.Target.ID != authority.Component.Record.Desired.ID || applied.Record.Target.Kind != ids.KindComponent {
+		if applied.Record.Target.ID != authority.Component.Record.Desired.ID ||
+			applied.Record.Target.Kind != ids.KindComponent {
 			continue
 		}
-		return applied.Record.State == blueprintunits.Absent || applied.Record.State == blueprintunits.Applied &&
-			authoredRuntimeComponentReceiptMatches(applied.Record, authority)
+		if applied.Record.State == blueprintunits.Absent && applied.Record.ControllerOperationID == "" {
+			return !authority.RuntimePresent || !authority.Runtime.Record.Component.Desired.Enabled
+		}
+		return (applied.Record.State == blueprintunits.Absent || applied.Record.State == blueprintunits.Applied) &&
+			authoredRuntimeComponentReceiptMatches(applied, authority)
 	}
 	return false
 }

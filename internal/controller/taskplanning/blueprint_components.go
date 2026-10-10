@@ -104,7 +104,7 @@ func reconcileBlueprintComponent(
 ) (BlueprintComponentChanges, error) {
 	var config core.ComponentConfig
 	if present {
-		config = blueprintComponentConfig(active.Kind, spec)
+		config = core.ComponentConfigForSpec(spec)
 	}
 	if active.Enabled == spec.Enabled && core.EqualComponentConfig(active.Config, config) {
 		if active.Enabled && !active.Healthy {
@@ -162,7 +162,9 @@ func SelectBlueprintComponentSingletons(
 	return selected, nil
 }
 
-func blueprintAuthoredComponents(specs map[string]core.ComponentSpec) (map[core.ComponentKind]core.ComponentSpec, error) {
+func blueprintAuthoredComponents(
+	specs map[string]core.ComponentSpec,
+) (map[core.ComponentKind]core.ComponentSpec, error) {
 	authored := make(map[core.ComponentKind]core.ComponentSpec, len(specs))
 	for capability, spec := range specs {
 		kind, err := validateBlueprintComponentSpec(core.ComponentCapability(capability), spec)
@@ -246,30 +248,6 @@ func validateBlueprintComponentSpec(
 			errs.KindValidationFailed,
 			"Blueprint Component capability is not supported for an Environment",
 		)
-	}
-}
-
-func blueprintComponentConfig(kind core.ComponentKind, spec core.ComponentSpec) core.ComponentConfig {
-	switch kind {
-	case core.ComponentKindIngressCaddy:
-		if len(spec.Settings.ZoneIDs) == 0 && spec.ImplementationConfig.CaddyfileTemplate == "" &&
-			spec.Settings.Alias == "" {
-			return core.ComponentConfig{}
-		}
-		return core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneIDs:           append([]string(nil), spec.Settings.ZoneIDs...),
-			CaddyfileTemplate: spec.ImplementationConfig.CaddyfileTemplate, Alias: spec.Settings.Alias,
-		}}
-	case core.ComponentKindEdgeCloudflare:
-		if spec.Settings.SecretID == "" && len(spec.Settings.ZoneIDs) == 0 {
-			return core.ComponentConfig{}
-		}
-		return core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
-			ZoneIDs:  append([]string(nil), spec.Settings.ZoneIDs...),
-			SecretID: spec.Settings.SecretID,
-		}}
-	default:
-		return core.ComponentConfig{}
 	}
 }
 

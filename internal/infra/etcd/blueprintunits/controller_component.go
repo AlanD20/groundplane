@@ -9,10 +9,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PrepareControllerDisabledComponentSettlement records that the exact current
-// disabled singleton already satisfies its authored unit or omission. The
-// caller must compare the captured Component and runtime revision (including
-// runtime absence) in the same transaction as this receipt.
+// PrepareControllerDisabledComponentSettlement captures the compared input
+// revision of a proven-disabled singleton. The caller publishes its exact
+// authored metadata in the same transaction as this receipt, retaining or
+// retiring only a proven-empty runtime. The shared publication revision, not
+// an invented Agent acknowledgement, binds the resulting metadata.
 func PrepareControllerDisabledComponentSettlement(
 	snapshot Snapshot,
 	unit Unit,
@@ -58,4 +59,14 @@ func PrepareControllerDisabledComponentSettlement(
 		Key: DesiredPlanKey(snapshot.EnvironmentID), ModRevision: snapshot.Desired.Revision,
 	})
 	return plan, nil
+}
+
+func ControllerDisabledComponentPublicationMatches(
+	applied etcdstore.Versioned[AppliedRecord], componentRevision, runtimeRevision int64,
+) bool {
+	receipt := applied.Record
+	return receipt.Target.Kind == ids.KindComponent && receipt.ControllerOperationID != "" &&
+		receipt.SourceTaskID == "" && receipt.ControllerComponentRecordRevision > 0 &&
+		receipt.ControllerComponentRecordRevision < applied.Revision && applied.Revision == componentRevision &&
+		receipt.ControllerComponentRuntimeRevision == runtimeRevision
 }
