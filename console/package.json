@@ -9,7 +9,8 @@
     "test": "node --test src/lib/*.test.mjs",
     "build": "tsc -b && vite build",
     "generate:api": "openapi-typescript ../openapi.json -o src/lib/api.generated.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:site": "node scripts/build-site.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

@@ -453,6 +453,11 @@ review questions do not require static source tests or a full release gate for
 every layout change. Record any exception with its concrete reason and affected
 workflow so it can be reviewed rather than silently becoming another convention.
 
+The public installation site imports the Console palette, fonts and shared UI
+primitives rather than maintaining copied control styles. Keep light/dark modes,
+keyboard focus, reduced motion and responsive layouts aligned. Public marketing
+content remains independent of live Console state.
+
 ## Rationale and references
 
 Predictable navigation and consistent names reduce the need to relearn controls;

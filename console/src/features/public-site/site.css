@@ -1,0 +1,94 @@
+@import "../../index.css";
+@source "./*.tsx";
+@source "../../components";
+
+.public-site a:focus-visible,
+.public-site pre:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+.public-site a {
+  transition: color 150ms ease-out;
+}
+.public-site footer a:hover {
+  color: var(--primary);
+}
+.site-skip {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  transform: translateY(-200%);
+  z-index: 50;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--popover);
+}
+.site-skip:focus {
+  transform: none;
+}
+.site-hero {
+  animation: site-enter 240ms ease-out;
+}
+.site-diagram {
+  background-image: radial-gradient(var(--border) 0.75px, transparent 0.75px);
+  background-size: 20px 20px;
+}
+.site-wire {
+  height: 30px;
+  width: 1px;
+  background: var(--primary);
+  opacity: 0.55;
+  margin: auto;
+}
+.site-join {
+  height: 48px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding-inline: 16%;
+}
+.site-join i {
+  border-bottom: 1px solid var(--primary);
+  height: 24px;
+  opacity: 0.55;
+}
+.site-join i:first-child {
+  border-left: 1px solid var(--primary);
+  border-bottom-left-radius: 8px;
+}
+.site-join i:nth-child(2) {
+  position: relative;
+}
+.site-join i:nth-child(2):after {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 48px;
+  left: 50%;
+  background: var(--primary);
+}
+.site-join i:last-child {
+  border-right: 1px solid var(--primary);
+  border-bottom-right-radius: 8px;
+}
+.site-join-reverse {
+  transform: rotate(180deg);
+}
+@keyframes site-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .public-site *,
+  .public-site *::before,
+  .public-site *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -98,8 +98,13 @@ and compatibility boundaries.
 
 [pages.yml](../.github/workflows/pages.yml) runs separately on pushes to `main`
 and manual dispatch on `main`. It publishes the landing page and that commit's
-installer/checksum, not repository contents or private evidence. A successful
-Pages deploy does not prove that a stable release exists.
+installer/checksum, not repository contents or private evidence. The page imports
+Console UI primitives, palette and local fonts; the Pages job installs the pinned
+Console dependencies and builds a separate static bundle. HTML is prerendered for
+readability without JavaScript; hydration adds copy and theme controls. Renderer
+output stays outside the uploaded site. Preview the staged site from
+`.tmp/pages-build/site`; staging refuses to reuse an existing output directory.
+A successful Pages deploy does not prove that a stable release exists.
 
 The primary address is `https://gp.aland20.com`. Pages uses GitHub Actions as its
 deployment source. DNS is `CNAME gp → aland20.github.io`; GitHub Pages must also
