@@ -39,14 +39,15 @@ func buildTaskAcknowledgement(result TaskResult) (*agentpb.TaskAck, error) {
 		return nil, errs.New(errs.KindInternal, "agent: worker returned an invalid terminal state")
 	}
 	ack := &agentpb.TaskAck{
-		TaskId:                      result.TaskID,
-		AssignmentId:                result.AssignmentID,
-		PlanHash:                    append([]byte(nil), result.PlanHash[:]...),
-		Terminal:                    terminal,
-		ExitCode:                    result.ExitCode,
-		ExecutionEpoch:              result.ExecutionEpoch,
-		AssignmentGeneration:        result.AssignmentGeneration,
-		ReleaseRecoveryRecordSha256: append([]byte(nil), result.ReleaseRecoveryRecordSHA256...),
+		TaskId:                        result.TaskID,
+		AssignmentId:                  result.AssignmentID,
+		PlanHash:                      append([]byte(nil), result.PlanHash[:]...),
+		Terminal:                      terminal,
+		ExitCode:                      result.ExitCode,
+		ExecutionEpoch:                result.ExecutionEpoch,
+		AssignmentGeneration:          result.AssignmentGeneration,
+		ReleaseRecoveryRecordSha256:   append([]byte(nil), result.ReleaseRecoveryRecordSHA256...),
+		ComponentRecoveryRecordSha256: append([]byte(nil), result.ComponentRecoveryRecordSHA256...),
 	}
 	if result.Backup != nil {
 		ack.Result = &agentpb.TaskAck_BackupResult{BackupResult: proto.CloneOf(result.Backup)}

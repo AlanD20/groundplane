@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -345,6 +346,16 @@ func requireAuthoredRuntimeProjectionInputs(
 		!sameOwnedNames(sortedAuthoredMapKeys(desired.Input.Components), identities.Components) ||
 		!sameOwnedNames(sortedAuthoredMapKeys(desired.Input.Scripts), identities.Scripts) {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime projection desired identities changed")
+	}
+	for _, applied := range snapshot.Applied {
+		if applied.Record.Target.Kind != ids.KindComponent || applied.Record.State == blueprintunits.Absent {
+			continue
+		}
+		if !slices.ContainsFunc(identities.Components, func(identity projectionrecord.OwnedIdentity) bool {
+			return identity.ID == applied.Record.Target.ID
+		}) {
+			return errs.New(errs.KindStateConflict, "Blueprint runtime projection is waiting for omitted Component teardown")
+		}
 	}
 	for _, group := range []struct {
 		kind       ids.Kind

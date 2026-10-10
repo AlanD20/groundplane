@@ -46,6 +46,15 @@ type TaskCandidateAbsenceEvidence struct {
 	AbsenceProven       bool                            `json:"absence_proven"`
 }
 
+type TaskComponentRestorationEvidence struct {
+	ComponentID        string `json:"component_id"`
+	ArtifactID         string `json:"artifact_id"`
+	ServiceID          string `json:"service_id"`
+	ComposeProjectName string `json:"compose_project_name"`
+	Target             string `json:"target"`
+	Restored           bool   `json:"restored"`
+}
+
 type TaskResultRecord struct {
 	Kind                            TaskResultKind                      `json:"kind"`
 	ExitCode                        int32                               `json:"exit_code"`
@@ -57,6 +66,7 @@ type TaskResultRecord struct {
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
+	ComponentRestorationEvidence    *TaskComponentRestorationEvidence   `json:"component_restoration_evidence,omitempty"`
 	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
 	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
 	ExecutionEpoch                  uint32                              `json:"-"`

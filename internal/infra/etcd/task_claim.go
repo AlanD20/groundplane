@@ -152,6 +152,20 @@ func (repository *TaskRepository) claimNextTask(
 		if backupClaim.assignmentID != "" {
 			assignment.AssignmentID = backupClaim.assignmentID
 		}
+		var componentRecoveryCondition etcdstore.Condition
+		if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+			_, procedure, condition, procedureErr := repository.componentRecoveryProcedureAtRevision(
+				ctx, task, candidate.readRevision,
+			)
+			if procedureErr != nil {
+				return TaskAssignment{}, false, procedureErr
+			}
+			assignment.ComponentRecoveryProcedureSHA256, err = componentRecoveryAuthorityDigest(procedure)
+			if err != nil {
+				return TaskAssignment{}, false, err
+			}
+			componentRecoveryCondition = condition
+		}
 		runningValue, err := EncodeTaskRecord(running)
 		if err != nil {
 			etcdstore.ClearMutationValues(backupClaim.mutations)
@@ -170,6 +184,10 @@ func (repository *TaskRepository) claimNextTask(
 			{Key: assignmentKey},
 			{Key: assignmentIndexKey},
 			{Key: timeoutIndexKey},
+		}
+		if componentRecoveryCondition.Key != "" {
+			conditions = append(conditions, componentRecoveryCondition,
+				etcdstore.Condition{Key: taskassignments.ComponentRecoveryKey(task.ID)})
 		}
 		mutations := []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: runningValue},

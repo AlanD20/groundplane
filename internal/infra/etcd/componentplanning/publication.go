@@ -2,6 +2,7 @@ package componentplanning
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/core"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -168,12 +169,15 @@ func (publication Publication) IsZero() bool {
 func (publication Publication) ValidateBlueprintChild(
 	environmentID string,
 	componentID string,
+	removal bool,
 	task TaskIdentity,
 ) error {
 	if publication.IsZero() || len(publication.preparation.Intent.Candidates) != 1 ||
 		publication.preparation.Intent.EnvironmentID != environmentID ||
 		publication.preparation.Intent.Candidates[0].Current.Desired.ID != componentID ||
-		publication.preparation.Intent.Candidates[0].Candidate.Desired.ID != componentID {
+		publication.preparation.Intent.Candidates[0].Candidate.Desired.ID != componentID ||
+		removal && (publication.preparation.Intent.Candidates[0].Candidate.Desired.Enabled ||
+			!core.EqualComponentConfig(publication.preparation.Intent.Candidates[0].Candidate.Desired.Config, core.ComponentConfig{})) {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Component child publication does not match its unit",

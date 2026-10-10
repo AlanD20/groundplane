@@ -451,12 +451,14 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 			ScriptCheckpoints:  assignment.ScriptCheckpoints,
 			AutomaticReconcile: assignment.GetAutomaticReconcile(), ExecutionEpoch: assignment.GetExecutionEpoch(),
 			ExecutionMode: assignment.GetExecutionMode(), ForwardDeadline: assignment.ForwardDeadline.AsTime(),
-			RecoveryDeadline:            assignment.RecoveryDeadline.AsTime(),
-			Deadline:                    executionDeadline,
-			RecoveryProofRequired:       recoveryProofRequired,
-			RestorationAuthority:        assignment.GetRestorationAuthority(),
-			ReleaseRecoveryDirective:    assignment.GetReleaseRecoveryDirective(),
-			ReleaseRecoveryRecordSHA256: append([]byte(nil), assignment.GetReleaseRecoveryRecordSha256()...),
+			RecoveryDeadline:              assignment.RecoveryDeadline.AsTime(),
+			Deadline:                      executionDeadline,
+			RecoveryProofRequired:         recoveryProofRequired,
+			RestorationAuthority:          assignment.GetRestorationAuthority(),
+			ReleaseRecoveryDirective:      assignment.GetReleaseRecoveryDirective(),
+			ReleaseRecoveryRecordSHA256:   append([]byte(nil), assignment.GetReleaseRecoveryRecordSha256()...),
+			ComponentRecoveryDirective:    assignment.GetComponentRecoveryDirective(),
+			ComponentRecoveryRecordSHA256: append([]byte(nil), assignment.GetComponentRecoveryRecordSha256()...),
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {

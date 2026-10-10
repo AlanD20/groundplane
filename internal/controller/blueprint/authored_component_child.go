@@ -3,6 +3,8 @@ package blueprint
 import (
 	"context"
 	"encoding/hex"
+	"slices"
+
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
@@ -27,7 +29,6 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
-	"slices"
 )
 
 // prepareAuthoredComponentChild renders only this singleton's generated
@@ -40,7 +41,7 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	capability, spec, found := authoredComponentSpec(source.identities.Record.Components, source.desired.Record.Input.Components, unit.Target.ID)
-	if !found {
+	if !found && !unit.Removal || found && unit.Removal {
 		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint Component is absent from the sealed input")
 	}
 	currentSet, err := service.listBlueprintComponents(ctx, parent.Owner.EnvironmentID)
@@ -59,6 +60,12 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 	active, err := componentrecord.ProjectRecord(current.Record)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
+	}
+	if unit.Removal {
+		capability, spec, err = omittedComponentSelection(current.Record)
+		if err != nil {
+			return blueprintcoordinator.PreparedChild{}, err
+		}
 	}
 	changes, err := taskplanning.ReconcileBlueprintComponent(capability, spec, active, func(kind ids.Kind) string { return ids.New(kind) })
 	if err != nil {
@@ -111,6 +118,18 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 	}, current)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
+	}
+	predecessorZones, err := authority.ComponentPredecessorZones()
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	for _, prior := range predecessorZones {
+		if slices.ContainsFunc(zoneVersions, func(zone keyvalue.Versioned[zonerecord.Record]) bool {
+			return zone.Record.Desired.ID == prior.Record.Desired.ID
+		}) {
+			continue
+		}
+		zoneChanges = append(zoneChanges, blueprints.EnvironmentBlueprintZoneChange{Current: &prior, Record: prior.Record})
 	}
 	createdAt := service.now().UTC()
 	child := etcd.TaskRecord{
@@ -235,9 +254,15 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	steps = append(steps, componentSteps...)
+	steps, componentRecovery, err := service.plans.PrepareBlueprintComponentRecovery(
+		ctx, child, artifact, teardown.Artifacts, teardown.Procedure, steps,
+	)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
 	plan, err := taskplan.Build(taskplan.BuildInput{VolumeRoot: service.volumeRoot, PlanID: child.PlanID, RenderGeneration: uint64(child.RenderGeneration),
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, TargetID: child.Target, Artifacts: teardown.Artifacts,
-		Steps: steps, ManagedComponentProcedure: teardown.Procedure})
+		Steps: steps, ManagedComponentProcedure: teardown.Procedure, ComponentRecoveryProcedure: componentRecovery})
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
@@ -268,6 +293,11 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 	for _, zone := range zoneVersions {
 		record.Zones = append(record.Zones, zone.Record)
 	}
+	for _, prior := range predecessorZones {
+		if !slices.ContainsFunc(record.Zones, func(zone zonerecord.Record) bool { return zone.Desired.ID == prior.Record.Desired.ID }) {
+			record.Zones = append(record.Zones, prior.Record)
+		}
+	}
 	slices.SortFunc(record.Zones, func(left, right zonerecord.Record) int {
 		if left.Desired.ID < right.Desired.ID {
 			return -1
@@ -293,4 +323,17 @@ func authoredComponentSpec(identities []projectionrecord.OwnedIdentity, specs ma
 		}
 	}
 	return "", core.ComponentSpec{}, false
+}
+
+func omittedComponentSelection(record componentrecord.Record) (core.ComponentCapability, core.ComponentSpec, error) {
+	var capability core.ComponentCapability
+	switch record.Desired.Kind {
+	case core.ComponentKindIngressCaddy:
+		capability = core.ComponentCapabilityHTTPRouter
+	case core.ComponentKindEdgeCloudflare:
+		capability = core.ComponentCapabilityEdgeTunnel
+	default:
+		return "", core.ComponentSpec{}, errs.New(errs.KindStateConflict, "omitted Component is not an Environment singleton")
+	}
+	return capability, core.ComponentSpec{Implementation: record.Desired.Kind, Enabled: false}, nil
 }

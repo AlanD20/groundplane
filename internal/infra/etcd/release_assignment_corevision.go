@@ -58,7 +58,7 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 	conditions = append(conditions, evidenceConditions...)
 	if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 		recoveryRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{taskassignments.ReleaseRecoveryKey(record.TaskID)}, Revision: current.Task.ReadRevision,
+			Keys: []string{assignmentRecoveryKey(record.TaskID, record)}, Revision: current.Task.ReadRevision,
 		})
 		if readErr != nil || recoveryRead == nil || len(recoveryRead.Values) != 1 || recoveryRead.Values[0] == nil {
 			if readErr != nil {
@@ -67,12 +67,21 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 			return taskassignments.CorruptTaskAssignment()
 		}
 		conditions = append(conditions, etcdstore.Condition{
-			Key: taskassignments.ReleaseRecoveryKey(record.TaskID), ModRevision: recoveryRead.Values[0].ModRevision,
+			Key: assignmentRecoveryKey(record.TaskID, record), ModRevision: recoveryRead.Values[0].ModRevision,
 		})
 	} else {
-		conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(record.TaskID)})
+		conditions = append(conditions, etcdstore.Condition{Key: assignmentRecoveryKey(record.TaskID, record)})
 	}
-	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+	claim, err := repository.prepareBlueprintChildAssignmentEpoch(
+		ctx, current.Task.Record, current.Assignment.Record.ExecutionEpoch,
+		record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly,
+	)
+	if err != nil {
+		return err
+	}
+	defer claim.Clear()
+	conditions = append(conditions, claim.Conditions()...)
+	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(record.TaskID), Value: taskValue},
 		{
 			Type:  etcdstore.MutationPut,
@@ -81,7 +90,9 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskAssignmentIndexKey(record.TaskID), Value: encoded},
 		{Type: etcdstore.MutationPut, Key: lifecycleKey, Value: encoded},
-	})
+	}
+	mutations = append(mutations, claim.Mutations()...)
+	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return err
 	}

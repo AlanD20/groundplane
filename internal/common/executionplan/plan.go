@@ -220,6 +220,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if err := validateCandidateReleasePlan(plan, artifacts); err != nil {
 		return err
 	}
+	if err := validateComponentRecoveryPlan(plan, artifacts); err != nil {
+		return err
+	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 		if err := validateComponentApplyPlan(plan, artifacts); err != nil {
 			return err

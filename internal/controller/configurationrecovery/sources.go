@@ -110,7 +110,7 @@ func (sources *Sources) Resolve(ctx context.Context, task etcd.TaskRecord, plan 
 	if err != nil {
 		return taskmaterialization.Record{}, taskmaterialization.Record{}, err
 	}
-	configuration := plan.GetCandidateReleaseProcedure().GetConfigurationRestoration()
+	configuration := executionplan.ConfigurationRestorationForPlan(plan)
 	if prepared.Procedure == nil || !executionplan.ConfigurationSnapshotMatches(configuration,
 		prepared.Procedure.PriorSnapshotId, prepared.Procedure.PriorSnapshotSha256) {
 		return taskmaterialization.Record{}, taskmaterialization.Record{}, errs.New(

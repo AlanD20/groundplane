@@ -140,6 +140,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 			}
 		}
 		var recovery *taskassignments.ReleaseRecoveryDirective
+		var componentRecovery *taskassignments.ReleaseRecoveryDirective
 		if task.Params[releaserender.TaskReleasePublicationParam] != "" {
 			_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(
 				ctx, task, assignments.ReadRevision,
@@ -156,6 +157,19 @@ func (repository *TaskRepository) ListAgentAssignments(
 				}
 			}
 		}
+		if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+			_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(ctx, task, assignments.ReadRevision)
+			digest, digestErr := componentRecoveryAuthorityDigest(procedure)
+			if procedureErr != nil || digestErr != nil || digest != record.ComponentRecoveryProcedureSHA256 {
+				return nil, taskassignments.CorruptTaskAssignment()
+			}
+			if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
+				componentRecovery, err = repository.componentRecoveryDirectiveAtRevision(ctx, task, record, procedure, assignments.ReadRevision)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
 		result[index] = TaskAssignment{
 			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
 				Record: record, Revision: assignmentValue.ModRevision,
@@ -166,6 +180,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 				ReadRevision: assignments.ReadRevision,
 			},
 			ReleaseRecovery:       recovery,
+			ComponentRecovery:     componentRecovery,
 			RecoveryProofRequired: proofRequired,
 		}
 	}

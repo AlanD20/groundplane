@@ -23,6 +23,7 @@ type TaskResultData struct {
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
+	ComponentRestorationEvidence    *TaskComponentRestorationEvidence   `json:"component_restoration_evidence,omitempty"`
 	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
 	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
 }
@@ -46,10 +47,11 @@ func TaskResultToData(result *TaskResultRecord) *TaskResultData {
 		Kind: result.Kind, ExitCode: result.ExitCode, FailedStepID: result.FailedStepID,
 		BackingObservations: backingruntimefact.CloneObservations(result.BackingObservations),
 		Diagnostic:          result.Diagnostic, ReconciliationRequired: result.ReconciliationRequired,
-		Projects:                 make([]taskObservedProjectSummaryData, len(result.Projects)),
-		ProxyEvidence:            append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
-		RecreateEvidence:         append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
-		CandidateAbsenceEvidence: CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence),
+		Projects:                     make([]taskObservedProjectSummaryData, len(result.Projects)),
+		ProxyEvidence:                append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
+		RecreateEvidence:             append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
+		CandidateAbsenceEvidence:     CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence),
+		ComponentRestorationEvidence: CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence),
 	}
 	data.DNSResolverCandidateObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,
@@ -75,10 +77,11 @@ func TaskResultFromData(data *TaskResultData) (*TaskResultRecord, error) {
 		Kind: data.Kind, ExitCode: data.ExitCode, FailedStepID: data.FailedStepID,
 		BackingObservations: backingruntimefact.CloneObservations(data.BackingObservations),
 		Diagnostic:          data.Diagnostic, ReconciliationRequired: data.ReconciliationRequired,
-		Projects:                 make([]TaskObservedProjectSummary, len(data.Projects)),
-		ProxyEvidence:            append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
-		RecreateEvidence:         append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
-		CandidateAbsenceEvidence: CloneTaskCandidateAbsenceEvidence(data.CandidateAbsenceEvidence),
+		Projects:                     make([]TaskObservedProjectSummary, len(data.Projects)),
+		ProxyEvidence:                append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
+		RecreateEvidence:             append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
+		CandidateAbsenceEvidence:     CloneTaskCandidateAbsenceEvidence(data.CandidateAbsenceEvidence),
+		ComponentRestorationEvidence: CloneTaskComponentRestorationEvidence(data.ComponentRestorationEvidence),
 	}
 	if data.DNSResolverCandidateObservation != nil {
 		evidence := *data.DNSResolverCandidateObservation

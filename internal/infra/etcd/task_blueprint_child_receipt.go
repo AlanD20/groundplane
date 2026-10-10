@@ -86,14 +86,13 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	verifiedNetworkEffect := verifiedResult && blueprintNetworkChildTaskMatches(task, execution.Unit)
 	verifiedVolumeEffect := verifiedResult && blueprintVolumeChildTaskMatches(task, execution.Unit)
 	verifiedAttachEffect := verifiedResult && blueprintAttachChildTaskMatches(task, execution.Unit)
-	verifiedComponentEffect := verifiedResult && !execution.Unit.Removal &&
+	verifiedComponentEffect := verifiedResult &&
 		execution.Unit.Target.Kind == ids.KindComponent &&
 		task.Params[taskjournal.TaskBlueprintComponentUnitParam] == execution.Unit.Target.ID
 	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect ||
 		verifiedAttachEffect || verifiedComponentEffect
 	if status != taskjournal.TaskStatusCompleted &&
-		(status != taskjournal.TaskStatusFailed && status != taskjournal.TaskStatusAborted ||
-			!verifiedEffect) {
+		(!taskassignments.ValidTerminalTaskStatus(status) || !verifiedEffect) {
 		if execution.State == blueprintunits.Draining {
 			return nil, nil, nil
 		}
@@ -145,7 +144,7 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 			return nil, nil, err
 		}
 		conditions, mutations := plan.Conditions(), plan.Mutations()
-		failedParent := status == taskjournal.TaskStatusFailed ||
+		failedParent := status == taskjournal.TaskStatusFailed || status == taskjournal.TaskStatusTimedOut ||
 			status == taskjournal.TaskStatusAborted && snapshot.HeadTaskID == execution.ParentTaskID
 		if failedParent {
 			failureConditions, failureMutations, err := repository.prepareBlueprintParentFailure(
@@ -170,6 +169,9 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		Fingerprint:  execution.Unit.Fingerprint,
 		ParentTaskID: execution.ParentTaskID, SourceTaskID: task.ID, SourcePlanID: task.PlanID,
 		SourceAssignment: assignment.AssignmentID, ExecutionEpoch: assignment.ExecutionEpoch,
+	}
+	if execution.Unit.Removal {
+		applied.State = blueprintunits.Absent
 	}
 	plan, err := blueprintunits.PrepareMutation(snapshot,
 		[]blueprintunits.AppliedChange{{Target: applied.Target, Next: &applied}},

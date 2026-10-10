@@ -38,6 +38,17 @@ func (s *Server) acknowledge(
 	if err != nil {
 		return taskReportRejected, err
 	}
+	componentRecovery := task.Record.Params[taskjournal.TaskBlueprintComponentUnitParam] != ""
+	recoveryDigest := acknowledgement.GetReleaseRecoveryRecordSha256()
+	if componentRecovery {
+		recoveryDigest = acknowledgement.GetComponentRecoveryRecordSha256()
+	}
+	if len(acknowledgement.GetReleaseRecoveryRecordSha256()) != 0 &&
+		len(acknowledgement.GetComponentRecoveryRecordSha256()) != 0 ||
+		componentRecovery && len(acknowledgement.GetReleaseRecoveryRecordSha256()) != 0 ||
+		!componentRecovery && len(acknowledgement.GetComponentRecoveryRecordSha256()) != 0 {
+		return taskReportRejected, errs.New(errs.KindValidationFailed, "Agent Task acknowledgement carries two recovery families")
+	}
 	backupTask := task.Record.Type == taskjournal.TaskBackup || task.Record.Type == taskjournal.TaskBackupPrune ||
 		task.Record.Type == taskjournal.TaskRestore
 	if backupTask != (acknowledgement.GetBackupResult() != nil) ||
@@ -72,7 +83,7 @@ func (s *Server) acknowledge(
 			}
 			if task.Record.Result.ExecutionEpoch != acknowledgement.GetExecutionEpoch() ||
 				task.Record.Result.ReleaseRecoveryRecordSHA256 != hex.EncodeToString(
-					acknowledgement.GetReleaseRecoveryRecordSha256(),
+					recoveryDigest,
 				) {
 				return taskReportRejected, errs.New(
 					errs.KindStateConflict,
@@ -84,17 +95,17 @@ func (s *Server) acknowledge(
 				assignment.Assignment.Record.BackupAuthorityFence.AssignmentGeneration != acknowledgement.AssignmentGeneration) {
 				return taskReportRejected, errs.New(errs.KindStateConflict, "Agent backup assignment generation changed")
 			}
-			recoveryDigest, decodeErr := hex.DecodeString(assignment.Assignment.Record.ReleaseRecoveryRecordSHA256)
+			durableRecoveryDigest, decodeErr := hex.DecodeString(assignment.Assignment.Record.ReleaseRecoveryRecordSHA256)
 			oldPrimaryReplay := assignment.Assignment.Record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly &&
 				acknowledgement.GetExecutionEpoch() < assignment.Assignment.Record.ExecutionEpoch &&
-				len(acknowledgement.GetReleaseRecoveryRecordSha256()) == 0
+				len(recoveryDigest) == 0
 			if !oldPrimaryReplay && assignment.Assignment.Record.ExecutionEpoch != acknowledgement.GetExecutionEpoch() {
 				return taskReportRejected, errs.New(
 					errs.KindStateConflict,
 					"Agent Task acknowledgement execution epoch does not match",
 				)
 			}
-			if !oldPrimaryReplay && (decodeErr != nil || !bytes.Equal(recoveryDigest, acknowledgement.GetReleaseRecoveryRecordSha256())) {
+			if !oldPrimaryReplay && (decodeErr != nil || !bytes.Equal(durableRecoveryDigest, recoveryDigest)) {
 				return taskReportRejected, errs.New(
 					errs.KindStateConflict,
 					"Agent Task acknowledgement recovery digest does not match",
@@ -174,7 +185,7 @@ func (s *Server) acknowledge(
 			result = durableBackupTaskResult(acknowledgement)
 		}
 		result.ExecutionEpoch = acknowledgement.GetExecutionEpoch()
-		result.ReleaseRecoveryRecordSHA256 = hex.EncodeToString(acknowledgement.GetReleaseRecoveryRecordSha256())
+		result.ReleaseRecoveryRecordSHA256 = hex.EncodeToString(recoveryDigest)
 		if environmentDirectory {
 			result = durableEnvironmentDirectoryTaskResult(acknowledgement)
 		}

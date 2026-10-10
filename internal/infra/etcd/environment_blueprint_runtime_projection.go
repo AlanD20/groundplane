@@ -24,8 +24,8 @@ import (
 )
 
 // BlueprintRuntimeComponent is one Component singleton and its acknowledged
-// runtime at the same fixed ledger snapshot. RuntimePresent is false only for
-// a never-configured disabled singleton.
+// runtime at the same fixed ledger snapshot. Runtime absence is accepted only
+// with proven disabled singleton state.
 type BlueprintRuntimeComponent struct {
 	Component      etcdstore.Versioned[componentrecord.Record]
 	Runtime        etcdstore.Versioned[componentplanning.Runtime]

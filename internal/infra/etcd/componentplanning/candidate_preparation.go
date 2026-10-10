@@ -189,6 +189,13 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 			continue
 		}
 		current, desiredZone := desiredZones[zoneID]
+		if !desiredZone && authority.unitRuntimeCondition != nil && selectedZone &&
+			change.Current.Revision == zone.Revision && change.Current.Record == zone.Record &&
+			componentCandidatesWithdrawZone(ordered, zoneID) {
+			// A private unit may withdraw its captured predecessor placement.
+			// It must not use that old topology for a candidate allocation.
+			continue
+		}
 		if !desiredZone || change.Current.Revision != current.Revision ||
 			change.Current.Record != current.Record {
 			return ComponentTaskPreparation{}, errs.New(
@@ -357,6 +364,24 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		return ComponentTaskPreparation{}, err
 	}
 	return cloneComponentTaskPreparation(preparation), nil
+}
+
+func componentCandidatesWithdrawZone(inputs []EnvironmentComponentCandidateInput, zoneID string) bool {
+	required := false
+	for _, input := range inputs {
+		current, present, err := environmentchanges.ComponentTaskAddress(input.Current.Record)
+		if err != nil {
+			return false
+		}
+		if present && current.ZoneID() == zoneID {
+			required = true
+		}
+		candidateZone, candidatePresent, err := projectedComponentCandidateZone(input.Candidate)
+		if err != nil || candidatePresent && candidateZone == zoneID {
+			return false
+		}
+	}
+	return required
 }
 
 func componentCandidateSelectedZoneIdentityMatches(

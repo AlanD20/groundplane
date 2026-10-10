@@ -6,7 +6,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -19,6 +21,23 @@ func (authority FrozenProjectionAuthority) ComponentPredecessor() (projectionrec
 		return projectionrecord.EnvironmentComposeProjection{}, false
 	}
 	return projectionrecord.CloneEnvironmentComposeProjection(authority.appliedProjection.Record), true
+}
+
+// ComponentPredecessorZones returns captured placement, not desired topology.
+// Teardown may still need a Zone omitted by the new authored head.
+func (authority FrozenProjectionAuthority) ComponentPredecessorZones() ([]keyvalue.Versioned[zonerecord.Record], error) {
+	if authority.unitRuntimeCondition == nil || !authority.appliedProjectionPresent {
+		return nil, nil
+	}
+	zones := make([]keyvalue.Versioned[zonerecord.Record], 0, len(authority.appliedProjection.Record.DesiredZones))
+	for _, desired := range authority.appliedProjection.Record.DesiredZones {
+		zone, err := environmentqueries.JoinZone(authority.appliedProjection, desired)
+		if err != nil {
+			return nil, err
+		}
+		zones = append(zones, zone)
+	}
+	return zones, nil
 }
 
 // PrepareFrozenComponentUnitAuthority selects the acknowledged singleton

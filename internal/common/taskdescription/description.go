@@ -206,6 +206,20 @@ func Describe(step *agentpb.ExecutionStep) Description {
 			"Restore the previous workload for the selected Service after a failed change.",
 			payload.CandidateRestorationCompensate.GetServiceId(),
 		)
+	case *agentpb.ExecutionStep_ComponentRestorationProbe:
+		return projected(
+			description,
+			"Verify previous Component runtime",
+			"Check whether the selected Component needs its exact previous runtime restored.",
+			payload.ComponentRestorationProbe.GetComponentId(),
+		)
+	case *agentpb.ExecutionStep_ComponentRestorationCompensate:
+		return projected(
+			description,
+			"Restore previous Component runtime",
+			"Restore the selected Component's exact previous runtime after a failed change.",
+			payload.ComponentRestorationCompensate.GetComponentId(),
+		)
 	case *agentpb.ExecutionStep_ManagedNetworkEnsure:
 		return projected(
 			description,

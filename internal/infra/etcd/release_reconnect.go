@@ -39,6 +39,49 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 		if assignment.ExecutionEpoch == math.MaxUint32 {
 			return TaskAssignment{}, errs.New(errs.KindStateConflict, "Agent reconnect assignment authority changed")
 		}
+		if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+			_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(ctx, task, current.Task.ReadRevision)
+			digest, digestErr := componentRecoveryAuthorityDigest(procedure)
+			if procedureErr != nil || digestErr != nil || digest != assignment.ComponentRecoveryProcedureSHA256 {
+				return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
+			}
+			if assignment.ExecutionMode == taskassignments.TaskExecutionModeForward {
+				result := taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultCompose,
+					ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch}
+				taskBytes, _ := EncodeTaskRecord(task)
+				assignmentBytes, _ := taskassignments.EncodeTaskAssignment(assignment)
+				transitioned, processed, transitionErr := repository.transitionComponentAcknowledgementToRecovery(
+					ctx, task,
+					&etcdstore.KeyValue{Key: taskjournal.TaskStorageKey(task.ID), Value: taskBytes, ModRevision: current.Task.Revision},
+					assignment,
+					&etcdstore.KeyValue{Key: taskjournal.TaskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID), Value: assignmentBytes, ModRevision: current.Assignment.Revision},
+					&etcdstore.KeyValue{Key: taskjournal.TaskAssignmentIndexKey(task.ID), Value: assignmentBytes, ModRevision: current.Assignment.Revision},
+					taskjournal.TaskStatusFailed, result, current.Task.ReadRevision,
+				)
+				clear(taskBytes)
+				clear(assignmentBytes)
+				if transitionErr != nil {
+					return TaskAssignment{}, transitionErr
+				}
+				if !processed || transitioned.ReadRevision == 0 {
+					if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts+1); err != nil {
+						return TaskAssignment{}, err
+					}
+					continue
+				}
+				return repository.GetTaskAssignment(ctx, task.ID)
+			}
+			if assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly || current.ComponentRecovery == nil {
+				return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
+			}
+			if err := repository.incrementAssignmentEpoch(ctx, current, nil); err != nil {
+				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+					return TaskAssignment{}, err
+				}
+				continue
+			}
+			return repository.GetTaskAssignment(ctx, task.ID)
+		}
 		if task.Params[releaserender.TaskReleasePublicationParam] == "" {
 			return current, nil
 		}

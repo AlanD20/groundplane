@@ -282,9 +282,10 @@ func validAppliedAdvance(
 ) bool {
 	if next.ControllerOperationID != "" {
 		if !exists || (next.State != Applied &&
-			!((next.Target.Kind == ids.KindScript || next.Target.Kind == ids.KindEnvEntry) && next.State == Absent)) ||
+			!((next.Target.Kind == ids.KindScript || next.Target.Kind == ids.KindEnvEntry ||
+				next.Target.Kind == ids.KindRoute || next.Target.Kind == ids.KindComponent) && next.State == Absent)) ||
 			(next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService &&
-				next.Target.Kind != ids.KindRoute && next.Target.Kind != ids.KindScript) ||
+				next.Target.Kind != ids.KindRoute && next.Target.Kind != ids.KindScript && next.Target.Kind != ids.KindComponent) ||
 			snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 			next.ParentTaskID != snapshot.HeadTaskID {
 			return false
@@ -342,7 +343,13 @@ func validExecutionAdvance(headTaskID string, current ExecutionRecord, exists bo
 	case Pending:
 		return next.ParentTaskID == headTaskID && next.State == Running && next.Epoch > 0
 	case Running:
-		return next.State == Draining && next.Epoch == current.Epoch
+		if next.State == Draining && next.Epoch == current.Epoch {
+			return true
+		}
+		return current.Epoch < math.MaxUint32 && next.Epoch == current.Epoch+1 &&
+			(next.State == Draining || next.State == Running && next.ParentTaskID == headTaskID)
+	case Draining:
+		return current.Epoch < math.MaxUint32 && next.Epoch == current.Epoch+1 && next.State == Draining
 	default:
 		return false
 	}

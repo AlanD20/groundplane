@@ -81,6 +81,12 @@ func validateStep(
 	case *agentpb.ExecutionStep_CandidateRestorationCompensate:
 		value := payload.CandidateRestorationCompensate
 		return validateCandidateRestorationStep(operation, value.GetCandidateArtifactId(), value.GetServiceId(), value.GetCandidateReleaseId(), artifacts)
+	case *agentpb.ExecutionStep_ComponentRestorationProbe:
+		value := payload.ComponentRestorationProbe
+		return validateComponentRestorationStep(operation, value.GetComponentId(), value.GetCandidateArtifactId(), artifacts)
+	case *agentpb.ExecutionStep_ComponentRestorationCompensate:
+		value := payload.ComponentRestorationCompensate
+		return validateComponentRestorationStep(operation, value.GetComponentId(), value.GetCandidateArtifactId(), artifacts)
 	case *agentpb.ExecutionStep_EnvironmentDirectoryCreate:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE ||
 			payload.EnvironmentDirectoryCreate == nil ||
@@ -194,4 +200,18 @@ func validateStep(
 	default:
 		return errs.New(errs.KindValidationFailed, "execution step payload is unsupported")
 	}
+}
+
+func validateComponentRestorationStep(
+	operation agentpb.PlanOperation,
+	componentID, candidateArtifactID string,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
+	artifact := artifacts[candidateArtifactID]
+	if operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
+		ids.Validate(ids.KindComponent, componentID) != nil ||
+		ids.Validate(ids.KindConfig, candidateArtifactID) != nil || artifact == nil {
+		return errs.New(errs.KindValidationFailed, "Component restoration step authority is invalid")
+	}
+	return nil
 }

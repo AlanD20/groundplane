@@ -41,6 +41,8 @@ func StartupServices(request *agentpb.ComposeHelperRequest) ([]*agentpb.ComposeS
 		names = append(names, releaseProxyName(artifact, apply.ServiceId))
 	case step.GetServiceRecreateCompensate() != nil:
 		names = serviceNames(artifact, []string{step.GetServiceRecreateCompensate().ServiceId})
+	case step.GetComponentRestorationCompensate() != nil && owned.GetPlan().GetComponentRecoveryProcedure().GetPredecessor() != nil:
+		names = serviceNames(artifact, []string{owned.GetPlan().GetComponentRecoveryProcedure().GetPredecessor().GetServiceId()})
 	case step.GetServiceProxyCompensate() != nil:
 		compensate := step.GetServiceProxyCompensate()
 		if !compensate.Enabled || compensate.PriorArtifactId == "" {

@@ -3,10 +3,11 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"time"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -115,7 +116,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 		var recoveryMutation []etcdstore.Mutation
 		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			recoveryRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys: []string{taskassignments.ReleaseRecoveryKey(task.ID)}, Revision: result.ReadRevision,
+				Keys: []string{assignmentRecoveryKey(task.ID, assignment)}, Revision: result.ReadRevision,
 			})
 			if readErr != nil {
 				return TaskEventAppend{}, readErr
@@ -131,7 +132,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 			if decodeErr != nil || digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 ||
 				record.TaskID != task.ID || record.AssignmentID != assignment.AssignmentID ||
 				record.OperationID != task.OperationID || record.PlanHash != task.PlanHash ||
-				record.RestorationAuthoritySHA256 != assignment.RestorationAuthoritySHA256 ||
+				record.RestorationAuthoritySHA256 != assignmentRecoveryAuthorityDigest(assignment) ||
 				!record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
 				return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
 			}

@@ -262,7 +262,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		AssignmentID: reservation.assignment.AssignmentID,
 		TaskID:       reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
 		ExitCode: exitCode, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
-		ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
+		ReleaseRecoveryRecordSHA256:   append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
+		ComponentRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ComponentRecoveryRecordSHA256...),
 	}
 	if reservation.assignment.BackupAuthority != nil {
 		result.Backup = &agentpb.BackupTaskResult{

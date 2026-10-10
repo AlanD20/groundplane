@@ -10,7 +10,7 @@ import (
 )
 
 // PrepareControllerDisabledComponentSettlement records that the exact current
-// disabled singleton already satisfies its explicitly authored unit. The
+// disabled singleton already satisfies its authored unit or omission. The
 // caller must compare the captured Component and runtime revision (including
 // runtime absence) in the same transaction as this receipt.
 func PrepareControllerDisabledComponentSettlement(
@@ -21,7 +21,7 @@ func PrepareControllerDisabledComponentSettlement(
 	componentRuntimeRevision int64,
 ) (MutationPlan, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
-		unit.Target.Kind != ids.KindComponent || unit.Removal ||
+		unit.Target.Kind != ids.KindComponent ||
 		ids.Validate(ids.KindOperation, operationID) != nil || componentRecordRevision <= 0 ||
 		componentRuntimeRevision < 0 || len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
 		return MutationPlan{}, invalidRecord()
@@ -38,9 +38,13 @@ func PrepareControllerDisabledComponentSettlement(
 	}) {
 		return MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint Component unit is not ready")
 	}
+	state := Applied
+	if unit.Removal {
+		state = Absent
+	}
 	applied := AppliedRecord{
 		EnvironmentID: snapshot.EnvironmentID, Target: unit.Target,
-		State: Applied, Fingerprint: unit.Fingerprint,
+		State: state, Fingerprint: unit.Fingerprint,
 		ParentTaskID:                       snapshot.HeadTaskID,
 		ControllerOperationID:              operationID,
 		ControllerComponentRecordRevision:  componentRecordRevision,

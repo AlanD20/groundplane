@@ -3,12 +3,12 @@ package agent
 import (
 	"context"
 	"errors"
-	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
-	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"slices"
 	"time"
 
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -16,11 +16,11 @@ import (
 )
 
 func hasConfigurationRestoration(plan *agentpb.ExecutionPlan) bool {
-	return plan.GetCandidateReleaseProcedure().GetConfigurationRestoration() != nil
+	return executionplan.ConfigurationRestorationForPlan(plan) != nil
 }
 
 func isConfigurationForwardStep(plan *agentpb.ExecutionPlan, stepID string) bool {
-	for _, file := range plan.GetCandidateReleaseProcedure().GetConfigurationRestoration().GetFiles() {
+	for _, file := range executionplan.ConfigurationRestorationForPlan(plan).GetFiles() {
 		if file.GetForwardStepId() == stepID {
 			return true
 		}
@@ -29,15 +29,15 @@ func isConfigurationForwardStep(plan *agentpb.ExecutionPlan, stepID string) bool
 }
 
 func releaseRecoveryPair(
-	procedure *agentpb.CandidateReleaseProcedure,
+	plan *agentpb.ExecutionPlan,
 	stepID string,
 ) (probeID string, compensateID string, configuration bool) {
-	for _, file := range procedure.GetConfigurationRestoration().GetFiles() {
+	for _, file := range executionplan.ConfigurationRestorationForPlan(plan).GetFiles() {
 		if file.GetProbeStepId() == stepID || file.GetCompensateStepId() == stepID {
 			return file.GetProbeStepId(), file.GetCompensateStepId(), true
 		}
 	}
-	for _, member := range procedure.GetMembers() {
+	for _, member := range plan.GetCandidateReleaseProcedure().GetMembers() {
 		selected := member.GetServingPredecessor()
 		probe, compensate := selected.GetProbeStepId(), selected.GetCompensateStepId()
 		if selected == nil {
@@ -48,7 +48,36 @@ func releaseRecoveryPair(
 			return probe, compensate, false
 		}
 	}
+	if probe, compensate, found := executionplan.ComponentRuntimeRecoveryPair(plan.GetComponentRecoveryProcedure(), stepID); found {
+		return probe, compensate, false
+	}
 	return "", "", false
+}
+
+type recoverySelection struct {
+	phase      agentpb.ReleaseRecoveryPhase
+	stepIDs    []string
+	cursor     uint32
+	applicable []string
+}
+
+func selectedRecovery(assignment taskassignment.Assignment) recoverySelection {
+	if directive := assignment.ReleaseRecoveryDirective; directive != nil {
+		return recoverySelection{directive.GetPhase(), executionplan.RecoveryStepIDs(assignment.Plan.GetCandidateReleaseProcedure()),
+			directive.GetCursor(), directive.GetApplicableCompensationStepIds()}
+	}
+	directive := assignment.ComponentRecoveryDirective
+	phase := agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_UNSPECIFIED
+	switch directive.GetPhase() {
+	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROBE:
+		phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE
+	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_COMPENSATE:
+		phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_COMPENSATE
+	case agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROVEN:
+		phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN
+	}
+	return recoverySelection{phase, executionplan.ComponentRecoveryStepIDs(assignment.Plan.GetComponentRecoveryProcedure()),
+		directive.GetCursor(), directive.GetApplicableCompensationStepIds()}
 }
 
 func (p *WorkerPool) runReleaseRecovery(
@@ -56,14 +85,13 @@ func (p *WorkerPool) runReleaseRecovery(
 	reservation *taskReservation,
 	state *releaseExecutionState,
 ) {
-	directive := reservation.assignment.ReleaseRecoveryDirective
-	procedure := reservation.assignment.Plan.GetCandidateReleaseProcedure()
-	stepIDs := executionplan.RecoveryStepIDs(procedure)
+	directive := selectedRecovery(reservation.assignment)
+	stepIDs := directive.stepIDs
 	steps := make(map[string]*agentpb.ExecutionStep, len(reservation.assignment.Plan.GetSteps()))
 	for _, step := range reservation.assignment.Plan.GetSteps() {
 		steps[step.GetStepId()] = step
 	}
-	if directive.GetPhase() == agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN {
+	if directive.phase == agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN {
 		for _, stepID := range stepIDs[:len(stepIDs)/2] {
 			step := steps[stepID]
 			required, err := p.probeReleaseRecoveryWithoutEvent(reservation, step, state)
@@ -80,9 +108,9 @@ func (p *WorkerPool) runReleaseRecovery(
 		return
 	}
 	compensationRequired := make(map[string]bool, len(stepIDs)/2)
-	for _, stepID := range directive.GetStepIds()[directive.GetCursor():] {
+	for _, stepID := range stepIDs[directive.cursor:] {
 		step := steps[stepID]
-		probeID, compensateID, configuration := releaseRecoveryPair(procedure, stepID)
+		probeID, compensateID, configuration := releaseRecoveryPair(reservation.assignment.Plan, stepID)
 		if step == nil || probeID == "" || compensateID == "" {
 			state.err, state.failedStepID = errs.New(
 				errs.KindInternal,
@@ -101,7 +129,7 @@ func (p *WorkerPool) runReleaseRecovery(
 			compensationRequired[compensateID] = state.probeRequired[probeID]
 		case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE:
 			required, known := compensationRequired[compensateID]
-			applicable := slices.Contains(directive.GetApplicableCompensationStepIds(), compensateID)
+			applicable := slices.Contains(directive.applicable, compensateID)
 			// File restoration can make a previously unhealthy native runtime
 			// healthy again. Its earlier read-only probe is not current proof for
 			// the later native compensation decision.
@@ -121,6 +149,10 @@ func (p *WorkerPool) runReleaseRecovery(
 					state.err, state.failedStepID, state.reconciliation = err, probeID, true
 					return
 				}
+			}
+			if step.GetComponentRestorationCompensate() != nil && applicable &&
+				hasConfigurationRestoration(reservation.assignment.Plan) {
+				required = true
 			}
 			if required && !applicable {
 				state.err, state.failedStepID = errs.New(
@@ -195,8 +227,14 @@ func (p *WorkerPool) probeReleaseRecoveryWithoutEvent(
 			return false, err
 		}
 	}
+	if result.ComponentRestorationEvidence != nil {
+		state.componentRestoration = proto.CloneOf(result.ComponentRestorationEvidence)
+	}
 	if result.ReconciliationRequired {
 		return false, errs.New(errs.KindInternal, "agent: release recovery probe requires reconciliation")
+	}
+	if step.GetComponentRestorationProbe() != nil {
+		return composeruntime.ComponentRestorationProbeStatus(reservation.assignment, result)
 	}
 	return composeruntime.ReleaseProbeEvidenceStatus(reservation.assignment, step, result)
 }

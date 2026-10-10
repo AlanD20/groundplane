@@ -3,33 +3,35 @@ package taskassignments
 import (
 	"bytes"
 	"encoding/json"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"time"
 )
 
 // TaskAssignmentRecord is the durable claim binding one running Task to one
 // Agent daemon generation. ClaimedTaskRevision is the pending Task revision
 // consumed by the assignment transaction, not the transaction's new revision.
 type TaskAssignmentRecord struct {
-	AssignmentID                string
-	TaskID                      string
-	Executor                    taskjournal.TaskExecutor
-	AgentID                     string
-	AgentGeneration             uint64
-	ClaimedTaskRevision         int64
-	AssignedAt                  time.Time
-	Deadline                    time.Time
-	RecoveryDeadline            time.Time
-	RecoveryExecutionDeadline   time.Time
-	ExecutionMode               TaskExecutionMode
-	ExecutionEpoch              uint32
-	RestorationAuthority        *ReleaseRestorationAuthority
-	RestorationAuthoritySHA256  string
-	ReleaseRecoveryRecordSHA256 string
-	BackupAuthorityFence        *BackupAuthorityFence
+	AssignmentID                     string
+	TaskID                           string
+	Executor                         taskjournal.TaskExecutor
+	AgentID                          string
+	AgentGeneration                  uint64
+	ClaimedTaskRevision              int64
+	AssignedAt                       time.Time
+	Deadline                         time.Time
+	RecoveryDeadline                 time.Time
+	RecoveryExecutionDeadline        time.Time
+	ExecutionMode                    TaskExecutionMode
+	ExecutionEpoch                   uint32
+	RestorationAuthority             *ReleaseRestorationAuthority
+	RestorationAuthoritySHA256       string
+	ComponentRecoveryProcedureSHA256 string
+	ReleaseRecoveryRecordSHA256      string
+	BackupAuthorityFence             *BackupAuthorityFence
 }
 
 type ReleaseRecoveryDirective struct {
@@ -41,23 +43,24 @@ type ReleaseRecoveryDirective struct {
 }
 
 type taskAssignmentJSON struct {
-	Schema                      int                          `json:"schema"`
-	AssignmentID                string                       `json:"assignment_id"`
-	TaskID                      string                       `json:"task_id"`
-	Executor                    taskjournal.TaskExecutor     `json:"executor"`
-	AgentID                     string                       `json:"agent_id"`
-	AgentGeneration             uint64                       `json:"agent_generation"`
-	ClaimedTaskRevision         int64                        `json:"claimed_task_revision"`
-	AssignedAt                  string                       `json:"assigned_at"`
-	ForwardDeadline             string                       `json:"forward_deadline"`
-	RecoveryDeadline            string                       `json:"recovery_deadline"`
-	RecoveryExecutionDeadline   string                       `json:"recovery_execution_deadline,omitempty"`
-	ExecutionMode               TaskExecutionMode            `json:"execution_mode"`
-	ExecutionEpoch              uint32                       `json:"execution_epoch"`
-	RestorationAuthority        *ReleaseRestorationAuthority `json:"restoration_authority,omitempty"`
-	RestorationAuthoritySHA256  string                       `json:"restoration_authority_sha256,omitempty"`
-	ReleaseRecoveryRecordSHA256 string                       `json:"release_recovery_record_sha256,omitempty"`
-	BackupAuthorityFence        *BackupAuthorityFence        `json:"backup_authority_fence,omitempty"`
+	Schema                           int                          `json:"schema"`
+	AssignmentID                     string                       `json:"assignment_id"`
+	TaskID                           string                       `json:"task_id"`
+	Executor                         taskjournal.TaskExecutor     `json:"executor"`
+	AgentID                          string                       `json:"agent_id"`
+	AgentGeneration                  uint64                       `json:"agent_generation"`
+	ClaimedTaskRevision              int64                        `json:"claimed_task_revision"`
+	AssignedAt                       string                       `json:"assigned_at"`
+	ForwardDeadline                  string                       `json:"forward_deadline"`
+	RecoveryDeadline                 string                       `json:"recovery_deadline"`
+	RecoveryExecutionDeadline        string                       `json:"recovery_execution_deadline,omitempty"`
+	ExecutionMode                    TaskExecutionMode            `json:"execution_mode"`
+	ExecutionEpoch                   uint32                       `json:"execution_epoch"`
+	RestorationAuthority             *ReleaseRestorationAuthority `json:"restoration_authority,omitempty"`
+	RestorationAuthoritySHA256       string                       `json:"restoration_authority_sha256,omitempty"`
+	ComponentRecoveryProcedureSHA256 string                       `json:"component_recovery_procedure_sha256,omitempty"`
+	ReleaseRecoveryRecordSHA256      string                       `json:"release_recovery_record_sha256,omitempty"`
+	BackupAuthorityFence             *BackupAuthorityFence        `json:"backup_authority_fence,omitempty"`
 }
 
 func EncodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
@@ -78,10 +81,11 @@ func EncodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 			return record.RecoveryExecutionDeadline.Format(time.RFC3339Nano)
 		}(),
 		ExecutionMode: record.ExecutionMode, ExecutionEpoch: record.ExecutionEpoch,
-		RestorationAuthority:        cloneReleaseRestorationAuthority(record.RestorationAuthority),
-		RestorationAuthoritySHA256:  record.RestorationAuthoritySHA256,
-		ReleaseRecoveryRecordSHA256: record.ReleaseRecoveryRecordSHA256,
-		BackupAuthorityFence:        cloneBackupAuthorityFence(record.BackupAuthorityFence),
+		RestorationAuthority:             cloneReleaseRestorationAuthority(record.RestorationAuthority),
+		RestorationAuthoritySHA256:       record.RestorationAuthoritySHA256,
+		ComponentRecoveryProcedureSHA256: record.ComponentRecoveryProcedureSHA256,
+		ReleaseRecoveryRecordSHA256:      record.ReleaseRecoveryRecordSHA256,
+		BackupAuthorityFence:             cloneBackupAuthorityFence(record.BackupAuthorityFence),
 	})
 }
 
@@ -120,10 +124,11 @@ func DecodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 		ClaimedTaskRevision: data.ClaimedTaskRevision, AssignedAt: assignedAt, Deadline: deadline,
 		RecoveryDeadline: recoveryDeadline, RecoveryExecutionDeadline: recoveryExecutionDeadline,
 		ExecutionMode: data.ExecutionMode, ExecutionEpoch: data.ExecutionEpoch,
-		RestorationAuthority:        cloneReleaseRestorationAuthority(data.RestorationAuthority),
-		RestorationAuthoritySHA256:  data.RestorationAuthoritySHA256,
-		ReleaseRecoveryRecordSHA256: data.ReleaseRecoveryRecordSHA256,
-		BackupAuthorityFence:        cloneBackupAuthorityFence(data.BackupAuthorityFence),
+		RestorationAuthority:             cloneReleaseRestorationAuthority(data.RestorationAuthority),
+		RestorationAuthoritySHA256:       data.RestorationAuthoritySHA256,
+		ComponentRecoveryProcedureSHA256: data.ComponentRecoveryProcedureSHA256,
+		ReleaseRecoveryRecordSHA256:      data.ReleaseRecoveryRecordSHA256,
+		BackupAuthorityFence:             cloneBackupAuthorityFence(data.BackupAuthorityFence),
 	}
 	if err := validateTaskAssignment(record); err != nil {
 		return TaskAssignmentRecord{}, CorruptTaskAssignment()
@@ -165,7 +170,7 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 		return CorruptTaskAssignment()
 	}
 	if record.RestorationAuthority == nil {
-		if record.RestorationAuthoritySHA256 != "" || record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+		if record.RestorationAuthoritySHA256 != "" {
 			return CorruptTaskAssignment()
 		}
 	} else {
@@ -173,6 +178,12 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 		if err != nil || digest != record.RestorationAuthoritySHA256 || record.RestorationAuthority.TaskID != record.TaskID {
 			return CorruptTaskAssignment()
 		}
+	}
+	component := record.ComponentRecoveryProcedureSHA256 != ""
+	if component && !recordcodec.ValidSHA256(record.ComponentRecoveryProcedureSHA256) ||
+		component && record.RestorationAuthority != nil ||
+		record.ExecutionMode == TaskExecutionModeRecoveryOnly && !component && record.RestorationAuthority == nil {
+		return CorruptTaskAssignment()
 	}
 	return validateBackupAuthorityFence(record.BackupAuthorityFence)
 }

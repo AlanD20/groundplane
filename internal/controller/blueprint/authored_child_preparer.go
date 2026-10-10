@@ -33,7 +33,7 @@ func (service *Service) Prepare(
 	unit blueprintunits.Unit,
 ) (blueprintcoordinator.PreparedChild, error) {
 	if service == nil || ctx == nil || parent.Executor != taskjournal.TaskExecutorBlueprint ||
-		parent.Status != taskjournal.TaskStatusRunning || unit.Removal {
+		parent.Status != taskjournal.TaskStatusRunning || unit.Removal && unit.Target.Kind != ids.KindComponent {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindValidationFailed, "Blueprint child request is invalid",
 		)

@@ -88,7 +88,8 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 	}
 	fileCount := 0
 	for _, step := range plan.GetSteps() {
-		if step.GetMaterializeFile() != nil {
+		if step.GetMaterializeFile() != nil &&
+			step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD {
 			fileCount++
 		}
 	}
@@ -111,6 +112,7 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 	}
 	if plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
 		plan.GetTargetId() != record.EnvironmentID || plan.GetCandidateReleaseProcedure() != nil ||
+		plan.GetComponentRecoveryProcedure().GetComponentId() != record.Component.Desired.ID ||
 		plan.GetEntryMutationProcedure() != nil || plan.GetServiceLifecycleProcedure() != nil {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Component recipe has unrelated runtime authority")
 	}
@@ -151,6 +153,16 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 		case step.GetComponentApply() != nil:
 			if step.GetComponentApply().GetComponentId() != record.Component.Desired.ID {
 				return nil, errs.New(errs.KindStateConflict, "Blueprint Component action belongs to another unit")
+			}
+			continue
+		case step.GetComponentRestorationProbe() != nil:
+			if step.GetComponentRestorationProbe().GetComponentId() != record.Component.Desired.ID {
+				return nil, errs.New(errs.KindStateConflict, "Blueprint Component restoration belongs to another unit")
+			}
+			continue
+		case step.GetComponentRestorationCompensate() != nil:
+			if step.GetComponentRestorationCompensate().GetComponentId() != record.Component.Desired.ID {
+				return nil, errs.New(errs.KindStateConflict, "Blueprint Component restoration belongs to another unit")
 			}
 			continue
 		default:

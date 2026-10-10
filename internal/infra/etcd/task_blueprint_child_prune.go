@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -74,6 +75,7 @@ func (repository *TaskRepository) prepareBlueprintComponentExecutionPrune(
 		taskjournal.TaskActiveOperationKey(task.OperationID),
 		taskjournal.TaskAssignmentIndexKey(task.ID),
 		taskjournal.TaskRecoveryProofRequiredKey(task.ID),
+		taskassignments.ComponentRecoveryKey(task.ID),
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

@@ -15,19 +15,20 @@ import (
 )
 
 type releaseExecutionState struct {
-	err            error
-	exitCode       int32
-	failedStepID   string
-	diagnostic     agentpb.ComposeHelperDiagnostic
-	reconciliation bool
-	projects       map[string]*agentpb.ObservedProject
-	evidence       map[string]*agentpb.ServiceProxyEvidence
-	recreate       map[string]*agentpb.ServiceRecreateEvidence
-	absence        map[string]*agentpb.CandidateAbsenceEvidence
-	probeRequired  map[string]bool
-	completed      map[string]struct{}
-	recoveryClosed bool
-	restored       bool
+	err                  error
+	exitCode             int32
+	failedStepID         string
+	diagnostic           agentpb.ComposeHelperDiagnostic
+	reconciliation       bool
+	projects             map[string]*agentpb.ObservedProject
+	evidence             map[string]*agentpb.ServiceProxyEvidence
+	recreate             map[string]*agentpb.ServiceRecreateEvidence
+	absence              map[string]*agentpb.CandidateAbsenceEvidence
+	componentRestoration *agentpb.ComponentRestorationEvidence
+	probeRequired        map[string]bool
+	completed            map[string]struct{}
+	recoveryClosed       bool
+	restored             bool
 
 	componentMutationAttempted bool
 }
@@ -95,7 +96,8 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	terminal := terminalFor(reservation.ctx, state.err)
 	if terminal != TaskTerminalCompleted &&
 		reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
-		reservation.assignment.Plan.GetCandidateReleaseProcedure() != nil &&
+		(reservation.assignment.Plan.GetCandidateReleaseProcedure() != nil ||
+			reservation.assignment.Plan.GetComponentRecoveryProcedure() != nil) &&
 		!state.restored {
 		// Even a pre-hook failure needs an exact predecessor/absence probe.
 		// Reporting terminal failure first can release Script sources that the
@@ -114,9 +116,10 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	result := TaskResult{
 		AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID,
 		PlanHash: taskassignment.PlanDigest(reservation.assignment.Plan), Terminal: terminal, ExitCode: state.exitCode,
-		ExecutionEpoch:              reservation.assignment.ExecutionEpoch,
-		ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
-		Compose:                     releaseComposeTaskResult(state),
+		ExecutionEpoch:                reservation.assignment.ExecutionEpoch,
+		ReleaseRecoveryRecordSHA256:   append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
+		ComponentRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ComponentRecoveryRecordSHA256...),
+		Compose:                       releaseComposeTaskResult(state),
 	}
 	if state.err != nil && p.logger != nil {
 		p.logger.Error("agent: release step failed", "task_id", reservation.assignment.TaskID, "error", state.err)
@@ -260,6 +263,7 @@ func (p *WorkerPool) runReleaseStep(
 	blueprintComponent := reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
 		step.GetComponentApply() != nil
 	if reservation.eventsDurable && (candidateMutationStep(step) || blueprintComponent ||
+		componentRecoveryForwardStep(reservation.assignment.Plan, step.GetStepId()) ||
 		isConfigurationForwardStep(reservation.assignment.Plan, step.GetStepId())) {
 		if err := p.emitProgressAndWait(reservation.ctx, running); err != nil {
 			state.err, state.failedStepID = err, step.GetStepId()
@@ -321,11 +325,15 @@ func (p *WorkerPool) runReleaseStep(
 	if result.RecreateEvidence != nil {
 		state.recreate[result.RecreateEvidence.ServiceId] = proto.Clone(result.RecreateEvidence).(*agentpb.ServiceRecreateEvidence)
 	}
+	if result.ComponentRestorationEvidence != nil {
+		state.componentRestoration = proto.CloneOf(result.ComponentRestorationEvidence)
+	}
 	err = state.recordAbsenceResult(&result, err)
 	pair := executionplan.ConfigurationFilePair(reservation.assignment.Plan, step.GetStepId())
 	if err == nil && step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
 		state.restored = pair != nil ||
-			composeruntime.ReleaseRestorationEvidenceProven(reservation.assignment, step, result)
+			composeruntime.ReleaseRestorationEvidenceProven(reservation.assignment, step, result) ||
+			composeruntime.ComponentRestorationEvidenceProven(reservation.assignment, result)
 		if !state.restored {
 			err = errs.New(errs.KindInternal, "agent: release compensation returned no exact restoration proof")
 			result.ReconciliationRequired = true
@@ -336,7 +344,11 @@ func (p *WorkerPool) runReleaseStep(
 		if pair != nil {
 			required = result.RestorationRequired
 		} else {
-			required, err = composeruntime.ReleaseProbeEvidenceStatus(reservation.assignment, step, result)
+			if step.GetComponentRestorationProbe() != nil {
+				required, err = composeruntime.ComponentRestorationProbeStatus(reservation.assignment, result)
+			} else {
+				required, err = composeruntime.ReleaseProbeEvidenceStatus(reservation.assignment, step, result)
+			}
 		}
 		if err == nil {
 			state.probeRequired[step.GetStepId()] = required
@@ -374,6 +386,15 @@ func (p *WorkerPool) runReleaseStep(
 	}
 }
 
+func componentRecoveryForwardStep(plan *agentpb.ExecutionPlan, stepID string) bool {
+	for _, selected := range plan.GetComponentRecoveryProcedure().GetForwardStepIds() {
+		if selected == stepID {
+			return true
+		}
+	}
+	return false
+}
+
 func candidateMutationStep(step *agentpb.ExecutionStep) bool {
 	if step.GetComposeRemove() != nil {
 		return true
@@ -383,7 +404,7 @@ func candidateMutationStep(step *agentpb.ExecutionStep) bool {
 	}
 	return step.GetComposeWorkloadApply() != nil || step.GetServiceProxySwitch() != nil ||
 		step.GetServiceProxyCompensate() != nil || step.GetServiceRecreateCompensate() != nil ||
-		step.GetCandidateRestorationCompensate() != nil
+		step.GetCandidateRestorationCompensate() != nil || step.GetComponentRestorationCompensate() != nil
 }
 
 func releaseFailureHookExecution(
@@ -442,6 +463,7 @@ func releaseComposeTaskResult(state *releaseExecutionState) *agentpb.ComposeTask
 		result.RecreateEvidence = append(result.RecreateEvidence, state.recreate[serviceID])
 	}
 	result.CandidateAbsenceEvidence = state.aggregateAbsenceEvidence()
+	result.ComponentRestorationEvidence = state.componentRestoration
 	return result
 }
 
@@ -453,6 +475,9 @@ func releaseCompensationEnabled(step *agentpb.ExecutionStep) bool {
 		return value.Enabled
 	}
 	if step.GetCandidateRestorationCompensate() != nil {
+		return true
+	}
+	if step.GetComponentRestorationCompensate() != nil {
 		return true
 	}
 	return false

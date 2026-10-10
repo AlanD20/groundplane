@@ -82,6 +82,12 @@ func validateRequest(
 		artifactID = payload.CandidateRestorationProbe.CandidateArtifactId
 	case *agentpb.ExecutionStep_CandidateRestorationCompensate:
 		artifactID = payload.CandidateRestorationCompensate.CandidateArtifactId
+	case *agentpb.ExecutionStep_ComponentRestorationCompensate:
+		procedure := plan.GetComponentRecoveryProcedure()
+		artifactID = procedure.GetCandidateArtifactId()
+		if procedure.GetPredecessor() != nil {
+			artifactID = procedure.GetPredecessor().GetPriorArtifactId()
+		}
 	default:
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}

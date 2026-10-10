@@ -225,6 +225,9 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 				)
 			}
 		}
+		if plan.GetComponentRecoveryProcedure() != nil {
+			return nil
+		}
 		return validateConfigurationRestorationPlan(plan)
 	}
 	if procedure == nil || len(procedure.GetMembers()) != len(mutations) {

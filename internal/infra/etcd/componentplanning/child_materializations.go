@@ -37,7 +37,7 @@ func (record ChildExecution) validateMaterializations(plan *agentpb.ExecutionPla
 	}
 	for _, step := range plan.GetSteps() {
 		wire := step.GetMaterializeFile()
-		if wire == nil {
+		if wire == nil || step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD {
 			continue
 		}
 		file, found := files[step.GetStepId()]

@@ -53,7 +53,7 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			result.ReleaseRecoveryRecordSHA256 != "" || result.Diagnostic != TaskResultDiagnosticNone ||
 			len(result.Projects) != 0 || len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 ||
 			result.CandidateAbsenceEvidence != nil || result.DNSResolverCandidateObservation != nil ||
-			result.DNSResolverRollbackObservation != nil {
+			result.DNSResolverRollbackObservation != nil || result.ComponentRestorationEvidence != nil {
 			return errs.New(
 				errs.KindValidationFailed,
 				"backup task result carries invalid or unrelated execution evidence",
@@ -121,6 +121,13 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			previous = identity
 		}
 	}
+	if evidence := result.ComponentRestorationEvidence; evidence != nil {
+		if result.Kind != TaskResultCompose || ids.Validate(ids.KindComponent, evidence.ComponentID) != nil ||
+			ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil || ids.Validate(ids.KindService, evidence.ServiceID) != nil ||
+			evidence.ComposeProjectName == "" || (evidence.Target != "predecessor" && evidence.Target != "candidate_absence") {
+			return errs.New(errs.KindValidationFailed, "task Component restoration evidence is invalid")
+		}
+	}
 	for _, candidate := range []*TaskDNSResolverObservationEvidence{
 		result.DNSResolverCandidateObservation,
 		result.DNSResolverRollbackObservation,
@@ -165,6 +172,7 @@ func CloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 	cloned.ProxyEvidence = append([]TaskProxyEvidence(nil), result.ProxyEvidence...)
 	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
 	cloned.CandidateAbsenceEvidence = CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence)
+	cloned.ComponentRestorationEvidence = CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence)
 	cloned.DNSResolverCandidateObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,
 	)

@@ -27,7 +27,6 @@ func (repository *TaskRepository) acknowledgeTask(
 	); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-
 	claimKey := taskjournal.TaskExecutionClaimKey(executor, agentID, taskID)
 	submittedResult := taskjournal.CloneTaskResult(result)
 	submittedTerminalStatus := terminalStatus
@@ -91,9 +90,8 @@ func (repository *TaskRepository) acknowledgeTask(
 		var recoveryAcknowledgement releaseRecoveryAcknowledgement
 		var terminalScriptSourceRelease scriptTerminalSourceRelease
 		if executor == taskjournal.TaskExecutorAgent && result != nil &&
-			task.Params[releaserender.TaskReleasePublicationParam] != "" &&
 			assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
-			recoveryAcknowledgement, err = repository.releaseRecoveryAcknowledgementAtRevision(
+			recoveryAcknowledgement, err = repository.recoveryAcknowledgementAtRevision(
 				ctx, task, assignment, terminalStatus, *result, primaryAndAssignment.ReadRevision,
 			)
 			if err != nil {
@@ -125,6 +123,22 @@ func (repository *TaskRepository) acknowledgeTask(
 				continue
 			}
 			defer terminalScriptSourceRelease.clear()
+		}
+		if executor == taskjournal.TaskExecutorAgent && result != nil &&
+			task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" &&
+			assignment.ExecutionMode == taskassignments.TaskExecutionModeForward &&
+			result.ReconciliationRequired {
+			transitioned, processed, transitionErr := repository.transitionComponentAcknowledgementToRecovery(
+				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
+				terminalStatus, *result, primaryAndAssignment.ReadRevision,
+			)
+			if transitionErr != nil {
+				return etcdstore.Versioned[TaskRecord]{}, transitionErr
+			}
+			if processed {
+				return transitioned, nil
+			}
+			continue
 		}
 		if executor == taskjournal.TaskExecutorAgent && result != nil &&
 			task.Params[releaserender.TaskReleasePublicationParam] != "" &&

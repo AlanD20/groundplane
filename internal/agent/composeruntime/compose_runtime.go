@@ -35,15 +35,16 @@ type Runtime struct {
 }
 
 type StepResult struct {
-	Observed                 *agentpb.ObservedProject
-	ExitCode                 int32
-	Diagnostic               agentpb.ComposeHelperDiagnostic
-	MutationAttempted        bool
-	ReconciliationRequired   bool
-	RestorationRequired      bool
-	ProxyEvidence            *agentpb.ServiceProxyEvidence
-	RecreateEvidence         *agentpb.ServiceRecreateEvidence
-	CandidateAbsenceEvidence *agentpb.CandidateAbsenceEvidence
+	Observed                     *agentpb.ObservedProject
+	ExitCode                     int32
+	Diagnostic                   agentpb.ComposeHelperDiagnostic
+	MutationAttempted            bool
+	ReconciliationRequired       bool
+	RestorationRequired          bool
+	ProxyEvidence                *agentpb.ServiceProxyEvidence
+	RecreateEvidence             *agentpb.ServiceRecreateEvidence
+	CandidateAbsenceEvidence     *agentpb.CandidateAbsenceEvidence
+	ComponentRestorationEvidence *agentpb.ComponentRestorationEvidence
 }
 
 func New(helper Helper, observer Observer) (*Runtime, error) {
@@ -130,6 +131,8 @@ func (runtime *Runtime) ExecuteStep(
 		return runtime.verifyReleaseRestorationPostcondition(ctx, assignment, step, result, err)
 	case *agentpb.ExecutionStep_CandidateRestorationProbe, *agentpb.ExecutionStep_CandidateRestorationCompensate:
 		return runtime.candidateRestoration(ctx, assignment, step)
+	case *agentpb.ExecutionStep_ComponentRestorationProbe, *agentpb.ExecutionStep_ComponentRestorationCompensate:
+		return runtime.componentRestoration(ctx, assignment, step)
 	default:
 		return StepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}

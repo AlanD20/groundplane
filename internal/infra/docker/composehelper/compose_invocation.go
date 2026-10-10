@@ -96,6 +96,23 @@ func commandsFor(
 		mutation.Args = append(mutation.Args, serviceNames(artifact, []string{compensate.ServiceId})...)
 		return []runner.RunCmdOpts{validation, mutation}, nil
 	}
+	if step.GetComponentRestorationCompensate() != nil {
+		procedure := request.Plan.GetComponentRecoveryProcedure()
+		serviceID := procedure.GetCandidateAbsence().GetServiceId()
+		if prior := procedure.GetPredecessor(); prior != nil {
+			serviceID = prior.GetServiceId()
+			validation := base
+			validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
+			mutation := base
+			mutation.Args = append(append([]string(nil), prefix...), "up", "--detach", "--force-recreate", "--no-deps")
+			mutation.Args = append(mutation.Args, serviceNames(artifact, []string{serviceID})...)
+			return []runner.RunCmdOpts{validation, mutation}, nil
+		}
+		mutation := base
+		mutation.Args = append(append([]string(nil), prefix...), "rm", "--stop", "--force")
+		mutation.Args = append(mutation.Args, serviceNames(artifact, []string{serviceID})...)
+		return []runner.RunCmdOpts{mutation}, nil
+	}
 	if apply := step.GetComposeWorkloadApply(); apply != nil {
 		validation := base
 		validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")

@@ -158,7 +158,7 @@ func (repository *TaskRepository) prepareTaskTerminalJournal(
 		conditions = append(conditions, recoveryAcknowledgement.conditions...)
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: taskassignments.ReleaseRecoveryKey(task.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: assignmentRecoveryKey(task.ID, assignment)},
 		)
 	}
 	conditions = append(conditions, terminalScriptSourceRelease.conditions...)

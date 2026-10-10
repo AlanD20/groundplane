@@ -22,6 +22,7 @@ type BuildInput struct {
 	ComponentLifecycleMode       agentpb.ComponentLifecycleMode
 	ComponentRollbackObservation *agentpb.ComponentApply
 	CandidateReleaseProcedure    *agentpb.CandidateReleaseProcedure
+	ComponentRecoveryProcedure   *agentpb.ComponentRecoveryProcedure
 	ManagedComponentProcedure    *agentpb.ManagedComponentProcedure
 	ServiceLifecycleProcedure    *agentpb.ServiceLifecycleProcedure
 	EntryMutationProcedure       *agentpb.EntryMutationProcedure
@@ -42,6 +43,7 @@ func Build(input BuildInput) (*agentpb.ExecutionPlan, error) {
 		ComponentLifecycleMode:       input.ComponentLifecycleMode,
 		ComponentRollbackObservation: input.ComponentRollbackObservation,
 		CandidateReleaseProcedure:    input.CandidateReleaseProcedure,
+		ComponentRecoveryProcedure:   input.ComponentRecoveryProcedure,
 		ManagedComponentProcedure:    input.ManagedComponentProcedure,
 		ServiceLifecycleProcedure:    input.ServiceLifecycleProcedure,
 		EntryMutationProcedure:       input.EntryMutationProcedure,

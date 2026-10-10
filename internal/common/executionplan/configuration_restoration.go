@@ -57,12 +57,19 @@ func validateConfigurationRestorationPlan(plan *agentpb.ExecutionPlan) error {
 	if err := validateConfigurationRestorationDescriptor(plan.GetOperation(), procedure); err != nil {
 		return err
 	}
+	return validateConfigurationRestorationSteps(plan, procedure.GetConfigurationRestoration())
+}
+
+func validateConfigurationRestorationSteps(
+	plan *agentpb.ExecutionPlan,
+	configuration *agentpb.ConfigurationRestoration,
+) error {
 	steps := make(map[string][]*agentpb.ExecutionStep)
 	for _, step := range plan.GetSteps() {
 		steps[step.GetStepId()] = append(steps[step.GetStepId()], step)
 	}
 	referenced := make(map[string]bool)
-	for _, binding := range procedure.GetConfigurationRestoration().GetFiles() {
+	for _, binding := range configuration.GetFiles() {
 		forward, probe, compensate := steps[binding.ForwardStepId], steps[binding.ProbeStepId], steps[binding.CompensateStepId]
 		if len(forward) != 1 || len(probe) != 1 || len(compensate) != 1 {
 			return invalidConfigurationRestoration("missing or duplicated step")
@@ -79,7 +86,7 @@ func validateConfigurationRestorationPlan(plan *agentpb.ExecutionPlan) error {
 			write.Destination != restore.Destination || !sameRestorationFile(inspect, restore) {
 			return invalidConfigurationRestoration("file procedure escapes its forward destination")
 		}
-		if procedure.GetConfigurationRestoration().GetPriorSnapshotId() == "" &&
+		if configuration.GetPriorSnapshotId() == "" &&
 			!removalOutput(restore.GetOutputKind()) {
 			return invalidConfigurationRestoration("initial absence authorizes file creation")
 		}
@@ -119,12 +126,25 @@ func invalidConfigurationRestoration(reason string) error {
 // ConfigurationFilePair returns the sealed file procedure owning this step.
 // Callers must first validate the complete plan and assignment authority.
 func ConfigurationFilePair(plan *agentpb.ExecutionPlan, stepID string) *agentpb.ConfigurationFileRestoration {
-	for _, file := range plan.GetCandidateReleaseProcedure().GetConfigurationRestoration().GetFiles() {
+	for _, file := range ConfigurationRestorationForPlan(plan).GetFiles() {
 		if file.GetProbeStepId() == stepID || file.GetCompensateStepId() == stepID {
 			return proto.CloneOf(file)
 		}
 	}
 	return nil
+}
+
+// ConfigurationRestorationForPlan returns the one closed file-restoration
+// procedure. Candidate Release and authored Component procedures are mutually
+// exclusive under complete plan validation.
+func ConfigurationRestorationForPlan(plan *agentpb.ExecutionPlan) *agentpb.ConfigurationRestoration {
+	if plan == nil {
+		return nil
+	}
+	if procedure := plan.GetCandidateReleaseProcedure(); procedure != nil {
+		return procedure.GetConfigurationRestoration()
+	}
+	return plan.GetComponentRecoveryProcedure().GetConfigurationRestoration()
 }
 
 // ConfigurationSnapshotMatches binds the retained source identity without

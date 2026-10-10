@@ -325,6 +325,7 @@ message TaskAck {
   uint32 execution_epoch = 8;
   bytes release_recovery_record_sha256 = 9;
   uint64 assignment_generation = 11;
+  bytes component_recovery_record_sha256 = 12;
 }
 
 message BackupTaskResult {
@@ -342,6 +343,22 @@ message ComposeTaskResult {
   DNSResolverObservationEvidence dns_resolver_candidate_observation = 7;
   DNSResolverObservationEvidence dns_resolver_rollback_observation = 8;
   CandidateAbsenceEvidence candidate_absence_evidence = 9;
+  ComponentRestorationEvidence component_restoration_evidence = 10;
+}
+
+message ComponentRestorationEvidence {
+  string component_id = 1;
+  string artifact_id = 2;
+  string service_id = 3;
+  string compose_project_name = 4;
+  ComponentRestorationTarget target = 5;
+  bool restored = 6;
+}
+
+enum ComponentRestorationTarget {
+  COMPONENT_RESTORATION_TARGET_UNSPECIFIED = 0;
+  COMPONENT_RESTORATION_TARGET_PREDECESSOR = 1;
+  COMPONENT_RESTORATION_TARGET_CANDIDATE_ABSENCE = 2;
 }
 
 message CandidateAbsenceEvidence {
@@ -625,6 +642,23 @@ message TaskAssignment {
   bytes release_recovery_record_sha256 = 20; // required only in recovery_only mode
   ReleaseRecoveryDirective release_recovery_directive = 21; // required only in recovery_only mode
   google.protobuf.Timestamp execution_deadline = 22; // current bounded attempt deadline; proof-required recovery uses a distinct non-renewable budget
+  ComponentRecoveryDirective component_recovery_directive = 23; // required only for authored Component recovery
+  bytes component_recovery_record_sha256 = 24; // exact durable authored Component recovery authority
+}
+
+message ComponentRecoveryDirective {
+  repeated string step_ids = 1;
+  uint32 cursor = 2;
+  bytes component_recovery_record_sha256 = 3;
+  ComponentRecoveryPhase phase = 4;
+  repeated string applicable_compensation_step_ids = 5;
+}
+
+enum ComponentRecoveryPhase {
+  COMPONENT_RECOVERY_PHASE_UNSPECIFIED = 0;
+  COMPONENT_RECOVERY_PHASE_PROBE = 1;
+  COMPONENT_RECOVERY_PHASE_COMPENSATE = 2;
+  COMPONENT_RECOVERY_PHASE_PROVEN = 3;
 }
 
 message ReleaseRecoveryDirective {
@@ -872,6 +906,35 @@ message ExecutionPlan {
   ServiceLifecycleProcedure service_lifecycle_procedure = 16;
   EntryMutationProcedure entry_mutation_procedure = 17;
   BackupPlanScope backup_scope = 18;
+  ComponentRecoveryProcedure component_recovery_procedure = 19;
+}
+
+// ComponentRecoveryProcedure is the immutable recovery-only authority for one
+// authored Environment Component child. It never names or fabricates a Service
+// Release and cannot select another Component or a newer desired projection.
+message ComponentRecoveryProcedure {
+  string component_id = 1;
+  string candidate_artifact_id = 2;
+  repeated string forward_step_ids = 3;
+  ConfigurationRestoration configuration_restoration = 4;
+  oneof runtime_target {
+    ComponentPredecessorRestoration predecessor = 5;
+    ComponentCandidateAbsenceRestoration candidate_absence = 6;
+  }
+}
+
+message ComponentPredecessorRestoration {
+  string prior_artifact_id = 1;
+  string service_id = 2;
+  string probe_step_id = 3;
+  string compensate_step_id = 4;
+}
+
+message ComponentCandidateAbsenceRestoration {
+  string compose_project_name = 1;
+  string service_id = 2;
+  string probe_step_id = 3;
+  string compensate_step_id = 4;
 }
 
 // EntryMutationProcedure confines configuration reconciliation to retained
@@ -977,6 +1040,16 @@ message CandidateRestorationCompensate {
   string candidate_artifact_id = 1;
   string service_id = 2;
   string candidate_release_id = 3;
+}
+
+message ComponentRestorationProbe {
+  string component_id = 1;
+  string candidate_artifact_id = 2;
+}
+
+message ComponentRestorationCompensate {
+  string component_id = 1;
+  string candidate_artifact_id = 2;
 }
 
 enum ComponentLifecycleMode {
@@ -1111,6 +1184,8 @@ message ExecutionStep {
     // Immutable typed Backup step input. Dispatch wraps these exact steps in
     // the assignment-specific BackupTaskAuthority; no source reconstruction.
     BackupStepAuthority backup_step = 37;
+    ComponentRestorationProbe component_restoration_probe = 38;
+    ComponentRestorationCompensate component_restoration_compensate = 39;
   }
   ExecutionStepPolicy policy = 30;
   string prerequisite_step_id = 31;

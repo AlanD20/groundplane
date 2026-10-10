@@ -14,10 +14,12 @@ import (
 )
 
 type candidateReleaseWireAuthority struct {
-	mode           agentpb.TaskExecutionMode
-	restoration    *agentpb.ReleaseRestorationAuthority
-	recovery       *agentpb.ReleaseRecoveryDirective
-	recoveryDigest []byte
+	mode                    agentpb.TaskExecutionMode
+	restoration             *agentpb.ReleaseRestorationAuthority
+	recovery                *agentpb.ReleaseRecoveryDirective
+	recoveryDigest          []byte
+	componentRecovery       *agentpb.ComponentRecoveryDirective
+	componentRecoveryDigest []byte
 }
 
 type candidateReleaseDescriptorStore interface {
@@ -75,13 +77,48 @@ func candidateReleaseAssignmentAuthority(
 	}
 	procedure := plan.GetCandidateReleaseProcedure()
 	if procedure == nil {
+		if component := plan.GetComponentRecoveryProcedure(); component != nil {
+			digest, digestErr := taskassignments.ComponentRecoveryProcedureSHA256(component)
+			if digestErr != nil || digest != record.ComponentRecoveryProcedureSHA256 || record.RestorationAuthority != nil ||
+				record.RestorationAuthoritySHA256 != "" {
+				return result, errs.New(errs.KindInternal, "Component recovery assignment authority is invalid")
+			}
+			if result.mode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
+				directive := claim.ComponentRecovery
+				if directive == nil || directive.RecordSHA256 != record.ReleaseRecoveryRecordSHA256 {
+					return result, errs.New(errs.KindInternal, "durable Component recovery directive is missing")
+				}
+				phase := agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_UNSPECIFIED
+				switch directive.Phase {
+				case taskassignments.ReleaseRecoveryPhaseProbe:
+					phase = agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROBE
+				case taskassignments.ReleaseRecoveryPhaseCompensate:
+					phase = agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_COMPENSATE
+				case taskassignments.ReleaseRecoveryPhaseProven:
+					phase = agentpb.ComponentRecoveryPhase_COMPONENT_RECOVERY_PHASE_PROVEN
+				default:
+					return result, errs.New(errs.KindInternal, "durable Component recovery phase is invalid")
+				}
+				result.componentRecoveryDigest = append([]byte(nil), result.recoveryDigest...)
+				result.recoveryDigest = nil
+				result.componentRecovery = &agentpb.ComponentRecoveryDirective{
+					StepIds: append([]string(nil), directive.StepIDs...), Cursor: directive.Cursor, Phase: phase,
+					ComponentRecoveryRecordSha256: append([]byte(nil), result.componentRecoveryDigest...),
+					ApplicableCompensationStepIds: append([]string(nil), directive.ApplicableCompensationStepIDs...),
+				}
+			}
+			return result, nil
+		}
 		if record.RestorationAuthority != nil || record.RestorationAuthoritySHA256 != "" ||
-			len(result.recoveryDigest) != 0 {
+			len(result.recoveryDigest) != 0 || record.ComponentRecoveryProcedureSHA256 != "" {
 			return result, errs.New(errs.KindInternal, "non-release assignment carries restoration authority")
 		}
 		return result, nil
 	}
 	authority := record.RestorationAuthority
+	if record.ComponentRecoveryProcedureSHA256 != "" {
+		return result, errs.New(errs.KindInternal, "candidate Release assignment carries Component recovery authority")
+	}
 	authorityDigest, err := hex.DecodeString(record.RestorationAuthoritySHA256)
 	if authority == nil || err != nil || len(authorityDigest) != 32 || authority.TaskID != claim.Task.Record.ID ||
 		authority.OperationID != claim.Task.Record.OperationID || authority.PlanHash != claim.Task.Record.PlanHash {

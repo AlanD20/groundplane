@@ -84,6 +84,19 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) taskjournal.Task
 			}
 		}
 	}
+	if evidence := result.GetComponentRestorationEvidence(); evidence != nil {
+		target := ""
+		switch evidence.GetTarget() {
+		case agentpb.ComponentRestorationTarget_COMPONENT_RESTORATION_TARGET_PREDECESSOR:
+			target = "predecessor"
+		case agentpb.ComponentRestorationTarget_COMPONENT_RESTORATION_TARGET_CANDIDATE_ABSENCE:
+			target = "candidate_absence"
+		}
+		durable.ComponentRestorationEvidence = &taskjournal.TaskComponentRestorationEvidence{
+			ComponentID: evidence.GetComponentId(), ArtifactID: evidence.GetArtifactId(), ServiceID: evidence.GetServiceId(),
+			ComposeProjectName: evidence.GetComposeProjectName(), Target: target, Restored: evidence.GetRestored(),
+		}
+	}
 	for index, project := range result.GetProjects() {
 		durable.Projects[index] = taskjournal.TaskObservedProjectSummary{
 			ProjectName: project.GetProjectName(),
@@ -148,6 +161,15 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 				return errs.New(errs.KindValidationFailed, "Agent candidate absence evidence is invalid or unsorted")
 			}
 			previous = identity
+		}
+	}
+	if evidence := result.GetComponentRestorationEvidence(); evidence != nil {
+		if ids.Validate(ids.KindComponent, evidence.GetComponentId()) != nil ||
+			ids.Validate(ids.KindConfig, evidence.GetArtifactId()) != nil ||
+			ids.Validate(ids.KindService, evidence.GetServiceId()) != nil || evidence.GetComposeProjectName() == "" ||
+			(evidence.GetTarget() != agentpb.ComponentRestorationTarget_COMPONENT_RESTORATION_TARGET_PREDECESSOR &&
+				evidence.GetTarget() != agentpb.ComponentRestorationTarget_COMPONENT_RESTORATION_TARGET_CANDIDATE_ABSENCE) {
+			return errs.New(errs.KindValidationFailed, "Agent Component restoration evidence is invalid")
 		}
 	}
 	if !validComposeTaskDiagnostic(result.GetDiagnostic()) {

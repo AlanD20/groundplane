@@ -54,7 +54,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		child.Params[attachinputs.TaskAttachIDParam] == unit.Target.ID && releasePublication.IsZero() &&
 		componentPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
-	componentChild := unit.Target.Kind == ids.KindComponent && !unit.Removal &&
+	componentChild := unit.Target.Kind == ids.KindComponent &&
 		child.Params[taskjournal.TaskBlueprintComponentUnitParam] == unit.Target.ID &&
 		releasePublication.IsZero() && !componentPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
@@ -75,6 +75,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		if err := componentPublication.ValidateBlueprintChild(
 			child.Owner.EnvironmentID,
 			unit.Target.ID,
+			unit.Removal,
 			componentplanning.TaskIdentity{
 				ID: child.ID, Target: child.Target, Executor: child.Executor,
 				Type: child.Type, CreatedAt: child.CreatedAt,

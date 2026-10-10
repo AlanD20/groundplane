@@ -12,7 +12,8 @@ func TaskResultsEqual(left, right TaskResultRecord) bool {
 		left.ReconciliationRequired != right.ReconciliationRequired || len(left.Projects) != len(right.Projects) ||
 		len(left.ProxyEvidence) != len(right.ProxyEvidence) ||
 		len(left.RecreateEvidence) != len(right.RecreateEvidence) ||
-		!TaskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) {
+		!TaskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) ||
+		!TaskComponentRestorationEvidenceEqual(left.ComponentRestorationEvidence, right.ComponentRestorationEvidence) {
 		return false
 	}
 	for index := range left.Projects {
@@ -32,6 +33,21 @@ func TaskResultsEqual(left, right TaskResultRecord) bool {
 	}
 	return TaskDNSResolverEvidenceEqual(left.DNSResolverCandidateObservation, right.DNSResolverCandidateObservation) &&
 		TaskDNSResolverEvidenceEqual(left.DNSResolverRollbackObservation, right.DNSResolverRollbackObservation)
+}
+
+func TaskComponentRestorationEvidenceEqual(left, right *TaskComponentRestorationEvidence) bool {
+	if (left == nil) != (right == nil) {
+		return false
+	}
+	return left == nil || *left == *right
+}
+
+func CloneTaskComponentRestorationEvidence(value *TaskComponentRestorationEvidence) *TaskComponentRestorationEvidence {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 func TaskCandidateAbsenceEvidenceEqual(left, right *TaskCandidateAbsenceEvidence) bool {

@@ -11,7 +11,7 @@ func validateBackupTaskResult(ack *agentpb.TaskAck) error {
 	result := ack.GetBackupResult()
 	if result == nil || result.RecoveryRequired == nil || executionplan.RejectUnknown(ack) != nil ||
 		ack.AssignmentGeneration == 0 ||
-		len(ack.ReleaseRecoveryRecordSha256) != 0 {
+		len(ack.ReleaseRecoveryRecordSha256) != 0 || len(ack.ComponentRecoveryRecordSha256) != 0 {
 		return errs.New(errs.KindValidationFailed, "Agent Backup Task result is invalid")
 	}
 	if ack.Terminal == agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED &&

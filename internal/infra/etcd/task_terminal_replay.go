@@ -22,8 +22,9 @@ func (repository *TaskRepository) acknowledgeTerminalTaskReplay(
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task assignment index is orphaned")
 	}
 	if executor == taskjournal.TaskExecutorAgent && result != nil &&
-		task.Params[releaserender.TaskReleasePublicationParam] != "" {
-		normalizedStatus, normalizedResult, handled, normalizeErr := repository.normalizeReleaseRecoveryTerminalReplay(
+		(task.Params[releaserender.TaskReleasePublicationParam] != "" ||
+			task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "") {
+		normalizedStatus, normalizedResult, handled, normalizeErr := repository.normalizeRecoveryTerminalReplay(
 			ctx,
 			task,
 			terminalStatus,

@@ -6,25 +6,27 @@ import (
 )
 
 type Assignment struct {
-	BackupAuthority             *agentpb.BackupTaskAuthority
-	BackupResume                *agentpb.BackupTaskResume
-	BackupAuthoritySHA256       []byte
-	AssignmentGeneration        uint64
-	AssignmentID                string
-	TaskID                      string
-	OperationID                 string
-	RetryOf                     string
-	Plan                        *agentpb.ExecutionPlan
-	ScriptArtifacts             *agentpb.ScriptAssignmentArtifacts
-	ScriptCheckpoints           []*agentpb.ScriptExecutionCheckpoint
-	AutomaticReconcile          bool
-	ExecutionEpoch              uint32
-	ExecutionMode               agentpb.TaskExecutionMode
-	ForwardDeadline             time.Time
-	RecoveryDeadline            time.Time
-	Deadline                    time.Time
-	RecoveryProofRequired       bool
-	RestorationAuthority        *agentpb.ReleaseRestorationAuthority
-	ReleaseRecoveryDirective    *agentpb.ReleaseRecoveryDirective
-	ReleaseRecoveryRecordSHA256 []byte
+	BackupAuthority               *agentpb.BackupTaskAuthority
+	BackupResume                  *agentpb.BackupTaskResume
+	BackupAuthoritySHA256         []byte
+	AssignmentGeneration          uint64
+	AssignmentID                  string
+	TaskID                        string
+	OperationID                   string
+	RetryOf                       string
+	Plan                          *agentpb.ExecutionPlan
+	ScriptArtifacts               *agentpb.ScriptAssignmentArtifacts
+	ScriptCheckpoints             []*agentpb.ScriptExecutionCheckpoint
+	AutomaticReconcile            bool
+	ExecutionEpoch                uint32
+	ExecutionMode                 agentpb.TaskExecutionMode
+	ForwardDeadline               time.Time
+	RecoveryDeadline              time.Time
+	Deadline                      time.Time
+	RecoveryProofRequired         bool
+	RestorationAuthority          *agentpb.ReleaseRestorationAuthority
+	ReleaseRecoveryDirective      *agentpb.ReleaseRecoveryDirective
+	ReleaseRecoveryRecordSHA256   []byte
+	ComponentRecoveryDirective    *agentpb.ComponentRecoveryDirective
+	ComponentRecoveryRecordSHA256 []byte
 }
