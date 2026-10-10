@@ -39,6 +39,7 @@ type ComponentTaskPreparation struct {
 	appliedProjectionPresent  bool
 	appliedProjectionRevision int64
 	desiredProjectionRevision int64
+	unitRuntimeCondition      *etcdstore.Condition
 	addresses                 []componentTaskAddressPreparation
 }
 
@@ -349,6 +350,7 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		appliedProjectionPresent:  found,
 		appliedProjectionRevision: selected.Revision,
 		desiredProjectionRevision: authority.desiredHeadRevision,
+		unitRuntimeCondition:      authority.unitRuntimeCondition,
 		addresses:                 addresses,
 	}
 	if err := ValidateComponentTaskPreparation(preparation); err != nil {
@@ -488,7 +490,12 @@ func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) Compone
 		appliedProjectionPresent:  preparation.appliedProjectionPresent,
 		appliedProjectionRevision: preparation.appliedProjectionRevision,
 		desiredProjectionRevision: preparation.desiredProjectionRevision,
+		unitRuntimeCondition:      preparation.unitRuntimeCondition,
 		addresses:                 make([]componentTaskAddressPreparation, len(preparation.addresses)),
+	}
+	if preparation.unitRuntimeCondition != nil {
+		condition := *preparation.unitRuntimeCondition
+		clone.unitRuntimeCondition = &condition
 	}
 	for index, address := range preparation.addresses {
 		clone.addresses[index] = address

@@ -168,6 +168,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			pinned.artifact,
 			"",
 			hasBlueprintReleases,
+			nil,
 		)
 		if err != nil {
 			return nil, err
@@ -305,6 +306,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			pinned.artifact,
 			prerequisite,
 			false,
+			nil,
 		)
 		if err != nil {
 			return nil, err

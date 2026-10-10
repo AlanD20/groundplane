@@ -57,6 +57,9 @@ func (service *Service) Prepare(
 	if unit.Target.Kind == ids.KindAttach {
 		return service.prepareAuthoredAttachChild(ctx, parent, unit, timeoutSeconds)
 	}
+	if unit.Target.Kind == ids.KindComponent {
+		return service.prepareAuthoredComponentChild(ctx, parent, unit, timeoutSeconds)
+	}
 	if unit.Target.Kind != ids.KindService {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindStateConflict, "Blueprint unit has no child preparer",

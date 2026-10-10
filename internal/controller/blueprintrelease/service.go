@@ -169,6 +169,7 @@ func (service *Service) prepareSelected(
 			input.Artifact,
 			prerequisite,
 			false,
+			nil,
 		)
 		if buildErr != nil {
 			return Prepared{}, buildErr

@@ -67,25 +67,36 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		zones = append(zones, zoneID)
 	}
 	sort.Strings(zones)
-	desiredRevisionID, desiredZones, err := componentTaskDesiredProjectionZones(
-		ctx, repository.store, task, intent, zones,
-	)
+	var authority componentTaskAcknowledgementAuthority
+	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+		authority, err = componentTaskBlueprintChildAuthority(
+			ctx, repository.store, task, intent, zones, revision,
+		)
+	} else {
+		authority, err = componentTaskDesiredProjectionZones(ctx, repository.store, task, intent, zones)
+	}
 	if err != nil {
 		return componentTaskChange{}, err
 	}
 	keys := make([]string, 0, 3+len(intent.Candidates)+(2*len(zones)))
-	keys = append(
-		keys,
-		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-		blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
-	)
+	keys = append(keys, environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID))
+	headOffset := -1
+	if authority.child == nil {
+		headOffset = len(keys)
+		keys = append(keys, blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID))
+	}
+	rootOffset := len(keys)
+	rootKey := blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, authority.revisionID)
+	keys = append(keys, rootKey)
+	componentOffset := len(keys)
 	for _, candidate := range intent.Candidates {
 		keys = append(keys, componentrecord.RecordKey(candidate.Current.Desired.ID))
 	}
+	registryOffset := len(keys)
 	for _, zoneID := range zones {
 		keys = append(keys, networkreservations.ComponentAddressRegistryKey(zoneID))
 	}
+	tombstoneOffset := len(keys)
 	for _, zoneID := range zones {
 		keys = append(keys, deletions.TombstoneKey("zone", zoneID))
 	}
@@ -93,14 +104,28 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil ||
-		state.Values[1] == nil || state.Values[2] == nil ||
+	if state == nil || state.ReadRevision != revision || len(state.Values) != len(keys) ||
+		state.Values[0] == nil || state.Values[rootOffset] == nil ||
 		string(state.Values[0].Value) != task.ID {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate ownership changed")
 	}
-	headRevisionID, err := idempotencyrecord.DecodeTaskReference(state.Values[1].Value)
-	if err != nil || headRevisionID != desiredRevisionID {
-		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
+	if headOffset >= 0 {
+		if state.Values[headOffset] == nil {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
+		}
+		headRevisionID, decodeErr := idempotencyrecord.DecodeTaskReference(state.Values[headOffset].Value)
+		if decodeErr != nil || headRevisionID != authority.revisionID {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
+		}
+	} else {
+		seal, decodeErr := blueprints.DecodeEnvironmentBlueprintSeal(state.Values[rootOffset].Value)
+		if decodeErr != nil || seal.EnvironmentID != intent.EnvironmentID ||
+			seal.RevisionID != authority.revisionID || seal.RenderGeneration != uint64(task.RenderGeneration) {
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Component parent root changed",
+			)
+		}
 	}
 	change := componentTaskChange{
 		applies: true,
@@ -110,22 +135,28 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 				Key:         environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 				ModRevision: state.Values[0].ModRevision,
 			},
-			{
-				Key:         blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-				ModRevision: state.Values[1].ModRevision,
-			},
 		},
 	}
-	if componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
+	if headOffset >= 0 {
 		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key: blueprints.EnvironmentBlueprintRootKey(
-				intent.EnvironmentID,
-				desiredRevisionID,
-			), ModRevision: state.Values[2].ModRevision,
+			Key:         blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
+			ModRevision: state.Values[headOffset].ModRevision,
+		})
+	}
+	if authority.requireRootCAS ||
+		componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
+		change.conditions = append(change.conditions, etcdstore.Condition{
+			Key: rootKey, ModRevision: state.Values[rootOffset].ModRevision,
+		})
+	}
+	if authority.child != nil {
+		change.conditions = append(change.conditions, etcdstore.Condition{
+			Key:         componentplanning.ChildExecutionKey(task.ID),
+			ModRevision: authority.child.Revision,
 		})
 	}
 	for index, candidate := range intent.Candidates {
-		value := state.Values[index+3]
+		value := state.Values[componentOffset+index]
 		if value == nil || value.ModRevision != candidate.CurrentRevision {
 			return componentTaskChange{}, errs.New(
 				errs.KindStateConflict,
@@ -149,13 +180,11 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	zoneRecords := make(map[string]zonerecord.Record, len(zones))
 	registries := make(map[string]networkreservations.ComponentAddressRegistry, len(zones))
 	registryValues := make(map[string]*etcdstore.KeyValue, len(zones))
-	registryOffset := 3 + len(intent.Candidates)
-	tombstoneOffset := registryOffset + len(zones)
 	for index, zoneID := range zones {
 		if state.Values[tombstoneOffset+index] != nil {
 			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Zone was removed")
 		}
-		zone := desiredZones[zoneID]
+		zone := authority.zones[zoneID]
 		registryValue := state.Values[registryOffset+index]
 		var decodeErr error
 		registry := networkreservations.ComponentAddressRegistry{Reservations: map[string]string{}}
@@ -228,6 +257,57 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			change.values = append(change.values, value)
 			change.mutations = append(change.mutations, etcdstore.Mutation{
 				Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(candidate.Candidate.Desired.ID), Value: value,
+			})
+			currentRuntime, runtimePresent, runtimeErr := componentplanning.ReadRuntime(
+				ctx,
+				repository.store,
+				candidate.Current.Desired.ID,
+				revision,
+			)
+			if runtimeErr != nil {
+				clearComponentTaskChange(change)
+				return componentTaskChange{}, runtimeErr
+			}
+			acknowledged := currentRuntime.Record.Component
+			acknowledged.Runtime.Healthy = candidate.Current.Runtime.Healthy
+			if runtimePresent && !componentrecord.EqualRecord(acknowledged, candidate.Current) {
+				clearComponentTaskChange(change)
+				return componentTaskChange{}, errs.New(
+					errs.KindStateConflict,
+					"acknowledged Component runtime no longer matches candidate base",
+				)
+			}
+			runtimeCondition := etcdstore.Condition{
+				Key: componentplanning.RuntimeKey(candidate.Current.Desired.ID),
+			}
+			if runtimePresent {
+				runtimeCondition.ModRevision = currentRuntime.Revision
+			}
+			change.conditions = append(change.conditions, runtimeCondition)
+			runtimeArtifact := authority.runtime.artifact
+			if !promoted.Desired.Enabled {
+				runtimeArtifact = nil
+			}
+			runtimeValue, encodeErr := componentplanning.EncodeRuntime(componentplanning.Runtime{
+				EnvironmentID:    intent.EnvironmentID,
+				Component:        promoted,
+				RevisionID:       authority.revisionID,
+				RenderGeneration: uint64(task.RenderGeneration),
+				Artifact:         append([]byte(nil), runtimeArtifact...),
+				Zones:            append([]zonerecord.Record(nil), authority.runtime.zones...),
+				TaskID:           task.ID,
+				PlanID:           task.PlanID,
+				PlanHash:         task.PlanHash,
+			})
+			if encodeErr != nil {
+				clearComponentTaskChange(change)
+				return componentTaskChange{}, encodeErr
+			}
+			change.values = append(change.values, runtimeValue)
+			change.mutations = append(change.mutations, etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   componentplanning.RuntimeKey(candidate.Current.Desired.ID),
+				Value: runtimeValue,
 			})
 		}
 		change.mutations = append(change.mutations, componentrecord.WriteFenceMutation(task.ID))

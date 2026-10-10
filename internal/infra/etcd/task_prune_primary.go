@@ -64,6 +64,12 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskStorageKey(current.Record.TaskID)},
 	}
+	componentConditions, componentMutations, err := repository.prepareBlueprintComponentExecutionPrune(ctx, task, taskResult.ReadRevision)
+	if err != nil {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
+	}
+	conditions = append(conditions, componentConditions...)
+	mutations = append(mutations, componentMutations...)
 	nativeConditions, nativeMutations, err := repository.prepareBackupNativeTaskPrune(
 		ctx, task, taskResult.ReadRevision,
 	)

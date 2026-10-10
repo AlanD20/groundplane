@@ -17,6 +17,7 @@ import (
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -53,6 +54,12 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		retry.RenderGeneration != source.RenderGeneration {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry changed its pinned Task")
 	}
+	if source.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+		return componentTaskChange{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component children require a new parent Apply",
+		)
+	}
 	retryIntent, err := environmentchanges.NewComponentTaskIntent(
 		retry.ID,
 		intent.EnvironmentID,
@@ -81,12 +88,13 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		zones = append(zones, zoneID)
 	}
 	sort.Strings(zones)
-	desiredRevisionID, desiredZones, err := componentTaskDesiredProjectionZones(
+	authority, err := componentTaskDesiredProjectionZones(
 		ctx, repository.store, source, intent, zones,
 	)
 	if err != nil {
 		return componentTaskChange{}, err
 	}
+	desiredRevisionID, desiredZones := authority.revisionID, authority.zones
 	blueprintRetry, err := componentTaskRetryIsBlueprint(source)
 	if err != nil {
 		return componentTaskChange{}, err

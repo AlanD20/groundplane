@@ -100,6 +100,9 @@ type environmentBlueprintRepository interface {
 		string,
 		int64,
 	) (componentplanning.FrozenProjectionAuthority, error)
+	PrepareFrozenProjectionAuthority(context.Context, componentplanning.FrozenProjectionAuthorityInput) (componentplanning.FrozenProjectionAuthority, error)
+	PrepareFrozenComponentUnitAuthority(context.Context, componentplanning.FrozenProjectionAuthorityInput, etcdstore.Versioned[componentrecord.Record]) (componentplanning.FrozenProjectionAuthority, error)
+	PrepareComponentTaskPublication(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], componentplanning.TaskIdentity, []blueprints.EnvironmentBlueprintZoneChange, componentplanning.ComponentTaskPreparation) (componentplanning.Publication, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageClaimRequest,

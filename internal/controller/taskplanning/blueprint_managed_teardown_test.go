@@ -92,7 +92,7 @@ func TestBlueprintManagedComponentTeardownBuildsTargetedHistoricalRemoval(t *tes
 	}
 
 	result, err := resolver.BlueprintManagedComponentTeardown(
-		context.Background(), task, projection, candidate, "", false,
+		context.Background(), task, projection, candidate, "", false, nil,
 	)
 	if err != nil {
 		t.Fatalf("BlueprintManagedComponentTeardown() error = %v", err)

@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -105,8 +106,9 @@ func TestComponentTaskIntentAcceptsEnabledHealthRepair(t *testing.T) {
 }
 
 func TestTaskAcknowledgementPromotesComponentCandidateAndMovesReservation(t *testing.T) {
-	// Rationale: a successful Agent Task must publish Component state and drop
-	// the superseded Caddy address in the same terminal transaction.
+	// CMP-04/05: promotion must atomically retain its exact acknowledged artifact
+	// and move the address. The next unit must not depend on an unrelated aggregate
+	// projection, which may not yet exist during resource-level Blueprint Apply.
 	t.Parallel()
 	ctx := context.Background()
 	store := newMemoryTaskStore()
@@ -141,6 +143,41 @@ func TestTaskAcknowledgementPromotesComponentCandidateAndMovesReservation(t *tes
 		ctx, agentID, 3, task.ID, taskAssignmentIDForTest(t, repository,
 			task.ID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(), terminalAt); err != nil {
 		t.Fatalf("AcknowledgeTask(replay) error = %v", err)
+	}
+	runtime, found, err := testcomponentplanning.ReadRuntime(ctx, store, records.candidate.Desired.ID, 0)
+	if err != nil || !found || runtime.Record.TaskID != task.ID || runtime.Record.PlanHash != task.PlanHash ||
+		runtime.Revision != terminal.Revision || runtime.Record.Component.Runtime.PinnedIPv4 != "10.40.11.2" {
+		t.Fatalf("acknowledged Component runtime = %#v, found=%v, error=%v", runtime, found, err)
+	}
+	seedTaskRepositoryValue(t, store,
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environmentID), []byte("unrelated aggregate unavailable"))
+	state, err := store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{
+		testcomponents.RecordKey(records.candidate.Desired.ID), testblueprints.EnvironmentBlueprintHeadKey(environmentID),
+	}})
+	if err != nil || state == nil || len(state.Values) != 2 || state.Values[0] == nil || state.Values[1] == nil {
+		t.Fatalf("read current Component authority = %#v, %v", state, err)
+	}
+	defer testkeyvalue.ClearValues(state.Values)
+	current, err := testcomponents.DecodeRecord(state.Values[0].Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Observation changes must not erase acknowledged deployment authority.
+	current.Runtime.Healthy = false
+	authority, err := testcomponentplanning.NewPlanner(store).PrepareFrozenComponentUnitAuthority(ctx,
+		testcomponentplanning.FrozenProjectionAuthorityInput{
+			EnvironmentID: environmentID, ReadRevision: state.ReadRevision,
+			DesiredHeadRevision: state.Values[1].ModRevision, DesiredRevisionID: task.ID,
+			RuntimeSourceAuthority: testcomponentplanning.ManagedRuntimeSourceAuthorityApplied,
+		}, testkeyvalue.Versioned[testcomponents.Record]{Record: current,
+			Revision: state.Values[0].ModRevision, ReadRevision: state.ReadRevision})
+	if err != nil {
+		t.Fatalf("prepare Component unit without aggregate = %v", err)
+	}
+	predecessor, found := authority.ComponentPredecessor()
+	if !found || !bytes.Equal(predecessor.ComposeArtifact, runtime.Record.Artifact) ||
+		predecessor.RevisionID != task.ID {
+		t.Fatal("Component unit did not retain its exact acknowledged predecessor")
 	}
 }
 

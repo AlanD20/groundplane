@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -32,6 +33,7 @@ func (resolver *TaskPlanResolver) BlueprintManagedComponentTeardown(
 	candidate *agentpb.ComposeArtifact,
 	prerequisite string,
 	releaseForward bool,
+	pinnedSources map[string]projectionrecord.EnvironmentComposeProjection,
 ) (BlueprintManagedComponentTeardown, error) {
 	desiredRevisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	if resolver == nil || resolver.blueprints == nil || ctx == nil || candidate == nil ||
@@ -60,7 +62,13 @@ func (resolver *TaskPlanResolver) BlueprintManagedComponentTeardown(
 	artifacts := map[string]*agentpb.ComposeArtifact{candidate.GetArtifactId(): candidate}
 	for _, source := range task.ManagedComponentTeardownSources {
 		sourceProjection := projection
-		if source.RevisionID != projection.RevisionID {
+		if taskjournal.IsBlueprintChild(task.Params) && task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+			var present bool
+			sourceProjection, present = pinnedSources[source.ComponentID]
+			if !present {
+				return BlueprintManagedComponentTeardown{}, errs.New(errs.KindStateConflict, "Blueprint Component child has no exact predecessor artifact")
+			}
+		} else if source.RevisionID != projection.RevisionID {
 			loaded, found, loadErr := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
 				ctx,
 				projection.EnvironmentID,

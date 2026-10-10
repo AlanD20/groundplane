@@ -68,7 +68,11 @@ func (repository *Planner) PrepareComponentTaskPublication(
 	if preparation.appliedProjectionPresent {
 		appliedProjectionCondition.ModRevision = preparation.appliedProjectionRevision
 	}
-	publication.conditions = append(publication.conditions, appliedProjectionCondition)
+	if preparation.unitRuntimeCondition != nil {
+		publication.conditions = append(publication.conditions, *preparation.unitRuntimeCondition)
+	} else {
+		publication.conditions = append(publication.conditions, appliedProjectionCondition)
+	}
 	publication.conditions = append(publication.conditions, etcdstore.Condition{
 		Key: blueprints.EnvironmentBlueprintHeadKey(
 			environment.Record.ID,
@@ -148,6 +152,7 @@ func ComponentTaskPreparationIsZero(preparation ComponentTaskPreparation) bool {
 		len(preparation.managedRuntimeSources) == 0 &&
 		!preparation.appliedProjectionPresent && preparation.appliedProjectionRevision == 0 &&
 		preparation.desiredProjectionRevision == 0 &&
+		preparation.unitRuntimeCondition == nil &&
 		len(preparation.addresses) == 0
 }
 

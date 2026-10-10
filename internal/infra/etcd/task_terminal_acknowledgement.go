@@ -513,6 +513,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			result,
 			blueprintCandidateChange.applies,
 			blueprintAttachChange.verifiedChildResult,
+			componentChange.applies,
 		)
 		childConditions, childMutations, err := repository.prepareBlueprintChildReceipt(
 			ctx, task, assignment, terminalStatus, verifiedBlueprintChildResult, terminalAt,

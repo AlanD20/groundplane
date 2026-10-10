@@ -69,6 +69,9 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		}
 	}
 	if componentChild {
+		if err := componentPublication.ValidateChildExecution(child.ID, parentID, child.PlanID, child.PlanHash, uint64(child.RenderGeneration)); err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
 		if err := componentPublication.ValidateBlueprintChild(
 			child.Owner.EnvironmentID,
 			unit.Target.ID,

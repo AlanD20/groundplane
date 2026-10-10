@@ -22,9 +22,14 @@ func blueprintChildTerminalResultVerified(
 	result *taskjournal.TaskResultRecord,
 	verifiedCandidate bool,
 	verifiedAttach bool,
+	verifiedComponent bool,
 ) bool {
 	if task.Params[attachinputs.TaskAttachIDParam] != "" {
 		return verifiedAttach
+	}
+	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+		return verifiedComponent && result != nil &&
+			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
 	}
 	if verifiedCandidate {
 		return true
@@ -81,7 +86,11 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	verifiedNetworkEffect := verifiedResult && blueprintNetworkChildTaskMatches(task, execution.Unit)
 	verifiedVolumeEffect := verifiedResult && blueprintVolumeChildTaskMatches(task, execution.Unit)
 	verifiedAttachEffect := verifiedResult && blueprintAttachChildTaskMatches(task, execution.Unit)
-	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect || verifiedAttachEffect
+	verifiedComponentEffect := verifiedResult && !execution.Unit.Removal &&
+		execution.Unit.Target.Kind == ids.KindComponent &&
+		task.Params[taskjournal.TaskBlueprintComponentUnitParam] == execution.Unit.Target.ID
+	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect ||
+		verifiedAttachEffect || verifiedComponentEffect
 	if status != taskjournal.TaskStatusCompleted &&
 		(status != taskjournal.TaskStatusFailed && status != taskjournal.TaskStatusAborted ||
 			!verifiedEffect) {

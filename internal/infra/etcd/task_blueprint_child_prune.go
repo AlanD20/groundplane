@@ -2,8 +2,10 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -40,4 +42,53 @@ func (repository *TaskRepository) blueprintChildPruneHeld(
 		return false, errs.New(errs.KindInternal, "Blueprint child prune claim changed")
 	}
 	return true, nil
+}
+
+// The acknowledged Component runtime owns its own artifact. Once no execution,
+// assignment or recovery owner remains, its retired child's recipe can expire
+// atomically with the Task; a terminal report alone does not release it.
+func (repository *TaskRepository) prepareBlueprintComponentExecutionPrune(
+	ctx context.Context,
+	task TaskRecord,
+	revision int64,
+) ([]keyvalue.Condition, []keyvalue.Mutation, error) {
+	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] == "" {
+		return nil, nil, nil
+	}
+	stored, err := componentplanning.ReadChildExecution(ctx, repository.store, task.ID, revision)
+	if err != nil {
+		return nil, nil, err
+	}
+	plan, err := stored.Record.ExecutionPlan()
+	if err != nil {
+		return nil, nil, err
+	}
+	if !taskjournal.IsBlueprintChild(task.Params) || stored.Record.ParentTaskID != task.Params[taskjournal.TaskBlueprintParentParam] ||
+		stored.Record.EnvironmentID != task.Owner.EnvironmentID || stored.Record.Component.Desired.ID != task.Params[taskjournal.TaskBlueprintComponentUnitParam] ||
+		plan.GetPlanId() != task.PlanID || hex.EncodeToString(plan.GetPlanHash()) != task.PlanHash ||
+		plan.GetRenderGeneration() != uint64(task.RenderGeneration) {
+		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component recipe prune ownership changed")
+	}
+	keys := []string{
+		blueprintunits.ExecutionKey(task.Owner.EnvironmentID, task.PlanID),
+		taskjournal.TaskActiveOperationKey(task.OperationID),
+		taskjournal.TaskAssignmentIndexKey(task.ID),
+		taskjournal.TaskRecoveryProofRequiredKey(task.ID),
+	}
+	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return nil, nil, err
+	}
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
+		return nil, nil, errs.New(errs.KindInternal, "Blueprint Component recipe prune read is incomplete")
+	}
+	defer keyvalue.ClearValues(read.Values)
+	conditions := []keyvalue.Condition{{Key: componentplanning.ChildExecutionKey(task.ID), ModRevision: stored.Revision}}
+	for index, key := range keys {
+		if read.Values[index] != nil {
+			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component recipe still has an execution or recovery owner")
+		}
+		conditions = append(conditions, keyvalue.Condition{Key: key})
+	}
+	return conditions, []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: componentplanning.ChildExecutionKey(task.ID)}}, nil
 }

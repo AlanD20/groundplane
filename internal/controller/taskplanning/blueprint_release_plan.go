@@ -265,6 +265,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 			artifact,
 			managedPrerequisite,
 			true,
+			nil,
 		)
 		if err != nil {
 			return etcd.TaskRecord{}, nil, err
