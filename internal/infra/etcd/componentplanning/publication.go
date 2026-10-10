@@ -151,6 +151,35 @@ func ComponentTaskPreparationIsZero(preparation ComponentTaskPreparation) bool {
 		len(preparation.addresses) == 0
 }
 
+func (publication Publication) IsZero() bool {
+	return ComponentTaskPreparationIsZero(publication.preparation) &&
+		len(publication.conditions) == 0 && len(publication.mutations) == 0 &&
+		len(publication.values) == 0 && len(publication.secrets) == 0
+}
+
+// ValidateBlueprintChild binds one publication fragment to one private
+// per-Component child. Multi-Component intents remain valid for aggregate Apply,
+// but cannot be smuggled through a resource-unit publication.
+func (publication Publication) ValidateBlueprintChild(
+	environmentID string,
+	componentID string,
+	task TaskIdentity,
+) error {
+	if publication.IsZero() || len(publication.preparation.Intent.Candidates) != 1 ||
+		publication.preparation.Intent.EnvironmentID != environmentID ||
+		publication.preparation.Intent.Candidates[0].Current.Desired.ID != componentID ||
+		publication.preparation.Intent.Candidates[0].Candidate.Desired.ID != componentID {
+		return errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Component child publication does not match its unit",
+		)
+	}
+	if err := ValidateComponentTaskPreparation(publication.preparation); err != nil {
+		return err
+	}
+	return ValidateComponentTaskOwner(task, publication.preparation.Intent)
+}
+
 func (publication Publication) Classify(values []*etcdstore.KeyValue) error {
 	if len(values) != len(publication.conditions) {
 		return errs.New(errs.KindInternal, "Blueprint Component compare evidence is incomplete")
@@ -222,4 +251,12 @@ func ClearPreparedComponentTaskPublication(publication Publication) {
 	for _, value := range publication.values {
 		clear(value)
 	}
+}
+
+func (publication *Publication) Clear() {
+	if publication == nil {
+		return
+	}
+	ClearPreparedComponentTaskPublication(*publication)
+	*publication = Publication{}
 }

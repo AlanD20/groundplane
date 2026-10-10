@@ -93,7 +93,13 @@ type environmentBlueprintRepository interface {
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]componentplanning.EnvironmentComponentCandidateInput,
 		time.Time,
+		componentplanning.FrozenProjectionAuthority,
 	) (componentplanning.ComponentTaskPreparation, error)
+	ReadCurrentProjectionAuthority(
+		context.Context,
+		string,
+		int64,
+	) (componentplanning.FrozenProjectionAuthority, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageClaimRequest,

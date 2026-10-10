@@ -127,6 +127,12 @@ func testEnvironmentComponentTaskPublication(t *testing.T, combined bool) {
 		t.Fatalf("CreateEnvironmentComponent() error = %v", err)
 	}
 	taskID := ids.NewAt(ids.KindTask, now, 1403)
+	authority, err := repository.ReadCurrentProjectionAuthority(
+		ctx, environment.Record.ID, current.ReadRevision,
+	)
+	if err != nil {
+		t.Fatalf("ReadCurrentProjectionAuthority() error = %v", err)
+	}
 	preparation, err := repository.PrepareEnvironmentComponentTask(
 		ctx,
 		taskID,
@@ -144,6 +150,7 @@ func testEnvironmentComponentTaskPublication(t *testing.T, combined bool) {
 			},
 		}},
 		now,
+		authority,
 	)
 	if err != nil {
 		t.Fatalf("PrepareEnvironmentComponentTask() error = %v", err)
@@ -274,6 +281,7 @@ func testEnvironmentComponentTaskPublication(t *testing.T, combined bool) {
 			GeneratedServices: []string{ids.NewAt(ids.KindService, now, 1407)},
 		}}},
 		now,
+		authority,
 	)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("PrepareEnvironmentComponentTask(active) error = %v", err)
@@ -325,6 +333,12 @@ func TestPrepareEnvironmentComponentTaskAllowsInitialProjectionAbsence(t *testin
 	}
 
 	taskID := ids.NewAt(ids.KindTask, now, 1504)
+	authority, err := repository.ReadCurrentProjectionAuthority(
+		ctx, environment.Record.ID, current.ReadRevision,
+	)
+	if err != nil {
+		t.Fatalf("ReadCurrentProjectionAuthority() error = %v", err)
+	}
 	preparation, err := repository.PrepareEnvironmentComponentTask(
 		ctx,
 		taskID,
@@ -335,6 +349,7 @@ func TestPrepareEnvironmentComponentTaskAllowsInitialProjectionAbsence(t *testin
 			Candidate: candidate,
 		}},
 		now,
+		authority,
 	)
 	if err != nil {
 		t.Fatalf("PrepareEnvironmentComponentTask() error = %v", err)
@@ -371,6 +386,7 @@ func TestPrepareEnvironmentComponentTaskAllowsInitialProjectionAbsence(t *testin
 		[]testblueprints.EnvironmentBlueprintZoneChange{{Current: &currentZone, Record: zone}},
 		[]testcomponentplanning.EnvironmentComponentCandidateInput{{Current: current, Candidate: candidate}},
 		now,
+		authority,
 	)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("PrepareEnvironmentComponentTask(existing Zone) error = %v", err)
@@ -448,6 +464,12 @@ func TestPrepareEnvironmentComponentTaskUsesAppliedProjectionAuthority(t *testin
 		t.Fatal(err)
 	}
 	zoneChanges := []testblueprints.EnvironmentBlueprintZoneChange{{Current: &currentZone, Record: zone}}
+	authority, err := repository.ReadCurrentProjectionAuthority(
+		ctx, environment.Record.ID, current.ReadRevision,
+	)
+	if err != nil {
+		t.Fatalf("ReadCurrentProjectionAuthority() error = %v", err)
+	}
 	preparation, err := repository.PrepareEnvironmentComponentTask(
 		ctx,
 		task.ID,
@@ -457,6 +479,7 @@ func TestPrepareEnvironmentComponentTaskUsesAppliedProjectionAuthority(t *testin
 			{Current: current, Candidate: candidate},
 		},
 		task.CreatedAt,
+		authority,
 	)
 	if err != nil {
 		t.Fatalf("PrepareEnvironmentComponentTask() = %#v, %v", preparation, err)
@@ -600,6 +623,12 @@ func TestPrepareEnvironmentComponentTaskRetainsPrimaryReservationWhenAddingSecon
 		{Current: &selectedZone, Record: existingZone},
 		{Record: newZone},
 	}
+	authority, err := repository.ReadCurrentProjectionAuthority(
+		ctx, environment.Record.ID, current.ReadRevision,
+	)
+	if err != nil {
+		t.Fatalf("ReadCurrentProjectionAuthority() error = %v", err)
+	}
 	preparation, err := repository.PrepareEnvironmentComponentTask(
 		ctx, taskID, environment.Record.ID,
 		zoneChanges,
@@ -610,7 +639,7 @@ func TestPrepareEnvironmentComponentTaskRetainsPrimaryReservationWhenAddingSecon
 				existingZone.Desired.ID, newZone.Desired.ID,
 			}}},
 			GeneratedServices: []string{serviceID},
-		}}}, now,
+		}}}, now, authority,
 	)
 	if err != nil || preparation.Intent.Candidates[0].Candidate.Runtime.PinnedIPv4 != component.Runtime.PinnedIPv4 {
 		t.Fatalf("PrepareEnvironmentComponentTask(mixed Zones) = %#v, %v", preparation, err)

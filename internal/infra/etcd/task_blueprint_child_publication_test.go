@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -151,11 +152,15 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := repository.PublishBlueprintChild(ctx, parent.ID, child, unit, publication)
+	created, err := repository.PublishBlueprintChild(
+		ctx, parent.ID, child, unit, publication, testcomponentplanning.Publication{},
+	)
 	if err != nil || created.Record.ID != child.ID {
 		t.Fatalf("publish child = %#v, %v", created, err)
 	}
-	if _, err := repository.PublishBlueprintChild(ctx, parent.ID, child, unit, publication); err == nil {
+	if _, err := repository.PublishBlueprintChild(
+		ctx, parent.ID, child, unit, publication, testcomponentplanning.Publication{},
+	); err == nil {
 		t.Fatal("same ready unit was published twice")
 	}
 	ledger, err := blueprintunits.NewRepository(store)

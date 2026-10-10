@@ -75,6 +75,14 @@ func (service *Service) prepareBlueprintComponents(
 	}
 	preparation := componentplanning.ComponentTaskPreparation{}
 	if len(inputs) != 0 {
+		authority, authorityErr := service.repository.ReadCurrentProjectionAuthority(
+			ctx,
+			environmentID,
+			inputs[0].Current.ReadRevision,
+		)
+		if authorityErr != nil {
+			return componentplanning.ComponentTaskPreparation{}, nil, nil, authorityErr
+		}
 		preparation, err = service.repository.PrepareEnvironmentComponentTask(
 			ctx,
 			taskID,
@@ -82,6 +90,7 @@ func (service *Service) prepareBlueprintComponents(
 			zoneChanges,
 			inputs,
 			createdAt,
+			authority,
 		)
 		if err != nil {
 			return componentplanning.ComponentTaskPreparation{}, nil, nil, err

@@ -60,6 +60,7 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	inputs []EnvironmentComponentCandidateInput,
 	createdAt time.Time,
+	authority FrozenProjectionAuthority,
 ) (ComponentTaskPreparation, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return ComponentTaskPreparation{}, err
@@ -147,35 +148,15 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 			)
 		}
 	}
-	appliedState, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID)}, Revision: fixedRevision,
-	})
-	if err != nil {
-		return ComponentTaskPreparation{}, err
-	}
-	if appliedState == nil || appliedState.ReadRevision != fixedRevision || len(appliedState.Values) != 1 {
+	if authority.environmentID != environmentID || authority.readRevision != fixedRevision ||
+		authority.desiredHeadRevision < 0 {
 		return ComponentTaskPreparation{}, errs.New(
-			errs.KindInternal,
-			"Component candidate applied projection read is incomplete",
+			errs.KindValidationFailed,
+			"Component candidate projection authority changed",
 		)
 	}
-	appliedValue := appliedState.Values[0]
-	found := appliedValue != nil
-	selected := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: fixedRevision}
-	if found {
-		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(appliedValue.Value)
-		if decodeErr != nil {
-			return ComponentTaskPreparation{}, decodeErr
-		}
-		if projection.EnvironmentID != environmentID {
-			return ComponentTaskPreparation{}, errs.New(
-				errs.KindStateConflict,
-				"Component candidate applied Environment projection changed",
-			)
-		}
-		selected.Record = projection
-		selected.Revision = appliedValue.ModRevision
-	}
+	found := authority.appliedProjectionPresent
+	selected := authority.appliedProjection
 	selectedZones := make(map[string]etcdstore.Versioned[zonerecord.Record])
 	if found {
 		selectedZones = make(map[string]etcdstore.Versioned[zonerecord.Record], len(selected.Record.DesiredZones))
@@ -187,24 +168,12 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 			selectedZones[zone.Record.Desired.ID] = zone
 		}
 	}
-	desired, _, err := blueprints.ReadCurrentProjection(ctx, repository.store, environmentID, fixedRevision)
-	if err != nil {
-		return ComponentTaskPreparation{}, err
-	}
-	managedRuntimeSources, err := projectionrecord.SelectManagedComponentRuntimeSources(
-		desired.Record,
-		selected.Record,
-		found,
+	managedRuntimeSources := append(
+		[]projectionrecord.ManagedComponentRuntimeSource(nil),
+		authority.managedRuntimeSources...,
 	)
-	if err != nil {
-		return ComponentTaskPreparation{}, err
-	}
-	desiredZones := make(map[string]etcdstore.Versioned[zonerecord.Record], len(desired.Record.DesiredZones))
-	for _, item := range desired.Record.DesiredZones {
-		zone, joinErr := environmentqueries.JoinZone(desired, item)
-		if joinErr != nil {
-			return ComponentTaskPreparation{}, joinErr
-		}
+	desiredZones := make(map[string]etcdstore.Versioned[zonerecord.Record], len(authority.desiredZones))
+	for _, zone := range authority.desiredZones {
 		desiredZones[zone.Record.Desired.ID] = zone
 	}
 	for zoneID, change := range preparedZones {
@@ -378,8 +347,8 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		managedRuntimeSources:     managedRuntimeSources,
 		appliedComponentRuntime:   append([]byte(nil), selected.Record.ComposeArtifact...),
 		appliedProjectionPresent:  found,
-		appliedProjectionRevision: etcdstore.RevisionOf(appliedValue),
-		desiredProjectionRevision: desired.Revision,
+		appliedProjectionRevision: selected.Revision,
+		desiredProjectionRevision: authority.desiredHeadRevision,
 		addresses:                 addresses,
 	}
 	if err := ValidateComponentTaskPreparation(preparation); err != nil {

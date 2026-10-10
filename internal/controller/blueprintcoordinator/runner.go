@@ -206,6 +206,22 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 			}
 			return true, nil
 		}
+		if unit.Target.Kind == ids.KindEnvEntry && unit.Removal {
+			settler, ok := runner.planner.(EntryOmissionSettler)
+			if !ok {
+				return planChanged, errs.New(errs.KindInternal, "Blueprint Entry omission settler is not configured")
+			}
+			settled, err := settler.TrySettleEntryOmission(ctx, parent, unit)
+			if err != nil {
+				if isStateRace(err) {
+					return true, nil
+				}
+				return planChanged, err
+			}
+			if settled {
+				return true, nil
+			}
+		}
 		if unit.Target.Kind == ids.KindEnvEntry && !unit.Removal {
 			settler, ok := runner.planner.(EntrySettler)
 			if !ok {
@@ -259,6 +275,7 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 			prepared.Task,
 			unit,
 			prepared.ReleasePublication,
+			prepared.ComponentPublication,
 		); err != nil {
 			if !unknownBlueprintChildPublication(err) {
 				if cleanupErr := prepared.ReleasePublication.Abandon(ctx); cleanupErr != nil {

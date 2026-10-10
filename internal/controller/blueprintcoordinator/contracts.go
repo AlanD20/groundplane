@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,6 +24,12 @@ type Planner interface {
 // receipt atomically. It is separate from Agent child preparation.
 type EntrySettler interface {
 	SettleEntry(context.Context, etcd.TaskRecord, blueprintunits.Unit, blueprintunits.Snapshot) error
+}
+
+// EntryOmissionSettler atomically retires omitted metadata with proven runtime
+// absence. It returns false when an Agent must clean the managed files first.
+type EntryOmissionSettler interface {
+	TrySettleEntryOmission(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
 }
 
 // ScriptSettler acknowledges the exact authored Script set. Hook execution
@@ -51,16 +58,18 @@ type ChildPreparer interface {
 }
 
 type PreparedChild struct {
-	Task               etcd.TaskRecord
-	ReleasePublication etcd.BlueprintReleasePublication
+	Task                 etcd.TaskRecord
+	ReleasePublication   etcd.BlueprintReleasePublication
+	ComponentPublication componentplanning.Publication
 }
 
-// Clear releases prepared Release bytes after publication.
+// Clear releases prepared publication bytes after publication.
 func (prepared *PreparedChild) Clear() {
 	if prepared == nil {
 		return
 	}
 	prepared.ReleasePublication.Clear()
+	prepared.ComponentPublication.Clear()
 }
 
 type taskStore interface {
@@ -77,6 +86,7 @@ type taskStore interface {
 		etcd.TaskRecord,
 		blueprintunits.Unit,
 		etcd.BlueprintReleasePublication,
+		componentplanning.Publication,
 	) (keyvalue.Versioned[etcd.TaskRecord], error)
 	AbortPendingTask(context.Context, string, time.Time) (keyvalue.Versioned[etcd.TaskRecord], error)
 	GetTask(context.Context, string) (keyvalue.Versioned[etcd.TaskRecord], error)

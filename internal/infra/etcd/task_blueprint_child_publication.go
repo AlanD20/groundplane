@@ -12,6 +12,7 @@ import (
 	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -26,6 +27,7 @@ import (
 func (repository *TaskRepository) PublishBlueprintChild(
 	ctx context.Context, parentID string, child TaskRecord, unit blueprintunits.Unit,
 	releasePublication BlueprintReleasePublication,
+	componentPublication componentplanning.Publication,
 ) (keyvalue.Versioned[TaskRecord], error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
@@ -41,21 +43,40 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		)
 	}
 	releaseChild := unit.Target.Kind == ids.KindService && !unit.Removal && !releasePublication.IsZero() &&
-		child.Params[releaserender.TaskReleasePublicationParam] != ""
+		componentPublication.IsZero() && child.Params[releaserender.TaskReleasePublicationParam] != ""
 	networkChild := blueprintNetworkChildTaskMatches(child, unit) && releasePublication.IsZero() &&
+		componentPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
 	volumeChild := blueprintVolumeChildTaskMatches(child, unit) && releasePublication.IsZero() &&
+		componentPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
 	attachChild := unit.Target.Kind == ids.KindAttach && !unit.Removal &&
 		child.Params[attachinputs.TaskAttachIDParam] == unit.Target.ID && releasePublication.IsZero() &&
+		componentPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
-	if !releaseChild && !networkChild && !volumeChild && !attachChild {
+	componentChild := unit.Target.Kind == ids.KindComponent && !unit.Removal &&
+		child.Params[taskjournal.TaskBlueprintComponentUnitParam] == unit.Target.ID &&
+		releasePublication.IsZero() && !componentPublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] == ""
+	if !releaseChild && !networkChild && !volumeChild && !attachChild && !componentChild {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict, "Blueprint child has no supported effect publication",
 		)
 	}
 	if releaseChild {
 		if err := releasePublication.validate(child.Owner.EnvironmentID, child); err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+	}
+	if componentChild {
+		if err := componentPublication.ValidateBlueprintChild(
+			child.Owner.EnvironmentID,
+			unit.Target.ID,
+			componentplanning.TaskIdentity{
+				ID: child.ID, Target: child.Target, Executor: child.Executor,
+				Type: child.Type, CreatedAt: child.CreatedAt,
+			},
+		); err != nil {
 			return keyvalue.Versioned[TaskRecord]{}, err
 		}
 	}
@@ -298,6 +319,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	if attachChild {
 		conditions = append(conditions, attachPublication.conditions...)
 		mutations = append(mutations, attachPublication.mutations...)
+	}
+	if componentChild {
+		conditions = append(conditions, componentPublication.Conditions()...)
+		mutations = append(mutations, componentPublication.Mutations()...)
 	}
 	defer keyvalue.ClearMutationValues(mutations)
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)

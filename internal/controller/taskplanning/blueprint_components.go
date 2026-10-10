@@ -54,50 +54,91 @@ func ReconcileBlueprintComponents(
 	for _, kind := range kinds {
 		active := byKind[kind]
 		spec, present := authored[kind]
-		var config core.ComponentConfig
-		if present {
-			config = blueprintComponentConfig(kind, spec)
+		change, err := reconcileBlueprintComponent(active, spec, present, allocate)
+		if err != nil {
+			return BlueprintComponentChanges{}, err
 		}
-		if active.Enabled == spec.Enabled && core.EqualComponentConfig(active.Config, config) {
-			if active.Enabled && !active.Healthy {
-				candidate := cloneBlueprintComponent(active)
-				candidate.PinnedIPv4 = ""
-				result.Candidates = append(result.Candidates, BlueprintComponentCandidate{
-					Current: active, Candidate: candidate,
-				})
-				result.Effective = append(result.Effective, candidate)
-				continue
-			}
-			result.Effective = append(result.Effective, cloneBlueprintComponent(active))
-			continue
-		}
-		candidate := cloneBlueprintComponent(active)
-		candidate.Enabled = spec.Enabled
-		candidate.Config = core.CloneComponentConfig(config)
-		candidate.PinnedIPv4 = ""
-		candidate.Healthy = false
-		if !candidate.Enabled {
-			candidate.GeneratedServices = nil
-		} else if !active.Enabled {
-			candidate.GeneratedServices = []string{allocate(ids.KindService)}
-		}
-		if candidate.Validate() != nil ||
-			(candidate.Enabled && len(candidate.GeneratedServices) != 1) ||
-			(!candidate.Enabled && len(candidate.GeneratedServices) != 0) {
-			return BlueprintComponentChanges{}, errs.New(
-				errs.KindValidationFailed,
-				"Blueprint Component candidate is invalid",
-			)
-		}
-		result.Candidates = append(result.Candidates, BlueprintComponentCandidate{
-			Current: active, Candidate: candidate,
-		})
-		result.Effective = append(result.Effective, cloneBlueprintComponent(candidate))
+		result.Effective = append(result.Effective, change.Effective...)
+		result.Candidates = append(result.Candidates, change.Candidates...)
 	}
 	sort.Slice(result.Candidates, func(left int, right int) bool {
 		return result.Candidates[left].Current.ID < result.Candidates[right].Current.ID
 	})
 	return result, nil
+}
+
+// ReconcileBlueprintComponent projects exactly one authored Component
+// singleton. It never changes or emits a candidate for another Environment
+// Component, so a resource unit cannot acquire all-Component effect authority.
+func ReconcileBlueprintComponent(
+	capability core.ComponentCapability,
+	spec core.ComponentSpec,
+	current core.Component,
+	allocate func(ids.Kind) string,
+) (BlueprintComponentChanges, error) {
+	if allocate == nil || current.Validate() != nil ||
+		current.Owner != core.ComponentOwnerEnvironment || current.Kind != spec.Implementation {
+		return BlueprintComponentChanges{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Component singleton input is invalid",
+		)
+	}
+	kind, err := validateBlueprintComponentSpec(capability, spec)
+	if err != nil {
+		return BlueprintComponentChanges{}, err
+	}
+	if kind != current.Kind {
+		return BlueprintComponentChanges{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component singleton implementation changed",
+		)
+	}
+	return reconcileBlueprintComponent(current, spec, true, allocate)
+}
+
+func reconcileBlueprintComponent(
+	active core.Component,
+	spec core.ComponentSpec,
+	present bool,
+	allocate func(ids.Kind) string,
+) (BlueprintComponentChanges, error) {
+	var config core.ComponentConfig
+	if present {
+		config = blueprintComponentConfig(active.Kind, spec)
+	}
+	if active.Enabled == spec.Enabled && core.EqualComponentConfig(active.Config, config) {
+		if active.Enabled && !active.Healthy {
+			candidate := cloneBlueprintComponent(active)
+			candidate.PinnedIPv4 = ""
+			return BlueprintComponentChanges{
+				Effective:  []core.Component{candidate},
+				Candidates: []BlueprintComponentCandidate{{Current: active, Candidate: candidate}},
+			}, nil
+		}
+		return BlueprintComponentChanges{Effective: []core.Component{cloneBlueprintComponent(active)}}, nil
+	}
+	candidate := cloneBlueprintComponent(active)
+	candidate.Enabled = spec.Enabled
+	candidate.Config = core.CloneComponentConfig(config)
+	candidate.PinnedIPv4 = ""
+	candidate.Healthy = false
+	if !candidate.Enabled {
+		candidate.GeneratedServices = nil
+	} else if !active.Enabled {
+		candidate.GeneratedServices = []string{allocate(ids.KindService)}
+	}
+	if candidate.Validate() != nil ||
+		(candidate.Enabled && len(candidate.GeneratedServices) != 1) ||
+		(!candidate.Enabled && len(candidate.GeneratedServices) != 0) {
+		return BlueprintComponentChanges{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Component candidate is invalid",
+		)
+	}
+	return BlueprintComponentChanges{
+		Effective:  []core.Component{cloneBlueprintComponent(candidate)},
+		Candidates: []BlueprintComponentCandidate{{Current: active, Candidate: candidate}},
+	}, nil
 }
 
 // SelectBlueprintComponentSingletons binds authored capabilities to the existing

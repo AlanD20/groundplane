@@ -161,6 +161,12 @@ func TestPrepareEnvironmentComponentTaskReorderedMultiComponentUsesDesiredSecond
 			},
 		},
 	}
+	authority, err := repository.ReadCurrentProjectionAuthority(
+		ctx, environment.Record.ID, inputs[0].Current.ReadRevision,
+	)
+	if err != nil {
+		t.Fatalf("ReadCurrentProjectionAuthority() error = %v", err)
+	}
 	_, err = repository.PrepareEnvironmentComponentTask(
 		ctx,
 		desiredTask.ID,
@@ -168,6 +174,7 @@ func TestPrepareEnvironmentComponentTaskReorderedMultiComponentUsesDesiredSecond
 		zoneChanges,
 		inputs,
 		now,
+		authority,
 	)
 	if err != nil {
 		t.Fatalf("PrepareEnvironmentComponentTask() rejected reordered desired secondary Zone: %v", err)
@@ -177,7 +184,7 @@ func TestPrepareEnvironmentComponentTaskReorderedMultiComponentUsesDesiredSecond
 	changedCurrent.Record.Desired.Internal = !changedCurrent.Record.Desired.Internal
 	changedRecord.Current = &changedCurrent
 	if _, err = repository.PrepareEnvironmentComponentTask(
-		ctx, desiredTask.ID, environment.Record.ID, []testblueprints.EnvironmentBlueprintZoneChange{changedRecord, zoneChanges[1]}, inputs, now,
+		ctx, desiredTask.ID, environment.Record.ID, []testblueprints.EnvironmentBlueprintZoneChange{changedRecord, zoneChanges[1]}, inputs, now, authority,
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("PrepareEnvironmentComponentTask(changed desired Zone) error = %v, want state conflict", err)
 	}
@@ -186,7 +193,7 @@ func TestPrepareEnvironmentComponentTaskReorderedMultiComponentUsesDesiredSecond
 	currentCopy.Revision++
 	changedRevision.Current = &currentCopy
 	if _, err = repository.PrepareEnvironmentComponentTask(
-		ctx, desiredTask.ID, environment.Record.ID, []testblueprints.EnvironmentBlueprintZoneChange{changedRevision, zoneChanges[1]}, inputs, now,
+		ctx, desiredTask.ID, environment.Record.ID, []testblueprints.EnvironmentBlueprintZoneChange{changedRevision, zoneChanges[1]}, inputs, now, authority,
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("PrepareEnvironmentComponentTask(changed Zone revision) error = %v, want state conflict", err)
 	}
