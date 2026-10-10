@@ -230,7 +230,6 @@ export function RollbackDialog({
       target={env.id}
       workspace={params.tenant}
       destructive
-      confirmText={env.name}
       startLabel="Roll back"
       review={
         <div className="flex flex-col gap-2">

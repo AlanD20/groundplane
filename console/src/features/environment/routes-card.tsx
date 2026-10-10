@@ -318,9 +318,6 @@ export function RoutesCard({ env }: { env: Environment }) {
         target={removing?.id ?? env.id}
         workspace={params.tenant}
         destructive
-        confirmText={
-          removing ? `${removing.host || "internal"}${removing.path}` : ""
-        }
         startLabel="Remove route"
         onDispatch={async () => {
           if (!removing) throw new Error("No Route selected for removal");

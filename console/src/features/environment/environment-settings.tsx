@@ -1,3 +1,5 @@
+import { useEditorSession } from "@/components/common/editor-session";
+import { NetworkRange } from "@/components/common/network-range";
 import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
@@ -37,6 +39,7 @@ import { useBackupRefresh } from "@/features/backup/use-backup-refresh";
 // ---- Environment settings: identity, encryption key, rename, delete ----
 
 export function SettingsCard({ env }: { env: Environment }) {
+  const editorSession = useEditorSession();
   const store = useStore();
   const params = useRequiredParams("tenant", "project");
   const navigate = useNavigate();
@@ -115,6 +118,7 @@ export function SettingsCard({ env }: { env: Environment }) {
           />
           <DetailRow label="Name" value={env.name} />
           <DetailRow label="Network pool" value={env.networkPool} mono />
+          <NetworkRange cidr={env.networkPool} />
           <DetailRow
             label="Allocated addresses"
             value={`${env.networkCapacity.allocatedAddresses.toLocaleString()} / ${env.networkCapacity.totalAddresses.toLocaleString()}`}
@@ -240,6 +244,7 @@ export function SettingsCard({ env }: { env: Environment }) {
             placeholder="10.40.0.0/16"
             autoFocus
           />
+          <NetworkRange cidr={networkPool} />
           {networkPoolError && (
             <p className="text-xs text-destructive">{networkPoolError}</p>
           )}
@@ -476,6 +481,7 @@ export function SettingsCard({ env }: { env: Environment }) {
                   env.id,
                   newName.trim(),
                 );
+                editorSession?.finish();
                 setRenameOpen(false);
                 navigate(
                   `/t/${params.tenant}/${params.project}/${encodeURIComponent(renamed.name)}`,

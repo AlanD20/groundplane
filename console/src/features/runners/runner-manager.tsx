@@ -398,7 +398,7 @@ export default function RunnerManager({
             })();
           }}
         >
-          <fieldset className="space-y-4 rounded-lg border border-border p-4">
+          <fieldset className="grid gap-4 md:grid-cols-2 rounded-lg border border-border p-4">
             <legend className="px-2 text-xs font-medium">Ownership</legend>
             <div className="space-y-2">
               <Label htmlFor="runner-create-provider">Provider</Label>
@@ -437,7 +437,7 @@ export default function RunnerManager({
               />
             </div>
           </fieldset>
-          <fieldset className="space-y-4 rounded-lg border border-border p-4">
+          <fieldset className="grid gap-4 md:grid-cols-2 rounded-lg border border-border p-4">
             <legend className="px-2 text-xs font-medium">Registration</legend>
             <div className="space-y-2">
               <Label htmlFor="runner-create-labels">Labels</Label>
@@ -539,7 +539,6 @@ export default function RunnerManager({
         target={removing?.id ?? tenant.id}
         workspace={params.tenant}
         destructive
-        confirmText={removing?.slug ?? ""}
         startLabel="Remove Runner"
         onDispatch={() =>
           removing

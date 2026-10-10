@@ -1,3 +1,4 @@
+import { registerEditorDraft } from "@/lib/editor-draft-value";
 import { createEditorSearchPanel } from "./editor-search-panel";
 import { useEffect, useRef, useState } from "react";
 import { Compartment, EditorState } from "@codemirror/state";
@@ -16,7 +17,7 @@ import {
   closeSearchPanel,
   searchPanelOpen,
 } from "@codemirror/search";
-import { Search } from "lucide-react";
+import { Search, Maximize, Minimize } from "lucide-react";
 import {
   HighlightStyle,
   syntaxHighlighting,
@@ -119,6 +120,16 @@ export function CodeEditor({
   className,
   ...aria
 }: CodeEditorProps) {
+  const frame = useRef<HTMLElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      setFullscreen(document.fullscreenElement === frame.current);
+      view.current?.requestMeasure();
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const latest = useRef({ value, onValueChange });
@@ -307,9 +318,19 @@ export function CodeEditor({
 
   return (
     <section
+      data-draft-editor
+      ref={(element) => {
+        frame.current = element;
+        if (element)
+          return registerEditorDraft(
+            element,
+            () => view.current?.state.doc.toString() ?? value,
+          );
+      }}
       className={cn(
         "overflow-hidden rounded-xl border border-input bg-card focus-within:border-primary",
         className,
+        fullscreen && "flex h-screen w-screen flex-col rounded-none",
       )}
       aria-label={label}
     >
@@ -318,6 +339,25 @@ export function CodeEditor({
           {label} <span className="ml-2 font-mono uppercase">{language}</span>
         </span>
         <div className="flex flex-wrap gap-1">
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            aria-label={
+              fullscreen ? "Exit fullscreen editor" : "Fullscreen editor"
+            }
+            onClick={() => {
+              const request = fullscreen
+                ? document.exitFullscreen()
+                : frame.current?.requestFullscreen();
+              void request?.catch(() =>
+                setNotice("Fullscreen is unavailable in this browser."),
+              );
+            }}
+          >
+            {fullscreen ? <Minimize /> : <Maximize />}
+            {fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          </Button>
           <Button
             type="button"
             size="xs"
@@ -399,7 +439,14 @@ export function CodeEditor({
           </Button>
         </div>
       </div>
-      <div ref={host} className="max-h-[65vh] overflow-auto" />
+      <div
+        ref={host}
+        className={
+          fullscreen
+            ? "min-h-0 flex-1 overflow-auto [&_.cm-editor]:min-h-full"
+            : "max-h-[65vh] overflow-auto"
+        }
+      />
       <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs text-muted-foreground">
         <span role="status" className="whitespace-pre-wrap">
           {notice ||

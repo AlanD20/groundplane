@@ -11,26 +11,28 @@ import {
 import { Button } from "@/components/ui/button";
 
 /** Use the router's blocker for links, tabs, and browser Back/Forward alike. */
-export function useUnsavedChanges(dirty: boolean) {
+export function useUnsavedChanges(
+  dirty: boolean | (() => boolean),
+  onDiscard?: () => void,
+) {
   const current = useRef(dirty);
   current.current = dirty;
+  const isDirty = () =>
+    typeof current.current === "function" ? current.current() : current.current;
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      current.current &&
+      isDirty() &&
       (currentLocation.pathname !== nextLocation.pathname ||
         currentLocation.search !== nextLocation.search),
   );
   useBeforeUnload(
     useCallback((event) => {
-      if (!current.current) return;
+      if (!isDirty()) return;
       event.preventDefault();
       event.returnValue = "";
     }, []),
   );
   return {
-    allowNavigation: () => {
-      current.current = false;
-    },
     dialog: (
       <Dialog
         open={blocker.state === "blocked"}
@@ -59,6 +61,7 @@ export function useUnsavedChanges(dirty: boolean) {
               onClick={() => {
                 if (blocker.state === "blocked") {
                   current.current = false;
+                  onDiscard?.();
                   blocker.proceed();
                 }
               }}

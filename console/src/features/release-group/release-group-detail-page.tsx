@@ -214,7 +214,6 @@ export default function ReleaseGroupDetailPage() {
         target={group.id}
         workspace={params.tenant}
         destructive
-        confirmText={group.name}
         startLabel="Remove group"
         onDispatch={() => store.removeReleaseGroup(environment.id, group.id)}
         onCommit={() => {

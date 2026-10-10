@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 
 import { Label } from "@/components/ui/label";
 
-import { Textarea } from "@/components/ui/textarea";
+import { CodeEditor } from "@/components/ui/code-editor";
 import {
   ResourceFormFooter as DialogFooter,
   ResourceFormHeader as DialogHeader,
@@ -176,17 +176,13 @@ export function BulkEntryDrawer({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="entry-bulk-values">Variables</Label>
-          <Textarea
+          <CodeEditor
             id="entry-bulk-values"
+            label="Environment variables"
+            language="text"
             value={bulkText}
             disabled={loading || !loaded || bulkSaving}
-            onChange={(event) => setBulkText(event.target.value)}
-            rows={12}
-            spellCheck={false}
-            className="font-mono text-xs"
-            placeholder={
-              "APP_ENV=production\nDATABASE_URL=postgres://app:pass@db/app\nEMPTY_VALUE="
-            }
+            onValueChange={setBulkText}
           />
           <p className="text-xs text-muted-foreground">
             KEY=value; multiline values use quoted \n escapes. Omitted keys stay

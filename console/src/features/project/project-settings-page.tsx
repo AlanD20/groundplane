@@ -1,3 +1,4 @@
+import { useEditorSession } from "@/components/common/editor-session";
 import { SettingsDraft } from "@/components/common/settings-draft";
 ("use client");
 
@@ -32,6 +33,7 @@ function normalizeSlug(value: string): string {
 }
 
 export default function ProjectSettingsPage() {
+  const editorSession = useEditorSession();
   const params = useRequiredParams("tenant", "project");
   const navigate = useNavigate();
   const store = useStore();
@@ -184,6 +186,7 @@ export default function ProjectSettingsPage() {
                         project.id,
                         normalizedSlug,
                       );
+                      editorSession?.finish();
                       navigate(`/t/${tenant.slug}/${renamed.slug}/settings`, {
                         replace: true,
                       });

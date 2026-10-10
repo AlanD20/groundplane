@@ -1,3 +1,4 @@
+import { useEditorSession } from "@/components/common/editor-session";
 import { ServiceFormBody } from "@/components/common/service-form-body";
 import {
   ResourceForm,
@@ -7,7 +8,7 @@ import {
 import { useRequiredParams } from "@/lib/router";
 import type { Environment } from "@/lib/types";
 import { useState } from "react";
-import { useUnsavedChanges } from "@/components/common/use-unsaved-changes";
+import { FormDirty } from "@/components/common/form-actions";
 
 export function EnvironmentServiceForm({
   env,
@@ -18,12 +19,15 @@ export function EnvironmentServiceForm({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const session = useEditorSession();
+  const close = () => {
+    session?.finish();
+    onOpenChange(false);
+  };
   const params = useRequiredParams("tenant");
   const [dirty, setDirty] = useState(false);
-  const navigation = useUnsavedChanges(open && dirty);
   return (
-    <>
-      {navigation.dialog}
+    <FormDirty.Provider value={dirty}>
       <ResourceForm inline open={open} onOpenChange={onOpenChange}>
         <ResourceFormHeader>
           <ResourceFormTitle>Add Service · {env.name}</ResourceFormTitle>
@@ -32,15 +36,18 @@ export function EnvironmentServiceForm({
           inline
           env={env}
           workspace={params.tenant}
-          onClose={() => onOpenChange(false)}
+          onClose={close}
           onDiscard={() => {
-            navigation.allowNavigation();
-            onOpenChange(false);
+            setDirty(false);
+            close();
           }}
           onDirtyChange={setDirty}
-          onSaved={navigation.allowNavigation}
+          onSaved={() => {
+            session?.finish();
+            setDirty(false);
+          }}
         />
       </ResourceForm>
-    </>
+    </FormDirty.Provider>
   );
 }

@@ -242,7 +242,7 @@ export function EnvVarsCard({
           {env.name}
         </DialogTitle>
       </DialogHeader>
-      <div className="flex flex-col gap-4">
+      <div className="grid min-w-0 gap-4 md:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label>Type</Label>
           <div className="flex gap-2">
@@ -335,7 +335,13 @@ export function EnvVarsCard({
           </div>
         </div>
         {sourceKind === "literal" && (
-          <div className="flex flex-col gap-1.5">
+          <div
+            className={
+              kind === "file"
+                ? "flex flex-col gap-1.5 md:col-span-2"
+                : "flex flex-col gap-1.5"
+            }
+          >
             <Label htmlFor="entry-value">Value</Label>
             {kind === "file" ? (
               <Textarea
@@ -381,7 +387,7 @@ export function EnvVarsCard({
           />
         )}
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 md:col-span-2">
           <Label>Available to</Label>
           <div className="flex flex-wrap gap-2">
             <Button

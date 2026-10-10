@@ -1,3 +1,4 @@
+import { useEditorSession } from "@/components/common/editor-session";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "@/lib/store";
@@ -13,6 +14,7 @@ import {
 } from "@/components/common/resource-form";
 
 export function TenantCreateForm({ onClose }: { onClose: () => void }) {
+  const editorSession = useEditorSession();
   const { addTenant } = useStore();
   const navigate = useNavigate();
   const setNewTenantOpen = (open: boolean) => {
@@ -41,6 +43,7 @@ export function TenantCreateForm({ onClose }: { onClose: () => void }) {
         name: name.trim() || s,
         description: description.trim(),
       });
+      editorSession?.finish();
       setNewTenantOpen(false);
       resetTenantIdentity();
       setDescription("");

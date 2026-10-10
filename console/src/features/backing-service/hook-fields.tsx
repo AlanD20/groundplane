@@ -235,6 +235,7 @@ export function BackingHookFields({
               <Button
                 type="button"
                 variant="ghost"
+                className="text-destructive hover:text-destructive"
                 onClick={() =>
                   onChange({
                     ...value,
@@ -307,6 +308,7 @@ export function BackingHookFields({
             <Button
               type="button"
               variant="ghost"
+              className="text-destructive hover:text-destructive"
               onClick={() =>
                 onChange({
                   ...value,
@@ -350,6 +352,25 @@ function HookCommand({
   return (
     <div className="grid min-w-0 gap-1.5">
       <Label htmlFor={id}>Command and arguments (JSON array)</Label>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-fit"
+        onClick={() => {
+          const sample = [
+            "/bin/sh",
+            "-c",
+            "# Replace this comment with your hook script\nexit 0",
+          ];
+          setText(JSON.stringify(sample, null, 2));
+          onChange(sample);
+          onError(null);
+        }}
+        disabled={command.length > 0}
+      >
+        Insert shell example
+      </Button>
       <CodeEditor
         id={id}
         label="Hook command and arguments"

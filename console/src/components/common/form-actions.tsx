@@ -1,3 +1,4 @@
+import { editorDraftValue } from "@/lib/editor-draft-value";
 import {
   EditorSessionProvider,
   EditorDiscard,
@@ -20,6 +21,7 @@ const Dock = createContext<{
   update: (id: string, height: number | null) => void;
 } | null>(null);
 export const FormActionsActive = createContext(true);
+export const FormDirty = createContext<boolean | undefined>(undefined);
 
 /** Reserves viewport space for the active editor action bar. */
 export function FormActionsProvider({ children }: { children: ReactNode }) {
@@ -76,8 +78,9 @@ export function FormActions({
   const session = useEditorSession();
   const contextDiscard = useContext(EditorDiscard);
   const discard = onDiscard ?? contextDiscard;
-  const latestDirty = useRef(dirty);
-  latestDirty.current = dirty;
+  const contextDirty = useContext(FormDirty);
+  const latestDirty = useRef(dirty ?? contextDirty);
+  latestDirty.current = dirty ?? contextDirty;
   const latestDiscard = useRef(discard);
   latestDiscard.current = discard;
   const id = useId();
@@ -94,26 +97,63 @@ export function FormActions({
       JSON.stringify(
         [
           ...owner.querySelectorAll(
-            'input:not([form=""]), textarea, [role=combobox], .cm-content',
+            'input:not([form=""]), textarea, select, [role=combobox], button[aria-pressed], [data-draft-editor]',
           ),
-        ].map((element) =>
-          element instanceof HTMLInputElement
-            ? [element.value, element.checked]
-            : element instanceof HTMLTextAreaElement
-              ? element.value
-              : element.textContent,
-        ),
+        ]
+          .filter(
+            (element) =>
+              element.matches("[data-draft-editor]") ||
+              !element.closest("[data-draft-editor]"),
+          )
+          .map((element) =>
+            element.matches("[data-draft-editor]")
+              ? editorDraftValue(element)
+              : element instanceof HTMLInputElement
+                ? [element.value, element.checked]
+                : element instanceof HTMLTextAreaElement
+                  ? element.value
+                  : element instanceof HTMLSelectElement
+                    ? element.value
+                    : element.hasAttribute("aria-pressed")
+                      ? element.getAttribute("aria-pressed")
+                      : element.textContent,
+          ),
       );
-    const initial = snapshot();
+    let initial = snapshot();
+    let touched = false;
+    const observer = new MutationObserver(() => {
+      if (!touched) initial = snapshot();
+    });
+    observer.observe(owner, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    const begin = () => {
+      touched = true;
+    };
+    owner.addEventListener("pointerdown", begin, true);
+    owner.addEventListener("keydown", begin, true);
+    const changed = () => {
+      touched = true;
+    };
+    owner.addEventListener("input", changed, true);
+    owner.addEventListener("change", changed, true);
     enter({
       id,
       element: ref.current,
       discard: () => latestDiscard.current?.(),
-      dirty: () =>
-        latestDirty.current ??
-        (!!owner.querySelector(".cm-content") || snapshot() !== initial),
+      dirty: () => latestDirty.current ?? (touched && snapshot() !== initial),
     });
-    return () => leave(id);
+    return () => {
+      observer.disconnect();
+      owner.removeEventListener("pointerdown", begin, true);
+      owner.removeEventListener("keydown", begin, true);
+      owner.removeEventListener("input", changed, true);
+      owner.removeEventListener("change", changed, true);
+      leave(id);
+    };
   }, [eligible, enter, leave, id]);
   const [label, setLabel] = useState("");
   const update = dock?.update;

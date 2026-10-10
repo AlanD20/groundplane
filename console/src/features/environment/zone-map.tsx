@@ -1,9 +1,9 @@
+import { AnimatedSection } from "@/components/common/animated-section";
 import { useState, type ReactNode } from "react";
 import type { Environment, Zone } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ResourcePanel } from "@/components/common/resource-panel";
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
   TablePagination,
   ListToolbar,
@@ -61,7 +61,6 @@ export function ZoneMap({
     "asc",
     env.id,
   );
-  const zone = env.zones.find((z) => z.id === selectedZone);
   const unzoned = env.services.filter((s) => !s.zones.length);
   return (
     <section className="space-y-5" aria-label="Network topology">
@@ -107,79 +106,94 @@ export function ZoneMap({
             { value: "services", label: "Services" },
           ]}
         />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-4">
           {table.rows.map((z) => (
-            <Button
+            <article
               key={z.id}
-              variant="outline"
-              size="content"
-              aria-pressed={selectedZone === z.id}
-              onClick={() => select(z.id)}
-              className={workspaceSectionClassName(
-                false,
-                `flex-col items-start gap-2 text-left ${selectedZone === z.id ? "border-primary bg-accent" : ""}`,
-              )}
+              className="grid min-w-0 gap-4 rounded-xl border border-border bg-card p-4 lg:grid-cols-[minmax(0,15rem)_2rem_minmax(0,1fr)]"
             >
-              <span className="grid size-10 place-items-center rounded-lg bg-accent text-primary">
-                <Network className="size-5" />
-              </span>
-              <strong className="text-xs">{z.name}</strong>
-              <span className="font-mono text-xs font-normal text-muted-foreground">
-                {z.subnet}
-              </span>
-              <Badge variant="outline" className="text-xs">
-                {z.internal ? "Internal" : "Outbound allowed"}
-              </Badge>
-              <span className="mt-1 flex flex-wrap gap-1.5">
-                {members(z).length ? (
-                  members(z).map((s) => (
-                    <span
-                      key={s.id}
-                      className="flex items-center gap-1 text-xs font-normal text-muted-foreground"
-                    >
-                      <Boxes className="size-2.5" />
-                      {s.name}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs font-normal text-muted-foreground">
-                    No Services assigned
-                  </span>
-                )}
-              </span>
-            </Button>
-          ))}
-          {!!unzoned.length && (
-            <Button
-              variant="outline"
-              size="content"
-              onClick={() => select("unzoned")}
-              aria-pressed={selectedZone === "unzoned"}
-              className="flex-col items-start gap-2 border-dashed p-4"
-            >
-              <Boxes className="size-5 text-muted-foreground" />
-              <strong className="text-xs">No Zone</strong>
-              <span className="text-xs font-normal text-muted-foreground">
-                {unzoned.length} unconnected Services
-              </span>
-            </Button>
-          )}
-        </div>
-        {selectedZone && (
-          <div className="space-y-3 border-y border-border py-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs">{zone?.name ?? "No Zone"}</span>
               <Button
                 variant="ghost"
-                size="sm"
-                onClick={() => select(selectedZone)}
+                size="content"
+                aria-expanded={selectedZone === z.id}
+                onClick={() => select(z.id)}
+                className="min-w-0 flex-col items-start justify-start gap-3 whitespace-normal text-left"
               >
-                Clear selection
+                <span className="flex items-center gap-2">
+                  <Network className="size-4 text-primary" />
+                  <strong className="break-all">{z.name}</strong>
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {z.subnet}
+                </span>
+                <Badge variant="outline">
+                  {z.internal ? "Internal" : "Outbound allowed"}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {members(z).length} Services
+                </span>
               </Button>
-            </div>
-            {zone ? renderZone(zone, selection) : renderUnzoned(selection)}
-          </div>
-        )}
+              <div
+                aria-hidden
+                className="hidden items-start justify-center pt-2 text-primary lg:flex"
+              >
+                →
+              </div>
+              <div className="min-w-0">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {members(z).map((s) => (
+                    <Button
+                      key={s.id}
+                      variant={
+                        selectedZone === z.id && selectedService === s.id
+                          ? "secondary"
+                          : "outline"
+                      }
+                      aria-expanded={
+                        selectedZone === z.id && selectedService === s.id
+                      }
+                      className="h-auto min-h-12 justify-start whitespace-normal break-all text-left"
+                      onClick={() => {
+                        const closing =
+                          selectedZone === z.id && selectedService === s.id;
+                        setSelectedZone(closing ? null : z.id);
+                        setSelectedService(closing ? null : s.id);
+                      }}
+                    >
+                      <Boxes className="size-4 shrink-0" />
+                      {s.name}
+                    </Button>
+                  ))}
+                  {!members(z).length && (
+                    <span className="text-xs text-muted-foreground">
+                      No Services assigned
+                    </span>
+                  )}
+                </div>
+                <AnimatedSection open={selectedZone === z.id}>
+                  <div className="mt-4">
+                    {selectedZone === z.id && renderZone(z, selection)}
+                  </div>
+                </AnimatedSection>
+              </div>
+            </article>
+          ))}
+          {!!unzoned.length && (
+            <article className="rounded-xl border border-dashed border-border p-4">
+              <Button
+                variant="ghost"
+                aria-expanded={selectedZone === "unzoned"}
+                onClick={() => select("unzoned")}
+              >
+                <Boxes />
+                No Zone · {unzoned.length} Services
+              </Button>
+              <AnimatedSection open={selectedZone === "unzoned"}>
+                {selectedZone === "unzoned" && renderUnzoned(selection)}
+              </AnimatedSection>
+            </article>
+          )}
+        </div>
         {!table.total && (
           <p className="text-sm text-muted-foreground">
             {env.zones.length

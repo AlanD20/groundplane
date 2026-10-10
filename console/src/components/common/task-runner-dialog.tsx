@@ -464,13 +464,13 @@ export function TaskRunnerDialog({
     </>
   );
 
-  if (variant === "embedded")
+  if (variant === "embedded" && !confirmText)
     return open ? (
       <ResourceFormBody onDiscard={() => onOpenChange(false)}>
         {Body}
       </ResourceFormBody>
     ) : null;
-  if (variant === "inline")
+  if (variant === "inline" && !confirmText)
     return (
       <ResourceForm open={open} onOpenChange={onOpenChange}>
         {Body}

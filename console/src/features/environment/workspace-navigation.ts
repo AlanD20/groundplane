@@ -69,7 +69,7 @@ export const environmentSections = [
     label: "Settings",
     icon: Settings,
     panels: [
-      { key: "settings", label: "Identity & encryption key", icon: Settings },
+      { key: "settings", label: "Environment settings", icon: Settings },
     ],
   },
 ] satisfies {

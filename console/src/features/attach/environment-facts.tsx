@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/common/disclosure";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
 
@@ -59,7 +60,8 @@ export function FactsCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-xs text-muted-foreground">
-          Use these values in Variables & files.
+          Connection outputs. Manage access in Backing connections; map values
+          in Variables & files.
         </p>
         {factGroups.map((grp) => (
           <div key={grp.id} className="flex flex-col gap-2">
@@ -67,24 +69,27 @@ export function FactsCard({
               {grp.title}
             </span>
             {grp.sets.map((set) => (
-              <div
+              <Disclosure
+                summary={
+                  <span className="flex flex-wrap gap-2 text-sm font-medium">
+                    {set.label}
+                    <span className="text-xs text-muted-foreground">
+                      {set.rows.length} values
+                    </span>
+                  </span>
+                }
                 key={set.label}
                 className={workspaceSectionClassName(
                   false,
                   "flex flex-col gap-3",
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-medium">
-                    {set.label}
-                  </span>
-                </div>
                 <div className="flex flex-col divide-y divide-border border-t border-border [&>div]:py-3">
                   {set.rows.map((r) => (
                     <FactRow key={r.k} {...r} />
                   ))}
                 </div>
-              </div>
+              </Disclosure>
             ))}
           </div>
         ))}

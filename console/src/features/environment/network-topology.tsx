@@ -131,7 +131,11 @@ export function ZoneColumn({
   const [removalImpact, setRemovalImpact] =
     useState<Awaited<ReturnType<typeof store.getZoneRemovalImpact>>>();
   const [removalImpactError, setRemovalImpactError] = useState<string>();
-  const services = env.services.filter((s) => s.zones.includes(zone.name));
+  const services = env.services.filter(
+    (s) =>
+      (s.zones.includes(zone.name) || s.zones.includes(zone.id)) &&
+      (!selection.selectedId || selection.selectedId === s.id),
+  );
   const attaches = env.attaches.filter((a) => {
     const g = store.getBackingProject(a.projectId);
     return (g?.environments?.[0]?.zones ?? []).some(

@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from "./use-unsaved-changes";
 import {
   createContext,
   useCallback,
@@ -26,6 +27,7 @@ const Sessions = createContext<{
   active: string | null;
   enter: (session: Session) => void;
   leave: (id: string) => void;
+  finish: () => void;
 } | null>(null);
 export const EditorDiscard = createContext<(() => void) | undefined>(undefined);
 export const useEditorSession = () => useContext(Sessions);
@@ -36,6 +38,15 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
   const next = useRef<Session | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const navigation = useUnsavedChanges(
+    () => current.current?.dirty() ?? false,
+    () => {
+      const draft = current.current;
+      current.current = null;
+      setActive(null);
+      draft?.discard();
+    },
+  );
   const enter = useCallback((session: Session) => {
     if (current.current?.id === session.id) return;
     if (current.current) {
@@ -71,8 +82,19 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
     current.current?.element.querySelector<HTMLElement>("button")?.focus();
   };
   return (
-    <Sessions.Provider value={{ active, enter, leave }}>
+    <Sessions.Provider
+      value={{
+        active,
+        enter,
+        leave,
+        finish: () => {
+          current.current = null;
+          setActive(null);
+        },
+      }}
+    >
       {children}
+      {navigation.dialog}
       <Dialog
         open={confirm}
         onOpenChange={(open) => {

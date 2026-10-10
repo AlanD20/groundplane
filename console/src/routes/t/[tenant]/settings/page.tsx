@@ -1,4 +1,5 @@
-"use client";
+import { useEditorSession } from "@/components/common/editor-session";
+("use client");
 
 import { useNavigate } from "react-router-dom";
 import { useRequiredParams } from "@/lib/router";
@@ -24,6 +25,7 @@ import { useStore } from "@/lib/store";
 import type { TaskStep } from "@/lib/types";
 
 export default function TenantSettingsPage() {
+  const editorSession = useEditorSession();
   const params = useRequiredParams("tenant");
   const navigate = useNavigate();
   const store = useStore();
@@ -142,6 +144,7 @@ export default function TenantSettingsPage() {
                           tenant.slug,
                           nextSlug,
                         );
+                        editorSession?.finish();
                         navigate(`/t/${renamed.slug}/settings`, {
                           replace: true,
                         });

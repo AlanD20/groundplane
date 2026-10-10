@@ -262,6 +262,41 @@ and stop polling and event streams when the row closes. Direct links remain vali
 Small popup actions use a normal footer with a spaced divider, without sticky
 positioning or a shadow. Viewport-pinned actions belong to inline forms.
 
+The shared draft owner blocks page/tab navigation when the edited values differ
+from their baseline, offering Keep editing or Discard. Refresh, tab close and
+external navigation use the browser beforeunload warning. Untouched forms and
+changes reverted to the baseline do not prompt. Editor search, folding, preview
+and fullscreen are viewing state, not edits. Cancel/save ends draft ownership.
+
+Editor workspaces use the shared CodeEditor, including bulk variable editing.
+Provide fullscreen without remounting the document or losing undo/selection, with
+an explicit exit and Escape support. Fullscreen changes viewing space, never saves
+or applies changes. Preview, search and read-only rules are identical in both sizes.
+
+Forms group related fields and use two columns when space permits; stack on narrow
+screens. Give multiline editors, long values and multi-select exposure full rows.
+Do not create tall single-column forms merely because fields are separate controls.
+
+Required retyping belongs in a focused confirmation popup, never in the inline
+editor or viewport footer.
+
+Typed confirmation is reserved for destructive data/configuration loss or an
+explicit capability requirement. Rollback and removing Routes, deployment-group
+definitions or Runners use impact review plus an explicit action, without retyping.
+Sticky action placement does not reduce an operation risk or waive authoritative
+removal previews, tokens, overwrite warnings or data-loss confirmations.
+
+Connection management owns Attach creation/removal and access. Connection values
+is a lookup of generated outputs, collapsed by connection by default; both reuse
+existing reveal protections. Backing Service consumers show Service plus Tenant,
+Project and Environment context, with details in the same card.
+
+Topology shows Zone membership left to right on wide screens and stacks on narrow
+screens. Place selected details within that Zone, never after the entire graph.
+Do not imply traffic reachability from membership edges. Custom hook examples must
+be valid command arrays; shell comments belong inside the shell argument, never
+JSON comments. Inserting a sample is explicit and must not overwrite existing code.
+
 ## Language and shared presentation
 
 Use familiar, specific labels with one meaning throughout the Console. Action
