@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import { ResourceTable } from "@/components/common/resource-table";
 import { TaskLink } from "@/components/common/task-link";
-import { CompactReference } from "@/components/common/compact-reference";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 import {
   TablePagination,
   TableSortHead,
@@ -249,7 +249,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                 <TableHeader>
                   <TableRow>
                     <TableSortHead sort={table} field="ref">
-                      Source
+                      Prepared candidates
                     </TableSortHead>
                     <TableSortHead sort={table} field="selection">
                       Components
@@ -267,27 +267,44 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                   {table.rows.map((item) => (
                     <TableRow key={item.task_id}>
                       <TableCell>
-                        <div className="space-y-1">
-                          <span className="font-medium">{item.ref}</span>
+                        <div className="space-y-3">
                           <p className="text-xs text-muted-foreground">
                             {item.source_kind === "source_ref"
-                              ? "Host source build"
-                              : "Published release"}
+                              ? `Requested source ${item.ref}`
+                              : `Published release ${item.ref}`}
                           </p>
-                          {(item.provenance ?? []).map((source) => (
-                            <CompactReference
-                              key={source.component}
-                              label={source.component}
-                              value={source.commit}
-                            />
-                          ))}
-                          {(item.artifacts ?? []).map((artifact) => (
-                            <CompactReference
-                              key={artifact.component}
-                              label={`${artifact.component} registry output`}
-                              value={artifact.reference}
-                            />
-                          ))}
+                          {preparedComponents(item.selection).map(
+                            (component) => {
+                              const provenance = item.provenance.find(
+                                (source) => source.component === component,
+                              );
+                              const artifact = item.artifacts.find(
+                                (candidate) =>
+                                  candidate.component === component,
+                              );
+                              return (
+                                <div key={component} className="space-y-1">
+                                  <p className="text-xs font-semibold capitalize text-muted-foreground">
+                                    {component}
+                                  </p>
+                                  <SoftwareIdentity
+                                    version={
+                                      item.source_kind === "release"
+                                        ? item.ref
+                                        : undefined
+                                    }
+                                    sourceBuild={
+                                      item.source_kind === "source_ref"
+                                    }
+                                    sourceCommit={provenance?.commit}
+                                    artifactReference={artifact?.reference}
+                                    digest={artifact?.manifest_digest}
+                                    unavailable="Identity pending verification"
+                                  />
+                                </div>
+                              );
+                            },
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -376,4 +393,10 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
       </ResourcePanel>
     </div>
   );
+}
+
+function preparedComponents(selection: "controller" | "agent" | "both") {
+  return selection === "both"
+    ? (["controller", "agent"] as const)
+    : ([selection] as const);
 }

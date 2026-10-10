@@ -2,6 +2,7 @@ import { Download } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { SummaryStrip, SummaryItem } from "@/components/common/resource-panel";
 import { ControllerUpdateCard } from "@/features/platform-controller/controller-update-card";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { useStore } from "@/lib/store";
 import { SoftwarePreparationPanel } from "./software-preparation-panel";
 import { AgentImageUpdate } from "./agent-image-update";
@@ -16,12 +17,24 @@ export function SoftwareUpdates() {
         icon={<Download />}
       />
       <SummaryStrip>
-        <SummaryItem label="Controller">
-          {host?.controller.version ?? "Unavailable"}
+        <SummaryItem label="Installed Controller">
+          <SoftwareIdentity
+            version={host?.controller.version}
+            digest={host?.controller.update.running_sha256}
+            showReferences={false}
+            unavailable="Unavailable"
+          />
         </SummaryItem>
         {platform.agents.map((agent) => (
-          <SummaryItem key={agent.id} label={`Agent · ${agent.host}`}>
-            {agent.version ?? "Unavailable"}
+          <SummaryItem
+            key={agent.id}
+            label={`Installed Agent · ${agent.host}`}
+          >
+            <SoftwareIdentity
+              version={agent.version}
+              showReferences={false}
+              unavailable="Version not reported"
+            />
           </SummaryItem>
         ))}
       </SummaryStrip>

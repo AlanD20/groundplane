@@ -8,6 +8,7 @@ import { useRequiredParams } from "@/lib/router";
 import { Router as RouterIcon } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { EnvironmentRouterUnavailable } from "@/features/environment/router-unavailable";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -371,6 +372,11 @@ export function RouterCard({ env }: { env: Environment }) {
                       <CompactReference
                         value={component.id}
                         label="Component ID"
+                      />
+                      <SoftwareIdentity
+                        className="mt-1 text-xs"
+                        showReferences={false}
+                        unavailable="Installed identity not reported by the Controller"
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">

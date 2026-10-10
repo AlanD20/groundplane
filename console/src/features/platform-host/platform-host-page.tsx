@@ -8,6 +8,7 @@ import { useStore } from "@/lib/store";
 import { Boxes, Server } from "lucide-react";
 import { Link } from "react-router-dom";
 import { HostAgentsTable } from "./host-agents-table";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 
 export default function PlatformHostPage() {
   const { host, hostLoading, hostError, platform, platformComponentError } =
@@ -97,13 +98,30 @@ export default function PlatformHostPage() {
                 title="Controller"
                 href="/platform/host/controller"
                 status={<StatusBadge status={host.controller.status} />}
-                description={`Version ${host.controller.version}`}
+                description={
+                  <SoftwareIdentity
+                    version={host.controller.version}
+                    digest={host.controller.update.running_sha256}
+                    showReferences={false}
+                    unavailable="Installed identity unavailable"
+                  />
+                }
               />
               <HostDestination
                 title="etcd"
                 href="/platform/host/etcd"
                 status={<StatusBadge status={host.etcd.status} />}
-                description={`${host.etcd.dbSize} stored · Configuration and maintenance`}
+                description={
+                  <span className="flex flex-col gap-1">
+                    <SoftwareIdentity
+                      showReferences={false}
+                      unavailable="Installed identity not reported"
+                    />
+                    <span>
+                      {host.etcd.dbSize} stored · Configuration and maintenance
+                    </span>
+                  </span>
+                }
               />
               {platform.components
                 .filter((component) => component.kind === "coredns")
@@ -114,9 +132,17 @@ export default function PlatformHostPage() {
                     href="/platform/components/coredns"
                     status={<StatusBadge status={component.status} />}
                     description={
-                      platform.dns.enabled
-                        ? "DNS records and upstream resolvers"
-                        : "Resolver disabled"
+                      <span className="flex flex-col gap-1">
+                        <SoftwareIdentity
+                          showReferences={false}
+                          unavailable="Installed identity not reported"
+                        />
+                        <span>
+                          {platform.dns.enabled
+                            ? "DNS records and upstream resolvers"
+                            : "Resolver disabled"}
+                        </span>
+                      </span>
                     }
                   />
                 ))}
@@ -143,7 +169,7 @@ function HostDestination({
   title: string;
   href: string;
   status: React.ReactNode;
-  description: string;
+  description: React.ReactNode;
 }) {
   return (
     <Link

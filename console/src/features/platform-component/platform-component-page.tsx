@@ -21,6 +21,7 @@ import { CoreDnsSettings } from "./coredns-settings";
 import { DNSRecordSettings } from "./dns-record-settings";
 import { coreDNSConfigInput, type CoreDNSDraft } from "./core-dns-config";
 import type { DNSRecord } from "@/lib/types";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 const kindIcon: Record<string, React.ReactNode> = {
   coredns: <Network className="size-4 text-muted-foreground" />,
 };
@@ -300,6 +301,14 @@ export default function PlatformComponentPage() {
             </Link>
           }
         >
+          <DetailRow
+            label="Installed software"
+            value={
+              <SoftwareIdentity
+                unavailable="Identity not reported by the Controller"
+              />
+            }
+          />
           <DetailRow
             label="Default upstream"
             value={

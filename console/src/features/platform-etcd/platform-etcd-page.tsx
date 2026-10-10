@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { requestTask } from "@/features/task/api";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { newULID } from "@/lib/utils";
 
 type Document =
@@ -131,6 +132,11 @@ export default function PlatformEtcdPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="etcd" icon={<Database />} />
+      <ResourcePanel title="Installed etcd">
+        <SoftwareIdentity
+          unavailable="Version and image identity not reported by the Controller"
+        />
+      </ResourcePanel>
       <ResourcePanel
         title="etcd configuration"
         actions={

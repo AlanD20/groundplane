@@ -31,6 +31,11 @@ export function shortImageId(id: string): string {
   return (digest?.[1] ?? id.replace("sha256:", "")).slice(0, 12);
 }
 
+export function compactDigest(reference: string): string {
+  const digest = reference.match(/(?:^|@)sha256:([a-f0-9]+)/i);
+  return digest ? `sha256:${digest[1].slice(0, 12)}` : shortImageId(reference);
+}
+
 export function isDigestReference(reference: string): boolean {
   return /(?:^|@)sha256:[a-f0-9]{64}$/i.test(reference.trim());
 }
@@ -66,6 +71,100 @@ export type ImageChoice = {
   references: string[];
   value: string;
 };
+
+export type SoftwareIdentityReference = {
+  label: string;
+  short?: string;
+  value: string;
+};
+
+export type SoftwareIdentityPresentation = {
+  available: boolean;
+  qualifier?: string;
+  references: SoftwareIdentityReference[];
+  title: string;
+};
+
+export function softwareIdentityPresentation({
+  artifactReference,
+  artifactLabel = "Registry output",
+  digest,
+  sourceBuild = false,
+  sourceCommit,
+  unavailable = "Identity not reported by the Controller",
+  version,
+}: {
+  artifactReference?: string | null;
+  artifactLabel?: string;
+  digest?: string | null;
+  sourceBuild?: boolean;
+  sourceCommit?: string | null;
+  unavailable?: string;
+  version?: string | null;
+}): SoftwareIdentityPresentation {
+  const recordedVersion = version?.trim() ?? "";
+  // A commit is presentation authority only when the API explicitly records
+  // both source-build provenance and the resolved commit.
+  const recordedCommit = sourceBuild ? (sourceCommit?.trim() ?? "") : "";
+  const recordedDigest = digest?.trim() ?? "";
+  const recordedArtifact = artifactReference?.trim() ?? "";
+  const immutableArtifact = isDigestReference(recordedArtifact)
+    ? recordedArtifact
+    : "";
+  const fallbackDigest = recordedDigest || immutableArtifact;
+  const references: SoftwareIdentityReference[] = [];
+
+  if (recordedCommit) {
+    references.push({
+      label: "Source commit",
+      short: recordedCommit.slice(0, 12),
+      value: recordedCommit,
+    });
+  }
+  if (recordedArtifact) {
+    references.push({
+      label: artifactLabel,
+      short: isDigestReference(recordedArtifact)
+        ? compactDigest(recordedArtifact)
+        : undefined,
+      value: recordedArtifact,
+    });
+  }
+  if (
+    recordedDigest &&
+    !references.some((reference) => reference.value === recordedDigest)
+  ) {
+    references.push({
+      label: "Digest",
+      short: compactDigest(recordedDigest),
+      value: recordedDigest,
+    });
+  }
+
+  if (recordedVersion) {
+    return {
+      available: true,
+      references,
+      title: recordedVersion,
+    };
+  }
+  if (recordedCommit) {
+    return {
+      available: true,
+      qualifier: "Source build",
+      references,
+      title: recordedCommit.slice(0, 12),
+    };
+  }
+  if (fallbackDigest) {
+    return {
+      available: true,
+      references,
+      title: compactDigest(fallbackDigest),
+    };
+  }
+  return { available: false, references, title: unavailable };
+}
 
 // A picker offers one choice per immutable local image. Current Docker tags are
 // real selectable names; retained Fetch requests only explain untagged content.

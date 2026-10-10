@@ -34,6 +34,7 @@ import { formatTimestamp } from "@/lib/format-timestamp";
 import type { Runner } from "@/lib/types";
 import { GitBranch, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 
 function runnerStatus(runner: Runner) {
   if (runner.lifecycle !== "ready") return runner.lifecycle;
@@ -201,6 +202,7 @@ export function RunnerInventory({
                     <TableSortHead sort={table} field="owner">
                       Owner
                     </TableSortHead>
+                    <TableHead>Installed software</TableHead>
                     <TableHead>Current job</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -235,6 +237,12 @@ export function RunnerInventory({
                         <TableCell className="max-w-64 break-words">
                           {owner(runner).name}
                         </TableCell>
+                        <TableCell>
+                          <SoftwareIdentity
+                            showReferences={false}
+                            unavailable="Identity not reported"
+                          />
+                        </TableCell>
                         <TableCell className="text-muted-foreground">
                           Not reported
                         </TableCell>
@@ -244,7 +252,7 @@ export function RunnerInventory({
                           </div>
                         </TableCell>
                       </ResourceRow>
-                      <TableExpansion columns={6}>
+                      <TableExpansion columns={7}>
                         {expandedId === runner.id ? editor : null}
                       </TableExpansion>
                     </Fragment>
@@ -293,6 +301,14 @@ export function RunnerInventory({
                 <DetailRow
                   label="Current job"
                   value="Not reported by the Controller"
+                />
+                <DetailRow
+                  label="Installed software"
+                  value={
+                    <SoftwareIdentity
+                      unavailable="Identity not reported by the Controller"
+                    />
+                  }
                 />
                 <DetailRow
                   label="Last report"

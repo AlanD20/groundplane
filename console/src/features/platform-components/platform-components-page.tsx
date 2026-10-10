@@ -14,6 +14,7 @@ import {
 import { useStore } from "@/lib/store";
 import { Network, RefreshCw, Server } from "lucide-react";
 import { Link } from "react-router-dom";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 
 export default function PlatformInfraPage() {
   const {
@@ -70,6 +71,7 @@ export default function PlatformInfraPage() {
                 <TableRow>
                   <TableHead>Component</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Installed software</TableHead>
                   <TableHead>Runtime</TableHead>
                   <TableHead>Network</TableHead>
                 </TableRow>
@@ -93,6 +95,12 @@ export default function PlatformInfraPage() {
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={component.status} />
+                      </TableCell>
+                      <TableCell>
+                        <SoftwareIdentity
+                          showReferences={false}
+                          unavailable="Identity not reported"
+                        />
                       </TableCell>
                       <TableCell>{component.runtime}</TableCell>
                       <TableCell>

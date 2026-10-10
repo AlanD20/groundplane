@@ -1,6 +1,6 @@
-import { CompactReference } from "@/components/common/compact-reference";
 import { DetailRow } from "@/components/common/detail-row";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 import type { HostInfo } from "../platform-host/host-model";
 
 export type ControllerRelease = NonNullable<
@@ -15,8 +15,13 @@ export function ControllerReleaseDetails({
   return (
     <div className={workspaceSectionClassName()}>
       <DetailRow
-        label="Controller version"
-        value={release.controller_version}
+        label="Staged Controller"
+        value={
+          <SoftwareIdentity
+            version={release.controller_version}
+            digest={release.controller_sha256}
+          />
+        }
       />
       <DetailRow
         label="Compatibility"
@@ -25,30 +30,19 @@ export function ControllerReleaseDetails({
       <DetailRow
         label="Release"
         value={
-          <CompactReference
-            value={release.release}
-            label="Release manifest"
-            hideLabel
+          <SoftwareIdentity
+            artifactReference={release.release}
+            artifactLabel="Release manifest"
+            unavailable="Release identity unavailable"
           />
         }
       />
       <DetailRow
-        label="Binary"
+        label="Staged Agent"
         value={
-          <CompactReference
-            value={release.controller_sha256}
-            label="Controller binary"
-            hideLabel
-          />
-        }
-      />
-      <DetailRow
-        label="Agent image"
-        value={
-          <CompactReference
-            value={release.agent_image}
-            label="Agent image"
-            hideLabel
+          <SoftwareIdentity
+            artifactReference={release.agent_image}
+            unavailable="Agent image identity unavailable"
           />
         }
       />

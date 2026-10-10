@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PlatformAgentActions } from "@/features/platform-agent/platform-agent-actions";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { formatAgentLabels, formatLastReportAt } from "@/lib/agent-read-model";
 import { useStore } from "@/lib/store";
 import { Plus } from "lucide-react";
@@ -59,7 +60,7 @@ export function HostAgentsTable() {
             <TableHeader>
               <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
                 <TableHead>Host</TableHead>
-                <TableHead>Version</TableHead>
+                <TableHead>Installed software</TableHead>
                 <TableHead>Labels</TableHead>
                 <TableHead>In-flight tasks</TableHead>
                 <TableHead>Last report</TableHead>
@@ -78,7 +79,13 @@ export function HostAgentsTable() {
                       {a.host}
                     </Link>
                   </TableCell>
-                  <TableCell>{a.version ?? "—"}</TableCell>
+                  <TableCell>
+                    <SoftwareIdentity
+                      version={a.version}
+                      showReferences={false}
+                      unavailable="Version not reported"
+                    />
+                  </TableCell>
                   <TableCell>
                     {formatAgentLabels(a.labels).join(", ")}
                   </TableCell>

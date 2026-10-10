@@ -1,8 +1,8 @@
 import { useSearchParams, Link } from "react-router-dom";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import { DetailRow } from "@/components/common/detail-row";
-import { CompactReference } from "@/components/common/compact-reference";
 import { SettingsDraft } from "@/components/common/settings-draft";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 ("use client");
 
 import { useEffect, useState } from "react";
@@ -88,20 +88,18 @@ export default function PlatformControllerPage() {
         }
       />
 
-      {host?.controller.update.running_sha256 && (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <CompactReference
-            value={host.controller.update.running_sha256}
-            label="Running binary"
-          />
-        </div>
-      )}
       {tab === "overview" && (
         <div className="grid items-start gap-5 xl:grid-cols-2">
           <ResourcePanel title="Running Controller">
             <DetailRow
-              label="Version"
-              value={host?.controller.version ?? "Unavailable"}
+              label="Installed software"
+              value={
+                <SoftwareIdentity
+                  version={host?.controller.version}
+                  digest={host?.controller.update.running_sha256}
+                  unavailable="Installed identity unavailable"
+                />
+              }
             />
             <DetailRow
               label="Service"
@@ -120,10 +118,17 @@ export default function PlatformControllerPage() {
             }
           >
             <DetailRow
-              label="Staged version"
+              label="Staged candidate"
               value={
-                host?.controller.update.candidate?.controller_version ??
-                "No release staged"
+                <SoftwareIdentity
+                  version={
+                    host?.controller.update.candidate?.controller_version
+                  }
+                  digest={
+                    host?.controller.update.candidate?.controller_sha256
+                  }
+                  unavailable="No release staged"
+                />
               }
             />
           </ResourcePanel>

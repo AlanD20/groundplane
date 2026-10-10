@@ -10,6 +10,7 @@ import { useStore } from "@/lib/store";
 import { formatAgentLabels, formatLastReportAt } from "@/lib/agent-read-model";
 import { AgentConfigCard } from "@/features/platform-agent/agent-config-card";
 import { PlatformAgentActions } from "@/features/platform-agent/platform-agent-actions";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 
 export default function PlatformAgentPage() {
   const { id } = useParams<{ id: string }>();
@@ -76,7 +77,23 @@ export default function PlatformAgentPage() {
             <Row label="Agent ID" value={agent.id} mono />
             <Row label="Enrollment task" value={agent.enrollmentTaskId} mono />
             <Row label="Host" value={agent.host} mono />
-            <Row label="Version" value={agent.version ?? "—"} mono />
+            <Row
+              label="Installed software"
+              value={
+                <SoftwareIdentity
+                  version={agent.version}
+                  unavailable="Version not reported"
+                />
+              }
+            />
+            <Row
+              label="Installed image"
+              value={
+                <SoftwareIdentity
+                  unavailable="Image identity not reported by the Controller"
+                />
+              }
+            />
             <Row label="Status" value={<StatusBadge status={agent.status} />} />
             <Row
               label="First ready"

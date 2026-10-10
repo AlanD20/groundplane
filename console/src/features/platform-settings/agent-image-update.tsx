@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ResourcePanel } from "@/components/common/resource-panel";
+import { DetailRow } from "@/components/common/detail-row";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { useStore } from "@/lib/store";
 import type { PlatformAgent } from "@/lib/types";
 
@@ -26,10 +28,27 @@ export function AgentImageUpdate({ agent }: { agent: PlatformAgent }) {
           }
           onClick={() => setUpdating(true)}
         >
-          Use image digest
+          Set desired image
         </Button>
       }
     >
+      <DetailRow
+        label="Installed Agent"
+        value={
+          <SoftwareIdentity
+            version={agent.version}
+            unavailable="Installed version not reported"
+          />
+        }
+      />
+      <DetailRow
+        label="Installed image"
+        value={
+          <SoftwareIdentity
+            unavailable="Image identity not reported by the Controller"
+          />
+        }
+      />
       {updating && (
         <TaskRunnerDialog
           variant="inline"
@@ -43,7 +62,7 @@ export function AgentImageUpdate({ agent }: { agent: PlatformAgent }) {
           review={
             <div className="space-y-2">
               <Label htmlFor={`agent-image-${agent.id}`}>
-                Agent image digest
+                Desired Agent image digest
               </Label>
               <Input
                 id={`agent-image-${agent.id}`}
