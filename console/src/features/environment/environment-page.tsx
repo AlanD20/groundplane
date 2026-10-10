@@ -14,14 +14,15 @@ import { ReleaseGroupsPanel } from "@/features/release-group/release-group-surfa
 import { DeployControls } from "@/features/release/environment-deploy-controls";
 import { ReleasesCard } from "@/features/release/environment-releases-card";
 import { ScriptsCard } from "@/features/script/scripts-card";
-import { ServiceFormDialog } from "@/features/service/environment-service-dialog";
+import { EnvironmentServiceForm } from "@/features/service/environment-service-form";
 import { environmentRuntimeState } from "@/features/service/service-observation";
 import { useVisibleServiceObservations } from "@/features/service/use-service-observation-refresh";
 import { TasksCard } from "@/features/task/environment-tasks-card";
 import { EnvironmentVolumeManager } from "@/features/volume/environment-volume-manager";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
-import { ArrowLeft, Boxes, Layers, Network, Plug } from "lucide-react";
+import { ArrowLeft, Boxes, Layers, Network, Plug, Plus } from "lucide-react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { EnvironmentDeletionFence } from "./deletion-fence";
 import { SettingsCard } from "./environment-settings";
@@ -38,6 +39,7 @@ export default function EnvironmentPage() {
   const env = store.getEnvironment(params.tenant, params.project, params.env);
   const project = store.getProject(params.tenant, params.project);
   const [search, setSearch] = useSearchParams();
+  const [addingService, setAddingService] = useState<string | null>(null);
   const { section, panel } = environmentNavigation(search);
   const backingEnvironments = store.backingProjects.flatMap(
     (backing) => backing.environments?.slice(0, 1) ?? [],
@@ -107,7 +109,7 @@ export default function EnvironmentPage() {
     ),
     overview: <EnvironmentOverview env={env} now={observation.now} />,
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
-    zones: <Topology env={env} />,
+    zones: <Topology env={env} onAddService={() => setAddingService(env.id)} />,
     routes: <RoutesCard env={env} />,
     attaches: <AttachesCard env={env} />,
     router: <RouterCard env={env} />,
@@ -168,7 +170,13 @@ export default function EnvironmentPage() {
         eyebrow={`${params.tenant} / ${project.name} / Environment`}
         actions={
           <>
-            <ServiceFormDialog env={env} />
+            <Button
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setAddingService(env.id)}
+            >
+              <Plus className="size-3.5" /> Add Service
+            </Button>
             <LogViewer
               target={{ kind: "environment", id: env.id }}
               label="Logs"
@@ -216,6 +224,12 @@ export default function EnvironmentPage() {
           deleting ? "Environment deletion in progress" : section.label
         }
       >
+        <EnvironmentServiceForm
+          key={env.id}
+          env={env}
+          open={addingService === env.id}
+          onOpenChange={(open) => setAddingService(open ? env.id : null)}
+        />
         <section
           key={panel.key}
           aria-label={panel.label}

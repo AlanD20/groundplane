@@ -19,7 +19,6 @@ import {
 import { ServiceCard } from "@/features/environment/services-list";
 import { ZoneFormDialog } from "@/features/environment/zone-form-dialog";
 import { ZoneMap, type ZoneSelection } from "@/features/environment/zone-map";
-import { ServiceFormDialog } from "@/features/service/environment-service-dialog";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, Zone } from "@/lib/types";
@@ -27,7 +26,13 @@ import { ChevronRight, Database, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-export function Topology({ env }: { env: Environment }) {
+export function Topology({
+  env,
+  onAddService,
+}: {
+  env: Environment;
+  onAddService: () => void;
+}) {
   const [zoneOpen, setZoneOpen] = useState(false);
   return (
     <>
@@ -49,7 +54,9 @@ export function Topology({ env }: { env: Environment }) {
             >
               <Plus className="size-3.5" /> Add Zone
             </Button>
-            <ServiceFormDialog env={env} />
+            <Button variant="outline" size="sm" onClick={onAddService}>
+              <Plus className="size-3.5" /> Add Service
+            </Button>
           </>
         }
         renderZone={(zone, selection) => (

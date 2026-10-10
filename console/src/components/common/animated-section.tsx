@@ -50,7 +50,6 @@ export function AnimatedSection({
       hidden={!open && retained === null}
       data-open={open}
       inert={!open}
-      aria-hidden={!open || undefined}
       className={cn(
         "min-w-0 duration-200 ease-out motion-reduce:transition-none",
         nested
