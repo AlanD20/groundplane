@@ -4,6 +4,7 @@ import type { ActivityEntry, TaskStep } from "@/lib/types";
 import { ChevronDown, Terminal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { parseTaskEvent, type TaskEventResponse } from "./journal-model";
+import { TaskExecutionSummary, taskDuration } from "./task-execution-summary";
 
 type StreamState =
   "connecting" | "live" | "reconnecting" | "history" | "unavailable";
@@ -74,6 +75,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
 
   return (
     <section className="space-y-3" aria-label="Task execution">
+      <TaskExecutionSummary task={task} events={events} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h3 className="flex items-center gap-2 text-sm font-medium">
@@ -90,7 +92,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
 
       <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950 text-slate-200">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
-          <span>Task events</span>
+          <span>Recorded execution</span>
           <span>
             {events.length} {events.length === 1 ? "transition" : "transitions"}
           </span>
@@ -122,6 +124,11 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
                 : " · no retained step transitions"}
             </p>
           )}
+          {(events[0]?.sequence ?? 1) > 1 && (
+            <p className="px-4 text-slate-400">
+              Earlier transitions are no longer retained.
+            </p>
+          )}
           {events.map((event) => {
             const step = steps.find(
               (candidate) => candidate.label === event.step_id,
@@ -151,7 +158,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
           })}
           {streamState === "reconnecting" && (
             <p role="status" className="text-amber-300">
-              Reconnecting…
+              Reconnecting to execution updates…
             </p>
           )}
           {eventError && (
@@ -163,7 +170,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
       </div>
 
       <Disclosure
-        summary={`Steps · ${steps.length}`}
+        summary={`Execution stages · ${steps.length}`}
         className="rounded-lg border border-border"
         summaryClassName="p-3 text-sm font-medium"
       >
@@ -213,6 +220,21 @@ function TaskStepDetails({
   const description =
     step.description ??
     "A description was not recorded when this Task was created.";
+  const started = events
+    .filter(
+      (event) => event.attempt === latest?.attempt && event.state === "running",
+    )
+    .at(-1);
+  const ended =
+    latest && terminalStatuses.includes(latest.state) ? latest : undefined;
+  const interval =
+    started && ended
+      ? Math.max(
+          0,
+          (Date.parse(ended.received_at) - Date.parse(started.received_at)) /
+            1000,
+        )
+      : undefined;
 
   return (
     <Disclosure
@@ -231,7 +253,10 @@ function TaskStepDetails({
               {step.action || "Action not recorded"}
             </span>
             <span className="block break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
-              {description}
+              {step.target ??
+                (latest
+                  ? `Attempt ${latest.attempt}`
+                  : "No execution event recorded")}
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-2">
@@ -245,6 +270,9 @@ function TaskStepDetails({
       }
     >
       <div className="space-y-4 border-t border-border bg-surface/40 px-4 py-3">
+        <p className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
+          {description}
+        </p>
         <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
           <StepDatum label="Action" value={step.action || "Not recorded"} />
           <StepDatum label="Target" value={step.target || "Not recorded"} />
@@ -252,7 +280,7 @@ function TaskStepDetails({
             label="Time limit"
             value={
               step.timeoutSeconds
-                ? formatDuration(step.timeoutSeconds)
+                ? taskDuration(step.timeoutSeconds)
                 : "Not recorded"
             }
           />
@@ -265,13 +293,25 @@ function TaskStepDetails({
             }
           />
           <StepDatum
-            label="Last recorded event"
+            label="Controller received latest event"
             value={
               lastEventAt
                 ? new Date(lastEventAt).toLocaleString()
                 : "Not recorded"
             }
           />
+          {started && (
+            <StepDatum
+              label="Controller received start"
+              value={new Date(started.received_at).toLocaleString()}
+            />
+          )}
+          {interval !== undefined && (
+            <StepDatum
+              label="Recorded interval"
+              value={taskDuration(interval)}
+            />
+          )}
           {step.detail && <StepDatum label="Script" value={step.detail} />}
         </dl>
         {events.length ? (
@@ -354,11 +394,4 @@ function terminalStateTone(state: TaskEventResponse["state"]) {
   if (failureStates.includes(state)) return "text-rose-400";
   if (state === "running") return "text-violet-300";
   return "text-amber-300";
-}
-
-function formatDuration(seconds: number) {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }

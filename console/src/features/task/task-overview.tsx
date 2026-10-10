@@ -8,7 +8,7 @@ import {
   type TaskNavigationContext,
 } from "@/lib/task-navigation";
 import type { ActivityEntry } from "@/lib/types";
-import { ArrowUpRight, CircleAlert, CircleCheck, Clock3 } from "lucide-react";
+import { ArrowUpRight, Clock3 } from "lucide-react";
 import { ContextLink } from "@/components/common/context-link";
 import { TaskExecutionTerminal } from "./task-execution-terminal";
 
@@ -135,17 +135,6 @@ export function TaskOverview({ task }: { task: ActivityEntry }) {
   return (
     <>
       <TaskExecutionTerminal task={task} />
-      <TaskOutcome task={task} />
-      {task.reconciliationRequired && (
-        <p
-          role="alert"
-          className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm"
-        >
-          Restoration is not proven. The resolver stays locked to this Task;
-          retry it to apply the same sealed configuration. GP has not reported a
-          successful restore.
-        </p>
-      )}
       {task.note && (
         <section className="space-y-1 rounded-lg border border-border p-3 text-sm">
           <h3 className="text-xs font-medium text-muted-foreground">
@@ -277,59 +266,6 @@ function resourceKindLabel(kind?: string) {
   return kind
     .replaceAll("_", " ")
     .replace(/^./, (letter) => letter.toUpperCase());
-}
-
-function TaskOutcome({ task }: { task: ActivityEntry }) {
-  if (
-    ["pending", "running", "completed"].includes(task.status) &&
-    !task.resultSummary
-  )
-    return null;
-  const active = task.status === "pending" || task.status === "running";
-  const failed = ["failed", "timed_out", "aborted"].includes(task.status);
-  const title = active
-    ? "Status"
-    : task.status === "completed"
-      ? "Result"
-      : "Failure";
-  const summary = active
-    ? task.status === "pending"
-      ? "Waiting for an executor."
-      : "Execution is in progress."
-    : task.status === "completed"
-      ? (task.resultSummary ?? "Completed.")
-      : (task.failureSummary ?? failureFallback(task.status));
-  const Icon = active ? Clock3 : failed ? CircleAlert : CircleCheck;
-
-  return (
-    <section
-      aria-live={active ? "polite" : undefined}
-      role={failed ? "alert" : undefined}
-      className={`space-y-2 rounded-lg border p-4 text-sm ${
-        failed
-          ? "border-destructive/30 bg-destructive/5"
-          : task.status === "completed"
-            ? "border-success/30 bg-success/5"
-            : "border-border bg-surface"
-      }`}
-    >
-      <h3 className="flex items-center gap-2 font-medium">
-        <Icon className="size-4 shrink-0" aria-hidden />
-        {title}
-      </h3>
-      <p className="break-words text-muted-foreground [overflow-wrap:anywhere]">
-        {summary}
-      </p>
-    </section>
-  );
-}
-
-function failureFallback(status: ActivityEntry["status"]) {
-  if (status === "timed_out")
-    return "The Task reached its time limit. No failure summary was captured.";
-  if (status === "aborted")
-    return "The Task was aborted. No failure summary was captured.";
-  return "The Task failed. No failure summary was captured.";
 }
 
 function Info({ label, value }: { label: string; value: string }) {
