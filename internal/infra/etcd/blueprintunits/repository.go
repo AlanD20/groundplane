@@ -281,16 +281,16 @@ func validAppliedAdvance(
 	snapshot Snapshot, exists bool, next AppliedRecord, executions map[string]etcdstore.Versioned[ExecutionRecord],
 ) bool {
 	if next.ControllerOperationID != "" {
-		if !exists || next.State != Applied ||
+		if !exists || (next.State != Applied && !(next.Target.Kind == ids.KindScript && next.State == Absent)) ||
 			(next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService &&
-				next.Target.Kind != ids.KindRoute) ||
+				next.Target.Kind != ids.KindRoute && next.Target.Kind != ids.KindScript) ||
 			snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 			next.ParentTaskID != snapshot.HeadTaskID {
 			return false
 		}
 		for _, unit := range snapshot.Desired.Record.Units {
 			if unit.Target == next.Target {
-				return !unit.Removal && next.Fingerprint == unit.Fingerprint &&
+				return unit.Removal == (next.State == Absent) && next.Fingerprint == unit.Fingerprint &&
 					len(unit.Writes) == 1 && unit.Writes[0] == next.Target
 			}
 		}

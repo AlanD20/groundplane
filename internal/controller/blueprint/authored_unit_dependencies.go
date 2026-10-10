@@ -138,6 +138,13 @@ func (planner *authoredUnitPlanner) serviceDependencies(
 		}
 		dependencies = append(dependencies, authoredResourceKey(ids.KindAttach, identity.ID))
 	}
+	for scriptName := range planner.serviceScripts(name) {
+		identity, found := planner.identities[ids.KindScript][scriptName]
+		if !found {
+			return nil, nil, planner.missingInput("Service Script", scriptName)
+		}
+		dependencies = append(dependencies, authoredResourceKey(ids.KindScript, identity.ID))
+	}
 	dependencies = canonicalAuthoredUnitKeys(dependencies)
 	return dependencies, slices.Clone(dependencies), nil
 }
@@ -221,16 +228,14 @@ func (planner *authoredUnitPlanner) componentRoutes(capability string) []core.Ro
 
 func (planner *authoredUnitPlanner) scriptDependencies(
 	spec core.ScriptSpec,
-	serviceBlocked map[string]bool,
 ) ([]blueprintunits.ResourceKey, []blueprintunits.ResourceKey, bool, error) {
-	service, found := planner.identities[ids.KindService][spec.Service]
+	_, found := planner.identities[ids.KindService][spec.Service]
 	if !found {
 		return nil, nil, false, planner.missingInput("Script Service", spec.Service)
 	}
-	if serviceBlocked[spec.Service] {
-		return nil, nil, false, nil
-	}
-	dependencies := []blueprintunits.ResourceKey{authoredResourceKey(ids.KindService, service.ID)}
+	// A Script unit publishes configuration, not hook execution. It needs the
+	// authored Service identity, but must precede that Service's deployment.
+	var dependencies []blueprintunits.ResourceKey
 	if spec.Execution != nil {
 		for _, grant := range spec.Execution.Volumes {
 			identity, found := planner.identities[ids.KindVolume][grant.Volume]
@@ -253,6 +258,16 @@ func (planner *authoredUnitPlanner) scriptDependencies(
 	}
 	dependencies = canonicalAuthoredUnitKeys(dependencies)
 	return dependencies, slices.Clone(dependencies), true, nil
+}
+
+func (planner *authoredUnitPlanner) serviceScripts(service string) map[string]core.ScriptSpec {
+	result := make(map[string]core.ScriptSpec)
+	for name, spec := range planner.input.desired.Input.Scripts {
+		if spec.Service == service {
+			result[name] = spec
+		}
+	}
+	return result
 }
 
 func (planner *authoredUnitPlanner) hasIdentityID(kind ids.Kind, id string) bool {

@@ -266,16 +266,58 @@ func TestBlueprintScriptStageReplayRetainsNewLocatorMutations(t *testing.T) {
 	}
 }
 
-func TestBlueprintScriptFlipRejectsActiveExecutionReferences(t *testing.T) {
+// Rationale: the new set must start independently while old hook execution
+// retains its own reference counter and exact body across the active-set flip.
+func TestBlueprintScriptPublicationRetainsReferencedOldSet(t *testing.T) {
 	store := newMemoryHierarchyStore()
 	repository, current := scriptBlueprintSeedActiveSet(t, store, 1)
 	current[0].Record.ActiveReferences = 1
-	_, err := repository.PrepareBlueprintScriptPublication(
-		context.Background(), current[0].Record.EnvironmentID, current[0].ReadRevision,
-		scriptBlueprintGenerationID(907), current, []testscripts.Record{current[0].Record}, nil,
+	old := current[0].Record
+	oldKey := testscripts.ScriptSetScriptKey(old.EnvironmentID, old.ScriptSetGeneration, old.Desired.ID)
+	value, err := testscripts.EncodeRecord(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.Transact(t.Context(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: oldKey, Value: value}})
+	if err != nil || !result.Succeeded {
+		t.Fatalf("pin old execution = %v, %v", result, err)
+	}
+	page, err := repository.ListScripts(t.Context(), old.EnvironmentID, testkeyvalue.PageRequest{Limit: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	desired := old
+	desired.ActiveReferences = 0
+	publication, err := repository.PrepareBlueprintScriptPublication(
+		t.Context(), old.EnvironmentID, page.Revision,
+		scriptBlueprintGenerationID(907), page.Items, []testscripts.Record{desired}, nil,
 	)
-	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-		t.Fatalf("PrepareBlueprintScriptPublication(active reference) error = %v, want state.conflict", err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer publication.Clear()
+	result, err = store.Transact(t.Context(), publication.conditions, publication.mutations)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("publish replacement = %v, %v", result, err)
+	}
+	next, err := repository.GetScript(t.Context(), old.Desired.ID)
+	if err != nil || next.Record.ActiveReferences != 0 || next.Record.Desired.Body != old.Desired.Body ||
+		next.Record.ScriptSetGeneration != scriptBlueprintGenerationID(907) {
+		t.Fatalf("new Script set = %+v, %v", next, err)
+	}
+	read, err := store.GetMany(t.Context(), testkeyvalue.GetManyRequest{Keys: []string{oldKey,
+		testscripts.ScriptSetBodyGenerationKey(old.EnvironmentID, old.ScriptSetGeneration, old.Desired.ID, old.ActiveGeneration),
+	}})
+	if err != nil || read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
+		t.Fatalf("retained old execution sources = %+v, %v", read, err)
+	}
+	retained, err := testscripts.DecodeRecord(read.Values[0].Value)
+	if err != nil || retained.ActiveReferences != 1 {
+		t.Fatalf("old execution counter changed = %+v, %v", retained, err)
+	}
+	body, err := testscripts.DecodeScriptBodyGeneration(read.Values[1].Value)
+	if err != nil || body.Body != old.Desired.Body {
+		t.Fatalf("old hook body changed = %+v, %v", body, err)
 	}
 }
 

@@ -25,6 +25,12 @@ type EntrySettler interface {
 	SettleEntry(context.Context, etcd.TaskRecord, blueprintunits.Unit, blueprintunits.Snapshot) error
 }
 
+// ScriptSettler acknowledges the exact authored Script set. Hook execution
+// remains part of the Service child; metadata has no Agent no-op Task.
+type ScriptSettler interface {
+	SettleScript(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
+}
+
 // RouteSettler acknowledges metadata already sealed into the exact runtime
 // projection; its Component dependency owns any subsequent host effect.
 type RouteSettler interface {

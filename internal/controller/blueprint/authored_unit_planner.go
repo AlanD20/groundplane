@@ -272,10 +272,12 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			Entries       []string
 			Attaches      map[string]core.AttachmentSpec
 			ReleaseGroups map[string]core.ReleaseGroupSpec
+			Scripts       map[string]core.ScriptSpec
 		}{
 			name, service, planner.input.desired.Input.ServiceExtensions[name],
 			planner.serviceRuntimeFiles(service), planner.serviceEntryNames(name),
 			planner.serviceAttachments(name), planner.serviceReleaseGroups(name),
+			planner.serviceScripts(name),
 		})
 		if err != nil {
 			return nil, false, err
@@ -341,7 +343,7 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if !found {
 			return nil, false, planner.missingInput("Script", name)
 		}
-		reads, after, scriptComplete, err := planner.scriptDependencies(spec, serviceBlocked)
+		reads, after, scriptComplete, err := planner.scriptDependencies(spec)
 		if err != nil {
 			return nil, false, err
 		}

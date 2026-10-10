@@ -161,6 +161,9 @@ func ReconcileBlueprintScripts(
 				return BlueprintScriptReconciliation{}, errs.Wrap(errs.KindValidationFailed, replaceErr)
 			}
 			current = updated
+			// The next immutable set owns a new reference counter. Executions
+			// pinned to the preceding set retain that set's counter and body.
+			current.ActiveReferences = 0
 			if bodyChanged {
 				generations = append(generations, scriptBodyGeneration(current))
 			}

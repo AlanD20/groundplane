@@ -193,6 +193,19 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 		if !found {
 			return planChanged, errs.New(errs.KindInternal, "ready Blueprint unit is absent from its desired plan")
 		}
+		if unit.Target.Kind == ids.KindScript {
+			settler, ok := runner.planner.(ScriptSettler)
+			if !ok {
+				return planChanged, errs.New(errs.KindInternal, "Blueprint Script settler is not configured")
+			}
+			if err := settler.SettleScript(ctx, parent, unit); err != nil {
+				if isStateRace(err) {
+					return true, nil
+				}
+				return planChanged, err
+			}
+			return true, nil
+		}
 		if unit.Target.Kind == ids.KindEnvEntry && !unit.Removal {
 			settler, ok := runner.planner.(EntrySettler)
 			if !ok {

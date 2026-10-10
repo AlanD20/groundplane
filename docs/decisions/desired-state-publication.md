@@ -100,7 +100,12 @@ from a definition edit: the Controller can acknowledge that unit only while
 the exact non-running runtime-intent record remains unchanged. A later Start
 uses the current desired Service definition. A Route unit can similarly be
 acknowledged against its exact sealed projection; the HTTP-router Component
-owns any host configuration that consumes it. Child identity is not an operator
+owns any host configuration that consumes it. Script definitions settle as
+Controller metadata before their Service can deploy; execution remains a hook
+within that Service's child Task. Publication flips the complete active Script
+set with the desired head. Older executions retain their pinned set and bodies,
+including definitions omitted by the new input; omission never deletes their
+recovery authority. Child identity is not an operator
 action: Task
 lists, direct reads, Retry, Abort and event streams expose only the parent.
 The parent remains nonterminal while any required unit is running or has

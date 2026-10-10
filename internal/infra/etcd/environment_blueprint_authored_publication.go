@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -30,6 +31,7 @@ type BlueprintAuthoredPublication struct {
 	AttachInputGenerations []BlueprintAttachInputGenerationPublication
 	Parent                 TaskRecord
 	Marker                 idempotency.IdempotencyMarker
+	ScriptPublication      BlueprintScriptPublication
 }
 
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAuthoredRevision(
@@ -70,6 +72,19 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	}
 	if err := ValidateTaskRecord(parent); err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	if err := input.ScriptPublication.validate(environment.Record.ID, claim.SourceKind); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if input.ScriptPublication.IsZero() {
+		if len(input.OwnedIdentities.Scripts) != 0 {
+			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Blueprint Script set has not been prepared")
+		}
+	} else {
+		set, err := scriptrecord.DecodeScriptSetGeneration(input.ScriptPublication.mutations[0].Value)
+		if err != nil || set.GenerationID != parent.ID {
+			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Blueprint Script set belongs to another revision")
+		}
 	}
 	ownedIdentityValue, err := projectionrecord.EncodeEnvironmentOwnedIdentities(input.OwnedIdentities)
 	if err != nil {
@@ -162,6 +177,8 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	}
 	conditions = append(conditions, initialAbsence.Conditions()...)
 	mutations = append(mutations, initialAbsence.Mutations()...)
+	conditions = append(conditions, input.ScriptPublication.conditions...)
+	mutations = append(mutations, input.ScriptPublication.mutations...)
 	tenant, err := loadConnectorTaskInitiationTenantAtRevision(
 		ctx, repository.store, project, project.ReadRevision,
 	)

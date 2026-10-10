@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -208,12 +209,23 @@ func (service *Service) applyAuthoredOnce(
 		ids.KindComponent,
 		allocator.Named,
 	)
-	scripts := selectAuthoredNamedResources(
-		parsed.Extensions.Scripts,
-		previous.Scripts,
-		ids.KindScript,
+	reconciledScripts, scriptPublication, err := service.prepareApplyScripts(
+		ctx, environmentID, claim.RevisionID, parsed.Extensions.Scripts, desiredServices,
+		desiredrevision.BlueprintScriptResources{Volumes: changes.Current.Volumes, Entries: entries.Current},
 		allocator.Named,
 	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	defer scriptPublication.Clear()
+	scripts := make([]composeidentity.Resource, len(reconciledScripts.Current))
+	for index, record := range reconciledScripts.Current {
+		name, err := scriptrecord.BlueprintAuthoringKey(record)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		scripts[index] = composeidentity.Resource{ID: record.Desired.ID, Name: name}
+	}
 	owned, err := authoredOwnedIdentities(
 		environmentID, claim.RevisionID, baseline.generation, changes.Current, previous,
 		volumeSlugs, entries.Current, routeProjections, attaches, components, scripts,
@@ -259,6 +271,7 @@ func (service *Service) applyAuthoredOnce(
 			ExpectedHeadRevision: baseline.expectedHeadRevision,
 			Staged:               staged, OwnedIdentities: owned, AttachInputGenerations: attachInputGenerations,
 			Evidence: evidence, Locator: locator, Parent: parent,
+			ScriptPublication: scriptPublication,
 		},
 	)
 }

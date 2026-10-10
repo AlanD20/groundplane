@@ -14,6 +14,7 @@ import (
 	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
@@ -67,7 +68,7 @@ func (service *Service) Prepare(
 	}
 	// The runtime projection is sealed only after Entry and Attach unit receipts
 	// match this parent. Other unit effects are still unsupported here.
-	if len(input.desired.Input.Components) != 0 || len(input.desired.Input.Scripts) != 0 ||
+	if len(input.desired.Input.Components) != 0 ||
 		len(input.desired.Input.Requires) != 0 {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindStateConflict, "Blueprint Service child prerequisites are not prepared",
@@ -95,6 +96,19 @@ func (service *Service) Prepare(
 		)
 	}
 	createdAt := service.now().UTC()
+	allScripts, _, err := service.listBlueprintScripts(ctx, parent.Owner.EnvironmentID, service.repository)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	scripts := make([]scriptrecord.Record, 0)
+	for _, versioned := range allScripts {
+		if versioned.Record.ScriptSetGeneration != parent.ID {
+			return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint Script set has been superseded")
+		}
+		if versioned.Record.ServiceID == unit.Target.ID {
+			scripts = append(scripts, versioned.Record)
+		}
+	}
 	child := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
 		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem,
@@ -116,7 +130,8 @@ func (service *Service) Prepare(
 		ctx,
 		blueprintrelease.PrepareServiceUnitInput{
 			ServiceID: unit.Target.ID, Projection: projection.Record,
-			Task: child, CreatedAt: createdAt,
+			Scripts: scripts,
+			Task:    child, CreatedAt: createdAt,
 			AllocateNamed: func(kind ids.Kind, _ string) string { return ids.New(kind) },
 		},
 	)

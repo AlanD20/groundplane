@@ -55,6 +55,7 @@ type AppliedRecord struct {
 	ControllerValueGenerationID  string        `json:"controller_value_generation_id,omitempty"`
 	ControllerRuntimeRevision    int64         `json:"controller_runtime_revision,omitempty"`
 	ControllerProjectionRevision int64         `json:"controller_projection_revision,omitempty"`
+	ControllerScriptSetRevision  int64         `json:"controller_script_set_revision,omitempty"`
 }
 
 type ExecutionState string
@@ -210,14 +211,17 @@ func validateApplied(record AppliedRecord) error {
 	if record.ControllerOperationID != "" {
 		validEntry := record.Target.Kind == ids.KindEnvEntry &&
 			ids.Validate(ids.KindConfig, record.ControllerValueGenerationID) == nil &&
-			record.ControllerRuntimeRevision == 0 && record.ControllerProjectionRevision == 0
+			record.ControllerRuntimeRevision == 0 && record.ControllerProjectionRevision == 0 && record.ControllerScriptSetRevision == 0
 		validDormantService := record.Target.Kind == ids.KindService &&
 			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision > 0 &&
-			record.ControllerProjectionRevision == 0
+			record.ControllerProjectionRevision == 0 && record.ControllerScriptSetRevision == 0
 		validRoute := record.Target.Kind == ids.KindRoute &&
 			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision == 0 &&
-			record.ControllerProjectionRevision > 0
-		if (!validEntry && !validDormantService && !validRoute) || record.State != Applied ||
+			record.ControllerProjectionRevision > 0 && record.ControllerScriptSetRevision == 0
+		validScript := record.Target.Kind == ids.KindScript && record.ControllerScriptSetRevision > 0 &&
+			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision == 0 && record.ControllerProjectionRevision == 0
+		if (!validEntry && !validDormantService && !validRoute && !validScript) ||
+			(record.State != Applied && !(validScript && record.State == Absent)) ||
 			ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
 			ids.Validate(ids.KindOperation, record.ControllerOperationID) != nil ||
 			record.SourceTaskID != "" || record.SourcePlanID != "" ||
@@ -227,7 +231,7 @@ func validateApplied(record AppliedRecord) error {
 	} else if record.SourceTaskID == "" {
 		if record.ParentTaskID != "" || record.SourcePlanID != "" || record.SourceAssignment != "" ||
 			record.ExecutionEpoch != 0 || record.ControllerValueGenerationID != "" ||
-			record.ControllerRuntimeRevision != 0 || record.ControllerProjectionRevision != 0 ||
+			record.ControllerRuntimeRevision != 0 || record.ControllerProjectionRevision != 0 || record.ControllerScriptSetRevision != 0 ||
 			record.State != Absent {
 			return invalidRecord()
 		}
@@ -236,7 +240,7 @@ func validateApplied(record AppliedRecord) error {
 		ids.Validate(ids.KindPlan, record.SourcePlanID) != nil ||
 		ids.Validate(ids.KindAssignment, record.SourceAssignment) != nil || record.ExecutionEpoch == 0 ||
 		record.ControllerValueGenerationID != "" || record.ControllerRuntimeRevision != 0 ||
-		record.ControllerProjectionRevision != 0 {
+		record.ControllerProjectionRevision != 0 || record.ControllerScriptSetRevision != 0 {
 		return invalidRecord()
 	}
 	switch record.State {

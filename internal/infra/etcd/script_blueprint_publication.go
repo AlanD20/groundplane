@@ -113,12 +113,6 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 		if err := scriptmutations.ValidateScriptVersion(versioned); err != nil {
 			return BlueprintScriptPublication{}, err
 		}
-		if versioned.Record.ActiveReferences != 0 {
-			return BlueprintScriptPublication{}, errs.New(
-				errs.KindStateConflict,
-				"active Script executions fence Blueprint publication",
-			)
-		}
 		if _, duplicate := currentByID[versioned.Record.Desired.ID]; duplicate {
 			return BlueprintScriptPublication{}, errs.New(errs.KindInternal, "Blueprint Script snapshot repeats an id")
 		}

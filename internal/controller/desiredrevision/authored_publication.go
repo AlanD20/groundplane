@@ -71,6 +71,7 @@ type PublishAuthoredInput struct {
 	Evidence               Evidence
 	Locator                idempotency.IdempotencyLocator
 	Parent                 etcd.TaskRecord
+	ScriptPublication      etcd.BlueprintScriptPublication
 }
 
 func PublishAuthored(
@@ -117,6 +118,7 @@ func PublishAuthored(
 			Claim:                claim, DesiredInput: desired, OwnedIdentities: input.OwnedIdentities,
 			AttachInputGenerations: input.AttachInputGenerations,
 			Parent:                 input.Parent, Marker: marker,
+			ScriptPublication: input.ScriptPublication,
 		},
 	)
 	var resolution requestidempotency.Resolution
