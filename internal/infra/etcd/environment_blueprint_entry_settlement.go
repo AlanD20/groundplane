@@ -110,9 +110,13 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintEntry(
 		storedParent.RenderGeneration != parent.RenderGeneration {
 		return errs.New(errs.KindStateConflict, "Blueprint Entry parent claim changed")
 	}
-	desired, desiredErr := environmentprojection.DecodeEnvironmentDesiredInputStorage(read.Values[2].Value)
+	desiredInput, desiredFound, desiredErr := blueprints.ReadDesiredInputRevision(
+		ctx, repository.store, record.EnvironmentID, parent.ID, snapshot.ReadRevision,
+	)
+	desired := desiredInput.Record
 	owned, ownedErr := environmentprojection.DecodeEnvironmentOwnedIdentities(read.Values[3].Value)
-	if desiredErr != nil || ownedErr != nil || desired.EnvironmentID != record.EnvironmentID ||
+	if desiredErr != nil || !desiredFound || desiredInput.Revision != read.Values[2].ModRevision ||
+		ownedErr != nil || desired.EnvironmentID != record.EnvironmentID ||
 		desired.RevisionID != parent.ID || owned.EnvironmentID != record.EnvironmentID ||
 		owned.RevisionID != parent.ID || desired.RenderGeneration != owned.RenderGeneration ||
 		desired.RenderGeneration > math.MaxInt32 ||

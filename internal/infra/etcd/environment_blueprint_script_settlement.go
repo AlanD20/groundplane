@@ -64,8 +64,12 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintScript(
 	claimID, claimErr := idempotency.DecodeTaskReference(read.Values[1].Value)
 	set, setErr := scriptrecord.DecodeScriptSetGeneration(read.Values[2].Value)
 	identities, identitiesErr := projectionrecord.DecodeEnvironmentOwnedIdentities(read.Values[3].Value)
-	desired, desiredErr := projectionrecord.DecodeEnvironmentDesiredInputStorage(read.Values[4].Value)
+	desiredInput, desiredFound, desiredErr := blueprints.ReadDesiredInputRevision(
+		ctx, repository.store, environmentID, parent.ID, snapshot.ReadRevision,
+	)
+	desired := desiredInput.Record
 	if parentErr != nil || claimErr != nil || setErr != nil || identitiesErr != nil || desiredErr != nil ||
+		!desiredFound || desiredInput.Revision != read.Values[4].ModRevision ||
 		validateBlueprintParentClaimTask(storedParent) != nil || storedParent.Status != taskjournal.TaskStatusRunning ||
 		storedParent.ID != parent.ID || storedParent.Owner != parent.Owner || storedParent.PlanHash != parent.PlanHash ||
 		storedParent.PlanID != parent.PlanID || claimID != parent.ID ||

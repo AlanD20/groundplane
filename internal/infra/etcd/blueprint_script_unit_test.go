@@ -12,9 +12,31 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
-// BP-10/12: Script metadata must settle without an Agent execution, including
-// omission, but a receipt prepared before a newer head cannot acknowledge it.
+// BP-10/12: Controller metadata must settle without an Agent execution,
+// including omission, but a receipt prepared before a newer head cannot
+// acknowledge it. Entry removal must retire the same exact value generation.
 func TestBlueprintScriptReceiptSettlesMetadataAndFencesSupersession(t *testing.T) {
+	t.Run("Script", func(t *testing.T) {
+		testBlueprintControllerMetadataReceipt(t, ids.KindScript, func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, revision int64) (blueprintunits.MutationPlan, error) {
+			return blueprintunits.PrepareControllerScriptSettlement(snapshot, unit, ids.New(ids.KindOperation), revision)
+		})
+	})
+	t.Run("Entry", func(t *testing.T) {
+		generationID := ids.New(ids.KindConfig)
+		testBlueprintControllerMetadataReceipt(t, ids.KindEnvEntry, func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, _ int64) (blueprintunits.MutationPlan, error) {
+			if unit.Removal {
+				return blueprintunits.PrepareControllerEntryRemoval(snapshot, unit, ids.New(ids.KindOperation), generationID)
+			}
+			return blueprintunits.PrepareControllerEntrySettlement(snapshot, unit, ids.New(ids.KindOperation), generationID)
+		})
+	})
+}
+
+func testBlueprintControllerMetadataReceipt(
+	t *testing.T, kind ids.Kind,
+	settle func(blueprintunits.Snapshot, blueprintunits.Unit, int64) (blueprintunits.MutationPlan, error),
+) {
+	t.Helper()
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	ledger, err := blueprintunits.NewRepository(store)
@@ -22,7 +44,7 @@ func TestBlueprintScriptReceiptSettlesMetadataAndFencesSupersession(t *testing.T
 		t.Fatal(err)
 	}
 	environmentID, parentID := ids.New(ids.KindEnvironment), ids.New(ids.KindTask)
-	target := blueprintunits.ResourceKey{Kind: ids.KindScript, ID: ids.New(ids.KindScript)}
+	target := blueprintunits.ResourceKey{Kind: kind, ID: ids.New(kind)}
 	publishHead := func(parent string) {
 		t.Helper()
 		value, err := idempotency.EncodeTaskReference(parent)
@@ -60,7 +82,7 @@ func TestBlueprintScriptReceiptSettlesMetadataAndFencesSupersession(t *testing.T
 	seedBlueprintUnitInitialAbsence(t, store, environmentID, parentID, target)
 	unit := blueprintunits.Unit{Target: target, Fingerprint: strings.Repeat("a", 64), Writes: []blueprintunits.ResourceKey{target}}
 	publishPlan(parentID, unit)
-	receipt, err := blueprintunits.PrepareControllerScriptSettlement(load(), unit, ids.New(ids.KindOperation), 1)
+	receipt, err := settle(load(), unit, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +101,7 @@ func TestBlueprintScriptReceiptSettlesMetadataAndFencesSupersession(t *testing.T
 	publishHead(parentID)
 	unit.Removal, unit.Fingerprint = true, ""
 	publishPlan(parentID, unit)
-	removal, err := blueprintunits.PrepareControllerScriptSettlement(load(), unit, ids.New(ids.KindOperation), 2)
+	removal, err := settle(load(), unit, 2)
 	if err != nil {
 		t.Fatal(err)
 	}

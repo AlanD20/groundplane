@@ -221,7 +221,7 @@ func validateApplied(record AppliedRecord) error {
 		validScript := record.Target.Kind == ids.KindScript && record.ControllerScriptSetRevision > 0 &&
 			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision == 0 && record.ControllerProjectionRevision == 0
 		if (!validEntry && !validDormantService && !validRoute && !validScript) ||
-			(record.State != Applied && !(validScript && record.State == Absent)) ||
+			(record.State != Applied && !((validScript || validEntry) && record.State == Absent)) ||
 			ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
 			ids.Validate(ids.KindOperation, record.ControllerOperationID) != nil ||
 			record.SourceTaskID != "" || record.SourcePlanID != "" ||

@@ -281,7 +281,8 @@ func validAppliedAdvance(
 	snapshot Snapshot, exists bool, next AppliedRecord, executions map[string]etcdstore.Versioned[ExecutionRecord],
 ) bool {
 	if next.ControllerOperationID != "" {
-		if !exists || (next.State != Applied && !(next.Target.Kind == ids.KindScript && next.State == Absent)) ||
+		if !exists || (next.State != Applied &&
+			!((next.Target.Kind == ids.KindScript || next.Target.Kind == ids.KindEnvEntry) && next.State == Absent)) ||
 			(next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService &&
 				next.Target.Kind != ids.KindRoute && next.Target.Kind != ids.KindScript) ||
 			snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||

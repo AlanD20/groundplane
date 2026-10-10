@@ -18,8 +18,29 @@ func PrepareControllerEntrySettlement(
 	operationID string,
 	valueGenerationID string,
 ) (MutationPlan, error) {
+	if unit.Removal {
+		return MutationPlan{}, invalidRecord()
+	}
+	return prepareControllerEntryReceipt(snapshot, unit, operationID, valueGenerationID)
+}
+
+// PrepareControllerEntryRemoval acknowledges retirement of one exact value
+// generation. The caller must atomically prove no applied files require Agent
+// cleanup and remove the definition, lookup and unreferenced generations.
+func PrepareControllerEntryRemoval(
+	snapshot Snapshot, unit Unit, operationID, valueGenerationID string,
+) (MutationPlan, error) {
+	if !unit.Removal {
+		return MutationPlan{}, invalidRecord()
+	}
+	return prepareControllerEntryReceipt(snapshot, unit, operationID, valueGenerationID)
+}
+
+func prepareControllerEntryReceipt(
+	snapshot Snapshot, unit Unit, operationID, valueGenerationID string,
+) (MutationPlan, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
-		unit.Target.Kind != ids.KindEnvEntry || unit.Removal ||
+		unit.Target.Kind != ids.KindEnvEntry ||
 		ids.Validate(ids.KindOperation, operationID) != nil ||
 		ids.Validate(ids.KindConfig, valueGenerationID) != nil ||
 		len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
@@ -37,9 +58,13 @@ func PrepareControllerEntrySettlement(
 	}) {
 		return MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint Entry unit is not ready")
 	}
+	state := Applied
+	if unit.Removal {
+		state = Absent
+	}
 	applied := AppliedRecord{
 		EnvironmentID: snapshot.EnvironmentID, Target: unit.Target,
-		State: Applied, Fingerprint: unit.Fingerprint,
+		State: state, Fingerprint: unit.Fingerprint,
 		ParentTaskID:                snapshot.HeadTaskID,
 		ControllerOperationID:       operationID,
 		ControllerValueGenerationID: valueGenerationID,
