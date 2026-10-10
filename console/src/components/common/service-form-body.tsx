@@ -14,6 +14,7 @@ import type { BackingHooks } from "@/features/backing-service/api";
 import { BackingHookFields } from "@/features/backing-service/hook-fields";
 import { ImagePicker } from "@/features/image-delivery/image-picker";
 import { HealthcheckFields } from "@/features/service/healthcheck-fields";
+import { portInputError } from "@/features/service/port-input";
 import { useStore } from "@/lib/store";
 import type { Service } from "@/lib/types";
 import { useState } from "react";
@@ -76,6 +77,7 @@ export function ServiceFormBody({
   const [exposeEdited, setExposeEdited] = useState(
     (initial?.expose ?? []).length > 0,
   );
+  const exposeError = portInputError(expose);
   const [restart, setRestart] = useState<Service["restart"]>(
     initial?.restart ?? "unless-stopped",
   );
@@ -109,12 +111,11 @@ export function ServiceFormBody({
   function applyAdapter(key: string) {
     const a = store.adapters.find((x) => x.key === key);
     if (!a) return;
-    const port = a.urlScheme === "redis" ? "6379" : "5432";
+    const port = backingPort(a.urlScheme);
     if (isBacking) {
       backing?.onAdapterChange(key);
       backing?.onPrefixChange(a.prefix);
-      if (!exposeEdited)
-        setExpose(`${name.trim().toLowerCase() || "svc"}:${port}`);
+      if (!exposeEdited) setExpose(port);
     }
   }
 
@@ -154,11 +155,12 @@ export function ServiceFormBody({
     !!name.trim() &&
     (isBacking ? !!backing.adapterKey : !!image.trim()) &&
     !submitting &&
+    !exposeError &&
     !hookError &&
     !healthcheckError;
 
   async function save() {
-    if (hookError || healthcheckError) return;
+    if (hookError || healthcheckError || exposeError) return;
     if (isBacking && onCreateBacking) {
       onCreateBacking(buildPatch(), backing.adapterKey, backing.prefix);
       return;
@@ -284,13 +286,7 @@ export function ServiceFormBody({
                       onChange={(e) => {
                         setName(e.target.value);
                         if (isBacking && !exposeEdited) {
-                          const port =
-                            selectedAdapter?.urlScheme === "redis"
-                              ? "6379"
-                              : "5432";
-                          setExpose(
-                            `${e.target.value.trim().toLowerCase() || "svc"}:${port}`,
-                          );
+                          setExpose(backingPort(selectedAdapter?.urlScheme));
                         }
                       }}
                       autoFocus
@@ -358,15 +354,29 @@ export function ServiceFormBody({
                     </div>
                   )}
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="sv-expose">Expose ports (comma list)</Label>
+                    <Label htmlFor="sv-expose">Container ports</Label>
                     <Input
                       id="sv-expose"
                       value={expose}
+                      placeholder="80/tcp, 53/udp"
+                      aria-invalid={!!exposeError}
+                      aria-describedby="sv-expose-help"
                       onChange={(event) => {
                         setExpose(event.target.value);
                         setExposeEdited(true);
                       }}
                     />
+                    <p
+                      id="sv-expose-help"
+                      className={
+                        exposeError
+                          ? "text-xs text-destructive"
+                          : "text-xs text-muted-foreground"
+                      }
+                    >
+                      {exposeError ??
+                        "Comma-separated ports; TCP is the default. No host ports. UDP proxy deployment is not available yet."}
+                    </p>
                   </div>
                 </div>
               </FormSection>
@@ -536,4 +546,17 @@ export function ServiceFormBody({
   ) : (
     <DrawerContent>{content}</DrawerContent>
   );
+}
+
+function backingPort(scheme: string | undefined): string {
+  switch (scheme) {
+    case "pgsql":
+      return "5432";
+    case "redis":
+      return "6379";
+    case "mysql":
+      return "3306";
+    default:
+      return "";
+  }
 }

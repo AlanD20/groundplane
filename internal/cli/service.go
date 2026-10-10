@@ -103,7 +103,8 @@ func newServiceCmd() *cobra.Command {
 	add.Flags().StringVar(&onFailure, "on-failure", "switch_back", "declared default: switch_back | leave_active")
 	add.Flags().StringVar(&memory, "memory", "", "memory limit, for example 512m")
 	add.Flags().Float64Var(&cpus, "cpus", 0, "CPU limit, for example 0.5")
-	add.Flags().StringSliceVar(&expose, "expose", nil, "internal exposed port (repeatable)")
+	add.Flags().
+		StringSliceVar(&expose, "expose", nil, "container port[/tcp|/udp], comma-separated or repeatable; no host ports")
 	add.Flags().StringVar(&restart, "restart", "unless-stopped", "unless-stopped | always | no")
 	add.Flags().IntVar(&replicas, "replicas", 1, "desired replica count")
 	add.Flags().
@@ -265,7 +266,7 @@ func newServiceCmd() *cobra.Command {
 	edit.Flags().StringVar(&editOnFailure, "on-failure", "", "switch_back | leave_active")
 	edit.Flags().StringVar(&editMemory, "memory", "", "memory limit")
 	edit.Flags().Float64Var(&editCPUs, "cpus", 0, "CPU limit")
-	edit.Flags().StringSliceVar(&editExpose, "expose", nil, "replacement internal exposed ports")
+	edit.Flags().StringSliceVar(&editExpose, "expose", nil, "replacement container port[/tcp|/udp] list; no host ports")
 	edit.Flags().StringVar(&editRestart, "restart", "", "unless-stopped | always | no")
 	edit.Flags().IntVar(&editReplicas, "replicas", 0, "desired replica count")
 	edit.Flags().StringArrayVar(

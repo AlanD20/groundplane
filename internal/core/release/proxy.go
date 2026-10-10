@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -22,22 +22,23 @@ func ProxyPorts(exposures []string) ([]uint16, error) {
 	ports := make([]uint16, 0, len(exposures))
 	seen := make(map[uint16]struct{}, len(exposures))
 	for _, raw := range exposures {
-		value := strings.TrimSpace(raw)
-		if strings.HasSuffix(value, "/udp") {
-			return nil, errs.New(errs.KindValidationFailed, "release proxy does not support UDP exposure")
+		declaration, err := serviceports.Parse(raw)
+		if err != nil {
+			return nil, err
 		}
-		value = strings.TrimSuffix(value, "/tcp")
-		if colon := strings.LastIndexByte(value, ':'); colon >= 0 {
-			value = value[colon+1:]
+		if declaration.Protocol == serviceports.UDP {
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				fmt.Sprintf("Service proxy cannot forward UDP port %q; UDP proxy deployment is not implemented", raw),
+			)
 		}
-		if strings.Contains(value, "-") {
-			return nil, errs.New(errs.KindValidationFailed, "release proxy requires individual TCP ports")
+		if declaration.First != declaration.Last {
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				fmt.Sprintf("Service proxy requires individual TCP ports, not range %q", raw),
+			)
 		}
-		parsed, err := strconv.ParseUint(value, 10, 16)
-		if err != nil || parsed == 0 {
-			return nil, errs.New(errs.KindValidationFailed, "release proxy exposure is invalid")
-		}
-		port := uint16(parsed)
+		port := declaration.First
 		if _, duplicate := seen[port]; duplicate {
 			continue
 		}

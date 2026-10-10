@@ -264,6 +264,11 @@ x-gp-scripts:
 
 Groundplane adds these restrictions to native Compose:
 
+Service `expose` entries use container ports such as `80`, `80/tcp`, `53/udp`
+or an inclusive range such as `8000-8002/tcp`. Host-address, published-port and
+Service-name prefixes are rejected. The current Service proxy still requires
+individual TCP ports; accepting a UDP declaration does not enable UDP deployment.
+
 | Compose input | Groundplane consequence |
 | --- | --- |
 | top-level `name` | Rejected. GP derives the Compose project identity from the Environment id. |

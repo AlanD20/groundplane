@@ -12,7 +12,6 @@ package core
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -22,6 +21,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/dnsname"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 )
 
 // Document is implemented by every top-level Blueprint document.
@@ -178,6 +178,11 @@ func (s Service) Validate() error {
 	}
 	if err := s.Healthcheck.Validate(); err != nil {
 		return err
+	}
+	for _, exposure := range s.Expose {
+		if _, err := serviceports.Parse(exposure); err != nil {
+			return err
+		}
 	}
 	for _, m := range s.Mounts {
 		if m.Mount == "" {
@@ -368,27 +373,9 @@ func isHex(character byte) bool {
 // drift between the two boundaries.
 func ServiceExposesTCPPort(exposures []string, target uint16) bool {
 	for _, exposure := range exposures {
-		value := strings.TrimSpace(exposure)
-		if _, udp := strings.CutSuffix(value, "/udp"); udp {
-			continue
-		}
-		value, _ = strings.CutSuffix(value, "/tcp")
-		if colon := strings.LastIndexByte(value, ':'); colon >= 0 {
-			value = value[colon+1:]
-		}
-		startText, endText, ranged := strings.Cut(value, "-")
-		start, err := strconv.ParseUint(startText, 10, 16)
-		if err != nil {
-			continue
-		}
-		end := start
-		if ranged {
-			end, err = strconv.ParseUint(endText, 10, 16)
-			if err != nil || end < start {
-				continue
-			}
-		}
-		if uint64(target) >= start && uint64(target) <= end {
+		declaration, err := serviceports.Parse(exposure)
+		if err == nil && declaration.Protocol == serviceports.TCP &&
+			target >= declaration.First && target <= declaration.Last {
 			return true
 		}
 	}
