@@ -34,6 +34,28 @@ Review existing tests by their actual assertions, not just a missing comment.
 Retain useful regressions; remove only tests within the authorized cleanup scope
 whose behavior has no defensible rationale. Record any lost or missing proof.
 
+## Local Console development
+
+From the repository root, install dependencies with
+`bash scripts/repo-env.sh npm --prefix console ci`, then start the frontend:
+
+```sh
+bash scripts/repo-env.sh npm --prefix console run dev
+```
+
+Vite serves the Console with live reload and proxies `/api` to the local
+Controller at `http://127.0.0.1:8080`. To use another installed Controller, set
+`GP_API_URL` to its HTTP origin before starting the dev server:
+
+```sh
+GP_API_URL=http://controller.lan:8080 bash scripts/repo-env.sh npm --prefix console run dev
+```
+
+Use the local URL printed by Vite. The target Controller must be reachable;
+actions in this frontend change its real resources. `GP_API_URL` configures the
+development proxy only, not production Console assets. No Controller deployment
+is needed to iterate on frontend code locally.
+
 ## Verification ladder
 
 Choose the smallest appropriate proof for the changed behavior. Reuse results
