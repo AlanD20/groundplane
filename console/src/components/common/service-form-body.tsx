@@ -42,6 +42,7 @@ export function ServiceFormBody({
   backing,
   onCreateBacking,
   onClose,
+  onDiscard,
   inline = false,
   onSaved,
   onDirtyChange,
@@ -555,7 +556,7 @@ export function ServiceFormBody({
               {submitError}
             </p>
           )}
-          <DialogFooter pinned={inline}
+          <DialogFooter onDiscard={onDiscard ?? onClose} pinned={inline}
             className={inline ? editorFooterClassName : undefined}
           >
             <Button

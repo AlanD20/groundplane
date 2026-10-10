@@ -184,7 +184,7 @@ export function RenameAttach({
         onOpenChange={setOpen}
       >
         <DialogHeader>
-          <DialogTitle>Rename connection</DialogTitle>
+          <DialogTitle>Rename connection · {attach.name}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`attach-rename-${attach.id}`}>Connection name</Label>

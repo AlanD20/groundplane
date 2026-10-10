@@ -158,6 +158,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
             </p>
           )}
           <FormActions
+            onDiscard={() => setRef("")}
             pinned={!!ref.trim()}
             status="Prepare version"
             className={editorFooterClassName}

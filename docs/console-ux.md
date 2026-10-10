@@ -223,7 +223,10 @@ content; it does not need its own visual treatment for ordinary fields and edits
   visible at the bottom of the browser viewport throughout editing, even when
   the form scrolls away. Show the owning editor and draft status; changed settings
   explicitly show Unsaved changes. Reserve page space, retain native form submit
-  and disabled behavior, and stack simultaneous editors without overlapping.
+  and disabled behavior. Permit one active editor per page: close an unchanged
+  editor when switching, and require explicit discard for a changed draft.
+  Keep editing preserves the current draft and cancels the attempted editor.
+  Never stack viewport action bars.
   Keep the sidebar clear on desktop and wrap controls on narrow screens. Use the
   opaque editing tint, a top divider/shadow, 16px padding and mobile safe-area
   padding in both themes. Resting settings and modal confirmations keep their

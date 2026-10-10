@@ -34,6 +34,8 @@ export function SettingsDraft({
         {children}
       </fieldset>
       <FormActions
+        dirty={dirty}
+        onDiscard={onCancel}
         pinned={dirty}
         status="Unsaved changes"
         className={`${editorFooterClassName} flex flex-wrap items-center justify-end gap-2`}

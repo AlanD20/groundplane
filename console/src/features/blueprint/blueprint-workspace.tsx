@@ -462,6 +462,10 @@ export function BlueprintWorkspace({
             />
             {editing && (
               <FormActions
+                onDiscard={() => {
+                  setDraft(savedDocument);
+                  setEditing(false);
+                }}
                 className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
               >
                 <Button

@@ -33,6 +33,10 @@ export function EnvironmentServiceForm({
           env={env}
           workspace={params.tenant}
           onClose={() => onOpenChange(false)}
+          onDiscard={() => {
+            navigation.allowNavigation();
+            onOpenChange(false);
+          }}
           onDirtyChange={setDirty}
           onSaved={navigation.allowNavigation}
         />

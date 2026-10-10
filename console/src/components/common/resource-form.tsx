@@ -1,3 +1,4 @@
+import { EditorDiscard } from "./editor-session";
 import { FormActions, FormActionsActive } from "./form-actions";
 import {
   createContext,
@@ -24,11 +25,19 @@ import { cn } from "@/lib/utils";
 const Inline = createContext(false);
 
 /** Form content inside an existing workspace section that owns its expansion. */
-export function ResourceFormBody({ children }: { children: ReactNode }) {
+export function ResourceFormBody({
+  children,
+  onDiscard,
+}: {
+  children: ReactNode;
+  onDiscard: () => void;
+}) {
   return (
-    <Inline.Provider value>
-      <div className="space-y-4">{children}</div>
-    </Inline.Provider>
+    <EditorDiscard.Provider value={onDiscard}>
+      <Inline.Provider value>
+        <div className="space-y-4">{children}</div>
+      </Inline.Provider>
+    </EditorDiscard.Provider>
   );
 }
 
@@ -69,29 +78,31 @@ export function ResourceForm({
   return (
     <Inline.Provider value={inline}>
       {inline ? (
-        <FormActionsActive.Provider value={open && editing}>
-          <AnimatedSection open={open} className="w-full min-w-0 basis-full">
-            <div
-              ref={region}
-              className={cn(
-                "w-full min-w-0 basis-full scroll-mt-24 py-2",
-                className,
-              )}
-            >
-              <div className="w-full">
-                <section
-                  onKeyDown={submitFormOnShortcut}
-                  className={workspaceSectionClassName(
-                    editing,
-                    "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
-                  )}
-                >
-                  {children}
-                </section>
+        <EditorDiscard.Provider value={() => onOpenChange(false)}>
+          <FormActionsActive.Provider value={open && editing}>
+            <AnimatedSection open={open} className="w-full min-w-0 basis-full">
+              <div
+                ref={region}
+                className={cn(
+                  "w-full min-w-0 basis-full scroll-mt-24 py-2",
+                  className,
+                )}
+              >
+                <div className="w-full">
+                  <section
+                    onKeyDown={submitFormOnShortcut}
+                    className={workspaceSectionClassName(
+                      editing,
+                      "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
+                    )}
+                  >
+                    {children}
+                  </section>
+                </div>
               </div>
-            </div>
-          </AnimatedSection>
-        </FormActionsActive.Provider>
+            </AnimatedSection>
+          </FormActionsActive.Provider>
+        </EditorDiscard.Provider>
       ) : (
         <Drawer open={open} onOpenChange={onOpenChange}>
           <DrawerContent>{children}</DrawerContent>

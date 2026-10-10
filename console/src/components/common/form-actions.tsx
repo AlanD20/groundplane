@@ -1,4 +1,9 @@
 import {
+  EditorSessionProvider,
+  EditorDiscard,
+  useEditorSession,
+} from "./editor-session";
+import {
   createContext,
   useCallback,
   useContext,
@@ -10,40 +15,43 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 
-type Entry = { id: string; height: number };
 const Dock = createContext<{
-  entries: Entry[];
+  height: number;
   update: (id: string, height: number | null) => void;
 } | null>(null);
 export const FormActionsActive = createContext(true);
 
-/** Keeps simultaneous editors visible without overlapping their actions. */
+/** Reserves viewport space for the active editor action bar. */
 export function FormActionsProvider({ children }: { children: ReactNode }) {
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const [measurement, setMeasurement] = useState<{
+    id: string;
+    height: number;
+  } | null>(null);
   const update = useCallback((id: string, height: number | null) => {
-    setEntries((current) => {
-      const entry = current.find((item) => item.id === id);
-      if (height === null)
-        return entry ? current.filter((item) => item.id !== id) : current;
-      if (entry?.height === height) return current;
-      return entry
-        ? current.map((item) => (item.id === id ? { id, height } : item))
-        : [...current, { id, height }];
+    setMeasurement((current) => {
+      if (height === null) return current?.id === id ? null : current;
+      return current?.id === id && current.height === height
+        ? current
+        : { id, height };
     });
   }, []);
-  const height = entries.reduce((sum, item) => sum + item.height, 0);
+  const height = measurement?.height ?? 0;
   return (
-    <Dock.Provider value={{ entries, update }}>
-      <div
-        className="contents"
-        style={
-          { "--viewport-actions-height": `${height}px` } as React.CSSProperties
-        }
-      >
-        {children}
-        <div aria-hidden style={{ height }} />
-      </div>
-    </Dock.Provider>
+    <EditorSessionProvider>
+      <Dock.Provider value={{ height, update }}>
+        <div
+          className="contents"
+          style={
+            {
+              "--viewport-actions-height": `${height}px`,
+            } as React.CSSProperties
+          }
+        >
+          {children}
+          <div aria-hidden style={{ height }} />
+        </div>
+      </Dock.Provider>
+    </EditorSessionProvider>
   );
 }
 
@@ -53,13 +61,60 @@ export function FormActions({
   className,
   pinned = true,
   status = "Unsaved draft",
+  onDiscard,
+  dirty,
   ...props
-}: React.ComponentProps<"div"> & { pinned?: boolean; status?: string }) {
+}: React.ComponentProps<"div"> & {
+  pinned?: boolean;
+  status?: string;
+  onDiscard?: () => void;
+  dirty?: boolean;
+}) {
   const dock = useContext(Dock);
   const active = useContext(FormActionsActive);
-  const fixed = pinned && active && !!dock;
+  const eligible = pinned && active && !!dock;
+  const session = useEditorSession();
+  const contextDiscard = useContext(EditorDiscard);
+  const discard = onDiscard ?? contextDiscard;
+  const latestDirty = useRef(dirty);
+  latestDirty.current = dirty;
+  const latestDiscard = useRef(discard);
+  latestDiscard.current = discard;
   const id = useId();
   const ref = useRef<HTMLDivElement>(null);
+  const fixed = eligible && (!session || session.active === id);
+  const enter = session?.enter;
+  const leave = session?.leave;
+  useLayoutEffect(() => {
+    if (!eligible || !enter || !leave || !ref.current) return;
+    const owner =
+      ref.current.closest("form, section, [data-form-owner]") ??
+      ref.current.parentElement!;
+    const snapshot = () =>
+      JSON.stringify(
+        [
+          ...owner.querySelectorAll(
+            'input:not([form=""]), textarea, [role=combobox], .cm-content',
+          ),
+        ].map((element) =>
+          element instanceof HTMLInputElement
+            ? [element.value, element.checked]
+            : element instanceof HTMLTextAreaElement
+              ? element.value
+              : element.textContent,
+        ),
+      );
+    const initial = snapshot();
+    enter({
+      id,
+      element: ref.current,
+      discard: () => latestDiscard.current?.(),
+      dirty: () =>
+        latestDirty.current ??
+        (!!owner.querySelector(".cm-content") || snapshot() !== initial),
+    });
+    return () => leave(id);
+  }, [eligible, enter, leave, id]);
   const [label, setLabel] = useState("");
   const update = dock?.update;
   useLayoutEffect(() => {
@@ -81,18 +136,14 @@ export function FormActions({
       update(id, null);
     };
   }, [fixed, id, update]);
-  const index = dock?.entries.findIndex((item) => item.id === id) ?? -1;
-  const bottom =
-    dock?.entries
-      .slice(0, Math.max(0, index))
-      .reduce((sum, item) => sum + item.height, 0) ?? 0;
   return (
     <div
       ref={ref}
       {...props}
+      hidden={eligible && !!session && session.active !== id}
       data-slot="dialog-footer"
       data-viewport-actions={fixed || undefined}
-      style={fixed ? { bottom } : undefined}
+      style={fixed ? { bottom: 0 } : undefined}
       className={cn(
         "form-actions flex flex-wrap items-center justify-end gap-2",
         className,

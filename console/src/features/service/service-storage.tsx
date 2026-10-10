@@ -255,6 +255,7 @@ export function ServiceStorage({
         </p>
       )}
       <FormActions
+        onDiscard={close}
         className={`${editorFooterClassName} flex flex-wrap items-center justify-between gap-3`}
       >
         <p className="text-xs text-muted-foreground">

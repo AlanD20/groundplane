@@ -39,6 +39,7 @@ export type ServiceFormBodyProps = {
       backing?: never;
       onCreateBacking?: never;
       onClose: () => void;
+      onDiscard?: () => void;
     }
   | {
       env?: never;
@@ -52,5 +53,6 @@ export type ServiceFormBodyProps = {
         prefix: string,
       ) => void;
       onClose: () => void;
+      onDiscard?: () => void;
     }
 );

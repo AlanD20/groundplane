@@ -358,6 +358,7 @@ export function ServiceWorkloadSettingsForm({
           </p>
         )}
         <FormActions
+          onDiscard={onClose}
           className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
         >
           <Button
