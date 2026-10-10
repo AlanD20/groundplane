@@ -1,3 +1,4 @@
+import { editorFooterClassName } from "@/components/common/workspace-section";
 import { useEffect, useState } from "react";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import { ResourceTable } from "@/components/common/resource-table";
@@ -155,7 +156,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
               {releaseError}
             </p>
           )}
-          <div>
+          <div className={editorFooterClassName}>
             <Button
               type="submit"
               disabled={

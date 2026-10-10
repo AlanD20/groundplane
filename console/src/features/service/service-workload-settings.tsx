@@ -357,7 +357,7 @@ export function ServiceWorkloadSettingsForm({
           </p>
         )}
         <div
-          className={`${editorFooterClassName} sticky bottom-0 flex justify-end gap-2 pb-1`}
+          className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
         >
           <Button
             type="button"

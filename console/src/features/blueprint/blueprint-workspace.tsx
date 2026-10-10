@@ -81,6 +81,7 @@ export function BlueprintWorkspace({
   const getBlueprint = store.getBlueprint;
   const getTask = store.getTask;
   const fileInput = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<BlueprintDocumentResponse | null>(
     null,
   );
@@ -306,12 +307,14 @@ export function BlueprintWorkspace({
             className="flex flex-wrap items-center gap-2"
           >
             {!serviceName && (
-              <BlueprintApplyAction
-                environment={environment}
-                workspace={workspace}
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={applyBlocked}
-                onIntentChange={refreshRecovery}
-              />
+                onClick={() => setImportOpen(true)}
+              >
+                <FileUp /> Import bundle
+              </Button>
             )}
             <Button
               variant="outline"
@@ -343,6 +346,15 @@ export function BlueprintWorkspace({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {!serviceName && (
+            <BlueprintApplyAction
+              environment={environment}
+              workspace={workspace}
+              open={importOpen}
+              onOpenChange={setImportOpen}
+              onIntentChange={refreshRecovery}
+            />
+          )}
           {recovery.error && (
             <p role="alert" className="text-sm text-destructive">
               Apply is unavailable: {recovery.error}

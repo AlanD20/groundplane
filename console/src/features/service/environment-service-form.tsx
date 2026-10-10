@@ -6,6 +6,8 @@ import {
 } from "@/components/common/resource-form";
 import { useRequiredParams } from "@/lib/router";
 import type { Environment } from "@/lib/types";
+import { useState } from "react";
+import { useUnsavedChanges } from "@/components/common/use-unsaved-changes";
 
 export function EnvironmentServiceForm({
   env,
@@ -17,17 +19,24 @@ export function EnvironmentServiceForm({
   onOpenChange: (open: boolean) => void;
 }) {
   const params = useRequiredParams("tenant");
+  const [dirty, setDirty] = useState(false);
+  const navigation = useUnsavedChanges(open && dirty);
   return (
-    <ResourceForm inline open={open} onOpenChange={onOpenChange}>
-      <ResourceFormHeader>
-        <ResourceFormTitle>Add Service · {env.name}</ResourceFormTitle>
-      </ResourceFormHeader>
-      <ServiceFormBody
-        inline
-        env={env}
-        workspace={params.tenant}
-        onClose={() => onOpenChange(false)}
-      />
-    </ResourceForm>
+    <>
+      {navigation.dialog}
+      <ResourceForm inline open={open} onOpenChange={onOpenChange}>
+        <ResourceFormHeader>
+          <ResourceFormTitle>Add Service · {env.name}</ResourceFormTitle>
+        </ResourceFormHeader>
+        <ServiceFormBody
+          inline
+          env={env}
+          workspace={params.tenant}
+          onClose={() => onOpenChange(false)}
+          onDirtyChange={setDirty}
+          onSaved={navigation.allowNavigation}
+        />
+      </ResourceForm>
+    </>
   );
 }

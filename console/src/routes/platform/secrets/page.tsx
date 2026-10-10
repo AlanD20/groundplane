@@ -4,11 +4,11 @@ import { PageHeader } from "@/components/common/page-header";
 import { HelpHint, ResourcePanel } from "@/components/common/resource-panel";
 import { Button } from "@/components/ui/button";
 import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+  ResourceFormFooter as DialogFooter,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceForm,
+} from "@/components/common/resource-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -73,6 +73,121 @@ export default function PlatformSecretsPage() {
           </Button>
         }
       />
+      <ResourceForm
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) clearDraft();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>New platform Secret</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Type</Label>
+            <div className="flex gap-2">
+              {(["env", "file"] as const).map((candidate) => (
+                <Button
+                  key={candidate}
+                  variant={kind === candidate ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setKind(candidate)}
+                >
+                  {candidate === "env" ? "env variable" : "file secret"}
+                </Button>
+              ))}
+            </div>
+          </div>
+          {kind === "env" ? (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="s-key">Key</Label>
+                <Input
+                  id="s-key"
+                  value={key}
+                  onChange={(event) => setKey(event.target.value)}
+                  placeholder="APP_KEY"
+                  autoFocus
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="s-value">Value</Label>
+                <Input
+                  id="s-value"
+                  type="password"
+                  autoComplete="new-password"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  placeholder="••••"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="f-key">Name</Label>
+                <Input
+                  id="f-key"
+                  value={key}
+                  onChange={(event) => setKey(event.target.value)}
+                  placeholder="identity-tls-ca"
+                  autoFocus
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="f-path">
+                  Path relative to each environment volume
+                </Label>
+                <Input
+                  id="f-path"
+                  value={path}
+                  onChange={(event) => setPath(event.target.value)}
+                  placeholder="config/identity-tls/ca.pem"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="f-content">Content</Label>
+                <Textarea
+                  id="f-content"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  rows={6}
+                  spellCheck={false}
+                  className="font-mono text-xs"
+                  placeholder={
+                    "-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"
+                  }
+                />
+              </div>
+            </>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Stored encrypted in the Controller and materialized by the Agent
+            only when referenced.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setOpen(false);
+              clearDraft();
+            }}
+            disabled={creating}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={
+              creating || !key.trim() || (kind === "file" && !path.trim())
+            }
+            onClick={() => void create()}
+          >
+            {creating ? "Saving…" : "Save secret"}
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -95,124 +210,6 @@ export default function PlatformSecretsPage() {
           onReveal={(secret) => store.revealReusableSecret(secret.id)}
         />
       </ResourcePanel>
-
-      <Drawer
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) clearDraft();
-        }}
-      >
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>New platform Secret</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label>Type</Label>
-              <div className="flex gap-2">
-                {(["env", "file"] as const).map((candidate) => (
-                  <Button
-                    key={candidate}
-                    variant={kind === candidate ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setKind(candidate)}
-                  >
-                    {candidate === "env" ? "env variable" : "file secret"}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            {kind === "env" ? (
-              <>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="s-key">Key</Label>
-                  <Input
-                    id="s-key"
-                    value={key}
-                    onChange={(event) => setKey(event.target.value)}
-                    placeholder="APP_KEY"
-                    autoFocus
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="s-value">Value</Label>
-                  <Input
-                    id="s-value"
-                    type="password"
-                    autoComplete="new-password"
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
-                    placeholder="••••"
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="f-key">Name</Label>
-                  <Input
-                    id="f-key"
-                    value={key}
-                    onChange={(event) => setKey(event.target.value)}
-                    placeholder="identity-tls-ca"
-                    autoFocus
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="f-path">
-                    Path relative to each environment volume
-                  </Label>
-                  <Input
-                    id="f-path"
-                    value={path}
-                    onChange={(event) => setPath(event.target.value)}
-                    placeholder="config/identity-tls/ca.pem"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="f-content">Content</Label>
-                  <Textarea
-                    id="f-content"
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
-                    rows={6}
-                    spellCheck={false}
-                    className="font-mono text-xs"
-                    placeholder={
-                      "-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"
-                    }
-                  />
-                </div>
-              </>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Stored encrypted in the Controller and materialized by the Agent
-              only when referenced.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setOpen(false);
-                clearDraft();
-              }}
-              disabled={creating}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                creating || !key.trim() || (kind === "file" && !path.trim())
-              }
-              onClick={() => void create()}
-            >
-              {creating ? "Saving…" : "Save secret"}
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
     </div>
   );
 }

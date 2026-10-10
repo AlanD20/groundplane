@@ -12,4 +12,4 @@ export function workspaceSectionClassName(editing = false, className?: string) {
 }
 
 export const editorFooterClassName =
-  "workspace-editor-footer mt-4 border-t border-primary/25 pt-4";
+  "form-actions workspace-editor-footer mt-4 border-t border-primary/25";

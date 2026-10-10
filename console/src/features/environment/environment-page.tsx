@@ -22,7 +22,6 @@ import { EnvironmentVolumeManager } from "@/features/volume/environment-volume-m
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { ArrowLeft, Boxes, Layers, Network, Plug, Plus } from "lucide-react";
-import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { EnvironmentDeletionFence } from "./deletion-fence";
 import { SettingsCard } from "./environment-settings";
@@ -39,7 +38,19 @@ export default function EnvironmentPage() {
   const env = store.getEnvironment(params.tenant, params.project, params.env);
   const project = store.getProject(params.tenant, params.project);
   const [search, setSearch] = useSearchParams();
-  const [addingService, setAddingService] = useState<string | null>(null);
+  function setAddingService(open: boolean) {
+    setSearch((current) => {
+      const next = new URLSearchParams(current);
+      if (open) {
+        next.set("view", "overview");
+        next.set("panel", "overview");
+        next.set("create", "service");
+        next.delete("service");
+        next.delete("serviceTab");
+      } else next.delete("create");
+      return next;
+    });
+  }
   const { section, panel } = environmentNavigation(search);
   const backingEnvironments = store.backingProjects.flatMap(
     (backing) => backing.environments?.slice(0, 1) ?? [],
@@ -109,7 +120,7 @@ export default function EnvironmentPage() {
     ),
     overview: <EnvironmentOverview env={env} now={observation.now} />,
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
-    zones: <Topology env={env} onAddService={() => setAddingService(env.id)} />,
+    zones: <Topology env={env} onAddService={() => setAddingService(true)} />,
     routes: <RoutesCard env={env} />,
     attaches: <AttachesCard env={env} />,
     router: <RouterCard env={env} />,
@@ -173,7 +184,7 @@ export default function EnvironmentPage() {
             <Button
               variant="outline"
               disabled={deleting}
-              onClick={() => setAddingService(env.id)}
+              onClick={() => setAddingService(true)}
             >
               <Plus className="size-3.5" /> Add Service
             </Button>
@@ -224,12 +235,14 @@ export default function EnvironmentPage() {
           deleting ? "Environment deletion in progress" : section.label
         }
       >
-        <EnvironmentServiceForm
-          key={env.id}
-          env={env}
-          open={addingService === env.id}
-          onOpenChange={(open) => setAddingService(open ? env.id : null)}
-        />
+        {panel.key === "overview" && search.get("create") === "service" && (
+          <EnvironmentServiceForm
+            key={env.id}
+            env={env}
+            open
+            onOpenChange={setAddingService}
+          />
+        )}
         <section
           key={panel.key}
           aria-label={panel.label}

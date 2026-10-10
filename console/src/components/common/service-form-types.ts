@@ -29,6 +29,7 @@ export type ServiceFormSection =
 export type ServiceFormBodyProps = {
   inline?: boolean;
   onSaved?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 } & (
   | {
       env: Environment;

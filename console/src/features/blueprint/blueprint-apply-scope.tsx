@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import type { Environment } from '@/lib/types'
@@ -8,11 +9,12 @@ export function BlueprintApplyScope({ environment, value, onChange, disabled = f
   onChange: (value: string) => void
   disabled?: boolean
 }) {
+  const id = useId();
   return (
     <div className="space-y-2">
-      <Label htmlFor={`blueprint-scope-${environment.id}`}>Apply scope</Label>
+      <Label htmlFor={id}>Apply scope</Label>
       <Select
-        id={`blueprint-scope-${environment.id}`}
+        id={id}
         value={value || '__environment__'}
         disabled={disabled}
         onValueChange={(next) => onChange(next === '__environment__' ? '' : next)}

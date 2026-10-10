@@ -17,6 +17,7 @@ import {
   editorFooterClassName,
 } from "./workspace-section";
 import { AnimatedSection } from "./animated-section";
+import { submitFormOnShortcut } from "@/components/ui/form-submit-shortcut";
 import { cn } from "@/lib/utils";
 
 const Inline = createContext(false);
@@ -77,6 +78,7 @@ export function ResourceForm({
           >
             <div className="w-full">
               <section
+                onKeyDown={submitFormOnShortcut}
                 className={workspaceSectionClassName(
                   editing,
                   "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",

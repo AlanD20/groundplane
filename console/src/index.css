@@ -160,6 +160,26 @@
 }
 
 @layer utilities {
+  /* Bottom actions stay inside their owning form and keep their flow space.
+     No fixed overlay: the footer stops at the form boundary. */
+  .form-actions.form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--workspace-editor-bg, var(--form-actions-bg, var(--card)));
+    box-shadow: 0 -8px 16px -12px
+      color-mix(in srgb, var(--foreground) 25%, transparent);
+  }
+  :is([data-slot="dialog-content"], [data-slot="drawer-content"]) {
+    --form-actions-bg: var(--popover);
+  }
+  :is(input, textarea, [role="combobox"], [contenteditable="true"]) {
+    scroll-margin-bottom: 7rem;
+  }
   .workspace-editing {
     --workspace-editor-bg: color-mix(in oklab, var(--primary) 8%, var(--card));
     background-color: var(--workspace-editor-bg);

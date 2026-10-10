@@ -290,41 +290,8 @@ export function EnvVarsCard({
           </div>
         }
       >
-        {service && (
-          <p className="text-xs text-muted-foreground">
-            Entries exposed to {service.name}, including shared Entries. Editing
-            a shared Entry affects every Service in its exposure.
-          </p>
-        )}
-        <ListToolbar
-          label="Variables & files"
-          query={query}
-          onQueryChange={setQuery}
-          sort={table}
-          fields={[
-            { value: "name", label: "Key / path" },
-            { value: "type", label: "Type" },
-          ]}
-        />
-        <ul aria-label="Variables & files" className="min-w-0 space-y-2">
-          {table.rows.map(renderEntry)}
-        </ul>
-        {!table.total && (
-          <p className="p-6 text-center text-xs text-muted-foreground">
-            {entries.length
-              ? "No Entries match your search."
-              : "No variables or files yet."}
-          </p>
-        )}
-        <TablePagination table={table} label="Variables & files" />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Changes update managed files. Running processes receive them on the
-          next Deploy.
-        </p>
-      </ResourcePanel>
-
       <ResourceForm
-        inline={!service}
+        inline
         open={open}
         onOpenChange={(next) => (next ? undefined : closeDrawer())}
       >
@@ -530,12 +497,46 @@ export function EnvVarsCard({
         </DialogFooter>
       </ResourceForm>
       <BulkEntryDrawer
-        inline={!service}
+        inline
         serviceName={service?.name}
         env={env}
         bulkOpen={bulkOpen}
         setBulkOpen={setBulkOpen}
       />
+
+        {service && (
+          <p className="text-xs text-muted-foreground">
+            Entries exposed to {service.name}, including shared Entries. Editing
+            a shared Entry affects every Service in its exposure.
+          </p>
+        )}
+        <ListToolbar
+          label="Variables & files"
+          query={query}
+          onQueryChange={setQuery}
+          sort={table}
+          fields={[
+            { value: "name", label: "Key / path" },
+            { value: "type", label: "Type" },
+          ]}
+        />
+        <ul aria-label="Variables & files" className="min-w-0 space-y-2">
+          {table.rows.map(renderEntry)}
+        </ul>
+        {!table.total && (
+          <p className="p-6 text-center text-xs text-muted-foreground">
+            {entries.length
+              ? "No Entries match your search."
+              : "No variables or files yet."}
+          </p>
+        )}
+        <TablePagination table={table} label="Variables & files" />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Changes update managed files. Running processes receive them on the
+          next Deploy.
+        </p>
+      </ResourcePanel>
+
       <TaskRunnerDialog
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}

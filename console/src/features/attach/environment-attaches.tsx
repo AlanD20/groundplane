@@ -75,7 +75,7 @@ export function AttachesCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <AttachFormDialog
-          inline={!service}
+          inline
           initialServiceId={service?.id}
           env={env}
           open={open}
@@ -120,7 +120,7 @@ export function AttachesCard({
                   {a.service ? ` · for ${a.service}` : ""}
                 </span>
               </ContextLink>
-              <RenameAttach env={env} attach={a} inline={!service} />
+              <RenameAttach env={env} attach={a} inline />
               <StatusBadge status={a.status} />
               <DetachAttach env={env} attach={a} />
             </div>

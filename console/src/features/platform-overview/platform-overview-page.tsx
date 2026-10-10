@@ -28,7 +28,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useEffect } from "react";
-import { Link } from "react-router-dom";
+import { TenantCreateForm } from "@/features/tenant/tenant-create-form";
+import { Link, useSearchParams } from "react-router-dom";
 
 const platformTaskScope: TaskJournalScope = {
   kind: "workspace",
@@ -50,6 +51,7 @@ function worst(states: HealthState[]): HealthState {
 
 export default function PlatformOverviewPage() {
   const store = useStore();
+  const [search, setSearch] = useSearchParams();
   const { tenants, tenantProjects, backingProjects, host } = store;
   const platformJournal = store.getTaskJournal(platformTaskScope);
 
@@ -124,6 +126,13 @@ export default function PlatformOverviewPage() {
         </p>
       )}
 
+      {search.get("create") === "tenant" && (
+        <TenantCreateForm onClose={() => setSearch((current) => {
+          const next = new URLSearchParams(current);
+          next.delete("create");
+          return next;
+        }, { replace: true })} />
+      )}
       <SummaryStrip>
         <SummaryItem label="Tenants">
           {tenants.length}

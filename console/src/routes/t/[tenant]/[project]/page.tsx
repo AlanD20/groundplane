@@ -7,11 +7,11 @@ import { PageHeader } from "@/components/common/page-header";
 import { StatusDot } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+  ResourceFormFooter as DialogFooter,
+  ResourceFormHeader as DialogHeader,
+  ResourceFormTitle as DialogTitle,
+  ResourceForm,
+} from "@/components/common/resource-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRequiredParams } from "@/lib/router";
@@ -117,6 +117,73 @@ export default function TenantProjectPage() {
           </>
         }
       />
+      <ResourceForm open={open} onOpenChange={setOpen}>
+        <DialogHeader>
+          <DialogTitle>New environment · {project.name}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="e-name">Name</Label>
+            <Input
+              id="e-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="production"
+              autoFocus
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="e-network-pool">Network pool</Label>
+            <Input
+              id="e-network-pool"
+              value={networkPool}
+              onChange={(e) => setNetworkPool(e.target.value)}
+              placeholder="10.200.0.0/16"
+            />
+          </div>
+        </div>
+        {createError && (
+          <p role="alert" className="text-sm text-destructive">
+            {createError}
+          </p>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={creating || !name.trim() || !networkPool.trim()}
+            onClick={async () => {
+              const slug = name
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9-]/g, "");
+              setCreating(true);
+              setCreateError(undefined);
+              try {
+                await store.addEnvironment(
+                  project.id,
+                  slug,
+                  networkPool.trim(),
+                );
+                setOpen(false);
+                setName("");
+                setNetworkPool("");
+              } catch (error) {
+                setCreateError(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to create Environment",
+                );
+              } finally {
+                setCreating(false);
+              }
+            }}
+          >
+            {creating ? "Creating…" : "Create environment"}
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
 
       {/* Environment selector */}
       {envs.length === 0 ? (
@@ -136,76 +203,6 @@ export default function TenantProjectPage() {
           onRemove={setRemovingEnvironment}
         />
       )}
-
-      <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>New environment · {project.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="e-name">Name</Label>
-              <Input
-                id="e-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="production"
-                autoFocus
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="e-network-pool">Network pool</Label>
-              <Input
-                id="e-network-pool"
-                value={networkPool}
-                onChange={(e) => setNetworkPool(e.target.value)}
-                placeholder="10.200.0.0/16"
-              />
-            </div>
-          </div>
-          {createError && (
-            <p role="alert" className="text-sm text-destructive">
-              {createError}
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={creating || !name.trim() || !networkPool.trim()}
-              onClick={async () => {
-                const slug = name
-                  .trim()
-                  .toLowerCase()
-                  .replace(/[^a-z0-9-]/g, "");
-                setCreating(true);
-                setCreateError(undefined);
-                try {
-                  await store.addEnvironment(
-                    project.id,
-                    slug,
-                    networkPool.trim(),
-                  );
-                  setOpen(false);
-                  setName("");
-                  setNetworkPool("");
-                } catch (error) {
-                  setCreateError(
-                    error instanceof Error
-                      ? error.message
-                      : "Unable to create Environment",
-                  );
-                } finally {
-                  setCreating(false);
-                }
-              }}
-            >
-              {creating ? "Creating…" : "Create environment"}
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
 
       {removingEnvironment ? (
         <HierarchyDeleteDialog

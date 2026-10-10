@@ -19,6 +19,7 @@ import { ImagePicker } from "@/features/image-delivery/image-picker";
 import { useStore } from "@/lib/store";
 import type { Service } from "@/lib/types";
 import { useState } from "react";
+import { useDraftDirty } from "@/lib/use-draft-dirty";
 
 // The full service form, shared between:
 //  - tenant environments ("Add service" / "Edit service") — one container
@@ -43,6 +44,7 @@ export function ServiceFormBody({
   onClose,
   inline = false,
   onSaved,
+  onDirtyChange,
 }: ServiceFormBodyProps) {
   const store = useStore();
   const editing = !!initial;
@@ -92,6 +94,7 @@ export function ServiceFormBody({
   );
   const [replicas, setReplicas] = useState(String(initial?.replicas ?? 1));
   const [hooks, setHooks] = useState<BackingHooks>(initial?.hooks ?? {});
+  useDraftDirty([name, image, role, strategy, onFailure, zones, hcKind, hcTarget, hcInterval, hcTimeout, hcStart, mem, cpus, expose, restart, replicas, hooks], onDirtyChange);
   const [hookError, setHookError] = useState<string | null>(null);
   // A backing service owns its own network: the zone named after it is
   // created with it, and consumers join it as `external` when they attach —
@@ -553,11 +556,7 @@ export function ServiceFormBody({
             </p>
           )}
           <DialogFooter
-            className={
-              inline
-                ? `${editorFooterClassName} sticky bottom-0 pb-1`
-                : undefined
-            }
+            className={inline ? editorFooterClassName : undefined}
           >
             <Button
               type="button"

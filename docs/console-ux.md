@@ -218,8 +218,10 @@ content; it does not need its own visual treatment for ordinary fields and edits
   themes. Preserve visible focus, validation, disabled and open-selector states.
   A highlighted editor must not camouflage its controls.
 - **Actions:** carry the same highlight through the Save/Cancel footer, including
-  when it is sticky. Leave 16px above its divider and 16px between the divider and
-  controls. Keep the actions inside their editing boundary; avoid a detached
+  while scrolling. Every form uses the shared sticky action footer, constrained
+  to its owning form or editor. Use an opaque theme surface, a subtle top shadow,
+  wrapping buttons and mobile safe-area padding. Leave 16px above its divider
+  and 16px between the divider and controls. Keep the actions inside their editing boundary; avoid a detached
   plain-background strip.
 - **Resource rows:** establish a clear hierarchy of identity, primary value and
   secondary details. For a mount, show the Volume with an icon, the container
@@ -324,6 +326,11 @@ List details and editors belong immediately beneath their owning row. The same
 disclosure button opens and closes details, exposes its expanded state, and
 keeps focus; inspection must not scroll to a detached panel after the list.
 New-resource forms appear beneath the section header, before existing rows.
+Use the shared ResourceForm for ordinary creation and editing; reserve dialogs
+for confirmations and Task review. Scope an open form to its owning navigation
+destination. Global creation shortcuts navigate there before opening it; they
+must not leave a form hanging above unrelated tabs. Add Service protects an
+unsaved draft when navigating away.
 When configuring an existing component, expand its current section in place;
 keep the section mounted and animate its height with reduced-motion support.
 The highlight surrounds both the added fields and their action footer. Do not

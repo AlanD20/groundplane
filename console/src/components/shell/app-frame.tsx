@@ -1,3 +1,4 @@
+import { DialogTitle } from "@/components/ui/dialog";
 import { ContextReturnLink } from "@/components/common/context-link";
 ("use client");
 
@@ -6,17 +7,10 @@ import { TaskNotifications } from "@/features/task/task-access";
 import { Brand } from "./brand";
 
 import { Button } from "@/components/ui/button";
-import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useStore } from "@/lib/store";
-import { useLinkedSlug } from "@/lib/use-linked-slug";
 import { Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -58,12 +52,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const workspace = useWorkspace(pathname);
   const hasLocalNavigation = hasWorkspaceNavigation(pathname);
   const navigate = useNavigate();
-  const {
-    addTenant,
-    tenantProjects,
-    resourceRefreshErrors,
-    retryResourceRefresh,
-  } = useStore();
+  const { tenantProjects, resourceRefreshErrors, retryResourceRefresh } =
+    useStore();
   const projectSlug = useProjectSlug(
     pathname,
     tenantProjects.map((p) => p.slug),
@@ -71,41 +61,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => setMobileOpen(false), [pathname, search]);
-  const [newTenantOpen, setNewTenantOpen] = useState(false);
-  const {
-    name,
-    slug,
-    setName,
-    setSlug,
-    reset: resetTenantIdentity,
-  } = useLinkedSlug();
-  const [description, setDescription] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-
-  async function createTenant() {
-    const s = slug.trim();
-    if (creating || !s) return;
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const tenant = await addTenant({
-        slug: s,
-        name: name.trim() || s,
-        description: description.trim(),
-      });
-      setNewTenantOpen(false);
-      resetTenantIdentity();
-      setDescription("");
-      navigate(`/t/${tenant.slug}`);
-    } catch (error) {
-      setCreateError(
-        error instanceof Error ? error.message : "Unable to create tenant",
-      );
-    } finally {
-      setCreating(false);
-    }
-  }
 
   return (
     <TooltipProvider>
@@ -129,7 +84,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
                 <WorkspaceSwitcher
                   workspace={workspace}
-                  onNewTenant={() => setNewTenantOpen(true)}
+                  onNewTenant={() =>
+                    navigate("/platform/overview?create=tenant")
+                  }
                 />
               </div>
               <div className="flex-1 overflow-y-auto">
@@ -167,7 +124,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                       workspace={workspace}
                       onNewTenant={() => {
                         setMobileOpen(false);
-                        setNewTenantOpen(true);
+                        navigate("/platform/overview?create=tenant");
                       }}
                     />
                   </div>
@@ -244,72 +201,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
-
-      <Drawer open={newTenantOpen} onOpenChange={setNewTenantOpen}>
-        <DrawerContent>
-          <form
-            className="flex flex-col gap-5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (name.trim() && slug.trim()) void createTenant();
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>New tenant</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="t-name">Display name</Label>
-                <Input
-                  id="t-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Acme Inc."
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="t-slug">Slug</Label>
-                <Input
-                  id="t-slug"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  placeholder="acme"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="t-desc">Description</Label>
-                <Input
-                  id="t-desc"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What this tenant hosts"
-                />
-              </div>
-              {createError && (
-                <p role="alert" className="text-xs text-destructive">
-                  {createError}
-                </p>
-              )}
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setNewTenantOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={creating || !name.trim() || !slug.trim()}
-              >
-                {creating ? "Creating…" : "Create tenant"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DrawerContent>
-      </Drawer>
     </TooltipProvider>
   );
 }
