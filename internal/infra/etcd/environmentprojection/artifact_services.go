@@ -3,7 +3,9 @@ package environmentprojection
 import (
 	"strconv"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -17,7 +19,7 @@ type environmentArtifactServiceIdentity struct {
 }
 
 // One logical Service is either the normalized authored service, a portless
-// singleton, or a stable proxy plus its exact singleton or blue/green workloads.
+// singleton, rolling replica set, or a stable proxy plus its exact workloads.
 func validateEnvironmentArtifactServices(
 	artifact *agentpb.ComposeArtifact,
 	expected map[string]environmentArtifactServiceIdentity,
@@ -54,6 +56,12 @@ func validateEnvironmentArtifactServices(
 			}
 			key = service.Slot
 			wantName, nameErr = domain.WorkloadComposeName(owner.name, domain.WorkloadTarget(service.Slot))
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA:
+			if _, err := executionplan.ReleaseWorkloadService(artifact, service.ServiceId, "", service.RollingReplicaOrdinal); err != nil {
+				return err
+			}
+			key = "replica/" + strconv.FormatUint(uint64(service.RollingReplicaOrdinal), 10)
+			wantName = service.ComposeName // The shared selector verifies its release-derived name.
 		default:
 			return errs.New(errs.KindValidationFailed, "Environment Compose Service role is invalid")
 		}
@@ -68,6 +76,9 @@ func validateEnvironmentArtifactServices(
 	}
 	for id, owner := range expected {
 		group := groups[id]
+		if rollingArtifactCoverage(group, owner) {
+			continue
+		}
 		if len(group) == 1 &&
 			(group["authored"] != nil || group["singleton"] != nil && group["singleton"].ComposeName == owner.name) {
 			continue
@@ -82,6 +93,39 @@ func validateEnvironmentArtifactServices(
 		return errs.New(errs.KindValidationFailed, "Environment Compose logical Service coverage is incomplete")
 	}
 	return nil
+}
+
+// A completed rolling runtime contains exactly one contiguous replica set.
+// Mixed old/new replicas belong to in-flight execution, never applied state.
+func rollingArtifactCoverage(group map[string]*agentpb.ComposeService, owner environmentArtifactServiceIdentity) bool {
+	count := len(group)
+	if group["proxy"] != nil {
+		count--
+	}
+	if owner.componentID != "" || count < 1 || count > rollingrelease.MaximumReplicas {
+		return false
+	}
+	releaseID, planID, generation := "", "", uint64(0)
+	owner.capturedRuntime = true // Applied and mixed inputs may retain the current generation.
+	for ordinal := 1; ordinal <= count; ordinal++ {
+		replica := group["replica/"+strconv.Itoa(ordinal)]
+		if replica == nil {
+			return false
+		}
+		plan, renderGeneration, valid := historicalArtifactIdentity(replica, owner)
+		selectedRelease := ""
+		for _, label := range replica.ExpectedLabels {
+			if label.GetKey() == "com.groundplane.release-id" {
+				selectedRelease = label.GetValue()
+			}
+		}
+		if !valid || ids.Validate(ids.KindDeployment, selectedRelease) != nil ||
+			ordinal > 1 && (selectedRelease != releaseID || plan != planID || renderGeneration != generation) {
+			return false
+		}
+		releaseID, planID, generation = selectedRelease, plan, renderGeneration
+	}
+	return true
 }
 
 // Mixed Blueprint artifacts retain only physically authoritative old workloads.

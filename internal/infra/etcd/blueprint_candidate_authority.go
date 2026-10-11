@@ -91,6 +91,14 @@ func blueprintCandidateCompensationResult(
 	if result.FailedStepID == "" && result.Diagnostic == taskjournal.TaskResultDiagnosticTimeoutBeforeEffect {
 		return nil, nil
 	}
+	// Reconnect can interrupt work between steps, including after forward work
+	// finished but before its acknowledgement committed. The recovery resolver
+	// binds this identity only after exact file/runtime restoration is proven.
+	// Keep that proof; do not invent a failed step or skip compensation checks.
+	if result.FailedStepID == "" && result.ExecutionEpoch > 1 &&
+		recordcodec.ValidSHA256(result.ReleaseRecoveryRecordSHA256) {
+		return &result, nil
+	}
 	if result.FailedStepID == "" || !taskContainsStep(task, result.FailedStepID) {
 		return nil, errs.New(errs.KindReleaseRecoveryRequired, "Blueprint failure lacks an exact failed step")
 	}
