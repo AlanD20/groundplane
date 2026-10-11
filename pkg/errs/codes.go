@@ -74,6 +74,7 @@ const (
 	// Internal request Kinds bind each accepted framework status; an unknown
 	// framework status fails closed as request.failed/500.
 	CodeRequestNotFound             Code = "request.not_found"
+	CodeRequestForbidden            Code = "request.forbidden"
 	CodeRequestMethodNotAllowed     Code = "request.method_not_allowed"
 	CodeRequestNotAcceptable        Code = "request.not_acceptable"
 	CodeRequestUnsupportedMediaType Code = "request.unsupported_media_type"
@@ -143,6 +144,7 @@ const (
 	KindScopeUnauthorized
 	KindConnectorScopeInvalid
 	KindRequestNotFound
+	KindRequestForbidden
 	KindRequestMethodNotAllowed
 	KindRequestNotAcceptable
 	KindRequestUnsupportedMediaType
@@ -213,6 +215,7 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindScopeUnauthorized:                  {CodeScopeUnauthorized, ClassValidation, 422},
 	KindConnectorScopeInvalid:              {CodeConnectorScopeInvalid, ClassValidation, 422},
 	KindRequestNotFound:                    {CodeRequestNotFound, ClassNotFound, 404},
+	KindRequestForbidden:                   {CodeRequestForbidden, ClassForbidden, 403},
 	KindRequestMethodNotAllowed:            {CodeRequestMethodNotAllowed, ClassMethodNotAllowed, 405},
 	KindRequestNotAcceptable:               {CodeRequestNotAcceptable, ClassNotAcceptable, 406},
 	KindRequestUnsupportedMediaType:        {CodeRequestUnsupportedMediaType, ClassUnsupportedMediaType, 415},

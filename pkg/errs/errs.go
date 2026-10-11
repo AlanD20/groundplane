@@ -22,6 +22,7 @@ const (
 	ClassBadRequest           Class = "bad_request"
 	ClassValidation           Class = "validation"
 	ClassNotFound             Class = "not_found"
+	ClassForbidden            Class = "forbidden"
 	ClassConflict             Class = "conflict"
 	ClassRetryable            Class = "retryable"
 	ClassMethodNotAllowed     Class = "method_not_allowed"

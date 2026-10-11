@@ -82,6 +82,8 @@ func requestProblemKind(status int) errs.Kind {
 		return errs.KindValidationFailed
 	case http.StatusNotFound:
 		return errs.KindRequestNotFound
+	case http.StatusForbidden:
+		return errs.KindRequestForbidden
 	case http.StatusMethodNotAllowed:
 		return errs.KindRequestMethodNotAllowed
 	case http.StatusNotAcceptable:

@@ -62,6 +62,7 @@ func expectedKindCatalog() map[Kind]descriptor {
 		KindScopeUnauthorized:                  {"scope.unauthorized", "validation", 422},
 		KindConnectorScopeInvalid:              {"connector.scope_invalid", "validation", 422},
 		KindRequestNotFound:                    {"request.not_found", "not_found", 404},
+		KindRequestForbidden:                   {"request.forbidden", "forbidden", 403},
 		KindRequestMethodNotAllowed:            {"request.method_not_allowed", "method_not_allowed", 405},
 		KindRequestNotAcceptable:               {"request.not_acceptable", "not_acceptable", 406},
 		KindRequestUnsupportedMediaType:        {"request.unsupported_media_type", "unsupported_media_type", 415},

@@ -133,11 +133,19 @@ export function HostTerminalProvider({
     socket.onerror = () => {
       if (socketRef.current === socket) setError("Host terminal connection was interrupted.");
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (socketRef.current !== socket) return;
       socketRef.current = null;
       setConnected(false);
       const latest = sessionRef.current;
+      if (event.code === 1008 && latest?.id === current.id) {
+        const ended: HostTerminalSession = { ...latest, state: "terminated", reason: "session_unavailable" };
+        sessionRef.current = ended;
+        setSession(ended);
+        terminatePendingRef.current = false;
+        setError("This host terminal session has ended. Open a new terminal to continue.");
+        return;
+      }
       if (
         latest?.state === "active" &&
         activeRef.current &&

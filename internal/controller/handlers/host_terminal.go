@@ -114,7 +114,7 @@ func (s *Server) streamHostTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 	owner := terminalOwner(r.Header.Get("Cookie"))
 	id := r.PathValue("id")
-	if owner == "" || ids.Validate(ids.KindTerminal, id) != nil {
+	if ids.Validate(ids.KindTerminal, id) != nil {
 		s.writeProblem(w, errs.New(errs.KindRequestNotFound, "host terminal session was not found"))
 		return
 	}
@@ -125,6 +125,10 @@ func (s *Server) streamHostTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 	attachment, err := s.hostTerminals.Attach(owner, id, after)
 	if err != nil {
+		if errs.IsNotFound(err) {
+			closeUnavailableHostTerminal(w, r)
+			return
+		}
 		var terminalErr *errs.Error
 		if !errors.As(err, &terminalErr) {
 			terminalErr = errs.Wrap(errs.KindInternal, err)
@@ -191,6 +195,22 @@ func (s *Server) streamHostTerminal(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// A browser cannot read an HTTP failure from a WebSocket handshake. Send a
+// permanent close on the continuation itself so reconnect cannot loop after
+// restart, expiration or loss of ownership. This never opens a shell.
+func closeUnavailableHostTerminal(w http.ResponseWriter, r *http.Request) {
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		CompressionMode: websocket.CompressionDisabled,
+	})
+	if err != nil {
+		return
+	}
+	defer conn.CloseNow()
+	// The close handshake is bounded by the WebSocket transport; a disconnected
+	// peer cannot receive it and does not require another recovery action.
+	_ = conn.Close(websocket.StatusPolicyViolation, "host terminal session is no longer available")
 }
 
 func (s *Server) readHostTerminalClient(
