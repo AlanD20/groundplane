@@ -244,6 +244,9 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 			response.InterruptedDetachRetry = &apiTypes.TaskDetachRetry{AttachID: retry.AttachID, StepID: retry.StepID}
 		}
 	}
+	if err := s.applyBlueprintFailureDetails(ctx, task.Record, &response); err != nil {
+		return nil, normalizeTaskRouteError(err)
+	}
 	return &taskOutput{Body: response}, nil
 }
 

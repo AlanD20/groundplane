@@ -63,10 +63,7 @@ func taskResourceKind(record etcd.TaskRecord) string {
 func taskFailureSummary(record etcd.TaskRecord) string {
 	if failure := record.BlueprintFailure; failure != nil {
 		if failure.Phase == "child_execution" {
-			return fmt.Sprintf(
-				"Blueprint Apply failed because child Task %s failed. Inspect that Task for the execution and recovery details; a new Apply is required.",
-				failure.ChildTaskID,
-			)
+			return "Blueprint Apply failed while executing a resource change. Open this Apply for execution and recovery details; a new Apply is required."
 		}
 		stage := map[string]string{
 			"planning": "planning changes", "selection": "selecting the next change",
