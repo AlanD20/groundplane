@@ -12,11 +12,11 @@ import (
 // durable deletion belongs to Task acknowledgement, not the execution handler.
 func TestControllerTaskHandlerAcceptsOnlyExactConnectorRemoval(t *testing.T) {
 	t.Parallel()
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		&fakeControllerTaskLocalAgents{},
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
-	)
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
@@ -29,7 +29,7 @@ func TestControllerTaskHandlerAcceptsOnlyExactConnectorRemoval(t *testing.T) {
 			etcd.TaskConnectorNameParam:           "primary-backups",
 		},
 	}
-	if err := handler.Execute(context.Background(), valid); err != nil {
+	if err := handler.Execute(context.Background(), valid, testControllerProgress(context.Background(), valid)); err != nil {
 		t.Fatalf("Execute(valid Connector removal) error = %v", err)
 	}
 	for name, mutate := range map[string]func(*etcd.TaskRecord){
@@ -48,7 +48,7 @@ func TestControllerTaskHandlerAcceptsOnlyExactConnectorRemoval(t *testing.T) {
 				etcd.TaskConnectorNameParam:           valid.Params[etcd.TaskConnectorNameParam],
 			}
 			mutate(&candidate)
-			if err := handler.Execute(context.Background(), candidate); err == nil {
+			if err := handler.Execute(context.Background(), candidate, testControllerProgress(context.Background(), candidate)); err == nil {
 				t.Fatal("Execute(invalid Connector removal) succeeded")
 			}
 		})

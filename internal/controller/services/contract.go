@@ -91,9 +91,12 @@ func serviceDesiredFromCreate(input apiTypes.ServiceCreate) core.Service {
 	return core.Service{
 		Name: input.Name, Image: input.Image, Zones: append([]string(nil), input.Zones...),
 		Strategy: core.Strategy(input.Strategy), OnFailure: core.OnFailure(input.OnFailure),
-		Healthcheck: serviceHealthcheckToCore(input.Healthcheck),
-		Resources:   core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs},
-		Expose:      append([]string(nil), input.Expose...), Restart: input.Restart, Replicas: input.Replicas,
+		RollingReplicaTimeoutSeconds: input.RollingReplicaTimeoutSeconds,
+		Healthcheck:                  serviceHealthcheckToCore(input.Healthcheck),
+		Resources:                    core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs},
+		Expose: append(
+			[]string(nil),
+			input.Expose...), Restart: input.Restart, Replicas: input.Replicas,
 	}
 }
 
@@ -148,6 +151,9 @@ func applyServiceEdit(current core.Service, input apiTypes.ServiceEdit) core.Ser
 	desired.Zones = append([]string(nil), input.Zones...)
 	desired.Strategy = core.Strategy(input.Strategy)
 	desired.OnFailure = core.OnFailure(input.OnFailure)
+	if input.RollingReplicaTimeoutSeconds != nil {
+		desired.RollingReplicaTimeoutSeconds = *input.RollingReplicaTimeoutSeconds
+	}
 	desired.Healthcheck = serviceHealthcheckToCore(input.Healthcheck)
 	desired.Resources = core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs}
 	desired.Expose = append([]string(nil), input.Expose...)
@@ -243,7 +249,7 @@ func validateServiceEditSettings(input apiTypes.ServiceEdit) error {
 }
 
 func serviceCreateIntentValue(input apiTypes.ServiceCreate) requestidempotency.Value {
-	return serviceIntentValue(
+	service := serviceIntentValue(
 		input.EnvironmentID,
 		input.Name,
 		input.Image,
@@ -255,6 +261,13 @@ func serviceCreateIntentValue(input apiTypes.ServiceCreate) requestidempotency.V
 		input.Expose,
 		input.Restart,
 		input.Replicas,
+	)
+	return requestidempotency.Object(
+		requestidempotency.Field{Name: "service", Value: service},
+		requestidempotency.Field{
+			Name:  "rolling_replica_timeout_seconds",
+			Value: requestidempotency.Integer(int64(input.RollingReplicaTimeoutSeconds)),
+		},
 	)
 }
 
@@ -301,6 +314,15 @@ func serviceEditSettingsIntentValue(
 	input apiTypes.ServiceEdit,
 ) requestidempotency.Value {
 	fields := []requestidempotency.Field{{Name: "service", Value: service}}
+	if input.RollingReplicaTimeoutSeconds != nil {
+		fields = append(
+			fields,
+			requestidempotency.Field{
+				Name:  "rolling_replica_timeout_seconds",
+				Value: requestidempotency.Integer(int64(*input.RollingReplicaTimeoutSeconds)),
+			},
+		)
+	}
 	if input.Command != nil {
 		fields = append(fields, requestidempotency.Field{
 			Name: "command", Value: serviceStringListIntentValue(*input.Command),

@@ -50,4 +50,6 @@ type TaskProgress struct {
 	Ordinal        uint64
 	State          TaskProgressState
 	Chunk          []byte
+	HealthWait     *agentpb.HealthWaitProgress
+	Failure        *agentpb.StepFailure
 }

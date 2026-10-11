@@ -85,7 +85,7 @@ func validateReleaseScriptPlan(
 				return err
 			}
 			if run.EnvironmentId != plan.TargetId ||
-				!blueprintCandidateReleaseBound(run, snapshot, applyStep, artifact) {
+				!blueprintCandidateReleaseBound(plan, run, snapshot, applyStep, artifact) {
 				return errs.New(errs.KindValidationFailed, "Blueprint Script candidate authority is invalid")
 			}
 		} else {
@@ -196,6 +196,7 @@ func validateBlueprintHookPhases(plan *agentpb.ExecutionPlan) error {
 }
 
 func blueprintCandidateReleaseBound(
+	plan *agentpb.ExecutionPlan,
 	run *agentpb.RunScript,
 	snapshot *agentpb.ResolvedRunnerSnapshot,
 	applyStep *agentpb.ExecutionStep,
@@ -213,7 +214,23 @@ func blueprintCandidateReleaseBound(
 			matches++
 		}
 	}
-	return matches == 1
+	if applyStep.GetComposeWorkloadApply().GetRollingReplicaOrdinal() == 0 {
+		return matches == 1
+	}
+	member, err := RollingMember(plan, run.GetServiceId())
+	if err != nil || member.GetCandidateReleaseId() != run.GetReleaseId() {
+		return false
+	}
+	rolling, err := OpenRollingPlan(member)
+	if err != nil || matches != len(rolling.Candidate) {
+		return false
+	}
+	for _, replica := range rolling.Candidate {
+		if _, err := RollingReplicaService(artifact, run.GetServiceId(), replica); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func blueprintCandidateApplyArtifact(step *agentpb.ExecutionStep, serviceID string) string {
@@ -221,6 +238,12 @@ func blueprintCandidateApplyArtifact(step *agentpb.ExecutionStep, serviceID stri
 		return apply.GetArtifactId()
 	}
 	if apply := step.GetComposeWorkloadApply(); apply != nil && apply.GetServiceId() == serviceID {
+		// Hooks belong to the Service Release, not to each replica. The first
+		// candidate start is its phase boundary; later starts are not ambiguous
+		// competing Deploys. The rolling procedure validates their whole set.
+		if apply.GetRollingReplicaOrdinal() > 1 {
+			return ""
+		}
 		return apply.GetArtifactId()
 	}
 	return ""

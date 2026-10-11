@@ -92,7 +92,9 @@ func (repository *EnvironmentBlueprintRepository) TrySettleBlueprintEntryOmissio
 		storedParent.PlanHash != parent.PlanHash || storedParent.RenderGeneration != parent.RenderGeneration ||
 		claimID != parent.ID || desired.EnvironmentID != environmentID || desired.RevisionID != parent.ID ||
 		owned.EnvironmentID != environmentID || owned.RevisionID != parent.ID ||
-		desired.RenderGeneration != uint64(parent.RenderGeneration) || owned.RenderGeneration != desired.RenderGeneration {
+		desired.RenderGeneration != uint64(
+			parent.RenderGeneration,
+		) || owned.RenderGeneration != desired.RenderGeneration {
 		return false, errs.New(errs.KindStateConflict, "Blueprint Entry omission revision changed")
 	}
 	for _, identity := range owned.Entries {
@@ -121,14 +123,22 @@ func (repository *EnvironmentBlueprintRepository) TrySettleBlueprintEntryOmissio
 	}
 	for _, value := range read.Values[8:] {
 		if value != nil {
-			return false, errs.New(errs.KindResourceInUse, "Blueprint Entry cleanup overlaps an active removal or file writer")
+			return false, errs.New(
+				errs.KindResourceInUse,
+				"Blueprint Entry cleanup overlaps an active removal or file writer",
+			)
 		}
 	}
 	scriptConditions, err := entries.PrepareEntryScriptAbsence(ctx, repository.store, entryID, snapshot.ReadRevision)
 	if err != nil {
 		return false, err
 	}
-	retirementConditions, mutations, err := entries.PrepareProjectedEntryRetirement(ctx, repository.store, record, snapshot.ReadRevision)
+	retirementConditions, mutations, err := entries.PrepareProjectedEntryRetirement(
+		ctx,
+		repository.store,
+		record,
+		snapshot.ReadRevision,
+	)
 	if err != nil {
 		return false, err
 	}

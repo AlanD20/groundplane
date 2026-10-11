@@ -49,8 +49,8 @@ func validateComponentRecoveryPlan(
 		}
 		return nil
 	}
-	if plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
-		ids.Validate(ids.KindEnvironment, plan.GetTargetId()) != nil ||
+	environmentID, scopeErr := componentRecoveryEnvironment(plan, artifacts)
+	if scopeErr != nil ||
 		ids.Validate(ids.KindComponent, procedure.GetComponentId()) != nil ||
 		ids.Validate(ids.KindConfig, procedure.GetCandidateArtifactId()) != nil ||
 		plan.GetCandidateReleaseProcedure() != nil || plan.GetServiceLifecycleProcedure() != nil ||
@@ -60,7 +60,7 @@ func validateComponentRecoveryPlan(
 	}
 	candidate := artifacts[procedure.GetCandidateArtifactId()]
 	if candidate == nil || candidate.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-		candidate.GetOwnerId() != plan.GetTargetId() {
+		candidate.GetOwnerId() != environmentID {
 		return invalidComponentRecovery("candidate artifact is invalid")
 	}
 	steps := make(map[string][]*agentpb.ExecutionStep, len(plan.GetSteps()))
@@ -101,6 +101,9 @@ func validateComponentRecoveryPlan(
 		return invalidComponentRecovery("runtime restoration pair is invalid")
 	}
 	if err := validateComponentRecoveryTarget(plan, procedure, candidate, artifacts); err != nil {
+		return err
+	}
+	if err := validateComponentRecoveryConfiguration(plan, procedure); err != nil {
 		return err
 	}
 	for _, step := range plan.GetSteps() {
@@ -148,6 +151,10 @@ func validateComponentRecoveryTarget(
 	artifacts map[string]*agentpb.ComposeArtifact,
 ) error {
 	ownedCandidate := componentOwnedServices(candidate, procedure.GetComponentId())
+	environmentID, err := componentRecoveryEnvironment(plan, artifacts)
+	if err != nil {
+		return err
+	}
 	if prior := procedure.GetPredecessor(); prior != nil {
 		if procedure.GetCandidateAbsence() != nil || ids.Validate(ids.KindConfig, prior.GetPriorArtifactId()) != nil ||
 			ids.Validate(ids.KindService, prior.GetServiceId()) != nil {
@@ -156,14 +163,22 @@ func validateComponentRecoveryTarget(
 		artifact := artifacts[prior.GetPriorArtifactId()]
 		ownedPrior := componentOwnedServices(artifact, procedure.GetComponentId())
 		managed := plan.GetManagedComponentProcedure()
-		if artifact == nil || artifact.GetOwnerId() != plan.GetTargetId() || len(ownedPrior) != 1 ||
+		if artifact == nil || artifact.GetOwnerId() != environmentID || len(ownedPrior) != 1 ||
 			ownedPrior[0].GetServiceId() != prior.GetServiceId() ||
-			managed == nil || len(managed.GetServices()) != 1 ||
-			managed.GetServices()[0].GetComponentId() != procedure.GetComponentId() ||
-			managed.GetServices()[0].GetServiceId() != prior.GetServiceId() ||
-			managed.GetServices()[0].GetSourceArtifactId() != prior.GetPriorArtifactId() ||
 			(len(ownedCandidate) != 0 && (len(ownedCandidate) != 1 || ownedCandidate[0].GetServiceId() != prior.GetServiceId())) {
 			return invalidComponentRecovery("predecessor artifact is invalid")
+		}
+		if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+			if managed == nil || len(managed.GetServices()) != 1 ||
+				managed.GetServices()[0].GetComponentId() != procedure.GetComponentId() ||
+				managed.GetServices()[0].GetServiceId() != prior.GetServiceId() ||
+				managed.GetServices()[0].GetSourceArtifactId() != prior.GetPriorArtifactId() {
+				return invalidComponentRecovery("predecessor differs from Component teardown")
+			}
+		} else if managed != nil || len(ownedCandidate) != 1 ||
+			artifact.GetProjectName() != candidate.GetProjectName() ||
+			artifact.GetAuthorizedVolumeDir() != candidate.GetAuthorizedVolumeDir() {
+			return invalidComponentRecovery("Route predecessor differs from its router scope")
 		}
 		return nil
 	}
@@ -175,6 +190,19 @@ func validateComponentRecoveryTarget(
 		return invalidComponentRecovery("candidate absence target is invalid")
 	}
 	return nil
+}
+
+// A Route's target is its Route id, not the Environment id. Its singleton
+// candidate owns the Environment scope; arbitrary reconcile/remove targets do
+// not gain Component recovery merely by carrying this procedure.
+func componentRecoveryEnvironment(
+	plan *agentpb.ExecutionPlan, artifacts map[string]*agentpb.ComposeArtifact,
+) (string, error) {
+	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
+		ids.Validate(ids.KindEnvironment, plan.GetTargetId()) == nil {
+		return plan.GetTargetId(), nil
+	}
+	return routeComponentRecoveryEnvironment(plan, artifacts)
 }
 
 func componentOwnedServices(artifact *agentpb.ComposeArtifact, componentID string) []*agentpb.ComposeService {

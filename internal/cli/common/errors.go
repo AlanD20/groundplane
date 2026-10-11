@@ -38,6 +38,9 @@ func HandleErrors(err error) int {
 	if errors.As(err, &de) {
 		problem := de.ToProblem()
 		fmt.Fprintf(os.Stderr, "error: %s: %s\n", problem.Code, problem.Detail)
+		if reference := de.RequestReference(); reference != "" {
+			fmt.Fprintf(os.Stderr, "request reference: %s\n", reference)
+		}
 		return 1
 	}
 

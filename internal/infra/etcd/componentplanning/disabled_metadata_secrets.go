@@ -26,7 +26,7 @@ func PrepareDisabledComponentSecretReplacement(ctx context.Context, store interf
 	if store == nil || revision <= 0 || componentrecord.ValidateRecord(current) != nil ||
 		componentrecord.ValidateRecord(candidate) != nil || current.Desired.Enabled || candidate.Desired.Enabled ||
 		current.Desired.ID != candidate.Desired.ID || current.Desired.Owner != candidate.Desired.Owner ||
-		current.Desired.OwnerID != candidate.Desired.OwnerID || current.Desired.Kind != candidate.Desired.Kind ||
+		current.Desired.OwnerID != candidate.Desired.OwnerID || !current.Desired.Kind.SharesEnvironmentCapability(candidate.Desired.Kind) ||
 		len(current.Runtime.GeneratedServices) != 0 || len(candidate.Runtime.GeneratedServices) != 0 ||
 		current.Runtime.PinnedIPv4 != "" || candidate.Runtime.PinnedIPv4 != "" ||
 		current.Runtime.Healthy || candidate.Runtime.Healthy {

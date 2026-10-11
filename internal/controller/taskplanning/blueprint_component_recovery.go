@@ -22,6 +22,20 @@ func (resolver *TaskPlanResolver) PrepareBlueprintComponentRecovery(
 	forward []*agentpb.ExecutionStep,
 ) ([]*agentpb.ExecutionStep, *agentpb.ComponentRecoveryProcedure, error) {
 	componentID := task.Params[taskjournal.TaskBlueprintComponentUnitParam]
+	var prior *agentpb.ManagedComponentService
+	if managed != nil {
+		if len(managed.GetServices()) != 1 {
+			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component predecessor is ambiguous")
+		}
+		prior = managed.GetServices()[0]
+	}
+	return resolver.prepareComponentRecovery(ctx, task, componentID, candidate, artifacts, prior, forward)
+}
+
+func (resolver *TaskPlanResolver) prepareComponentRecovery(
+	ctx context.Context, task etcd.TaskRecord, componentID string, candidate *agentpb.ComposeArtifact,
+	artifacts []*agentpb.ComposeArtifact, prior *agentpb.ManagedComponentService, forward []*agentpb.ExecutionStep,
+) ([]*agentpb.ExecutionStep, *agentpb.ComponentRecoveryProcedure, error) {
 	if resolver == nil || resolver.configurationRecovery == nil || ctx == nil ||
 		ids.Validate(ids.KindComponent, componentID) != nil || candidate == nil ||
 		candidate.GetOwnerId() != task.Owner.EnvironmentID || candidate.GetArtifactId() == "" ||
@@ -46,6 +60,23 @@ func (resolver *TaskPlanResolver) PrepareBlueprintComponentRecovery(
 		if step == nil {
 			return nil, nil, errs.New(errs.KindInternal, "Blueprint Component forward step is absent")
 		}
+		if action := step.GetComponentApply(); action != nil {
+			if err := resolver.bindContainerConfigTransition(ctx, task, action); err != nil {
+				return nil, nil, err
+			}
+			if transition := action.GetContainerConfigTransition(); transition != nil &&
+				len(transition.GetPreviousSource()) != 0 {
+				if procedure.GetConfigurationActionStepId() != "" {
+					return nil, nil, errs.New(
+						errs.KindStateConflict,
+						"Component recovery has multiple discovery configurations",
+					)
+				}
+				procedure.ConfigurationSource = &agentpb.ComponentRecoveryProcedure_ConfigurationActionStepId{
+					ConfigurationActionStepId: step.GetStepId(),
+				}
+			}
+		}
 		step.Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD
 		if componentRecoveryForwardMutation(step) {
 			procedure.ForwardStepIds = append(procedure.ForwardStepIds, step.GetStepId())
@@ -62,19 +93,23 @@ func (resolver *TaskPlanResolver) PrepareBlueprintComponentRecovery(
 	}
 	probeID := ids.DeriveAt(ids.KindStep, planTime, task.PlanID, "component-runtime-probe:"+componentID)
 	compensateID := ids.DeriveAt(ids.KindStep, planTime, task.PlanID, "component-runtime-restore:"+componentID)
-	if managed != nil {
-		if len(managed.GetServices()) != 1 {
-			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component predecessor is ambiguous")
-		}
-		prior := managed.GetServices()[0]
+	if prior != nil {
 		if prior.GetComponentId() != componentID || artifactByID[prior.GetSourceArtifactId()] == nil {
-			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component predecessor differs from its teardown")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Component predecessor differs from its captured runtime",
+			)
 		}
 		procedure.RuntimeTarget = &agentpb.ComponentRecoveryProcedure_Predecessor{
 			Predecessor: &agentpb.ComponentPredecessorRestoration{
 				PriorArtifactId: prior.GetSourceArtifactId(), ServiceId: prior.GetServiceId(),
 				ProbeStepId: probeID, CompensateStepId: compensateID,
 			},
+		}
+		if procedure.GetConfigurationActionStepId() == "" {
+			if err := resolver.bindRetainedComponentConfiguration(ctx, task, procedure, prior); err != nil {
+				return nil, nil, err
+			}
 		}
 	} else {
 		serviceID, projectName, err := componentRecoveryCandidateIdentity(candidate, componentID)
@@ -92,16 +127,20 @@ func (resolver *TaskPlanResolver) PrepareBlueprintComponentRecovery(
 		{
 			StepId: probeID, TimeoutSeconds: uint32(task.TimeoutSeconds),
 			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-			Payload: &agentpb.ExecutionStep_ComponentRestorationProbe{ComponentRestorationProbe: &agentpb.ComponentRestorationProbe{
-				ComponentId: componentID, CandidateArtifactId: candidate.GetArtifactId(),
-			}},
+			Payload: &agentpb.ExecutionStep_ComponentRestorationProbe{
+				ComponentRestorationProbe: &agentpb.ComponentRestorationProbe{
+					ComponentId: componentID, CandidateArtifactId: candidate.GetArtifactId(),
+				},
+			},
 		},
 		{
 			StepId: compensateID, TimeoutSeconds: uint32(task.TimeoutSeconds),
 			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-			Payload: &agentpb.ExecutionStep_ComponentRestorationCompensate{ComponentRestorationCompensate: &agentpb.ComponentRestorationCompensate{
-				ComponentId: componentID, CandidateArtifactId: candidate.GetArtifactId(),
-			}},
+			Payload: &agentpb.ExecutionStep_ComponentRestorationCompensate{
+				ComponentRestorationCompensate: &agentpb.ComponentRestorationCompensate{
+					ComponentId: componentID, CandidateArtifactId: candidate.GetArtifactId(),
+				},
+			},
 		},
 	}
 	steps = append(steps, fileSteps...)

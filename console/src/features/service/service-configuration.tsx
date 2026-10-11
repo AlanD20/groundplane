@@ -80,6 +80,12 @@ export function ServiceConfiguration({
             mono
           />
           <DetailRow label="Replicas" value={String(service.replicas)} />
+          {!!service.rollingReplicaTimeoutSeconds && (
+            <DetailRow
+              label="Rolling replica timeout"
+              value={`${service.rollingReplicaTimeoutSeconds}s`}
+            />
+          )}
           <DetailRow
             label="Memory limit"
             value={service.resources.mem || "Not set"}
@@ -91,7 +97,7 @@ export function ServiceConfiguration({
           <DetailRow label="Restart policy" value={service.restart} />
           <DetailRow
             label="Deployment strategy"
-            value={`${service.strategy}${service.strategy === "rolling" ? " (deferred)" : ""}`}
+            value={service.strategy}
           />
           <DetailRow label="Runtime intent" value={service.runtimeIntent} />
           <DetailRow

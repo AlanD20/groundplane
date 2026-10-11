@@ -54,7 +54,8 @@ func NewDatabaseVersionObserver(
 					role = "backing"
 				}
 				target = &agentpb.ServiceObservationTarget{EnvironmentId: artifact.OwnerId, ServiceId: serviceID,
-					ComposeName: service.ComposeName, PlanId: labels["com.groundplane.plan-id"], RenderGeneration: generation,
+					Workloads: []*agentpb.ServiceWorkloadObservation{{ComposeName: service.ComposeName,
+						PlanId: labels["com.groundplane.plan-id"], RenderGeneration: generation}},
 					RuntimeRole: role, ReleaseId: labels["com.groundplane.release-id"], Slot: labels["com.groundplane.slot"], DatabaseProbe: probe}
 			}
 		}

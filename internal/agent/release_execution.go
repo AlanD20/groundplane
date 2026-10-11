@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"sort"
 	"time"
 
@@ -24,6 +25,7 @@ type releaseExecutionState struct {
 	projects             map[string]*agentpb.ObservedProject
 	evidence             map[string]*agentpb.ServiceProxyEvidence
 	recreate             map[string]*agentpb.ServiceRecreateEvidence
+	rolling              map[string]*agentpb.RollingReleaseEvidence
 	absence              map[string]*agentpb.CandidateAbsenceEvidence
 	componentRestoration *agentpb.ComponentRestorationEvidence
 	serviceAbsence       *agentpb.ServiceAbsenceEvidence
@@ -40,6 +42,7 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 		diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 		projects:   map[string]*agentpb.ObservedProject{}, evidence: map[string]*agentpb.ServiceProxyEvidence{}, recreate: map[string]*agentpb.ServiceRecreateEvidence{},
 		probeRequired: map[string]bool{}, completed: map[string]struct{}{},
+		rolling: map[string]*agentpb.RollingReleaseEvidence{},
 	}
 	if p.compose == nil {
 		state.err = errs.New(errs.KindInternal, "agent: release Compose runtime is not configured")
@@ -265,7 +268,16 @@ func (p *WorkerPool) runReleaseStep(
 		ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: 1, State: TaskProgressRunning}
 	blueprintComponent := reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
 		step.GetComponentApply() != nil
-	if reservation.eventsDurable && (candidateMutationStep(step) || blueprintComponent ||
+	rolling := rollingStepMember(reservation.assignment.Plan, step.GetStepId())
+	var rollingBudget *agentpb.RollingStepBudget
+	if rolling != nil {
+		var err error
+		rollingBudget, err = p.beginRollingStep(reservation, step, rolling, running)
+		if err != nil {
+			state.err, state.failedStepID, state.reconciliation = err, step.GetStepId(), true
+			return
+		}
+	} else if reservation.eventsDurable && (candidateMutationStep(step) || blueprintComponent ||
 		componentRecoveryForwardStep(reservation.assignment.Plan, step.GetStepId()) ||
 		isConfigurationForwardStep(reservation.assignment.Plan, step.GetStepId())) {
 		if err := p.emitProgressAndWait(reservation.ctx, running); err != nil {
@@ -275,10 +287,17 @@ func (p *WorkerPool) runReleaseStep(
 	} else {
 		p.emitProgress(runCtx, running)
 	}
-	stepCtx, cancel := context.WithTimeout(reservation.ctx, time.Duration(step.TimeoutSeconds)*time.Second)
+	deadline := time.Now().Add(time.Duration(step.TimeoutSeconds) * time.Second)
+	if rollingBudget != nil && rollingBudget.GetDeadline().AsTime().Before(deadline) {
+		deadline = rollingBudget.GetDeadline().AsTime()
+	}
+	stepCtx, cancel := context.WithDeadline(reservation.ctx, deadline)
+	reportHealth, ordinal := p.healthWaitEvents(stepCtx, running)
 	var result composeruntime.StepResult
 	var err error
-	if step.GetRunScript() != nil {
+	if step.GetRollingReplicaDrain() != nil {
+		err = waitRollingDrain(stepCtx, rollingBudget)
+	} else if step.GetRunScript() != nil {
 		if p.scriptRuntime == nil {
 			err = errs.New(errs.KindInternal, "agent: Script runtime is not configured")
 		} else {
@@ -309,10 +328,11 @@ func (p *WorkerPool) runReleaseStep(
 		(step.GetMaterializeFile() != nil || step.GetAdapterProcedure() != nil || step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetEnvironmentDirectoryCreate() != nil) {
 		result, err = p.executeBlueprintReleaseSetup(stepCtx, reservation.assignment, step)
 	} else {
-		result, err = p.compose.ExecuteStep(stepCtx, reservation.assignment, step)
+		result, err = p.compose.ExecuteStep(stepCtx, reservation.assignment, step, reportHealth)
 	}
 	stepContextErr := stepCtx.Err()
 	cancel()
+	err = errors.Join(err, stepContextErr)
 	if result.ExitCode != 0 {
 		state.exitCode = result.ExitCode
 	}
@@ -324,9 +344,16 @@ func (p *WorkerPool) runReleaseStep(
 	}
 	if result.ProxyEvidence != nil {
 		state.evidence[result.ProxyEvidence.ServiceId] = proto.Clone(result.ProxyEvidence).(*agentpb.ServiceProxyEvidence)
+		delete(state.rolling, result.ProxyEvidence.ServiceId)
 	}
 	if result.RecreateEvidence != nil {
 		state.recreate[result.RecreateEvidence.ServiceId] = proto.Clone(result.RecreateEvidence).(*agentpb.ServiceRecreateEvidence)
+		delete(state.rolling, result.RecreateEvidence.ServiceId)
+	}
+	if result.RollingEvidence != nil {
+		state.rolling[result.RollingEvidence.GetServiceId()] = proto.CloneOf(result.RollingEvidence)
+		delete(state.evidence, result.RollingEvidence.GetServiceId())
+		delete(state.recreate, result.RollingEvidence.GetServiceId())
 	}
 	if result.ComponentRestorationEvidence != nil {
 		state.componentRestoration = proto.CloneOf(result.ComponentRestorationEvidence)
@@ -365,7 +392,7 @@ func (p *WorkerPool) runReleaseStep(
 			result.ReconciliationRequired = true
 		}
 	}
-	progress := progressStateFor(reservation.ctx, errors.Join(err, stepContextErr))
+	progress := progressStateFor(reservation.ctx, err)
 	state.reconciliation = state.reconciliation || result.ReconciliationRequired
 	if err != nil {
 		if p.logger != nil {
@@ -383,9 +410,10 @@ func (p *WorkerPool) runReleaseStep(
 	}
 	completedProgress := TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
 		TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId,
-		ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: 2, State: progress}
-	if reservation.eventsDurable &&
-		reservation.assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
+		ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: *ordinal + 1, State: progress,
+		Failure: taskprogress.CaptureFailure(err, result.ExitCode, result.Diagnostic)}
+	if reservation.eventsDurable && (rolling != nil ||
+		reservation.assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY) {
 		if progressErr := p.emitProgressAndWait(reservation.ctx, completedProgress); progressErr != nil &&
 			state.err == nil {
 			state.err, state.failedStepID, state.reconciliation = progressErr, step.GetStepId(), true
@@ -411,9 +439,13 @@ func candidateMutationStep(step *agentpb.ExecutionStep) bool {
 	if apply := step.GetComposeApply(); apply != nil {
 		return apply.GetForceRecreate() && apply.GetNoDependencies()
 	}
-	return step.GetComposeWorkloadApply() != nil || step.GetServiceProxySwitch() != nil ||
-		step.GetServiceProxyCompensate() != nil || step.GetServiceRecreateCompensate() != nil ||
-		step.GetCandidateRestorationCompensate() != nil || step.GetComponentRestorationCompensate() != nil
+	return step.GetComposeWorkloadApply() != nil || step.GetComposeWorkloadRemove() != nil ||
+		step.GetServiceProxySwitch() != nil ||
+		step.GetRollingTrafficSwitch() != nil ||
+		step.GetServiceProxyCompensate() != nil ||
+		step.GetServiceRecreateCompensate() != nil ||
+		step.GetCandidateRestorationCompensate() != nil ||
+		step.GetComponentRestorationCompensate() != nil
 }
 
 func releaseFailureHookExecution(
@@ -429,17 +461,21 @@ func releaseFailureHookExecution(
 	}
 	proxy, hasProxy := state.evidence[run.GetServiceId()]
 	recreate, hasRecreate := state.recreate[run.GetServiceId()]
-	if !hasProxy && !hasRecreate {
+	rolling, hasRolling := state.rolling[run.GetServiceId()]
+	if !hasProxy && !hasRecreate && !hasRolling {
 		return false, agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE
 	}
-	if hasProxy == hasRecreate || hasProxy && proxy == nil || hasRecreate && recreate == nil {
+	if hasProxy && hasRecreate || hasRolling && (hasProxy || hasRecreate) ||
+		hasProxy && proxy == nil || hasRecreate && recreate == nil || hasRolling && rolling == nil {
 		return false, agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE
 	}
 	servingReleaseID := ""
 	if hasProxy {
 		servingReleaseID = proxy.GetReleaseId()
-	} else {
+	} else if hasRecreate {
 		servingReleaseID = recreate.GetReleaseId()
+	} else {
+		servingReleaseID = rolling.GetReleaseId()
 	}
 	if servingReleaseID == "" || servingReleaseID != run.GetReleaseId() {
 		return false, agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE
@@ -449,6 +485,7 @@ func releaseFailureHookExecution(
 
 func releaseComposeTaskResult(state *releaseExecutionState) *agentpb.ComposeTaskResult {
 	result := composeTaskResult(state.projects, state.failedStepID, state.diagnostic, state.reconciliation)
+	result.Failure = taskprogress.CaptureFailure(state.err, state.exitCode, state.diagnostic)
 	serviceIDs := make([]string, 0, len(state.evidence))
 	for serviceID := range state.evidence {
 		serviceIDs = append(serviceIDs, serviceID)
@@ -472,6 +509,14 @@ func releaseComposeTaskResult(state *releaseExecutionState) *agentpb.ComposeTask
 		result.RecreateEvidence = append(result.RecreateEvidence, state.recreate[serviceID])
 	}
 	result.CandidateAbsenceEvidence = state.aggregateAbsenceEvidence()
+	rollingIDs := make([]string, 0, len(state.rolling))
+	for serviceID := range state.rolling {
+		rollingIDs = append(rollingIDs, serviceID)
+	}
+	sort.Strings(rollingIDs)
+	for _, serviceID := range rollingIDs {
+		result.RollingEvidence = append(result.RollingEvidence, proto.CloneOf(state.rolling[serviceID]))
+	}
 	result.ComponentRestorationEvidence = state.componentRestoration
 	result.ServiceAbsenceEvidence = state.serviceAbsence
 	return result

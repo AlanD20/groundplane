@@ -125,8 +125,15 @@ func (repository *EnvironmentBlueprintRepository) ReadEnvironmentBlueprintRuntim
 	sort.Slice(result, func(left, right int) bool {
 		return result[left].Component.Record.Desired.Kind < result[right].Component.Record.Desired.Kind
 	})
-	if result[0].Component.Record.Desired.Kind != core.ComponentKindIngressCaddy ||
-		result[1].Component.Record.Desired.Kind != core.ComponentKindEdgeCloudflare {
+	capabilities := make(map[core.ComponentCapability]bool, len(result))
+	for _, singleton := range result {
+		capability, supported := singleton.Component.Record.Desired.Kind.EnvironmentCapability()
+		if !supported || capabilities[capability] {
+			return nil, errs.New(errs.KindStateConflict, "Environment Component singleton capabilities changed")
+		}
+		capabilities[capability] = true
+	}
+	if !capabilities[core.ComponentCapabilityHTTPRouter] || !capabilities[core.ComponentCapabilityEdgeTunnel] {
 		return nil, errs.New(errs.KindStateConflict, "Environment Component singleton kinds changed")
 	}
 	return result, nil
@@ -314,6 +321,14 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 		conditions = append(conditions, runtimeCondition)
 	}
 	for _, receipt := range input.ComponentReceipts {
+		candidateInput, err := componentplanning.ValidateBlueprintProxyCandidateProjection(ctx, repository.store,
+			receipt.Applied.Record, receipt.Applied.Revision, input.SnapshotReadRevision, projection)
+		if err != nil {
+			return err
+		}
+		if candidateInput != nil {
+			conditions = append(conditions, *candidateInput)
+		}
 		conditions = append(conditions, etcdstore.Condition{
 			Key:         blueprintunits.AppliedKey(projection.EnvironmentID, receipt.Applied.Record.Target),
 			ModRevision: receipt.Applied.Revision,
@@ -346,12 +361,14 @@ func validateBlueprintRuntimeComponentSeal(input BlueprintRuntimeProjectionSeal)
 	expectedSources := make([]projectionrecord.ManagedComponentRuntimeSource, 0, len(input.Components))
 	for index, authority := range input.Components {
 		component := authority.Component
+		configuration := componentrecord.CloneRecord(component.Record)
+		configuration.Runtime.Healthy = false
 		if component.Revision <= 0 || component.ReadRevision != input.SnapshotReadRevision ||
 			component.Record.Desired.Owner != core.ComponentOwnerEnvironment ||
 			component.Record.Desired.OwnerID != projection.EnvironmentID ||
 			componentrecord.ValidateRecord(component.Record) != nil ||
 			index >= len(projection.Components) ||
-			!componentrecord.EqualRecord(component.Record, projection.Components[index]) {
+			!componentrecord.EqualRecord(configuration, projection.Components[index]) {
 			return errs.New(errs.KindValidationFailed, "Blueprint runtime Component authority is invalid")
 		}
 		if _, duplicate := byID[component.Record.Desired.ID]; duplicate {

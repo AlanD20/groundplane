@@ -2,7 +2,9 @@ package blueprintrelease
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 
@@ -13,90 +15,99 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// WorkloadPreparation retains the exact historical authority checked alongside
-// candidate images. New-Service provisional identities are never retained.
-type WorkloadPreparation struct {
+// workloadPreparation captures candidate images and their exact predecessor
+// authority for the selected Service unit.
+type workloadPreparation struct {
 	candidates   map[string]domain.WorkloadSeal
 	predecessors map[string]predecessorSnapshot
-	retained     *retainedRuntime
-}
-
-// Preflight does no durable staging. Its temporary new-Service IDs are not
-// retained: seals are bound to the final candidate by name, image and count.
-func (service *Service) Preflight(
-	ctx context.Context,
-	environmentID string,
-	changes []blueprints.EnvironmentBlueprintServiceChange,
-	memberships NormalizedServiceMemberships,
-	groups map[string]core.ReleaseGroupSpec,
-) (WorkloadPreparation, error) {
-	candidates, err := selectCandidates(
-		projectionrecord.EnvironmentComposeProjection{},
-		changes,
-		groups,
-		memberships,
-	)
-	if err != nil {
-		return WorkloadPreparation{}, err
-	}
-	return service.prepareSelectedWorkloads(ctx, environmentID, changes, candidates)
+	proxyImages  map[string]domain.ProxyImage
 }
 
 func (service *Service) prepareSelectedWorkloads(
 	ctx context.Context,
-	environmentID string,
-	changes []blueprints.EnvironmentBlueprintServiceChange,
+	projection projectionrecord.EnvironmentComposeProjection,
 	candidates []blueprints.EnvironmentBlueprintServiceChange,
-) (WorkloadPreparation, error) {
-	result := WorkloadPreparation{
+	replacement *componentplanning.ProxyReplacementImage,
+) (workloadPreparation, error) {
+	result := workloadPreparation{
 		candidates:   make(map[string]domain.WorkloadSeal, len(candidates)),
 		predecessors: make(map[string]predecessorSnapshot),
+		proxyImages:  make(map[string]domain.ProxyImage),
+	}
+	if replacement != nil && (len(candidates) != 1 || candidates[0].Record.Desired.ID != replacement.ServiceID) {
+		return workloadPreparation{}, errs.New(
+			errs.KindStateConflict,
+			"proxy replacement image belongs to another Service unit",
+		)
 	}
 	var err error
-	result.retained, err = service.captureRetainedRuntime(ctx, environmentID, changes, candidates)
-	if err != nil {
-		return WorkloadPreparation{}, err
-	}
-	if len(candidates) == 0 {
-		return result, nil
+	environmentID := projection.EnvironmentID
+	if len(candidates) != 1 {
+		return workloadPreparation{}, errs.New(
+			errs.KindInternal,
+			"Blueprint workload preparation requires one Service unit",
+		)
 	}
 	selections := make([]workloadseal.Selection, len(candidates))
 	var scope *releasequeries.ReleasePlanningScope
+	var proxyImplementation serviceproxy.Implementation
 	for index, candidate := range candidates {
 		desired := candidate.Record.Desired
 		if desired.Replicas < 1 || uint64(desired.Replicas) > uint64(^uint32(0)) {
-			return WorkloadPreparation{}, errs.New(
+			return workloadPreparation{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint workload replica count is invalid",
 			)
 		}
 		strategy, strategyErr := domain.DeploymentStrategy("", string(desired.Strategy))
 		if strategyErr != nil {
-			return WorkloadPreparation{}, strategyErr
+			return workloadPreparation{}, strategyErr
 		}
+		if err := domain.ValidateDeploymentReadiness(desired.Name, strategy, uint32(desired.Replicas), desired.Healthcheck.Enabled()); err != nil {
+			return workloadPreparation{}, err
+		}
+		exposures := desired.ProxyExposures()
+		proxySelection := domain.ProxySelection{}
 		if strategy == domain.StrategyBlueGreen {
-			if !desired.Healthcheck.Enabled() {
-				return WorkloadPreparation{}, errs.Newf(
+			if len(exposures) == 0 {
+				return workloadPreparation{}, errs.New(
 					errs.KindValidationFailed,
-					"Service %q: blue-green requires an enabled healthcheck with an explicit command; configure one or select recreate",
-					desired.Name,
+					"blue-green requires an exposed container TCP port; configure expose or select recreate for a portless Service",
 				)
 			}
-			if desired.Replicas != 1 {
-				return WorkloadPreparation{}, errs.New(
-					errs.KindValidationFailed,
-					"blue-green Blueprint Apply requires one replica",
-				)
+		}
+		if len(exposures) != 0 {
+			if proxyImplementation == "" {
+				proxyImplementation, err = projectionrecord.ServiceProxyImplementation(projection)
+				if err != nil {
+					return workloadPreparation{}, err
+				}
 			}
-			if _, err := domain.ProxyPorts(desired.Expose); err != nil {
-				return WorkloadPreparation{}, errs.New(
-					errs.KindValidationFailed,
-					"blue-green Blueprint Apply requires an addressable TCP Service",
-				)
+			ports, err := domain.ProxyPorts(exposures)
+			if err != nil {
+				return workloadPreparation{}, err
 			}
+			if err := domain.ValidateProxyForwarding(proxyImplementation, ports); err != nil {
+				return workloadPreparation{}, err
+			}
+			proxySelection = domain.ProxySelection{Implementation: proxyImplementation, Ports: ports}
 		}
 		selections[index] = workloadseal.Selection{
 			Requested: &workloadseal.Requested{Reference: desired.Image, Replicas: uint32(desired.Replicas)},
+		}
+		if replacement != nil {
+			if replacement.Workload.RequestedReference != desired.Image ||
+				replacement.Workload.ReplicaCount != uint32(
+					desired.Replicas,
+				) || domain.ValidateWorkloadSeal(replacement.Workload) != nil ||
+				replacement.Proxy.Validate() != nil || proxySelection.Implementation == "" {
+				return workloadPreparation{}, errs.New(
+					errs.KindStateConflict,
+					"proxy replacement image differs from its sealed Service input",
+				)
+			}
+			selections[index] = workloadseal.Selection{Historical: &replacement.Workload}
+			result.proxyImages[desired.Name] = replacement.Proxy
 		}
 		if candidate.Current == nil {
 			continue
@@ -108,36 +119,43 @@ func (service *Service) prepareSelectedWorkloads(
 				candidate.Current.ReadRevision,
 			)
 			if scopeErr != nil {
-				return WorkloadPreparation{}, scopeErr
+				return workloadPreparation{}, scopeErr
 			}
 			scope = &loaded
 		}
 		if scope.ReadRevision != candidate.Current.ReadRevision {
-			return WorkloadPreparation{}, errs.New(
+			return workloadPreparation{}, errs.New(
 				errs.KindStateConflict,
 				"Blueprint predecessor capture revisions disagree",
 			)
 		}
 		planning, planningErr := service.ledger.LoadPlanningServices(ctx, *scope, []string{desired.ID})
 		if planningErr != nil {
-			return WorkloadPreparation{}, planningErr
+			return workloadPreparation{}, planningErr
 		}
 		predecessor, captureErr := service.capturePredecessor(ctx, *scope, planning[0])
 		if captureErr != nil {
-			return WorkloadPreparation{}, captureErr
+			return workloadPreparation{}, captureErr
 		}
 		result.predecessors[desired.Name] = predecessor
 		if predecessor.serving != nil {
+			previous := domain.ProxySelection{
+				Implementation: predecessor.historical.Record.ProxyImplementation,
+				Ports:          predecessor.historical.Record.ProxyPorts,
+			}
+			if err := domain.ValidateProxyTransition(desired.Name, strategy, proxySelection, &previous); err != nil {
+				return workloadPreparation{}, err
+			}
 			selections = append(selections, workloadseal.Selection{Historical: &predecessor.serving.CandidateWorkload})
 		}
 	}
 	agent, err := service.agents.GetSingleton(ctx)
 	if err != nil {
-		return WorkloadPreparation{}, err
+		return workloadPreparation{}, err
 	}
 	seals, err := workloadseal.Resolve(ctx, service.images, agent.Record.ID, selections)
 	if err != nil {
-		return WorkloadPreparation{}, err
+		return workloadPreparation{}, err
 	}
 	for index, candidate := range candidates {
 		result.candidates[candidate.Record.Desired.Name] = seals[index]

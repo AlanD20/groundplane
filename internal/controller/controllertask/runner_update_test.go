@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -105,18 +107,19 @@ func (updates *fakeUpdateExecutor) Restore(_ context.Context, claim etcd.TaskAss
 }
 
 func (updates *fakeUpdateExecutor) Execute(
-	ctx context.Context, _ etcd.TaskRecord, _ time.Time,
-) (testtaskjournal.TaskStatus, error) {
+	ctx context.Context, _ etcd.TaskRecord, _ time.Time, _ *Progress,
+) (testtaskjournal.ControllerOutcome, error) {
 	updates.executions++
 	if updates.started != nil {
 		close(updates.started)
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return testtaskjournal.ControllerOutcome{}, ctx.Err()
 		case <-updates.finish:
 		}
 	}
-	return updates.status, updates.err
+	return testtaskjournal.ControllerOutcome{Status: updates.status,
+		Failure: taskprogress.CaptureControllerFailure(updates.err)}, updates.err
 }
 
 func (updates *fakeUpdateExecutor) Abort(context.Context, string) error {

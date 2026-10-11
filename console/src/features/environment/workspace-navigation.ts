@@ -34,6 +34,7 @@ export const environmentSections = [
     panels: [
       { key: "zones", label: "Zones & topology", icon: Network },
       { key: "routes", label: "Routes", icon: Route },
+      { key: "dns", label: "DNS records", icon: Network },
       { key: "attaches", label: "Backing connections", icon: Plug },
       { key: "facts", label: "Connection values", icon: KeyRound },
       { key: "router", label: "Router", icon: Router },

@@ -61,8 +61,8 @@ func (*componentEnableRouteFixture) SetComponentConfig(
 // and optional body semantics through real request parsing and dispatch.
 func TestComponentEnableRouteAcceptsOptionalTypedPlacement(t *testing.T) {
 	zones := []string{"net_01ARZ3NDEKTSV4RRFFQ69G5FAX", "net_01ARZ3NDEKTSV4RRFFQ69G5FAW"}
-	for _, body := range []string{"", `{}`, `{"config":{"zone_ids":["` + zones[0] + `","` + zones[1] + `"]}}`,
-		`{"config":{"zone_ids":["` + zones[0] + `","` + zones[1] + `"],"credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}}`} {
+	for _, body := range []string{"", `{}`, `{"config":{"implementation":"caddy","zone_ids":["` + zones[0] + `","` + zones[1] + `"]}}`,
+		`{"config":{"implementation":"cloudflare-tunnel","zone_ids":["` + zones[0] + `","` + zones[1] + `"],"credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}}`} {
 		fixture := &componentEnableRouteFixture{}
 		server := New(nil, nil, Options{ComponentMutations: fixture})
 		request := httptest.NewRequest(

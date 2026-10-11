@@ -13,7 +13,7 @@ type abortBlockingHandler struct {
 	started chan struct{}
 }
 
-func (handler *abortBlockingHandler) Execute(ctx context.Context, _ etcd.TaskRecord) error {
+func (handler *abortBlockingHandler) Execute(ctx context.Context, _ etcd.TaskRecord, _ *Progress) error {
 	close(handler.started)
 	<-ctx.Done()
 	return ctx.Err()

@@ -2,7 +2,9 @@ package hierarchydeletionplanning
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -50,7 +52,7 @@ func (repository *Planner) RequireDescendantsAvailable(
 	case hierarchydeletion.HierarchyDeletionTargetProject, hierarchydeletion.HierarchyDeletionTargetBacking:
 		return repository.requireProjectDeletionDescendantsAvailable(ctx, revision, targetID)
 	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
-		return repository.requireEnvironmentBackupDeletionAvailable(ctx, revision, targetID)
+		return repository.requireEnvironmentDeletionAvailable(ctx, revision, targetID)
 	default:
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion target kind is invalid")
 	}
@@ -83,18 +85,27 @@ func (repository *Planner) requireProjectDeletionDescendantsAvailable(
 		return err
 	}
 	for _, environment := range environments {
-		if err := repository.requireEnvironmentBackupDeletionAvailable(ctx, revision, environment.id); err != nil {
+		if err := repository.requireEnvironmentDeletionAvailable(ctx, revision, environment.id); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (repository *Planner) requireEnvironmentBackupDeletionAvailable(
+func (repository *Planner) requireEnvironmentDeletionAvailable(
 	ctx context.Context,
 	revision int64,
 	environmentID string,
 ) error {
+	if _, err := backingchecks.RequireEnvironmentIdle(ctx, repository.store, environmentID, revision); err != nil {
+		return err
+	}
+	if _, err := edgechecks.RequireEnvironmentIdle(ctx, repository.store, environmentID, revision); err != nil {
+		return err
+	}
+	if err := repository.requireConnectorChecksAbsent(ctx, revision, environmentID); err != nil {
+		return err
+	}
 	if err := repository.requireEnvironmentBackupHistoryAvailable(ctx, revision, environmentID); err != nil {
 		return err
 	}

@@ -75,11 +75,23 @@ func WithTitle(title string) Option {
 type Error struct {
 	Problem
 
-	kind    Kind
-	message string
-	title   string
-	err     error
+	kind             Kind
+	message          string
+	title            string
+	err              error
+	requestReference string
 }
+
+// WithRequestReference preserves the exact error taxonomy and safe Problem
+// body while attaching transport diagnostics for the CLI. This is not a Task
+// identifier and grants no replay or execution authority.
+func (e *Error) WithRequestReference(reference string) *Error {
+	result := *e
+	result.requestReference = reference
+	return &result
+}
+
+func (e *Error) RequestReference() string { return e.requestReference }
 
 func (e *Error) Error() string {
 	kind := e.Kind()

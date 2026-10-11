@@ -218,7 +218,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
-			intentMutation, err := servicerecord.RunningRuntimeMutation(ctx, repository.store,
+			intentCondition, intentMutation, err := servicerecord.AcknowledgeRunningRuntime(ctx, repository.store,
 				task.Owner.EnvironmentID, member.ServiceID, readRevision)
 			if err != nil {
 				return false, err
@@ -231,6 +231,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
+			conditions = append(conditions, intentCondition)
 			conditions = append(conditions, postgresConditions...)
 			mutations = append(mutations, postgresMutations...)
 			mutations = append(mutations, intentMutation, etcdstore.Mutation{

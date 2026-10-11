@@ -9,19 +9,18 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PrepareControllerDormantServiceSettlement records that a selected Service
-// has no host effect because its independently owned runtime intent is stopped
-// or absent. The caller must compare that exact runtime sidecar revision in
-// the same transaction as this receipt.
-func PrepareControllerDormantServiceSettlement(
+// PrepareControllerServiceConfigurationSettlement records configuration without
+// a host effect. The caller checks runtime intent and immutable deployment policy,
+// and compares the exact runtime sidecar revision in the receipt's transaction.
+func PrepareControllerServiceConfigurationSettlement(
 	snapshot Snapshot,
 	unit Unit,
 	operationID string,
-	runtimeRevision int64,
+	projectionRevision, runtimeRevision int64,
 ) (MutationPlan, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 		unit.Target.Kind != ids.KindService || unit.Removal ||
-		ids.Validate(ids.KindOperation, operationID) != nil || runtimeRevision <= 0 ||
+		ids.Validate(ids.KindOperation, operationID) != nil || projectionRevision <= 0 || runtimeRevision < 0 ||
 		len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
 		return MutationPlan{}, invalidRecord()
 	}
@@ -40,9 +39,10 @@ func PrepareControllerDormantServiceSettlement(
 	applied := AppliedRecord{
 		EnvironmentID: snapshot.EnvironmentID, Target: unit.Target,
 		State: Applied, Fingerprint: unit.Fingerprint,
-		ParentTaskID:              snapshot.HeadTaskID,
-		ControllerOperationID:     operationID,
-		ControllerRuntimeRevision: runtimeRevision,
+		ParentTaskID:               snapshot.HeadTaskID,
+		ControllerOperationID:      operationID,
+		ControllerRuntimeRevision:  runtimeRevision,
+		ControllerAuthoredRevision: projectionRevision,
 	}
 	plan, err := PrepareMutation(snapshot, []AppliedChange{{Target: unit.Target, Next: &applied}}, nil)
 	if err != nil {

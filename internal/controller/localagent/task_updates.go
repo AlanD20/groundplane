@@ -2,6 +2,7 @@ package localagent
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
 	"math"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,7 +20,8 @@ import (
 const updateRecoveryReserve = 130 * time.Second
 
 type UpdateLifecycle interface {
-	RecoverUpdate(context.Context, UpdateRequest, UpdateGoal) (UpdateResult, error)
+	RecoverUpdate(context.Context, UpdateRequest, UpdateGoal, *taskprogress.Failure) (UpdateResult, error)
+	ReplacementFailure(context.Context, UpdateRequest) (*taskprogress.Failure, error)
 	Health(context.Context, string) (Health, error)
 }
 
@@ -47,6 +50,7 @@ type agentUpdateOperation struct {
 	aborted  bool
 	restore  bool
 	settled  taskjournal.TaskStatus
+	failure  *taskprogress.Failure
 }
 
 func NewTaskUpdates(agents UpdateLifecycle, sessions UpdateAdmission, logger *slog.Logger) (*TaskUpdates, error) {
@@ -91,8 +95,9 @@ func (updates *TaskUpdates) Restore(ctx context.Context, claim etcd.TaskAssignme
 	return nil
 }
 
-func (updates *TaskUpdates) Execute(
+func (updates *TaskUpdates) execute(
 	ctx context.Context, task etcd.TaskRecord, deadline time.Time,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	updates.mu.Lock()
 	operation := updates.active
@@ -116,7 +121,7 @@ func (updates *TaskUpdates) Execute(
 		}
 		if health.Agent.Phase == PhaseReady && health.Agent.Generation == operation.request.StartingGeneration+1 &&
 			health.Agent.Image == operation.request.DesiredImage {
-			return updates.recoverReadyCandidate(ctx, operation)
+			return updates.recoverReadyCandidate(ctx, operation, progress)
 		}
 	}
 	if !restore {
@@ -127,12 +132,26 @@ func (updates *TaskUpdates) Execute(
 			cancel()
 		}
 		updates.mu.Unlock()
-		result, err := updates.agents.RecoverUpdate(candidateContext, operation.request, UpdateFinish)
+		result, err := updates.reconcileWithProgress(
+			candidateContext,
+			operation.request,
+			UpdateFinish,
+			nil,
+			progress,
+			"agent_update",
+		)
 		cancel()
+		recordErr := progress.Err()
 		updates.mu.Lock()
 		operation.cancel = nil
+		if recordErr == nil && err != nil && operation.failure == nil && ctx.Err() == nil {
+			operation.failure = taskprogress.CaptureControllerFailure(err)
+		}
 		aborted := operation.aborted
 		updates.mu.Unlock()
+		if recordErr != nil {
+			return "", recordErr
+		}
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
@@ -151,12 +170,27 @@ func (updates *TaskUpdates) Execute(
 	}
 	updates.mu.Lock()
 	operation.restore = true
+	if operation.failure == nil {
+		if operation.aborted {
+			operation.failure = taskprogress.CaptureControllerFailure(context.Canceled)
+		} else if !updates.now().Before(deadline.Add(-updateRecoveryReserve)) {
+			operation.failure = taskprogress.CaptureControllerFailure(context.DeadlineExceeded)
+		}
+	}
+	failure := taskprogress.CloneFailure(operation.failure)
 	updates.mu.Unlock()
 	// Even an expired Task gets a bounded recovery pass; failure retains its
 	// claim and admission hold for the next pass or Controller process.
 	recoveryContext, cancel := context.WithTimeout(ctx, updateRecoveryReserve)
 	defer cancel()
-	result, err := updates.agents.RecoverUpdate(recoveryContext, operation.request, UpdateRestore)
+	result, err := updates.reconcileWithProgress(
+		recoveryContext,
+		operation.request,
+		UpdateRestore,
+		failure,
+		progress,
+		"agent_restore",
+	)
 	if err != nil {
 		return "", err
 	}
@@ -174,10 +208,18 @@ func (updates *TaskUpdates) Execute(
 
 func (updates *TaskUpdates) recoverReadyCandidate(
 	ctx context.Context, operation *agentUpdateOperation,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	ctx, cancel := context.WithTimeout(ctx, updateRecoveryReserve)
 	defer cancel()
-	result, err := updates.agents.RecoverUpdate(ctx, operation.request, UpdateFinish)
+	result, err := updates.reconcileWithProgress(
+		ctx,
+		operation.request,
+		UpdateFinish,
+		nil,
+		progress,
+		"agent_ready_check",
+	)
 	if err != nil {
 		return "", err
 	}

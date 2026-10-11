@@ -2,6 +2,7 @@ package componentrender
 
 import (
 	"crypto/sha256"
+	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,6 +29,7 @@ type EnvironmentHTTPRouterPlanFunc func(
 type EnvironmentManagedConfigurationRegistration struct {
 	SourcePath string
 	ActionID   componentsdk.ActionID
+	Activation registeredcatalog.ContainerConfigActivation
 }
 
 // EnvironmentComponentRegistration is the composition-root seam between one
@@ -74,16 +76,16 @@ func ValidateEnvironmentComponentCatalog(catalog []EnvironmentComponentRegistrat
 				path.Clean(managed.SourcePath) != managed.SourcePath ||
 				!found ||
 				action.Capability() != componentsdk.CapabilityManagedConfig ||
-				action.Operation() != componentsdk.OperationActivate {
+				action.Operation() != componentsdk.OperationActivate ||
+				managed.Activation != registeredcatalog.ContainerConfigActivationCommand &&
+					managed.Activation != registeredcatalog.ContainerConfigActivationHTTPDiscovery {
 				return errs.New(errs.KindInternal, "Environment Component managed configuration is invalid")
 			}
 		}
-		providesRouter := false
-		for _, capability := range registration.Definition.Provides() {
-			providesRouter = providesRouter || capability == componentsdk.CapabilityHTTPRouter
-		}
+		providesRouter := providesCapability(registration, componentsdk.CapabilityHTTPRouter)
 		if registration.ProjectHTTPRouter != nil != (registration.PlanHTTPRouter != nil) ||
-			registration.ProjectHTTPRouter != nil && (!providesRouter || registration.ManagedConfiguration == nil) {
+			providesRouter != (registration.ProjectHTTPRouter != nil) ||
+			providesRouter && registration.ManagedConfiguration == nil {
 			return errs.New(errs.KindInternal, "HTTP router Component registration is incomplete")
 		}
 		if _, duplicate := seen[registration.Kind]; duplicate {
@@ -92,6 +94,15 @@ func ValidateEnvironmentComponentCatalog(catalog []EnvironmentComponentRegistrat
 		seen[registration.Kind] = struct{}{}
 	}
 	return nil
+}
+
+func providesCapability(registration EnvironmentComponentRegistration, capability componentsdk.Capability) bool {
+	for _, provided := range registration.Definition.Provides() {
+		if provided == capability {
+			return true
+		}
+	}
+	return false
 }
 
 func CloneEnvironmentComponentCatalog(

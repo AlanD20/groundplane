@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -153,12 +154,19 @@ func (store *fakeStore) AcknowledgeControllerTask(
 	_ context.Context,
 	taskID string,
 	status testtaskjournal.TaskStatus,
+	_ *taskprogress.Failure,
 	_ time.Time,
 ) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	store.ackCalls++
 	store.ackTaskID = taskID
 	store.ackStatus = status
 	return testkeyvalue.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{ID: taskID, Status: status}}, nil
+}
+
+func (*fakeStore) AppendControllerTaskEvent(ctx context.Context, _ testtaskjournal.TaskEventInput,
+	_ time.Time,
+) (etcd.TaskEventAppend, error) {
+	return etcd.TaskEventAppend{}, ctx.Err()
 }
 
 type fakeHandler struct {
@@ -209,14 +217,20 @@ func (store *wakeStore) ClaimNextControllerTask(
 
 func (store *wakeStore) AcknowledgeControllerTask(
 	context.Context, string, testtaskjournal.TaskStatus,
-
+	*taskprogress.Failure,
 	time.Time,
 ) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	store.ackOnce.Do(func() { close(store.acknowledged) })
 	return testkeyvalue.Versioned[etcd.TaskRecord]{}, nil
 }
 
-func (handler *fakeHandler) Execute(ctx context.Context, task etcd.TaskRecord) error {
+func (*wakeStore) AppendControllerTaskEvent(ctx context.Context, _ testtaskjournal.TaskEventInput,
+	_ time.Time,
+) (etcd.TaskEventAppend, error) {
+	return etcd.TaskEventAppend{}, ctx.Err()
+}
+
+func (handler *fakeHandler) Execute(ctx context.Context, task etcd.TaskRecord, _ *Progress) error {
 	handler.calls++
 	handler.task = task
 	if handler.waitForCancellation {

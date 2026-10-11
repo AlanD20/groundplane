@@ -33,11 +33,14 @@ func prepareTaskEvent(
 	if input.Identity.TaskID != task.ID {
 		return PreparedTaskEvent{}, errs.New(errs.KindValidationFailed, "task event identity does not match its task")
 	}
-	if !taskContainsStep(task, input.Identity.StepID) {
+	if !taskEventBelongsToTask(task, input.Identity) {
 		return PreparedTaskEvent{}, errs.New(
 			errs.KindValidationFailed,
 			"task event step id does not belong to its task",
 		)
+	}
+	if err := taskjournal.ValidateEventObservationIdentity(input.Identity, input.Payload); err != nil {
+		return PreparedTaskEvent{}, err
 	}
 	if err := recordcodec.ValidateTimestamp("task event received_at", receivedAt); err != nil {
 		return PreparedTaskEvent{}, err
@@ -101,4 +104,11 @@ func prepareTaskEvent(
 	}
 	dedup := taskjournal.TaskEventDedupRecord{Identity: input.Identity, Sequence: sequence, PayloadSHA256: hash}
 	return PreparedTaskEvent{Task: updated, Event: event, Dedup: dedup, Sequence: sequence}, nil
+}
+
+func taskEventBelongsToTask(task TaskRecord, identity taskjournal.TaskEventIdentity) bool {
+	if identity.ControllerOperation() {
+		return task.Executor == taskjournal.TaskExecutorController
+	}
+	return task.Executor == taskjournal.TaskExecutorAgent && taskContainsStep(task, identity.StepID)
 }

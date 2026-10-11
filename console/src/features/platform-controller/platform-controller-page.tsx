@@ -81,7 +81,12 @@ export default function PlatformControllerPage() {
             {host ? <StatusBadge status={host.controller.status} /> : null}
             {host ? (
               <MetaPill icon={<ServerCog />}>
-                {host.controller.version}
+                <SoftwareIdentity
+                  version={host.controller.version}
+                  sourceBuild={host.controller.source?.kind === "source_ref"}
+                  sourceCommit={host.controller.source?.commit}
+                  showReferences={false}
+                />
               </MetaPill>
             ) : null}
           </>
@@ -96,6 +101,8 @@ export default function PlatformControllerPage() {
               value={
                 <SoftwareIdentity
                   version={host?.controller.version}
+                  sourceBuild={host?.controller.source?.kind === "source_ref"}
+                  sourceCommit={host?.controller.source?.commit}
                   digest={host?.controller.update.running_sha256}
                   unavailable="Installed identity unavailable"
                 />
@@ -124,9 +131,14 @@ export default function PlatformControllerPage() {
                   version={
                     host?.controller.update.candidate?.controller_version
                   }
-                  digest={
-                    host?.controller.update.candidate?.controller_sha256
+                  sourceBuild={
+                    host?.controller.update.candidate?.controller_source
+                      ?.kind === "source_ref"
                   }
+                  sourceCommit={
+                    host?.controller.update.candidate?.controller_source?.commit
+                  }
+                  digest={host?.controller.update.candidate?.controller_sha256}
                   unavailable="No release staged"
                 />
               }

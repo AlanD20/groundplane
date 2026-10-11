@@ -14,6 +14,13 @@ import (
 
 type emptyDNSRecordsResolver struct{}
 
+func (emptyDNSRecordsResolver) ResolveEnvironmentDNS(
+	context.Context,
+	int64,
+) (platformcomponents.EnvironmentDNSResolution, []keyvalue.Condition, error) {
+	return platformcomponents.EnvironmentDNSResolution{}, nil, nil
+}
+
 func (emptyDNSRecordsResolver) ResolveDNSRecords(
 	_ context.Context,
 	records []core.DNSRecord,

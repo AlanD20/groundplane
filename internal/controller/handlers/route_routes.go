@@ -270,7 +270,8 @@ func routeListRequest(environmentID string, limit int, cursor string) (corenetwo
 
 func routeResponse(record corenetwork.Route) apiTypes.Route {
 	return apiTypes.Route{
-		ID: record.ID, EnvironmentID: record.EnvironmentID, Host: record.Host,
+		Revision: record.Revision,
+		ID:       record.ID, EnvironmentID: record.EnvironmentID, Host: record.Host,
 		Path: record.Path, Exposure: string(record.Exposure),
 		TargetServiceID: record.TargetServiceID, TargetPort: record.TargetPort,
 		Status: string(record.Status),

@@ -264,6 +264,9 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err := client.SetComponentActionRuntime(componentActions); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
+	if err := client.SetDNSConnectionChecker(componentActions); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
 	if err := client.SetHostResolutionRuntime(hostresolution.New(hostResolution)); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
@@ -273,7 +276,7 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err := client.SetAdapterCompiler(adaptercompiler.Compile); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	if err := configureAgentDockerReads(ctx, client, runtimeResources); err != nil {
+	if err := configureAgentDockerReads(ctx, client, runtimeResources, componentActions); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 

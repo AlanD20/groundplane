@@ -31,8 +31,9 @@ class ControllerReleaseStageTest(unittest.TestCase):
         (self.bundle / "controller").write_bytes(self.binary)
         (self.bundle / "controller").chmod(0o500)
         self.metadata = {
-            "schema": 1, "storage_epoch": 1, "channel_schema": 1,
+            "schema": 2, "storage_epoch": 1, "channel_schema": 1,
             "controller_version": "0.1.0-test", "controller_sha256": self.digest(self.binary),
+            "controller_source": {"kind": "release", "commit": "d" * 40},
         }
         self.write_metadata()
         self.agent = "localhost:5000/groundplane-agent@sha256:" + "a" * 64

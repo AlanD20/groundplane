@@ -77,13 +77,23 @@ func TestBlueprintNetworkStepJournalRejectsMissingOrReorderedPreparation(t *test
 			},
 		)
 	}
-	members := []testreleaserender.ReleaseTaskRenderMember{{}}
-	if _, next, err := blueprintReleaseProcedureStepIDs(task, etcd.ReleaseTaskRenderInput{Members: members}, 0); err != nil ||
+	members := []testreleaserender.ReleaseTaskRenderMember{{Render: testreleaserender.ReleaseRenderInput{
+		Strategy: "recreate",
+	}}}
+	if _, next, err := blueprintReleaseProcedureStepIDs(
+		task,
+		etcd.ReleaseTaskRenderInput{Members: members},
+		0,
+	); err != nil ||
 		next != len(task.Steps) {
 		t.Fatalf("valid durable procedure rejected: next=%d error=%v", next, err)
 	}
 	task.Steps[0], task.Steps[1] = task.Steps[1], task.Steps[0]
-	if _, _, err := blueprintReleaseProcedureStepIDs(task, etcd.ReleaseTaskRenderInput{Members: members}, 0); err == nil {
+	if _, _, err := blueprintReleaseProcedureStepIDs(
+		task,
+		etcd.ReleaseTaskRenderInput{Members: members},
+		0,
+	); err == nil {
 		t.Fatal("accepted unbound network preparation journal")
 	}
 	for _, encoded := range []string{"", stepID + "," + stepID, "invalid"} {

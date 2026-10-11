@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"maps"
 	"time"
@@ -60,18 +61,26 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		return backingZoneTaskChange{}, err
 	}
 	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil || state.Values[1] != nil ||
-		state.Values[2] == nil || state.Values[4] != nil {
+		state.Values[4] != nil {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone is not available for removal retry")
 	}
 	intent, err := environmentchanges.DecodeZoneRemovalIntent(state.Values[0].Value)
 	if err != nil || validateZoneRemovalTaskOwner(source, intent) != nil || intent.Status != source.Status ||
 		intent.TerminalAt == nil || !intent.TerminalAt.Equal(*source.FinishedAt) ||
-		state.Values[2].ModRevision != intent.DesiredHeadRevision ||
 		!environmentchanges.ZoneRemovalAppliedEvidenceMatches(intent, state.Values[3]) {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry authority changed")
 	}
-	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
-	if err != nil || headID != intent.DesiredProjection.RevisionID {
+	if intent.Authored != nil {
+		return backingZoneTaskChange{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"authored Zone removal recovery must retain the original Blueprint execution claim",
+		)
+	}
+	if state.Values[2] == nil || state.Values[2].ModRevision != intent.DesiredHeadRevision {
+		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
+	}
+	headID, decodeErr := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
+	if decodeErr != nil || headID != intent.DesiredProjection.RevisionID {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
 	}
 	if _, err := projectedZoneRemovalTarget(intent, revision); err != nil {
@@ -146,10 +155,11 @@ func (repository *TaskRepository) prepareBackingZoneTaskAcknowledgement(
 	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
+	assignment taskassignments.TaskAssignmentRecord,
 ) (backingZoneTaskChange, error) {
 	if task.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
 		conditions, mutations, err := repository.prepareZoneRemovalAcknowledgement(
-			ctx, task, terminalStatus, terminalAt, revision,
+			ctx, task, terminalStatus, terminalAt, revision, assignment,
 		)
 		values := make([][]byte, 0, len(mutations))
 		for _, mutation := range mutations {
@@ -172,6 +182,9 @@ func (repository *TaskRepository) validateBackingZoneTaskAcknowledgementReplay(
 	revision int64,
 ) error {
 	if task.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
+		if retainedAuthoredZoneAbsence(task) {
+			terminalStatus = taskjournal.TaskStatusCompleted
+		}
 		return repository.validateZoneRemovalReplay(ctx, task, terminalStatus, revision)
 	}
 	_, err := taskOwnsBackingZoneCascade(task)

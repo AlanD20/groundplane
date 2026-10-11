@@ -73,7 +73,11 @@ func (c *Client) ListAgents(ctx context.Context, limit int, cursor string) (apiT
 		page.NextCursor = *parsed.NextCursor
 	}
 	for index, agent := range items {
-		page.Items[index] = agentFromGenerated(agent)
+		converted, err := agentFromGenerated(agent)
+		if err != nil {
+			return apiTypes.Page[apiTypes.Agent]{}, err
+		}
+		page.Items[index] = converted
 	}
 	return page, nil
 }
@@ -100,7 +104,7 @@ func (c *Client) ShowAgent(ctx context.Context, id string) (apiTypes.Agent, erro
 			return apiTypes.Agent{}, err
 		}
 	}
-	return agentFromGenerated(*parsed), nil
+	return agentFromGenerated(*parsed)
 }
 
 func (c *Client) ShowAgentConfig(ctx context.Context, id string) (apiTypes.AgentConfig, error) {
@@ -212,18 +216,24 @@ func (c *Client) UpdateAgent(ctx context.Context, id, image string) (apiTypes.Ta
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func agentFromGenerated(agent generated.Agent) apiTypes.Agent {
+func agentFromGenerated(agent generated.Agent) (apiTypes.Agent, error) {
+	source, err := buildProvenanceFromGenerated(agent.Source)
+	if err != nil {
+		return apiTypes.Agent{}, err
+	}
 	return apiTypes.Agent{
 		ID:               agent.Id,
 		EnrollmentTaskID: agent.EnrollmentTaskId,
 		Host:             agent.Host,
 		Status:           apiTypes.AgentStatus(agent.Status),
 		Version:          agent.Version,
+		InstalledImage:   agent.InstalledImage,
+		Source:           source,
 		Labels:           copyGeneratedAgentLabels(agent.Labels),
 		ReadyAt:          agent.ReadyAt,
 		LastReportAt:     agent.LastReportAt,
 		InFlight:         int(agent.InFlight),
-	}
+	}, nil
 }
 
 func copyGeneratedAgentLabels(labels map[string]string) map[string]string {

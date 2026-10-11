@@ -28,6 +28,7 @@ export function ZoneFormDialog({
   const [name, setName] = useState("");
   const [subnet, setSubnet] = useState("");
   const [internal, setInternal] = useState(false);
+  const [allowGPDNS, setAllowGPDNS] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const normalizedName = name.trim();
@@ -44,11 +45,13 @@ export function ZoneFormDialog({
         name: normalizedName,
         subnet: subnet.trim(),
         internal,
+        allowGPDNS: internal && allowGPDNS,
       });
       onOpenChange(false);
       setName("");
       setSubnet("");
       setInternal(false);
+      setAllowGPDNS(false);
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : "Unable to create Zone",
@@ -112,11 +115,27 @@ export function ZoneFormDialog({
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
-          <Switch checked={internal} onCheckedChange={setInternal} />
+          <Switch checked={internal} onCheckedChange={(value) => {
+            setInternal(value);
+            if (!value) setAllowGPDNS(false);
+          }} />
           <span className="text-muted-foreground">
             Internal network (no external access through this zone)
           </span>
         </label>
+        {internal && (
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={allowGPDNS} onCheckedChange={setAllowGPDNS} />
+              <span>Allow GP DNS</span>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Resolve managed names through shared CoreDNS. Docker aliases still work;
+              this does not enable outbound connections. Existing containers change
+              on their next deployment, using the Service's release strategy.
+            </p>
+          </div>
+        )}
         {submitError && (
           <p className="text-sm text-destructive" role="alert">
             {submitError}

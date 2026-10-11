@@ -16,12 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-type ConnectionCheckStage struct {
-	Name      string
-	Elapsed   time.Duration
-	Succeeded bool
-	Failure   string
-}
+type ConnectionCheckStage = s3connector.ConnectionCheckStage
 
 type ConnectionCheckResult struct {
 	Stages  []ConnectionCheckStage
@@ -35,6 +30,7 @@ type ConnectionCheckResult struct {
 // calls CleanupConnectionCheck instead of starting the permission check again.
 type ConnectionCheckJournal interface {
 	WriteConnectionCheckCleanup(context.Context, s3connector.ConnectionCheckCleanup) error
+	WriteConnectionCheckStage(context.Context, s3connector.ConnectionCheckStage) error
 }
 
 // CheckConnection checks real object and multipart permissions in the configured
@@ -60,17 +56,17 @@ func (adapter *Adapter) CheckConnection(
 	}
 	body := s3connector.ConnectionCheckPayload(operationID)
 	metadata := checkObjectMetadata(state)
-	run := func(name string, operation func() error) error {
+	run := func(stageCtx context.Context, name s3connector.ConnectionCheckStageName, operation func() error) error {
 		started := time.Now()
 		err := operation()
 		stage := ConnectionCheckStage{Name: name, Elapsed: time.Since(started), Succeeded: err == nil}
 		if err != nil {
-			stage.Failure = checkFailure(err)
+			stage.Failure = s3connector.CheckFailureForError(err)
 		}
 		result.Stages = append(result.Stages, stage)
-		return err
+		return errors.Join(err, journal.WriteConnectionCheckStage(stageCtx, stage))
 	}
-	err = run("Write object", func() error {
+	err = run(ctx, s3connector.CheckWriteObject, func() error {
 		state.ObjectPending = true
 		if err := journal.WriteConnectionCheckCleanup(ctx, state); err != nil {
 			return err
@@ -83,7 +79,7 @@ func (adapter *Adapter) CheckConnection(
 		return providerError(err)
 	})
 	if err == nil {
-		err = run("Read and verify object", func() error {
+		err = run(ctx, s3connector.CheckReadObject, func() error {
 			output, err := adapter.client.GetObject(ctx, &s3.GetObjectInput{
 				Bucket: aws.String(adapter.config.Bucket), Key: aws.String(state.ObjectKey),
 			}, oneAttempt)
@@ -105,7 +101,7 @@ func (adapter *Adapter) CheckConnection(
 		})
 	}
 	if err == nil {
-		err = run("Create and upload multipart part", func() error {
+		err = run(ctx, s3connector.CheckMultipart, func() error {
 			return adapter.checkMultipart(ctx, &state, journal, body, metadata)
 		})
 	}
@@ -113,7 +109,7 @@ func (adapter *Adapter) CheckConnection(
 	// timed out. Pending authority is retained when cleanup or its publication fails.
 	cleanupCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer stop()
-	cleanupErr := run("Delete object and abort multipart; verify cleanup", func() error {
+	cleanupErr := run(cleanupCtx, s3connector.CheckCleanup, func() error {
 		var cleanupErr error
 		state, cleanupErr = adapter.CleanupConnectionCheck(cleanupCtx, state, journal)
 		return cleanupErr
@@ -124,26 +120,6 @@ func (adapter *Adapter) CheckConnection(
 
 func checkObjectMetadata(state s3connector.ConnectionCheckCleanup) map[string]string {
 	return map[string]string{"groundplane-check": state.OperationID, "payload-sha256": state.PayloadSHA256}
-}
-
-func checkFailure(err error) string {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return "The connection check timed out."
-	}
-	if errors.Is(err, context.Canceled) {
-		return "The connection check was canceled."
-	}
-	kind, _ := errs.KindOf(err)
-	switch kind {
-	case errs.KindValidationFailed:
-		return "The provider rejected credentials, permissions, or the requested operation."
-	case errs.KindStorageUnavailable:
-		return "The storage endpoint could not complete the request."
-	case errs.KindStateConflict:
-		return "The test object or upload no longer matches this check. Cleanup requires investigation."
-	default:
-		return "The check could not record or verify its result."
-	}
 }
 
 func checkOwnershipConflict() error {

@@ -71,13 +71,13 @@ func TestZoneRemovalCompletionPromotesCandidate(t *testing.T) {
 	ctx := context.Background()
 	completedAt := fixture.task.CreatedAt.Add(2 * time.Second)
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, fixture.task.ID, testtaskjournal.TaskStatusCompleted, completedAt,
-	); err != nil {
+		ctx, fixture.task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		completedAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(completed) error = %v", err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, fixture.task.ID, testtaskjournal.TaskStatusCompleted, completedAt,
-	); err != nil {
+		ctx, fixture.task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		completedAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(completed replay) error = %v", err)
 	}
 	current, found, err := fixture.hierarchy.GetEnvironmentComposeProjection(ctx, fixture.environment.Record.ID)

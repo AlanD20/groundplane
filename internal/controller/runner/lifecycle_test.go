@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -103,9 +104,7 @@ func TestCreateReplaysRegistrationWithoutToken(t *testing.T) {
 		}
 		attempt := Attempt{TaskID: "task_create", Executor: "controller", Plan: testPlan()}
 		registration := corerunner.StepStartRunner
-		ownership := RuntimeEvidence{
-			ContainerID: repeat("a", 64), DaemonNonce: repeat("b", 64), SocketDevice: 1, SocketInode: 2,
-		}
+		ownership := testRuntimeEvidence()
 		journal.progress = Progress{
 			Plan: attempt.Plan.Clone(), RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID,
 			Executor: attempt.Executor, PlanDigest: attempt.Plan.Digest(), IdentityDigest: attempt.Plan.IdentityDigest(),
@@ -300,9 +299,7 @@ func (runtime *recordingRuntime) apply(
 		return corerunner.StepEvidence{}, errors.New("token escaped registration step")
 	}
 	if step == corerunner.StepStartRunner {
-		ownership := RuntimeEvidence{
-			ContainerID: repeat("a", 64), DaemonNonce: repeat("b", 64), SocketDevice: 1, SocketInode: 2,
-		}
+		ownership := testRuntimeEvidence()
 		return corerunner.StepEvidence{Step: step, State: corerunner.EffectApplied, Ownership: &ownership}, nil
 	}
 	if isRemovalStep(step) {
@@ -323,9 +320,8 @@ func (runtime *recordingRuntime) resolve(
 		return corerunner.StepEvidence{}, runtime.resolveErr
 	}
 	if step == corerunner.StepStartRunner {
-		return corerunner.StepEvidence{Step: step, State: corerunner.EffectApplied, Ownership: &RuntimeEvidence{
-			ContainerID: repeat("a", 64), DaemonNonce: repeat("b", 64), SocketDevice: 1, SocketInode: 2,
-		}}, nil
+		ownership := testRuntimeEvidence()
+		return corerunner.StepEvidence{Step: step, State: corerunner.EffectApplied, Ownership: &ownership}, nil
 	}
 	return corerunner.StepEvidence{Step: step, State: corerunner.EffectApplied}, nil
 }
@@ -494,6 +490,16 @@ func isRemovalStep(step corerunner.Step) bool {
 }
 
 func testPlan() corerunner.Plan { return corerunner.Plan{RunnerID: "run_test", RuntimeEpoch: 1} }
+
+func testRuntimeEvidence() RuntimeEvidence {
+	return RuntimeEvidence{
+		Software: buildversion.ContainerIdentity{
+			Image:        "registry.example/runner@sha256:" + repeat("d", 64),
+			ConfigDigest: "sha256:" + repeat("e", 64),
+		},
+		ContainerID: repeat("a", 64), DaemonNonce: repeat("b", 64), SocketDevice: 1, SocketInode: 2,
+	}
+}
 
 func allZero(value []byte) bool {
 	for _, item := range value {

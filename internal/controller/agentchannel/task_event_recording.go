@@ -6,12 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *Server) recordTaskEvent(
@@ -19,20 +21,20 @@ func (s *Server) recordTaskEvent(
 	agentID string,
 	agentGeneration uint64,
 	event *agentpb.TaskEvent,
-) error {
+) (*agentpb.TaskEventAck, error) {
 	if event == nil || ids.Validate(ids.KindAssignment, event.AssignmentId) != nil ||
 		len(event.PlanHash) != 32 || event.ExecutionEpoch == 0 || event.Ordinal == 0 {
-		return errs.New(errs.KindValidationFailed, "Agent Task event is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "Agent Task event is invalid")
 	}
 	if len(event.Chunk) != 0 {
-		return status.Error(
+		return nil, status.Error(
 			codes.Unimplemented,
 			"ephemeral Task output streaming is not implemented",
 		)
 	}
 	task, err := s.tasks.GetTask(ctx, event.TaskId)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if assignments, ok := s.tasks.(interface {
 		GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
@@ -40,15 +42,15 @@ func (s *Server) recordTaskEvent(
 		assignment, assignmentErr := assignments.GetTaskAssignment(ctx, event.GetTaskId())
 		if assignmentErr != nil || assignment.Assignment.Record.AssignmentID != event.GetAssignmentId() ||
 			assignment.Assignment.Record.ExecutionEpoch != event.GetExecutionEpoch() {
-			return errs.New(errs.KindStateConflict, "Agent Task event execution epoch does not match")
+			return nil, errs.New(errs.KindStateConflict, "Agent Task event execution epoch does not match")
 		}
 	}
 	planHash, err := hex.DecodeString(task.Record.PlanHash)
 	if err != nil || !bytes.Equal(planHash, event.PlanHash) {
-		return errs.New(errs.KindStateConflict, "Agent Task event plan hash does not match")
+		return nil, errs.New(errs.KindStateConflict, "Agent Task event plan hash does not match")
 	}
 	if task.Record.Status != taskjournal.TaskStatusRunning {
-		return errs.New(
+		return nil, errs.New(
 			errs.KindStateConflict,
 			"Agent Task event does not belong to a running Task",
 		)
@@ -68,16 +70,49 @@ func (s *Server) recordTaskEvent(
 	case agentpb.TaskState_TASK_STATE_TIMED_OUT:
 		state = taskjournal.TaskEventStateTimedOut
 	default:
-		return errs.New(errs.KindValidationFailed, "Agent Task event state is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "Agent Task event state is invalid")
 	}
-	_, err = s.tasks.AppendTaskEvent(ctx, taskjournal.TaskEventInput{
+	health, err := taskprogress.FromAgent(event.GetHealthWait())
+	if err != nil {
+		return nil, err
+	}
+	if health != nil && (state != taskjournal.TaskEventStateRunning || event.GetOrdinal() < 2) {
+		return nil, errs.New(errs.KindValidationFailed, "health wait observation must belong to a running step")
+	}
+	failure, err := taskprogress.FailureFromAgent(event.GetFailure())
+	if err != nil {
+		return nil, err
+	}
+	if failure != nil &&
+		(state != taskjournal.TaskEventStateFailed && state != taskjournal.TaskEventStateTimedOut && state != taskjournal.TaskEventStateAborted || health != nil) {
+		return nil, errs.New(errs.KindValidationFailed, "failure diagnostic must belong to an unsuccessful step")
+	}
+	payload, err := json.Marshal(taskprogress.Payload{HealthWait: health, Failure: failure})
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	appended, err := s.tasks.AppendTaskEvent(ctx, taskjournal.TaskEventInput{
 		Identity: taskjournal.TaskEventIdentity{
 			AssignmentID: event.AssignmentId, AgentID: agentID, AgentGeneration: agentGeneration,
 			TaskID: event.TaskId, StepID: event.StepId,
 			Attempt: event.ExecutionEpoch, Ordinal: event.Ordinal,
 		},
 		State:   state,
-		Payload: json.RawMessage(`{}`),
+		Payload: payload,
 	}, s.now().UTC())
-	return err
+	if err != nil {
+		return nil, err
+	}
+	ack := &agentpb.TaskEventAck{
+		TaskId: event.GetTaskId(), AssignmentId: event.GetAssignmentId(),
+		PlanHash: append([]byte(nil), event.GetPlanHash()...), StepId: event.GetStepId(),
+		ExecutionEpoch: event.GetExecutionEpoch(), Ordinal: event.GetOrdinal(), State: event.GetState(),
+	}
+	if budget := appended.RollingBudget; budget != nil {
+		ack.RollingBudget = &agentpb.RollingStepBudget{Deadline: timestamppb.New(budget.Deadline)}
+		if !budget.DrainUntil.IsZero() {
+			ack.RollingBudget.DrainUntil = timestamppb.New(budget.DrainUntil)
+		}
+	}
+	return ack, nil
 }

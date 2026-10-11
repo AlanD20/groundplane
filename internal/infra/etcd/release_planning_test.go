@@ -15,6 +15,17 @@ type releasePlanningTestStore struct {
 	*memoryHierarchyStore
 }
 
+func (store *releasePlanningTestStore) TransactBlueprintChild(
+	ctx context.Context,
+	transaction BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	conditions, mutations, err := transaction.Operations()
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	return store.Transact(ctx, conditions, mutations)
+}
+
 func (*releasePlanningTestStore) Health(context.Context) error { return nil }
 
 func (store *releasePlanningTestStore) Put(ctx context.Context, key string, value []byte) (int64, error) {

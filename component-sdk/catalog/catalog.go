@@ -16,6 +16,7 @@ type Catalog struct {
 	managedConfigActions    []registeredManagedConfigAction
 	containerConfigActions  []registeredContainerConfigAction
 	dnsResolverObservations []registeredDNSResolverObservation
+	edgeTunnelObservations  []registeredEdgeTunnelObservation
 	digest                  [sha256.Size]byte
 }
 
@@ -25,6 +26,7 @@ type Registration struct {
 	ManagedConfigActions    []ManagedConfigActionRecipe
 	ContainerConfigActions  []ContainerConfigActionRecipe
 	DNSResolverObservations []DNSResolverObservationRecipe
+	EdgeTunnelObservations  []EdgeTunnelObservationRecipe
 }
 
 type registeredImage struct {
@@ -100,6 +102,7 @@ type ContainerConfigActionRecipe struct {
 	preflightArgs []string
 	validateArgs  []string
 	activateArgs  []string
+	activation    ContainerConfigActivation
 	image         component.OCIImage
 }
 
@@ -147,13 +150,14 @@ func NewContainerConfigActionRecipe(
 	preflightArgs []string,
 	validateArgs []string,
 	activateArgs []string,
+	activation ContainerConfigActivation,
 	image component.OCIImage,
 ) (ContainerConfigActionRecipe, error) {
 	if actionID == "" || !validManagedConfigRelativePath(relativePath) ||
 		!path.IsAbs(containerPath) || path.Clean(containerPath) != containerPath ||
 		!validContainerCommand(
 			preflightArgs,
-		) || !validContainerCommand(validateArgs) || !validContainerCommand(activateArgs) ||
+		) || !validContainerCommand(validateArgs) || !validContainerActivation(activation, activateArgs) ||
 		image.Validate() != nil {
 		return ContainerConfigActionRecipe{}, fmt.Errorf("component catalog: container-config action recipe is invalid")
 	}
@@ -162,6 +166,7 @@ func NewContainerConfigActionRecipe(
 		preflightArgs: append([]string(nil), preflightArgs...),
 		validateArgs:  append([]string(nil), validateArgs...),
 		activateArgs:  append([]string(nil), activateArgs...),
+		activation:    activation,
 		image:         cloneOCIImage(image),
 	}, nil
 }
@@ -177,6 +182,9 @@ func (recipe ContainerConfigActionRecipe) ValidateArgs() []string {
 }
 func (recipe ContainerConfigActionRecipe) ActivateArgs() []string {
 	return append([]string(nil), recipe.activateArgs...)
+}
+func (recipe ContainerConfigActionRecipe) Activation() ContainerConfigActivation {
+	return recipe.activation
 }
 func (recipe ContainerConfigActionRecipe) Image() component.OCIImage {
 	return cloneOCIImage(recipe.image)
@@ -247,7 +255,7 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 				!path.IsAbs(recipe.containerPath) || path.Clean(recipe.containerPath) != recipe.containerPath ||
 				!validContainerCommand(
 					recipe.preflightArgs,
-				) || !validContainerCommand(recipe.validateArgs) || !validContainerCommand(recipe.activateArgs) ||
+				) || !validContainerCommand(recipe.validateArgs) || !validContainerActivation(recipe.activation, recipe.activateArgs) ||
 				recipe.image.Validate() != nil ||
 				!registeredImageMatches(images, definition.Implementation(), recipe.image) {
 				return Catalog{}, fmt.Errorf(
@@ -342,14 +350,19 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 			)
 		}
 	}
+	edgeObservations, err := registerEdgeTunnelObservations(registrations, images)
+	if err != nil {
+		return Catalog{}, err
+	}
 	catalog := Catalog{
 		definitions:             canonical,
 		images:                  images,
 		managedConfigActions:    actions,
 		containerConfigActions:  containerActions,
 		dnsResolverObservations: observations,
+		edgeTunnelObservations:  edgeObservations,
 	}
-	catalog.digest = catalogDigest(canonical, images, actions, containerActions, observations)
+	catalog.digest = catalogDigest(canonical, images, actions, containerActions, observations, edgeObservations)
 	return catalog, nil
 }
 

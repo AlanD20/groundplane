@@ -29,7 +29,7 @@ func TestReleaseReconnectAndMutationEventRaceIsCASFenced(t *testing.T) {
 				AgentID:      fixture.agentID, AgentGeneration: 1, TaskID: fixture.claim.Task.Record.ID,
 				StepID: fixture.forwardStepID, Attempt: 1, Ordinal: 1,
 			},
-			State: testtaskjournal.TaskEventStateRunning, Payload: json.RawMessage(`{"message":"running"}`),
+			State: testtaskjournal.TaskEventStateRunning, Payload: json.RawMessage(`{}`),
 		}, fixture.now.Add(2*time.Second))
 		eventResult <- err
 	}()

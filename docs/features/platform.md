@@ -15,6 +15,28 @@ A healthy Controller row means that the Controller served the request. It does
 not prove application health. Likewise, container presence and socket keepalive
 do not prove that an Agent is accepting work; its authenticated Ready reports do.
 
+Agent details expose the last acknowledged installed image separately from a
+desired update image. During provisioning or replacement, installed identity is
+unavailable until that generation is accepted; a prepared candidate is not an
+installed version. A degraded Agent can still have a recorded installed identity,
+which does not prove that its container is currently running.
+
+The Agent's accepted version and source commit survive Controller restarts;
+health still requires a fresh authenticated report. Source builds lead with their
+recorded short commit, while release builds lead with their version. Full commits
+and immutable artifact identities remain available in details. CoreDNS, Caddy and
+Tunnel images come from their retained runtime acknowledgements, not a new desired
+configuration or the current image catalog. Optional version/build labels are
+read only from that exact immutable local image configuration. A tag captured at
+installation remains visible as “Installed from tag” even after the registry tag
+moves. It describes the installed selection; it does not claim the tag still
+resolves to those bytes. Missing tags and version labels use a compact digest.
+An unavailable metadata lookup retains the acknowledged image and captured tag.
+etcd's image, captured installation tag and optional image-version label
+come from its owned container and immutable local image configuration. Its reported
+server version is a separate status observation, unavailable when that response
+cannot establish it. Neither comes from the next selected bootstrap image.
+
 ## Controller configuration
 
 The Controller detail at `/platform/host/controller` shows its startup YAML.
@@ -42,6 +64,58 @@ workspace; runtime configuration remains with each resource.
 Host Components lists CoreDNS. Environment routers and tunnels remain in their
 Environment workspace. CoreDNS has Overview, DNS records and Resolver settings
 sections, with configuration drafts retained when switching sections.
+
+## CoreDNS connection checks
+
+Open CoreDNS → Overview → Test DNS. The check queries the running resolver and
+each upstream in its acknowledged configuration; unsaved settings are not tested.
+Saving configuration remains separate. CoreDNS must be enabled and its
+configuration Task settled before a check can start.
+
+Default queries use root NS for the default upstream and an A lookup of each
+forwarding domain. Optional query names can override one query per domain, using
+A or NS. The name must select that domain under the configured longest-suffix
+rules. GP chooses the endpoints; operators cannot inject arbitrary servers.
+
+The result records the queried name, server, answer samples, total answer count,
+elapsed time and whether the query passed through CoreDNS or went directly to an
+upstream. NXDOMAIN and an empty answer differ from refusal, timeout and connection
+failure. The Console provides search, sorting and pagination; execution details
+identify the exact applied configuration and Agent generation checked.
+
+Each query is limited to two seconds, within a one-minute query budget. The
+check does not change configuration or reload CoreDNS. GP records the result
+under its Task and marks it stale when its captured sources change. Opening a
+page or refreshing results only reads stored evidence. An interrupted check is
+not replayed by Task Retry: start a new check explicitly.
+
+CLI: `component check COMPONENT_ID`, optionally with repeated
+`--query domain=name:A` or `--query domain=name:NS`; `component check-result
+COMPONENT_ID` reads the latest retained check, or `--task TASK_ID` selects one.
+The matching API is `POST/GET /components/{id}/dns-checks`. These surfaces are
+implemented locally; live DNS and interruption qualification is still pending.
+
+## Host terminal
+
+The Console's top-bar Terminal action opens a root shell on the Controller host.
+Anyone who can reach the Console can use it; there is no separate login or token.
+Keep Console/API listeners restricted to trusted private clients. This is host
+access, not a container shell or a Task log.
+
+The bottom panel can be resized or maximized within the browser tab. Hide keeps
+the shell running. Close offers Keep in background or Terminate; Terminate ends
+the shell and its owned foreground/background processes. Reopen resumes the
+owning browser session. A Controller restart terminates these transient sessions;
+opening again is an explicit new shell, not replay of past commands.
+
+Platform Settings configures operator-input inactivity: 15 minutes by default,
+from 1 minute to 8 hours. Save takes effect after the next Controller restart.
+Shell output does not refresh the timeout. Commands and output are not logged;
+only a bounded in-memory output buffer supports reconnect.
+
+CLI: `groundplane host terminal` requires an interactive TTY. It uses the same
+terminal backend. The API's Open request returns its WebSocket continuation;
+see [request replay](../api-cli.md#protected-requests-and-uncertain-outcomes) for its transient boundary.
 
 ## etcd configuration
 

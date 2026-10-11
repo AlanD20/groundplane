@@ -15,6 +15,20 @@ import (
 func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
+	if len(os.Args) == 2 && os.Args[1] == app.EdgeConnectionCheckHelperArgument {
+		if err := app.RunEdgeConnectionCheckHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent edge connection helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.BackingAccessHelperArgument {
+		if err := app.RunBackingAccessHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Backing access helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == app.ComposeHelperArgument {
 		if err := app.RunComposeHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent compose helper:", err)

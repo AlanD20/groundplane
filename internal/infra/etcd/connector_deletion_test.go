@@ -116,8 +116,9 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	terminal, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-	)
+		ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		task.CreatedAt.Add(2*time.Second))
+
 	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask() = %#v/%v", terminal, err)
 	}
@@ -153,8 +154,8 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 	} {
 		connectorDeletionPutKey(t, fixture.store, reference.key, reference.value)
 		if _, err := tasks.AcknowledgeControllerTask(
-			ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-		); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+			ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+			task.CreatedAt.Add(2*time.Second)); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
 			t.Fatalf("AcknowledgeControllerTask(replay with %s) error = %v, want resource in use", name, err)
 		}
 		connectorDeletionDeleteKey(t, fixture.store, reference.key)
@@ -167,8 +168,8 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 		[]byte(reusedNameOwnerID),
 	)
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-	); err != nil {
+		ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay with reused name) error = %v", err)
 	}
 }
@@ -215,8 +216,9 @@ func TestConnectorDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testin
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	failed, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-	)
+		ctx, task.ID, testtaskjournal.TaskStatusFailed, nil,
+		task.CreatedAt.Add(2*time.Second))
+
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
 	}
@@ -547,8 +549,9 @@ func TestConnectorDeletionRetryAndFinalizationRejectArtifactMemberships(t *testi
 		}
 		connectorDeletionPutKey(t, fixture.store, referenceKey, []byte(pointID))
 		_, err = tasks.AcknowledgeControllerTask(
-			ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-		)
+			ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+			task.CreatedAt.Add(2*time.Second))
+
 		if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
 			t.Fatalf("AcknowledgeControllerTask() error = %v, want resource in use", err)
 		}
@@ -578,8 +581,8 @@ func TestConnectorDeletionRetryAndFinalizationRejectArtifactMemberships(t *testi
 			t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 		}
 		if _, err := tasks.AcknowledgeControllerTask(
-			ctx, task.ID, testtaskjournal.TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-		); err != nil {
+			ctx, task.ID, testtaskjournal.TaskStatusFailed, nil,
+			task.CreatedAt.Add(2*time.Second)); err != nil {
 			t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
 		}
 		pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2695)
@@ -630,8 +633,8 @@ func TestConnectorDeletionRetryAndFinalizationRaceArtifactMemberships(t *testing
 			t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 		}
 		if _, err := tasks.AcknowledgeControllerTask(
-			ctx, task.ID, testtaskjournal.TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-		); err != nil {
+			ctx, task.ID, testtaskjournal.TaskStatusFailed, nil,
+			task.CreatedAt.Add(2*time.Second)); err != nil {
 			t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
 		}
 		pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2698)
@@ -717,8 +720,9 @@ func TestConnectorDeletionRetryAndFinalizationRaceArtifactMemberships(t *testing
 			t.Fatalf("newTaskRepository(race) error = %v", err)
 		}
 		_, err = raceTasks.AcknowledgeControllerTask(
-			ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-		)
+			ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+			task.CreatedAt.Add(2*time.Second))
+
 		if err == nil {
 			t.Fatal("AcknowledgeControllerTask() succeeded across Recovery Point membership race")
 		}

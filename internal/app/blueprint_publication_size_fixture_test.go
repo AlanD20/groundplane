@@ -47,6 +47,45 @@ type blueprintSizeOrdinaryStore struct {
 	audit *BlueprintPublicationSizeAudit
 }
 
+func (wrapped *blueprintSizeOrdinaryStore) TransactBlueprintChild(
+	ctx context.Context,
+	transaction etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	conditions, mutations, err := transaction.Operations()
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	budget, err := wrapped.MeasureTransaction(ctx, conditions, mutations)
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	wrapped.audit.Publication = BlueprintTransactionSize{
+		Comparisons: len(conditions), Mutations: len(mutations), Bytes: budget.Bytes,
+	}
+	if !budget.Fits() {
+		return testkeyvalue.TransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"fixture exceeded Blueprint child transaction bound",
+		)
+	}
+	for key, revision := range wrapped.audit.SourceFences {
+		found := false
+		for _, condition := range conditions {
+			if condition.Key == key && condition.ModRevision == revision {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return testkeyvalue.TransactionResult{}, errs.New(
+				errs.KindInternal,
+				"Blueprint child publication omitted an exact native source fence",
+			)
+		}
+	}
+	return wrapped.releasePlanningTestStore.Transact(ctx, conditions, mutations)
+}
+
 func (wrapped *blueprintSizeOrdinaryStore) Transact(
 	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
 ) (testkeyvalue.TransactionResult, error) {

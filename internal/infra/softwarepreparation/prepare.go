@@ -16,6 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -29,9 +30,10 @@ func (preparer *Preparer) Prepare(
 	input Input,
 	checkpoint Result,
 	reporter Reporter,
+	observation OperationObserver,
 ) (result Result, returnErr error) {
-	if reporter == nil {
-		return Result{}, errs.New(errs.KindInternal, "software preparation progress reporter is required")
+	if reporter == nil || observation == nil {
+		return Result{}, errs.New(errs.KindInternal, "software preparation progress reporters are required")
 	}
 	if err := ValidateInput(input); err != nil {
 		return Result{}, err
@@ -43,8 +45,12 @@ func (preparer *Preparer) Prepare(
 		checkpoint.Source = input.Source
 	}
 	result = checkpoint
-	if err := preparer.verifyCheckpoint(ctx, result); err != nil {
-		return result, err
+	if result.Agent != nil || result.Controller != nil {
+		if err := observation.Run(ctx, "software_checkpoint_check", func(ctx context.Context) error {
+			return preparer.verifyCheckpoint(ctx, result)
+		}); err != nil {
+			return result, err
+		}
 	}
 	if err := reporter(ctx, Progress{Phase: PhasePreparing, Result: result}); err != nil {
 		return result, err
@@ -109,40 +115,50 @@ func (preparer *Preparer) Prepare(
 			ctx, input,
 			input.Source.Selection.includesAgent() && result.Agent == nil,
 			input.Source.Selection.includesController() && result.Controller == nil,
+			observation,
 		)
-	} else {
-		agentTag, agentUpstream, controllerTag, controllerIdentity, err = operation.prepareRelease(
-			ctx, input,
-			input.Source.Selection.includesAgent() && result.Agent == nil,
-			input.Source.Selection.includesController() && result.Controller == nil,
-		)
+	} else if input.Source.Selection.includesAgent() && result.Agent == nil ||
+		input.Source.Selection.includesController() && result.Controller == nil {
+		err = observation.Run(ctx, "software_release_import", func(ctx context.Context) error {
+			var importErr error
+			agentTag, agentUpstream, controllerTag, controllerIdentity, importErr = operation.prepareRelease(
+				ctx, input,
+				input.Source.Selection.includesAgent() && result.Agent == nil,
+				input.Source.Selection.includesController() && result.Controller == nil,
+			)
+			return importErr
+		})
 	}
 	if err != nil {
 		return result, err
 	}
 
 	if input.Source.Selection.includesAgent() && result.Agent == nil {
-		artifact, err := operation.publish(ctx, agentTag, agentRepository, input.Source, SelectionAgent)
-		if err != nil {
-			return result, err
-		}
-		result.Agent = &AgentResult{Artifact: artifact, UpstreamReference: agentUpstream}
-		if err := reporter(ctx, Progress{Phase: PhaseAgentPublished, Result: result}); err != nil {
+		if err := observation.Run(ctx, "software_agent_publish", func(ctx context.Context) error {
+			artifact, err := operation.publish(ctx, agentTag, agentRepository, input.Source, SelectionAgent)
+			if err != nil {
+				return err
+			}
+			result.Agent = &AgentResult{Artifact: artifact, UpstreamReference: agentUpstream}
+			return reporter(ctx, Progress{Phase: PhaseAgentPublished, Result: result})
+		}); err != nil {
 			return result, err
 		}
 	}
 	if input.Source.Selection.includesController() && result.Controller == nil {
-		artifact, err := operation.publish(
-			ctx, controllerTag, controllerRepository, input.Source, SelectionController,
-		)
-		if err != nil {
-			return result, err
-		}
-		result.Controller = &ControllerResult{
-			Artifact: artifact, BinarySHA256: controllerIdentity.binary,
-			MetadataSHA256: controllerIdentity.metadata, CLISHA256: controllerIdentity.cli,
-		}
-		if err := reporter(ctx, Progress{Phase: PhaseControllerPublished, Result: result}); err != nil {
+		if err := observation.Run(ctx, "software_controller_publish", func(ctx context.Context) error {
+			artifact, err := operation.publish(
+				ctx, controllerTag, controllerRepository, input.Source, SelectionController,
+			)
+			if err != nil {
+				return err
+			}
+			result.Controller = &ControllerResult{
+				Artifact: artifact, BinarySHA256: controllerIdentity.binary,
+				MetadataSHA256: controllerIdentity.metadata, CLISHA256: controllerIdentity.cli,
+			}
+			return reporter(ctx, Progress{Phase: PhaseControllerPublished, Result: result})
+		}); err != nil {
 			return result, err
 		}
 	}
@@ -152,7 +168,9 @@ func (preparer *Preparer) Prepare(
 	if err := cleanup(); err != nil {
 		return result, errs.Wrap(errs.KindRequestUnavailable, err)
 	}
-	if err := preparer.verifyCheckpoint(ctx, result); err != nil {
+	if err := observation.Run(ctx, "software_output_check", func(ctx context.Context) error {
+		return preparer.verifyCheckpoint(ctx, result)
+	}); err != nil {
 		return result, err
 	}
 	if err := reporter(ctx, Progress{Phase: PhaseVerified, Result: result}); err != nil {
@@ -343,11 +361,14 @@ func (operation *dockerOperation) prepareSource(
 	input Input,
 	wantAgent bool,
 	wantController bool,
+	observation OperationObserver,
 ) (agentTag string, controllerTag string, identity controllerDigests, err error) {
 	if !wantAgent && !wantController {
 		return "", "", controllerDigests{}, nil
 	}
-	if err := operation.preparer.downloadSource(ctx, input.Source, operation.directory); err != nil {
+	if err := observation.Run(ctx, "software_source_download", func(ctx context.Context) error {
+		return operation.preparer.downloadSource(ctx, input.Source, operation.directory)
+	}); err != nil {
 		return "", "", controllerDigests{}, err
 	}
 	sourceDirectory := filepath.Join(operation.directory, "source")
@@ -361,15 +382,23 @@ func (operation *dockerOperation) prepareSource(
 	}
 	version := baseVersion + "-ref." + input.Source.ResolvedSHA
 	if wantController {
-		controllerTag, identity, err = operation.buildController(
-			ctx, sourceDirectory, input.Source, version, input.ControllerToolCatalog,
-		)
+		err = observation.Run(ctx, "software_controller_build", func(ctx context.Context) error {
+			var buildErr error
+			controllerTag, identity, buildErr = operation.buildController(
+				ctx, sourceDirectory, input.Source, version, input.ControllerToolCatalog,
+			)
+			return buildErr
+		})
 		if err != nil {
 			return "", "", controllerDigests{}, err
 		}
 	}
 	if wantAgent {
-		agentTag, err = operation.buildAgent(ctx, sourceDirectory, input.Source, version)
+		err = observation.Run(ctx, "software_agent_build", func(ctx context.Context) error {
+			var buildErr error
+			agentTag, buildErr = operation.buildAgent(ctx, sourceDirectory, input.Source, version)
+			return buildErr
+		})
 		if err != nil {
 			return "", "", controllerDigests{}, err
 		}
@@ -416,7 +445,8 @@ func (operation *dockerOperation) prepareRelease(
 		if err := os.Mkdir(payload, 0o700); err != nil {
 			return "", "", "", controllerDigests{}, errs.Wrap(errs.KindInternal, err)
 		}
-		identity, err = extractControllerBundle(assetPaths[bundleName], payload, version, input.Source.Platform)
+		identity, err = extractControllerBundle(assetPaths[bundleName], payload, version, input.Source.Platform,
+			buildversion.BuildProvenance{Kind: string(Release), Commit: input.Source.ControllerRelease.ResolvedSHA})
 		if err != nil {
 			return "", "", "", controllerDigests{}, err
 		}

@@ -3,62 +3,46 @@ package executionplan
 import (
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/json"
-	"strconv"
-	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // ProxyConfigGeneration opens the generation embedded in every canonical
 // server identity of a sealed Groundplane proxy config.
-func ProxyConfigGeneration(config []byte, releaseID string) (uint64, error) {
-	var document struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]json.RawMessage `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
+func ProxyConfigGeneration(
+	implementation agentpb.ServiceProxyImplementation,
+	config []byte,
+	releaseID string,
+) (uint64, error) {
+	selected, err := OpenProxyImplementation(implementation)
+	if err != nil {
+		return 0, err
 	}
-	if ids.Validate(ids.KindDeployment, releaseID) != nil || json.Unmarshal(config, &document) != nil ||
-		len(document.Apps.HTTP.Servers) == 0 {
-		return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
+	configuration, err := serviceproxy.Read(selected, config)
+	if err != nil || ids.Validate(ids.KindDeployment, releaseID) != nil || configuration.ReleaseID != releaseID {
+		return 0, errs.New(
+			errs.KindValidationFailed,
+			"Service proxy configuration does not identify the captured Release",
+		)
 	}
-	wantSuffix := "_" + strings.ToLower(releaseID) + "_p"
-	var generation uint64
-	for name := range document.Apps.HTTP.Servers {
-		if !strings.HasPrefix(name, "gp_g") {
-			return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
-		}
-		rest := strings.TrimPrefix(name, "gp_g")
-		separator := strings.IndexByte(rest, '_')
-		if separator <= 0 || !strings.HasPrefix(rest[separator:], wantSuffix) {
-			return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
-		}
-		parsed, err := strconv.ParseUint(rest[:separator], 10, 64)
-		if err != nil || parsed == 0 || generation != 0 && generation != parsed {
-			return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
-		}
-		generation = parsed
-	}
-	return generation, nil
+	return configuration.Generation, nil
 }
 
 func validateReleaseWorkloadStep(
 	operation agentpb.PlanOperation,
 	artifactID, serviceID, target string,
+	replicaOrdinal uint32,
 	artifacts map[string]*agentpb.ComposeArtifact,
 ) error {
-	if !releaseOperation(operation) || validateID(ids.KindService, serviceID) != nil || !validReleaseTarget(target) {
+	if !releaseOperation(operation) || validateID(ids.KindService, serviceID) != nil {
 		return errs.New(errs.KindValidationFailed, "release workload step is invalid")
 	}
 	artifact := artifacts[artifactID]
-	if artifact == nil || releaseTargetService(artifact, serviceID, target) == nil {
-		return errs.New(errs.KindValidationFailed, "release workload is absent from its Compose artifact")
-	}
-	return nil
+	_, err := ReleaseWorkloadService(artifact, serviceID, target, replicaOrdinal)
+	return err
 }
 
 func validateServiceProxySwitch(
@@ -67,12 +51,24 @@ func validateServiceProxySwitch(
 	artifacts map[string]*agentpb.ComposeArtifact,
 ) error {
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
-		!validReleaseTarget(
-			value.FromTarget,
-		) || !validReleaseTarget(value.ToTarget) || value.FromTarget == value.ToTarget ||
+		(!validReleaseTarget(value.FromTarget) && value.FromTarget != "rolling") ||
+		!validReleaseTarget(value.ToTarget) || value.FromTarget == value.ToTarget ||
 		value.ProxyGeneration == 0 || ids.Validate(ids.KindDeployment, value.ReleaseId) != nil ||
 		!validSealedProxyConfig(value.ConfigJson, value.ConfigSha256) {
 		return errs.New(errs.KindValidationFailed, "release proxy switch is invalid")
+	}
+	if value.FromTarget == "rolling" {
+		if value.ToTarget != "blue" && value.ToTarget != "green" {
+			return errs.New(errs.KindValidationFailed, "rolling proxy handoff requires a blue-green candidate")
+		}
+		workloads, proxy, err := nativePredecessorServices(artifacts[value.PriorArtifactId], value.ServiceId)
+		if err != nil || proxy == nil ||
+			workloads[0].GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA {
+			return errs.New(
+				errs.KindValidationFailed,
+				"rolling proxy handoff requires the complete captured predecessor",
+			)
+		}
 	}
 	return validateProxyArtifacts(value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, artifacts)
 }
@@ -113,17 +109,35 @@ func validateProxyArtifacts(
 ) error {
 	artifactID := candidateArtifactID
 	artifact := artifacts[artifactID]
-	if artifact == nil ||
-		releaseRuntimeService(
-			artifact,
-			serviceID,
-			"",
-			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-		) == nil {
+	proxy := releaseRuntimeService(
+		artifact,
+		serviceID,
+		"",
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+	)
+	if artifact == nil || proxy == nil {
 		return errs.New(errs.KindValidationFailed, "stable release proxy is absent from its Compose artifact")
+	}
+	configuration, err := OpenProxyConfiguration(proxy)
+	if err != nil {
+		return err
+	}
+	if err := serviceproxy.ValidateTrafficSwitchPorts(configuration.Implementation, configuration.Ports); err != nil {
+		return err
 	}
 	if priorArtifactID != "" && artifacts[priorArtifactID] == nil {
 		return errs.New(errs.KindValidationFailed, "prior release topology artifact is absent")
+	}
+	if priorArtifactID != "" {
+		priorProxy := releaseRuntimeService(
+			artifacts[priorArtifactID],
+			serviceID,
+			"",
+			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+		)
+		if err := validateStableProxyContinuity(proxy, priorProxy); err != nil {
+			return err
+		}
 	}
 	return nil
 }

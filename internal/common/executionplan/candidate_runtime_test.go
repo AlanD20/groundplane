@@ -556,7 +556,8 @@ func candidateRuntimeFixtureArtifact(
 		proxyDigest := sha256.Sum256(proxyConfig)
 		services = append(services, &agentpb.ComposeService{
 			ServiceId: candidateRuntimeServiceID, ComposeName: "api", ExpectedReplicas: 1,
-			Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+			Role:                agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+			ProxyImplementation: agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY,
 			ExpectedLabels: candidateRuntimeLabels(
 				ownerPlanID,
 				generation,
@@ -721,7 +722,7 @@ func candidateRuntimeAbsenceSteps(probeID, compensateID string) []*agentpb.Execu
 
 func candidateRuntimeProxyConfig(releaseID, target string, generation uint64) []byte {
 	return []byte(fmt.Sprintf(
-		`{"apps":{"http":{"servers":{"gp_g%d_%s_p8080":{"routes":[{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"api--%s:8080"}]}]}]}}}}}`,
+		`{"admin":{"listen":"127.0.0.1:2019"},"apps":{"http":{"servers":{"gp_g%d_%s_p8080":{"listen":[":8080"],"routes":[{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"api--%s:8080"}]}]}]}}}}}`,
 		generation,
 		strings.ToLower(releaseID),
 		target,

@@ -3,6 +3,7 @@ package localagent
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"testing"
 	"time"
 
@@ -172,15 +173,17 @@ func (repository *cancelledPublicationRepository) BeginReplacement(
 	current StoredRecord,
 	image string,
 	credential Credential,
+	failure *taskprogress.Failure,
 	at time.Time,
 ) (StoredRecord, error) {
 	stored, err := repository.uncertainReplacementRepository.BeginReplacement(
 		ctx,
 		current,
 		image,
-		credential,
-		at,
-	)
+		credential, nil,
+
+		at)
+
 	repository.cancel()
 	return stored, err
 }

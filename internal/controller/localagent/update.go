@@ -3,6 +3,7 @@ package localagent
 import (
 	"context"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -111,6 +112,7 @@ func (manager *Manager) update(ctx context.Context, request UpdateRequest) error
 		stored,
 		request.DesiredImage,
 		cloneCredential(credential),
+		nil,
 		updatedAt,
 	)
 	if err != nil {
@@ -182,14 +184,28 @@ func (manager *Manager) completeUpdateOrRollback(
 	if current.Record.Phase != PhaseUpdating {
 		return errs.New(errs.KindStateConflict, "local agent replacement cannot be rolled back")
 	}
-	return manager.rollbackUpdate(ctx, request, current)
+	return manager.rollbackUpdate(ctx, request, current, taskprogress.CaptureControllerFailure(replacementErr))
 }
 
 func (manager *Manager) rollbackUpdate(
 	ctx context.Context,
 	request UpdateRequest,
 	current StoredRecord,
+	failure *taskprogress.Failure,
 ) error {
+	if failure != nil && current.Record.ReplacementFailure == nil {
+		observed, err := manager.repository.RecordReplacementFailure(ctx, current, failure)
+		if err != nil {
+			return err
+		}
+		if err := validateRecoveryRecord(observed, request); err != nil {
+			return err
+		}
+		current = observed
+	}
+	if current.Record.ReplacementFailure != nil {
+		failure = taskprogress.CloneFailure(current.Record.ReplacementFailure)
+	}
 	credential, err := manager.runtime.GenerateCredential(ctx, current.Record.ID)
 	if err != nil {
 		return safePortError(ctx, err, "local agent rollback credential generation failed")
@@ -210,6 +226,7 @@ func (manager *Manager) rollbackUpdate(
 		current,
 		request.PreviousImage,
 		cloneCredential(credential),
+		failure,
 		updatedAt,
 	)
 	if err != nil {
@@ -258,11 +275,16 @@ func (manager *Manager) resumeReplacement(ctx context.Context, stored StoredReco
 	if err := manager.waitReplacementReady(ctx, stored.Record); err != nil {
 		return err
 	}
+	build, err := manager.acceptedBuild(stored.Record)
+	if err != nil {
+		return err
+	}
 	updated, err := manager.repository.MarkReplacementReady(
 		ctx,
 		stored.Record.ID,
 		stored.Record.Generation,
 		stored.Revision,
+		build,
 	)
 	if err != nil {
 		return safePortError(ctx, err, "local agent replacement ready transition failed")
@@ -270,7 +292,8 @@ func (manager *Manager) resumeReplacement(ctx context.Context, stored StoredReco
 	if err := validateStored(updated); err != nil {
 		return err
 	}
-	if updated.Record.Phase != PhaseReady || !updated.Record.ReadyAt.Equal(stored.Record.ReadyAt) {
+	if updated.Record.Phase != PhaseReady || !updated.Record.ReadyAt.Equal(stored.Record.ReadyAt) ||
+		updated.Record.Build != build {
 		return errs.New(errs.KindInternal, "local agent repository did not preserve replacement identity")
 	}
 	return nil

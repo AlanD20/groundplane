@@ -33,7 +33,7 @@ type preparedHooks struct {
 
 func (service *Service) prepareDeployHooks(
 	ctx context.Context,
-	input PrepareInput,
+	input prepareInput,
 	manifest releases.VersionedReleaseManifest,
 	task etcd.TaskRecord,
 	members []releaserender.ReleaseTaskRenderMember,

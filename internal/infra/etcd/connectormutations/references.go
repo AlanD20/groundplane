@@ -2,8 +2,10 @@ package connectormutations
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorchecks"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -19,6 +21,7 @@ func RequireConnectorReferencesUnused(
 		backuppolicy.BackupPolicyConnectorReferencePrefix(connectorID),
 		backupruntime.BackupRecoveryPointConnectorPrefix + connectorID + "/",
 		backupruntime.BackupOrphanConnectorPrefix + connectorID + "/",
+		connectorchecks.ReferencePrefix(connectorID),
 	}
 	conditions := make([]etcdstore.Condition, 0, len(prefixes))
 	for index, prefix := range prefixes {
@@ -71,6 +74,15 @@ func ClassifyConnectorReference(
 			return errs.New(errs.KindInternal, "connector orphan reference is corrupt")
 		}
 		return errs.New(errs.KindResourceInUse, "connector is referenced by a backup orphan")
+	case 3:
+		taskID := string(value.Value)
+		if ids.Validate(ids.KindTask, taskID) != nil || value.Key != connectorchecks.ReferenceKey(connectorID, taskID) {
+			return errs.New(errs.KindInternal, "connector check reference is corrupt")
+		}
+		return errs.New(
+			errs.KindResourceInUse,
+			"connector is retained by a connection check or its pending test-object cleanup",
+		)
 	default:
 		return errs.New(errs.KindInternal, "connector reference kind is invalid")
 	}

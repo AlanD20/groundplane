@@ -34,7 +34,8 @@ import { formatTimestamp } from "@/lib/format-timestamp";
 import type { Runner } from "@/lib/types";
 import { GitBranch, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
+import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-identity";
+import { RunnerCheckPanel } from "./runner-check-panel";
 
 function runnerStatus(runner: Runner) {
   if (runner.lifecycle !== "ready") return runner.lifecycle;
@@ -238,7 +239,8 @@ export function RunnerInventory({
                           {owner(runner).name}
                         </TableCell>
                         <TableCell>
-                          <SoftwareIdentity
+                          <ContainerSoftwareIdentity
+                            software={runner.software}
                             showReferences={false}
                             unavailable="Identity not reported"
                           />
@@ -305,7 +307,8 @@ export function RunnerInventory({
                 <DetailRow
                   label="Installed software"
                   value={
-                    <SoftwareIdentity
+                    <ContainerSoftwareIdentity
+                      software={inspected.software}
                       unavailable="Identity not reported by the Controller"
                     />
                   }
@@ -340,6 +343,11 @@ export function RunnerInventory({
                   />
                 )}
                 <DetailRow label="Runner ID" value={inspected.id} />
+                <RunnerCheckPanel
+                  runnerId={inspected.id}
+                  open
+                  disabled={inspected.lifecycle !== "ready"}
+                />
                 <p className="text-xs text-muted-foreground">
                   Trusted workflows use normal GP CLI/API access. Builds use a
                   dedicated rootless Docker daemon, not the host socket.

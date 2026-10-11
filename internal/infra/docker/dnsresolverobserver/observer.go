@@ -69,6 +69,7 @@ type metricsReader interface {
 
 type dnsProber interface {
 	Query(context.Context, string, string, agentpb.DNSQueryType) (*agentpb.DNSQueryProof, error)
+	QueryTCP(context.Context, string, string, agentpb.DNSQueryType) (*agentpb.DNSQueryProof, error)
 }
 
 type Executor struct {
@@ -127,6 +128,9 @@ func (executor *Executor) Observe(
 		if err != nil {
 			return nil, err
 		}
+	}
+	if err := executor.observePrivateListeners(proofCtx, parsed); err != nil {
+		return nil, err
 	}
 	catchAll, found := parsed.forwardGroup(".")
 	if !found {

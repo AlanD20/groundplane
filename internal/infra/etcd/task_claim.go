@@ -56,10 +56,18 @@ func (repository *TaskRepository) claimNextTask(
 
 	conflicts := 0
 	expiredBackups := 0
+	settledDNSRemovals := 0
 	for {
-		candidate, found, err := repository.nextTaskClaimCandidate(ctx, executor)
+		candidate, found, err := repository.nextTaskClaimCandidate(ctx, executor, assignedAt)
 		if err != nil || !found {
 			return TaskAssignment{}, false, err
+		}
+		if candidate.advanced {
+			settledDNSRemovals++
+			if settledDNSRemovals == 24 {
+				return TaskAssignment{}, false, nil
+			}
+			continue
 		}
 		queued := candidate.queued
 		taskValue := candidate.taskValue
@@ -154,7 +162,7 @@ func (repository *TaskRepository) claimNextTask(
 			assignment.AssignmentID = backupClaim.assignmentID
 		}
 		var componentRecoveryCondition etcdstore.Condition
-		if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+		if componentRecoveryTask(task) {
 			_, procedure, condition, procedureErr := repository.componentRecoveryProcedureAtRevision(
 				ctx, task, candidate.readRevision,
 			)
@@ -186,6 +194,7 @@ func (repository *TaskRepository) claimNextTask(
 			{Key: assignmentIndexKey},
 			{Key: timeoutIndexKey},
 		}
+		conditions = append(conditions, candidate.dnsConditions...)
 		if componentRecoveryCondition.Key != "" {
 			conditions = append(conditions, componentRecoveryCondition,
 				etcdstore.Condition{Key: taskassignments.ComponentRecoveryKey(task.ID)})
@@ -345,6 +354,51 @@ func (repository *TaskRepository) claimNextTask(
 			assignmentValue = updatedAssignmentValue
 			mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
 		}
+		attachConditions, attachAssignmentValue, attachClaimErr := repository.prepareAttachRemovalRecoveryClaim(
+			ctx, task, &assignment, candidate.readRevision)
+		if attachClaimErr != nil {
+			etcdstore.ClearMutationValues(mutations)
+			return TaskAssignment{}, false, attachClaimErr
+		}
+		if attachAssignmentValue != nil {
+			conditions = append(conditions, attachConditions...)
+			clear(assignmentValue)
+			assignmentValue = attachAssignmentValue
+			mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
+		}
+		if authoredBlueprintZoneRemovalTask(task) || taskjournal.IsReleaseNetworkChild(task.Params) {
+			procedure, _, networkConditions, found, procedureErr := repository.managedNetworkRecoveryProcedureAtRevision(
+				ctx,
+				task,
+				candidate.readRevision,
+			)
+			if procedureErr != nil {
+				etcdstore.ClearMutationValues(mutations)
+				return TaskAssignment{}, false, procedureErr
+			}
+			if !found {
+				etcdstore.ClearMutationValues(mutations)
+				return TaskAssignment{}, false, taskassignments.CorruptTaskAssignment()
+			}
+			assignment.ManagedNetworkProcedureSHA256, err = managedNetworkRecoveryAuthorityDigest(procedure)
+			if err != nil {
+				etcdstore.ClearMutationValues(mutations)
+				return TaskAssignment{}, false, err
+			}
+			conditions = append(conditions, networkConditions...)
+			conditions = append(
+				conditions,
+				etcdstore.Condition{Key: taskassignments.ManagedNetworkRecoveryKey(task.ID)},
+			)
+			updatedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
+			if encodeErr != nil {
+				etcdstore.ClearMutationValues(mutations)
+				return TaskAssignment{}, false, encodeErr
+			}
+			clear(assignmentValue)
+			assignmentValue = updatedAssignmentValue
+			mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
+		}
 		if !taskHasBlueprintCandidateAppliedAuthority(task) &&
 			task.Params[releaserender.TaskReleasePublicationParam] != "" {
 			authority, authorityDigest, authorityConditions, authorityErr := repository.prepareOrdinaryRestorationAuthority(
@@ -415,118 +469,5 @@ func (repository *TaskRepository) claimNextTask(
 				Record: running, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 			},
 		}, true, nil
-	}
-}
-
-const taskClaimQueuePageSize = 64
-
-type taskClaimCandidate struct {
-	queued        etcdstore.KeyValue
-	taskValue     *etcdstore.KeyValue
-	task          TaskRecord
-	readRevision  int64
-	writerKey     string
-	environmentID string
-}
-
-func (repository *TaskRepository) nextTaskClaimCandidate(
-	ctx context.Context,
-	executor taskjournal.TaskExecutor,
-) (taskClaimCandidate, bool, error) {
-	prefix := taskjournal.TaskQueueScopePrefix(executor)
-	start := ""
-	var revision int64
-	for {
-		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: prefix, StartExclusive: start, Limit: taskClaimQueuePageSize, Revision: revision,
-		})
-		if err != nil {
-			return taskClaimCandidate{}, false, err
-		}
-		if revision == 0 {
-			revision = page.ReadRevision
-		}
-		if page.ReadRevision != revision {
-			return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "task queue scan changed MVCC revision")
-		}
-		for _, queued := range page.Values {
-			taskID, err := taskjournal.TaskIDFromQueueKey(executor, queued.Key)
-			if err != nil {
-				return taskClaimCandidate{}, false, err
-			}
-			referencedTaskID, err := idempotencyrecord.DecodeTaskReference(queued.Value)
-			if err != nil || referencedTaskID != taskID {
-				return taskClaimCandidate{}, false, errs.New(
-					errs.KindInternal,
-					"task queue record does not match its key",
-				)
-			}
-			taskRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: revision,
-			})
-			if err != nil {
-				return taskClaimCandidate{}, false, err
-			}
-			if len(taskRead.Values) != 1 || taskRead.Values[0] == nil {
-				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task primary is missing")
-			}
-			taskValue := taskRead.Values[0]
-			task, err := DecodeTaskRecord(taskValue.Value)
-			if err != nil {
-				return taskClaimCandidate{}, false, err
-			}
-			if task.ID != taskID || task.Executor != executor || task.Status != taskjournal.TaskStatusPending ||
-				task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
-				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task is not claimable")
-			}
-			currentChild, err := repository.blueprintChildHeadAtRevision(ctx, task, revision)
-			if err != nil {
-				return taskClaimCandidate{}, false, err
-			}
-			if !currentChild {
-				continue
-			}
-			environmentID, materializes, err := taskEnvironmentWriter(task)
-			if err != nil {
-				return taskClaimCandidate{}, false, err
-			}
-			writerKey := ""
-			if materializes {
-				writerKey = taskjournal.TaskMaterializationWriterKey(environmentID)
-				writerRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-					Keys: []string{writerKey}, Revision: revision,
-				})
-				if err != nil {
-					return taskClaimCandidate{}, false, err
-				}
-				if len(writerRead.Values) != 1 {
-					return taskClaimCandidate{}, false, errs.New(
-						errs.KindInternal,
-						"materialization writer read is incomplete",
-					)
-				}
-				if writerRead.Values[0] != nil {
-					writer, err := decodeTaskMaterializationWriter(writerRead.Values[0].Value)
-					if err != nil || writer.EnvironmentID != environmentID || writer.TaskID == task.ID {
-						return taskClaimCandidate{}, false, corruptTaskMaterializationWriter()
-					}
-					continue
-				}
-			}
-			return taskClaimCandidate{
-				queued: queued, taskValue: taskValue, task: task, readRevision: revision,
-				writerKey: writerKey, environmentID: environmentID,
-			}, true, nil
-		}
-		if !page.More {
-			return taskClaimCandidate{}, false, nil
-		}
-		if len(page.Values) == 0 {
-			return taskClaimCandidate{}, false, errs.New(
-				errs.KindInternal,
-				"task queue page is empty before completion",
-			)
-		}
-		start = page.Values[len(page.Values)-1].Key
 	}
 }

@@ -145,7 +145,10 @@ Task actions always take a Task id, without requiring `--id`. `pending` and
 `timed_out` are terminal outcomes. Check the application, Route or data after
 completion. A completed Task alone does not prove application health.
 
-`task retry <id>` creates a new eligible attempt using captured inputs.
+`task retry <id>` creates a new eligible attempt using captured inputs. For a
+running Blueprint Apply that reports an interrupted Custom Detach hook, it
+authorizes that captured hook once in the same child Task instead; it does not
+retry the Blueprint. See [Tasks and logs](features/tasks-and-logs.md#retry).
 `task abort <id>` addresses the existing Task. Closing a stream or pressing
 Ctrl-C stops the client request, not the Task. Restrictions and recovery limits
 are in [Tasks and logs](features/tasks-and-logs.md).
@@ -268,6 +271,13 @@ Equal replay resolves the original intent. Pending work may return
 including its Task id. Changed input under the same key returns
 `idempotency.mismatch`. Terminal replay evidence is retained for 90 days;
 keys are not permanent operation ids.
+
+Host Terminal Open is the transient exception to that durable retention. Its
+required key can replay only while the Controller process retains the terminal
+session record; it can also restore the internal owner cookie after a lost
+response. Controller restart terminates the shell and its replay evidence.
+Replay never resurrects a root shell, and changed initial terminal geometry
+under the same key returns `idempotency.mismatch`.
 
 After a timeout or lost response, preserve the original key, stable target,
 body and preconditions. Replay them instead of generating a new mutation.
@@ -392,6 +402,12 @@ API errors use `application/problem+json` with `type`, `title`, `status`,
 
 Branch on `code` and status rather than diagnostic wording. Malformed input
 can return 400 and semantically invalid input 422 under `validation.failed`.
+
+The Controller returns `X-GP-Request-Reference` for each HTTP attempt, including
+rejections that create no Task. Console and CLI errors retain that reference for
+matching the Controller's request log. It is neither a Task id nor an idempotency
+key: a repeated request has a new reference while retaining its replay key.
+The reference does not prove whether a mutation took effect.
 
 | Code | Operator response |
 | --- | --- |

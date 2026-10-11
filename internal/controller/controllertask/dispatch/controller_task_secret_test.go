@@ -12,11 +12,11 @@ import (
 // durable effect belongs to Task acknowledgement, not the execution handler.
 func TestControllerTaskHandlerAcceptsOnlyExactSecretRemoval(t *testing.T) {
 	t.Parallel()
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		&fakeControllerTaskLocalAgents{},
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
-	)
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
@@ -25,7 +25,7 @@ func TestControllerTaskHandlerAcceptsOnlyExactSecretRemoval(t *testing.T) {
 		Type: testtaskjournal.TaskRemove, Target: "sec_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Params: map[string]string{testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceSecret},
 	}
-	if err := handler.Execute(context.Background(), valid); err != nil {
+	if err := handler.Execute(context.Background(), valid, testControllerProgress(context.Background(), valid)); err != nil {
 		t.Fatalf("Execute(valid Secret removal) error = %v", err)
 	}
 	for name, mutate := range map[string]func(*etcd.TaskRecord){
@@ -40,7 +40,7 @@ func TestControllerTaskHandlerAcceptsOnlyExactSecretRemoval(t *testing.T) {
 				testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceSecret,
 			}
 			mutate(&candidate)
-			if err := handler.Execute(context.Background(), candidate); err == nil {
+			if err := handler.Execute(context.Background(), candidate, testControllerProgress(context.Background(), candidate)); err == nil {
 				t.Fatal("Execute(invalid Secret removal) succeeded")
 			}
 		})

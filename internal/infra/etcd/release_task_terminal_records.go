@@ -88,7 +88,10 @@ func releaseAcknowledgedRuntime(
 		}
 		proxy, hasProxy := releaseProxyEvidence(result, candidate.ServiceID)
 		recreate, hasRecreate := releaseRecreateEvidence(result, candidate.ServiceID)
-		if hasProxy == hasRecreate || proxy.Compensated || recreate.Compensated {
+		rolling, hasRolling := releaseRollingEvidence(result, candidate.ServiceID)
+		if hasProxy && hasRecreate || hasRolling && (hasProxy || hasRecreate) ||
+			!hasProxy && !hasRecreate &&
+				!hasRolling || proxy.Compensated || recreate.Compensated || rolling.Compensated {
 			return nil, errs.New(errs.KindStateConflict, "release runtime requires uncompensated serving evidence")
 		}
 		observation := serviceruntimerecord.Observation{
@@ -103,6 +106,13 @@ func releaseAcknowledgedRuntime(
 				ReleaseID:          recreate.ReleaseID,
 				Target:             recreate.Target,
 				RecreateArtifactID: recreate.ArtifactID,
+			}
+		}
+		if hasRolling {
+			observation = serviceruntimerecord.Observation{
+				ReleaseID: rolling.ReleaseID,
+				Target:    "rolling",
+				Rolling:   &rolling,
 			}
 		}
 		record, err := serviceruntimerecord.AcknowledgeRelease(task.Owner.EnvironmentID, candidate,

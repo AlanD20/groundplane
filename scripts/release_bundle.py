@@ -93,7 +93,11 @@ def main() -> None:
     }
     postgres_catalog, _ = load_catalog(Path(args.postgres16_release), published=True)
     environment["POSTGRES16_RELEASE_BASE64"] = base64.b64encode(postgres_catalog).decode("ascii")
-    subprocess.run(["bash", "scripts/repo-env.sh", "make", "controller", "cli", f"VERSION=controller/v{args.version}"],
+    if subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=normal"], cwd=ROOT):
+        raise ValueError("release Controller requires a clean source checkout")
+    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    subprocess.run(["bash", "scripts/repo-env.sh", "make", "controller", "cli", f"VERSION=controller/v{args.version}",
+                    "SOURCE_KIND=release", f"SOURCE_COMMIT={source_commit}"],
                    cwd=ROOT, env=environment, check=True)
     files = payload(args.version, args.agent_image, args.runner_image, ARCHES[platform.machine()], postgres_catalog)
     write_archive(destination, files)

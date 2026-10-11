@@ -74,7 +74,7 @@ func backingServiceCreationConditions(
 				Key: componentrecord.EnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID),
 			},
 			etcdstore.Condition{
-				Key: componentrecord.EnvironmentKindKey(creation.Environment.ID, component.Desired.Kind),
+				Key: componentrecord.EnvironmentSingletonKey(component.Desired),
 			},
 		)
 	}

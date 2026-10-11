@@ -20,15 +20,20 @@ func (service *MutationService) environmentComponentConfig(
 	if err := input.Validate(); err != nil {
 		return apiTypes.ComponentConfig{}, errs.New(errs.KindValidationFailed, err.Error())
 	}
-	switch desired.Kind {
-	case core.ComponentKindIngressCaddy:
+	if desired.Kind.IsEnvironmentProxy() {
+		if input.Envoy != nil {
+			return apiTypes.ComponentConfig{Envoy: &apiTypes.EnvoyComponentConfig{
+				ZoneIDs: append([]string(nil), input.Envoy.ZoneIDs...), Alias: input.Envoy.Alias,
+			}}, nil
+		}
 		if input.Caddy != nil {
 			return apiTypes.ComponentConfig{Caddy: &apiTypes.CaddyComponentConfig{
 				ZoneIDs:           append([]string(nil), input.Caddy.ZoneIDs...),
 				CaddyfileTemplate: input.Caddy.CaddyfileTemplate, Alias: input.Caddy.Alias,
 			}}, nil
 		}
-	case core.ComponentKindEdgeCloudflare:
+	}
+	if desired.Kind == core.ComponentKindEdgeCloudflare {
 		if input.CloudflareTunnel != nil {
 			credential := input.CloudflareTunnel.Credential
 			secretID, err := service.credentials.ResolveCredentialReference(ctx, desired.OwnerID,
@@ -51,16 +56,26 @@ func (service *MutationService) environmentComponentConfig(
 func applyEnvironmentComponentConfig(spec *yaml.Node, config apiTypes.ComponentConfig) error {
 	settings := core.ComponentCapabilitySettings{}
 	implementation := core.ComponentImplementationConfig{}
+	var kind core.ComponentKind
 	switch {
+	case config.Envoy != nil:
+		kind = core.ComponentKindIngressEnvoy
+		settings.ZoneIDs = append([]string(nil), config.Envoy.ZoneIDs...)
+		settings.Alias = config.Envoy.Alias
 	case config.Caddy != nil:
+		kind = core.ComponentKindIngressCaddy
 		settings.ZoneIDs = append([]string(nil), config.Caddy.ZoneIDs...)
 		settings.Alias = config.Caddy.Alias
 		implementation.CaddyfileTemplate = config.Caddy.CaddyfileTemplate
 	case config.CloudflareTunnel != nil:
+		kind = core.ComponentKindEdgeCloudflare
 		settings.ZoneIDs = append([]string(nil), config.CloudflareTunnel.ZoneIDs...)
 		settings.SecretID = config.CloudflareTunnel.SecretID
 	default:
 		return errs.New(errs.KindValidationFailed, "Environment Component config is required")
+	}
+	if err := replaceYAMLMappingValue(spec, "implementation", scalarNode("!!str", string(kind))); err != nil {
+		return err
 	}
 	var node yaml.Node
 	if err := node.Encode(settings); err != nil {

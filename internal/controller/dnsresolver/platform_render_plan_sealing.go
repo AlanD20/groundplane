@@ -83,7 +83,7 @@ func sealPlatformComponentTaskPlanHash(
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	input.ExecutionPlanSHA256 = hex.EncodeToString(execution.GetPlanHash())
-	input.PreparedSteps = taskjournal.CaptureStepDescriptions(task.Steps, execution.Steps)
+	input.PreparedSteps = taskjournal.CaptureStepDescriptions(task.Steps, execution)
 	return input, nil
 }
 

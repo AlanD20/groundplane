@@ -55,6 +55,7 @@ export function platformComponentFromAPI(
     ...coreDNSPresentation,
     id: item.id,
     status: componentHealthState(item.status),
+    software: item.software,
   };
 }
 
@@ -66,6 +67,7 @@ export function platformDNSFromComponent(
     return { enabled: item.enabled };
   }
   if (
+    config.implementation !== "coredns" ||
     !("upstream_auto" in config) ||
     typeof config.upstream_auto !== "boolean" ||
     !("upstream_resolvers" in config) ||

@@ -3,6 +3,7 @@ package dnsrecords
 import (
 	"context"
 	"fmt"
+	model "github.com/AlanD20/groundplane/internal/common/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -17,35 +18,47 @@ import (
 )
 
 // Last-applied records remain protected while replacement is pending or failed.
-func (reader *Reader) references(ctx context.Context, revision int64) ([]core.DNSRecord, []keyvalue.Condition, error) {
+type referenceSnapshot struct {
+	records    []core.DNSRecord
+	hosts      []platformcomponents.PlatformDNSHost
+	bindings   []model.EnvironmentBinding
+	updating   bool
+	conditions []keyvalue.Condition
+}
+
+func (reader *Reader) references(ctx context.Context, revision int64) (referenceSnapshot, error) {
 	kindKey := platformcomponents.PlatformComponentKindKey(core.ComponentKindCoreDNS)
 	index, err := reader.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{kindKey}, Revision: revision})
 	if err != nil {
-		return nil, nil, err
+		return referenceSnapshot{}, err
 	}
 	if index == nil || len(index.Values) != 1 {
-		return nil, nil, errs.New(errs.KindInternal, "DNS reference index read is incomplete")
+		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS reference index read is incomplete")
 	}
 	conditions := []keyvalue.Condition{{Key: kindKey}}
 	if index.Values[0] == nil {
-		return nil, conditions, nil
+		return referenceSnapshot{conditions: conditions}, nil
 	}
 	conditions[0].ModRevision = index.Values[0].ModRevision
 	id := string(index.Values[0].Value)
-	keys := []string{components.RecordKey(id), platformcomponents.ComponentObservationKey(id)}
+	keys := []string{
+		components.RecordKey(id),
+		platformcomponents.ComponentObservationKey(id),
+		platformcomponents.ActiveTaskKey(id),
+	}
 	read, err := reader.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: index.ReadRevision})
 	if err != nil {
-		return nil, nil, err
+		return referenceSnapshot{}, err
 	}
-	if read == nil || len(read.Values) != 2 || read.Values[0] == nil {
-		return nil, nil, errs.New(errs.KindInternal, "DNS reference authority is missing")
+	if read == nil || len(read.Values) != len(keys) || read.Values[0] == nil {
+		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS reference authority is missing")
 	}
 	component, err := components.DecodeRecord(read.Values[0].Value)
 	if err != nil {
-		return nil, nil, err
+		return referenceSnapshot{}, err
 	}
 	if component.Desired.Config.CoreDNS == nil {
-		return nil, nil, errs.New(errs.KindInternal, "DNS config authority is missing")
+		return referenceSnapshot{}, errs.New(errs.KindInternal, "DNS config authority is missing")
 	}
 	records := slices.Clone(component.Desired.Config.CoreDNS.Records)
 	for i, key := range keys {
@@ -55,16 +68,21 @@ func (reader *Reader) references(ctx context.Context, revision int64) ([]core.DN
 		}
 		conditions = append(conditions, condition)
 	}
+	snapshot := referenceSnapshot{records: records, conditions: conditions, updating: read.Values[2] != nil}
 	if read.Values[1] != nil {
 		observation, err := platformcomponents.DecodeComponentObservation(read.Values[1].Value)
 		if err != nil {
-			return nil, nil, err
+			return referenceSnapshot{}, err
 		}
 		if observation.Enabled {
-			records = append(records, observation.DNSRecords...)
+			snapshot.records = append(snapshot.records, observation.DNSRecords...)
+			snapshot.hosts = platformcomponents.CloneDNSHosts(observation.ResolvedDNSHosts)
+			for _, capture := range observation.EnvironmentDNS {
+				snapshot.bindings = append(snapshot.bindings, capture.Binding)
+			}
 		}
 	}
-	return records, conditions, nil
+	return snapshot, nil
 }
 
 func (reader *Reader) RequireDNSUnreferenced(
@@ -72,16 +90,64 @@ func (reader *Reader) RequireDNSUnreferenced(
 	serviceID, zoneID string,
 	revision int64,
 ) ([]keyvalue.Condition, error) {
-	records, conditions, err := reader.references(ctx, revision)
+	snapshot, err := reader.references(ctx, revision)
 	if err != nil {
 		return nil, err
 	}
-	for _, record := range records {
+	for _, record := range snapshot.records {
 		if serviceID != "" && record.ServiceID == serviceID || zoneID != "" && record.ZoneID == zoneID {
 			return nil, referenced(record.Hostname)
 		}
 	}
-	return conditions, nil
+	for _, binding := range snapshot.bindings {
+		if binding.Address != "" && (serviceID != "" && binding.ServiceID == serviceID ||
+			zoneID != "" && binding.Record.ZoneID == zoneID) {
+			return nil, referenced(binding.Record.Hostname())
+		}
+	}
+	if snapshot.updating {
+		return nil, errs.New(
+			errs.KindResourceInUse,
+			"CoreDNS is updating; wait for its Task before removing the DNS target",
+		)
+	}
+	return snapshot.conditions, nil
+}
+
+// PrepareServiceWithdrawal permits Environment-owned names to become waiting
+// after the native removal intent is published. Platform names still require an
+// explicit successful DNS edit before removal can be accepted.
+func (reader *Reader) PrepareServiceWithdrawal(ctx context.Context, serviceID string,
+	revision int64,
+) ([]keyvalue.Condition, error) {
+	snapshot, err := reader.references(ctx, revision)
+	if err != nil {
+		return nil, err
+	}
+	for _, record := range snapshot.records {
+		if record.ServiceID == serviceID {
+			return nil, referenced(record.Hostname)
+		}
+	}
+	return snapshot.conditions, nil
+}
+
+// AppliedEnvironmentBindings is the last acknowledged answer selection. It is
+// used to order withdrawal before resource removal, never to invent new answers.
+func (reader *Reader) AppliedEnvironmentBindings(ctx context.Context, environmentID string,
+	revision int64,
+) ([]model.EnvironmentBinding, error) {
+	snapshot, err := reader.references(ctx, revision)
+	if err != nil {
+		return nil, err
+	}
+	var bindings []model.EnvironmentBinding
+	for _, binding := range snapshot.bindings {
+		if binding.Record.EnvironmentID == environmentID {
+			bindings = append(bindings, binding)
+		}
+	}
+	return bindings, nil
 }
 
 func (reader *Reader) ProtectDNSProjection(
@@ -89,6 +155,16 @@ func (reader *Reader) ProtectDNSProjection(
 	projection environmentprojection.EnvironmentComposeProjection,
 	revision int64,
 ) ([]keyvalue.Condition, error) {
+	hostnames := make([]string, 0, len(projection.DesiredRoutes))
+	for _, route := range projection.DesiredRoutes {
+		if route.Desired.Host != "" {
+			hostnames = append(hostnames, route.Desired.Host)
+		}
+	}
+	nameConditions, err := reader.RequireHostnamesUnclaimed(ctx, hostnames, revision)
+	if err != nil {
+		return nil, err
+	}
 	previous, found, err := blueprints.ReadCurrentProjection(ctx, reader.store, projection.EnvironmentID, revision)
 	if err != nil {
 		return nil, err
@@ -96,13 +172,13 @@ func (reader *Reader) ProtectDNSProjection(
 	// Non-network edits cannot invalidate a DNS target. The caller already
 	// fences the Environment head used for this comparison.
 	if found && sameDNSTargets(previous.Record, projection) {
-		return nil, nil
+		return nameConditions, nil
 	}
-	records, conditions, err := reader.references(ctx, revision)
+	snapshot, err := reader.references(ctx, revision)
 	if err != nil {
 		return nil, err
 	}
-	for _, record := range records {
+	for _, record := range snapshot.records {
 		if record.ServiceID == "" {
 			continue
 		}
@@ -123,7 +199,7 @@ func (reader *Reader) ProtectDNSProjection(
 		if service == nil || service.Adapter != "" {
 			return nil, referenced(record.Hostname)
 		}
-		if _, err := domain.ProxyPorts(service.Expose); err != nil {
+		if err := domain.RequireTCPProxyPort(service.Expose); err != nil {
 			return nil, referenced(record.Hostname)
 		}
 		zoneFound := false
@@ -137,7 +213,7 @@ func (reader *Reader) ProtectDNSProjection(
 			return nil, referenced(record.Hostname)
 		}
 	}
-	return conditions, nil
+	return uniqueConditions(append(snapshot.conditions, nameConditions...))
 }
 
 func (reader *Reader) ProtectDNSHierarchy(
@@ -145,11 +221,11 @@ func (reader *Reader) ProtectDNSHierarchy(
 	kind, id string,
 	revision int64,
 ) ([]keyvalue.Condition, error) {
-	records, conditions, err := reader.references(ctx, revision)
+	snapshot, err := reader.references(ctx, revision)
 	if err != nil {
 		return nil, err
 	}
-	for _, record := range records {
+	for _, record := range snapshot.records {
 		if record.ServiceID == "" {
 			continue
 		}
@@ -206,7 +282,7 @@ func (reader *Reader) ProtectDNSHierarchy(
 			}
 		}
 	}
-	return conditions, nil
+	return snapshot.conditions, nil
 }
 
 func referenced(hostname string) error {

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"maps"
@@ -40,17 +42,19 @@ type LocalAgentConfig struct {
 }
 
 type LocalAgentRecord struct {
-	ID               string
-	EnrollmentTaskID string
-	Image            string
-	Generation       uint64
-	Phase            LocalAgentPhase
-	Config           LocalAgentConfig
-	EncryptedToken   []byte
-	TokenDigest      string
-	CreatedAt        time.Time
-	ReadyAt          time.Time
-	TokenUpdatedAt   time.Time
+	ReplacementFailure *taskprogress.Failure
+	ID                 string
+	EnrollmentTaskID   string
+	Image              string
+	Build              buildversion.BuildIdentity
+	Generation         uint64
+	Phase              LocalAgentPhase
+	Config             LocalAgentConfig
+	EncryptedToken     []byte
+	TokenDigest        string
+	CreatedAt          time.Time
+	ReadyAt            time.Time
+	TokenUpdatedAt     time.Time
 }
 
 type LocalAgentChannelAuthorization struct {
@@ -60,13 +64,15 @@ type LocalAgentChannelAuthorization struct {
 }
 
 type localAgentPrimaryData struct {
-	ID               string          `json:"id"`
-	EnrollmentTaskID string          `json:"enrollment_task_id"`
-	Image            string          `json:"image"`
-	Generation       uint64          `json:"generation"`
-	Phase            LocalAgentPhase `json:"phase"`
-	CreatedAt        string          `json:"created_at"`
-	ReadyAt          string          `json:"ready_at,omitempty"`
+	ReplacementFailure *taskprogress.Failure      `json:"replacement_failure,omitempty"`
+	ID                 string                     `json:"id"`
+	EnrollmentTaskID   string                     `json:"enrollment_task_id"`
+	Image              string                     `json:"image"`
+	Build              buildversion.BuildIdentity `json:"build"`
+	Generation         uint64                     `json:"generation"`
+	Phase              LocalAgentPhase            `json:"phase"`
+	CreatedAt          string                     `json:"created_at"`
+	ReadyAt            string                     `json:"ready_at,omitempty"`
 }
 
 type localAgentConfigData struct {
@@ -144,8 +150,10 @@ func EncodeLocalAgentPrimary(record LocalAgentRecord) ([]byte, error) {
 		readyAt = record.ReadyAt.Format(time.RFC3339Nano)
 	}
 	return recordcodec.Encode("agent", localAgentPrimaryData{
-		ID: record.ID, EnrollmentTaskID: record.EnrollmentTaskID,
+		ReplacementFailure: taskprogress.CloneFailure(record.ReplacementFailure),
+		ID:                 record.ID, EnrollmentTaskID: record.EnrollmentTaskID,
 		Image: record.Image, Generation: record.Generation,
+		Build: record.Build,
 		Phase: record.Phase, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano), ReadyAt: readyAt,
 	})
 }
@@ -167,8 +175,10 @@ func DecodeLocalAgentPrimary(value []byte) (LocalAgentRecord, error) {
 		}
 	}
 	record := LocalAgentRecord{
-		ID: data.ID, EnrollmentTaskID: data.EnrollmentTaskID,
+		ReplacementFailure: taskprogress.CloneFailure(data.ReplacementFailure),
+		ID:                 data.ID, EnrollmentTaskID: data.EnrollmentTaskID,
 		Image: data.Image, Generation: data.Generation,
+		Build: data.Build,
 		Phase: data.Phase, CreatedAt: createdAt, ReadyAt: readyAt,
 	}
 	if err := validateLocalAgentPrimary(record); err != nil {
@@ -269,6 +279,13 @@ func ValidateLocalAgentRecord(record LocalAgentRecord) error {
 }
 
 func validateLocalAgentPrimary(record LocalAgentRecord) error {
+	if err := record.ReplacementFailure.Validate(); err != nil {
+		return err
+	}
+	if record.ReplacementFailure != nil && (record.Generation < 2 ||
+		record.Phase == LocalAgentPhaseProvisioning || record.ReplacementFailure.ExitCode != 0) {
+		return errs.New(errs.KindValidationFailed, "local Agent replacement failure has no candidate generation")
+	}
 	if err := recordcodec.ValidateID(ids.KindAgent, record.ID); err != nil {
 		return err
 	}
@@ -286,8 +303,11 @@ func validateLocalAgentPrimary(record LocalAgentRecord) error {
 	}
 	switch record.Phase {
 	case LocalAgentPhaseProvisioning:
-		if !record.ReadyAt.IsZero() {
-			return errs.New(errs.KindValidationFailed, "provisioning local Agent ready_at must be empty")
+		if !record.ReadyAt.IsZero() || record.Build != (buildversion.BuildIdentity{}) {
+			return errs.New(
+				errs.KindValidationFailed,
+				"provisioning local Agent must not have an accepted build or Ready time",
+			)
 		}
 	case LocalAgentPhaseReady, LocalAgentPhaseUpdating, LocalAgentPhaseDeleting:
 		if err := recordcodec.ValidateTimestamp("local Agent ready_at", record.ReadyAt); err != nil {
@@ -295,6 +315,9 @@ func validateLocalAgentPrimary(record LocalAgentRecord) error {
 		}
 		if record.ReadyAt.Before(record.CreatedAt) {
 			return errs.New(errs.KindValidationFailed, "local Agent ready_at precedes creation")
+		}
+		if err := record.Build.Validate(); err != nil {
+			return err
 		}
 	default:
 		return errs.New(errs.KindValidationFailed, "local Agent phase is invalid")
@@ -350,6 +373,7 @@ func LocalAgentDigestFromKey(key string) (string, error) {
 }
 
 func CloneLocalAgentRecord(record LocalAgentRecord) LocalAgentRecord {
+	record.ReplacementFailure = taskprogress.CloneFailure(record.ReplacementFailure)
 	record.Config = CloneLocalAgentConfig(record.Config)
 	record.EncryptedToken = append([]byte(nil), record.EncryptedToken...)
 	return record

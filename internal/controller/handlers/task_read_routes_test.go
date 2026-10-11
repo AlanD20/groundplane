@@ -32,6 +32,30 @@ type fakeTaskQueries struct {
 	list           func(etcd.TaskListScope, testkeyvalue.PageRequest) (testkeyvalue.Page[etcd.TaskRecord], error)
 }
 
+func (*fakeTaskQueries) GetInterruptedDetachRetry(context.Context, string) (*etcd.InterruptedDetachRetry, error) {
+	return nil, nil
+}
+
+func (*fakeTaskQueries) GetTaskRecovery(context.Context, etcd.TaskRecord, int64) (*etcd.TaskRecoverySnapshot, error) {
+	return nil, nil
+}
+
+func (*fakeTaskQueries) GetReleasePreparation(
+	context.Context,
+	etcd.TaskRecord,
+	int64,
+) (*etcd.ReleasePreparationSnapshot, error) {
+	return nil, nil
+}
+
+func (*fakeTaskQueries) GetTaskAttemptHistory(
+	context.Context,
+	etcd.TaskRecord,
+	etcd.TaskEventSnapshot,
+) (*testtaskjournal.AttemptHistory, error) {
+	return nil, nil
+}
+
 // Rationale: TASK-07 trimming progress history must not reset completed steps
 // in Console, CLI or API; retained newer events still override the checkpoint.
 func TestTaskProgressSurvivesTrimmedHistory(t *testing.T) {
@@ -39,7 +63,7 @@ func TestTaskProgressSurvivesTrimmedHistory(t *testing.T) {
 		Steps: []testtaskjournal.TaskStepRecord{{ID: "first"}, {ID: "second"}},
 		EventCheckpoints: []testtaskjournal.TaskEventCheckpoint{
 			{
-				Identity: testtaskjournal.TaskEventIdentity{StepID: "first"},
+				Identity: testtaskjournal.TaskEventIdentity{StepID: "first", Attempt: 1, Ordinal: 1},
 				State:    testtaskjournal.TaskEventStateCompleted,
 			},
 		},
@@ -50,8 +74,9 @@ func TestTaskProgressSurvivesTrimmedHistory(t *testing.T) {
 		if newer {
 			snapshot.Events = []testtaskjournal.TaskEventRecord{
 				{
-					Identity: testtaskjournal.TaskEventIdentity{StepID: "first"},
+					Identity: testtaskjournal.TaskEventIdentity{StepID: "first", Attempt: 1, Ordinal: 2},
 					State:    testtaskjournal.TaskEventStateRunning,
+					Payload:  json.RawMessage(`{}`),
 				},
 			}
 			want = apiTypes.TaskRunning
@@ -178,7 +203,8 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 				ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 3),
 				PlanHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				Type:     testtaskjournal.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 4),
-				Status: testtaskjournal.TaskStatusRunning, Steps: []testtaskjournal.TaskStepRecord{
+				Executor: testtaskjournal.TaskExecutorAgent,
+				Status:   testtaskjournal.TaskStatusRunning, Steps: []testtaskjournal.TaskStepRecord{
 					{
 						Kind:       testtaskjournal.TaskStepScript,
 						ID:         stepID,
@@ -197,6 +223,7 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 		events: etcd.TaskEventSnapshot{Revision: 17, Events: []testtaskjournal.TaskEventRecord{{
 			Identity: testtaskjournal.TaskEventIdentity{TaskID: taskID, StepID: stepID, Attempt: 1, Ordinal: 1},
 			State:    testtaskjournal.TaskEventStateRunning,
+			Payload:  json.RawMessage(`{}`),
 		}}},
 	}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})

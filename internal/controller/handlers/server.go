@@ -6,16 +6,17 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"io/fs"
 	"log/slog"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/version"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
+	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
+	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -34,6 +35,7 @@ type Server struct {
 	mutationAdmission MutationAdmission
 
 	host                    HostReader
+	hostTerminals           *hostterminal.Manager
 	controllerConfig        NativeConfigStore
 	etcdConfig              NativeConfigStore
 	etcdConfigApplier       EtcdConfigApplier
@@ -76,10 +78,12 @@ type Server struct {
 	connectors              ConnectorReader
 	connectorMutations      ConnectorMutator
 	connectorDeletions      ConnectorDeleter
+	connectorChecks         ConnectorChecker
 	runners                 RunnerReader
 	runnerProvisioning      RunnerProvisioner
 	runnerMutations         RunnerMutator
 	runnerRemovals          RunnerRemover
+	runnerChecks            RunnerChecker
 	backupPolicies          BackupPolicyReader
 	backupPolicyMutations   BackupPolicyMutator
 	recoveryPoints          RecoveryPointReader
@@ -97,6 +101,10 @@ type Server struct {
 	hierarchyDeletions      HierarchyDeletionService
 	attachMutations         AttachMutator
 	attachFacts             AttachFactReader
+	backingChecks           BackingChecker
+	edgeChecks              EdgeChecker
+	dnsChecks               DNSChecker
+	environmentDNS          EnvironmentDNSService
 	taskMutations           TaskRetrier
 	taskAborts              TaskAborter
 	controllerTaskWake      func()
@@ -112,6 +120,7 @@ type Options struct {
 	OnHTTPReady             func()
 	MutationAdmission       MutationAdmission
 	Host                    HostReader
+	HostTerminals           *hostterminal.Manager
 	ControllerConfig        NativeConfigStore
 	EtcdConfig              NativeConfigStore
 	EtcdConfigApplier       EtcdConfigApplier
@@ -154,10 +163,12 @@ type Options struct {
 	Connectors              ConnectorReader
 	ConnectorMutations      ConnectorMutator
 	ConnectorDeletions      ConnectorDeleter
+	ConnectorChecks         ConnectorChecker
 	Runners                 RunnerReader
 	RunnerProvisioning      RunnerProvisioner
 	RunnerMutations         RunnerMutator
 	RunnerRemovals          RunnerRemover
+	RunnerChecks            RunnerChecker
 	BackupPolicies          BackupPolicyReader
 	BackupPolicyMutations   BackupPolicyMutator
 	RecoveryPoints          RecoveryPointReader
@@ -175,6 +186,10 @@ type Options struct {
 	HierarchyDeletions      HierarchyDeletionService
 	AttachMutations         AttachMutator
 	AttachFacts             AttachFactReader
+	BackingChecks           BackingChecker
+	EdgeChecks              EdgeChecker
+	DNSChecks               DNSChecker
+	EnvironmentDNS          EnvironmentDNSService
 	TaskMutations           TaskRetrier
 	TaskAborts              TaskAborter
 	ControllerTaskWake      func()
@@ -185,6 +200,7 @@ type Options struct {
 }
 
 type taskQueries interface {
+	GetInterruptedDetachRetry(context.Context, string) (*etcd.InterruptedDetachRetry, error)
 	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	ListTasksByScope(
 		context.Context,
@@ -192,6 +208,9 @@ type taskQueries interface {
 		etcdstore.PageRequest,
 	) (etcdstore.Page[etcd.TaskRecord], error)
 	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
+	GetTaskRecovery(context.Context, etcd.TaskRecord, int64) (*etcd.TaskRecoverySnapshot, error)
+	GetReleasePreparation(context.Context, etcd.TaskRecord, int64) (*etcd.ReleasePreparationSnapshot, error)
+	GetTaskAttemptHistory(context.Context, etcd.TaskRecord, etcd.TaskEventSnapshot) (*taskjournal.AttemptHistory, error)
 }
 
 func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
@@ -207,6 +226,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		onHTTPReady:             options.OnHTTPReady,
 		mutationAdmission:       options.MutationAdmission,
 		host:                    options.Host,
+		hostTerminals:           options.HostTerminals,
 		controllerConfig:        options.ControllerConfig,
 		etcdConfig:              options.EtcdConfig,
 		etcdConfigApplier:       options.EtcdConfigApplier,
@@ -249,10 +269,12 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		connectors:              options.Connectors,
 		connectorMutations:      options.ConnectorMutations,
 		connectorDeletions:      options.ConnectorDeletions,
+		connectorChecks:         options.ConnectorChecks,
 		runners:                 options.Runners,
 		runnerProvisioning:      options.RunnerProvisioning,
 		runnerMutations:         options.RunnerMutations,
 		runnerRemovals:          options.RunnerRemovals,
+		runnerChecks:            options.RunnerChecks,
 		backupPolicies:          options.BackupPolicies,
 		backupPolicyMutations:   options.BackupPolicyMutations,
 		recoveryPoints:          options.RecoveryPoints,
@@ -270,6 +292,10 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		hierarchyDeletions:      options.HierarchyDeletions,
 		attachMutations:         options.AttachMutations,
 		attachFacts:             options.AttachFacts,
+		backingChecks:           options.BackingChecks,
+		edgeChecks:              options.EdgeChecks,
+		dnsChecks:               options.DNSChecks,
+		environmentDNS:          options.EnvironmentDNS,
 		taskMutations:           options.TaskMutations,
 		taskAborts:              options.TaskAborts,
 		controllerTaskWake:      options.ControllerTaskWake,
@@ -315,8 +341,13 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerBackupKeyRoutes()
 	s.registerVolumes()
 	s.registerAttaches()
+	s.registerBackingChecks()
+	s.registerEdgeChecks()
+	s.registerDNSChecks()
+	s.registerEnvironmentDNS()
 	s.registerTasks()
 	s.registerHost()
+	s.registerHostTerminal()
 	return s
 }
 
@@ -324,7 +355,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 // listener. Release validation uses it to exercise the production dispatcher
 // and embedded Console through the same server assembled by application DI.
 func (s *Server) HTTPHandler() http.Handler {
-	return s.requestHandler()
+	return s.withRequestReference(s.requestHandler())
 }
 
 // routes registers every endpoint from api-cli.md's resource map. Method
@@ -379,16 +410,27 @@ func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiT
 		return apiTypes.Task{}, err
 	}
 	response.Steps = make([]apiTypes.TaskStep, len(record.Steps))
+	healthWait, err := taskHealthWaitObservations(record, snapshot)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
+	failures, err := taskStepFailures(record, snapshot)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
 	for index, step := range record.Steps {
 		kind, err := taskStepKindResponse(step)
 		if err != nil {
 			return apiTypes.Task{}, err
 		}
 		response.Steps[index] = apiTypes.TaskStep{
-			Name: step.ID, Status: stepStatus[step.ID], Kind: kind,
+			Failure: failures[step.ID],
+			Name:    step.ID, Status: stepStatus[step.ID], Kind: kind,
 			ScriptID: step.ScriptID, ScriptSlug: step.ScriptSlug,
 			Action: step.Action, Description: step.Description, Target: step.Target,
-			TimeoutSeconds: step.TimeoutSeconds,
+			TimeoutSeconds: step.TimeoutSeconds, HealthWait: healthWait[step.ID].value,
+			HealthWaitReceivedAt: healthWait[step.ID].receivedAt,
+			Healthchecks:         step.Healthchecks,
 		}
 		if response.Steps[index].Action == "" {
 			response.Steps[index].Action = "Descriptions were not recorded"

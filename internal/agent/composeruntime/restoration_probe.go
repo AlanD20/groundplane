@@ -14,6 +14,7 @@ func validUnrestoredProbeResponse(
 	return response.GetSchema() == composeHelperSchema && executionplan.RejectUnknown(response) == nil &&
 		response.GetExitCode() == 0 && response.GetDiagnostic() == agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE &&
 		response.GetProxyEvidence() == nil && response.GetRecreateEvidence() == nil && response.GetCandidateAbsenceEvidence() == nil &&
+		response.GetRollingEvidence() == nil && response.GetRollingProxyEvidence() == nil &&
 		selectedServingProbe(assignment, step)
 }
 

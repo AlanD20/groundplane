@@ -49,6 +49,7 @@ func RenderPlatformComponentCompose(
 	if ids.Validate(ids.KindService, service.ID) != nil || service.Name == "" ||
 		input.ImageReference != input.ImageRepository+"@sha256:"+input.ImageChildDigest ||
 		service.Image.Repository != input.ImageRepository || service.Image.IndexDigest != input.ImageIndexDigest ||
+		!componentsdk.ValidOCIImageTag(service.Image.Tag) ||
 		!validPlatformSHA256(input.ImageConfigDigest) || input.ImageConfigDigest == input.ImageIndexDigest ||
 		input.ImageConfigDigest == input.ImageChildDigest || input.ImageIndexDigest == input.ImageChildDigest ||
 		len(service.Networks) != 0 || len(service.Mounts) != 1 ||
@@ -66,6 +67,7 @@ func RenderPlatformComponentCompose(
 		return nil, errs.New(errs.KindInternal, "platform Component replica count exceeds Compose limits")
 	}
 	labels := map[string]string{
+		composeLabelComponentID:               input.ComponentID,
 		composeLabelKind:                      "service",
 		composeLabelManaged:                   "true",
 		composeLabelPlanID:                    input.PlanID,
@@ -102,6 +104,7 @@ func RenderPlatformComponentCompose(
 	}
 	digest := sha256.Sum256(canonical)
 	expectedLabels := []*agentpb.LabelPair{
+		{Key: composeLabelComponentID, Value: input.ComponentID},
 		{Key: "com.groundplane.image-child-digest", Value: "sha256:" + input.ImageChildDigest},
 		{Key: "com.groundplane.image-config-digest", Value: "sha256:" + input.ImageConfigDigest},
 		{Key: "com.groundplane.image-index-digest", Value: "sha256:" + input.ImageIndexDigest},
@@ -122,8 +125,10 @@ func RenderPlatformComponentCompose(
 		CanonicalYaml: canonical, YamlSha256: digest[:],
 		Services: []*agentpb.ComposeService{{
 			ServiceId: service.ID, ComposeName: service.Name,
-			ExpectedLabels: expectedLabels, ExpectedReplicas: uint32(service.Replicas), HasHealthcheck: false,
+			OwnerComponentId: input.ComponentID,
+			ExpectedLabels:   expectedLabels, ExpectedReplicas: uint32(service.Replicas), HasHealthcheck: false,
 			ImageReference: input.ImageReference, ImageRepository: input.ImageRepository,
+			ImageSelectedTag:  service.Image.Tag,
 			ImageIndexDigest:  mustDecodePlatformDigest(input.ImageIndexDigest),
 			ImageConfigDigest: mustDecodePlatformDigest(input.ImageConfigDigest),
 			ImageChildDigest:  mustDecodePlatformDigest(input.ImageChildDigest), ImageOs: input.ImageOS,

@@ -104,6 +104,15 @@ type publicationStoreWitness struct {
 	writes int
 }
 
+func (store *publicationStoreWitness) TransactBlueprintChild(
+	context.Context,
+	etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	store.writes++
+	store.unexpected()
+	return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "unexpected Blueprint child transaction")
+}
+
 func (store *publicationStoreWitness) unexpected() {
 	store.t.Helper()
 	store.t.Fatal("publication reached persistence before successful image preflight")

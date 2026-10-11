@@ -3,6 +3,7 @@ package controllertask
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
@@ -15,18 +16,20 @@ import (
 )
 
 type Store interface {
+	progressStore
 	ListControllerTaskClaims(context.Context) ([]etcd.TaskAssignment, error)
 	ClaimNextControllerTask(context.Context, time.Time) (etcd.TaskAssignment, bool, error)
 	AcknowledgeControllerTask(
 		context.Context,
 		string,
 		taskjournal.TaskStatus,
+		*taskprogress.Failure,
 		time.Time,
 	) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
 
 type Handler interface {
-	Execute(context.Context, etcd.TaskRecord) error
+	Execute(context.Context, etcd.TaskRecord, *Progress) error
 }
 
 // Runner serially resumes or claims native Controller Tasks. Handler effects
@@ -149,7 +152,8 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 	now := runner.now().UTC()
 	if !now.Before(deadline) {
 		_, err := runner.store.AcknowledgeControllerTask(
-			ctx, claim.Task.Record.ID, taskjournal.TaskStatusTimedOut, now,
+			ctx, claim.Task.Record.ID, taskjournal.TaskStatusTimedOut,
+			taskprogress.CaptureControllerFailure(context.DeadlineExceeded), now,
 		)
 		return err
 	}
@@ -166,10 +170,14 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 	defer func() {
 		runner.finishExecution(active, result)
 	}()
-	executionErr := runner.handler.Execute(executionContext, claim.Task.Record)
+	progress := NewProgress(ctx, runner.store, claim, runner.now)
+	executionErr := runner.handler.Execute(executionContext, claim.Task.Record, progress)
 	cancel()
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if err := progress.Err(); err != nil {
+		return err
 	}
 	if executionErr != nil &&
 		claim.Task.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceSoftwarePreparation {
@@ -201,7 +209,8 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 			status = taskjournal.TaskStatusTimedOut
 		}
 	}
-	_, err := runner.store.AcknowledgeControllerTask(ctx, claim.Task.Record.ID, status, terminalAt)
+	_, err := runner.store.AcknowledgeControllerTask(ctx, claim.Task.Record.ID, status,
+		taskprogress.CaptureControllerFailure(executionErr), terminalAt)
 	return err
 }
 

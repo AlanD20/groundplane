@@ -7,6 +7,21 @@ import (
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
+func (store *channelMemoryStore) TransactBlueprintChild(
+	ctx context.Context, envelope etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	conditions, mutations, err := envelope.Operations()
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	defer func() {
+		for _, mutation := range mutations {
+			clear(mutation.Value)
+		}
+	}()
+	return store.Transact(ctx, conditions, mutations)
+}
+
 func (store *channelMemoryStore) ValidateBlueprintTaskTerminal(
 	_ context.Context,
 	envelope etcd.BlueprintTaskTerminalTransaction,

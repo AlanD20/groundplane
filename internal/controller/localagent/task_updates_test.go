@@ -3,6 +3,9 @@ package localagent
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"io"
 	"log/slog"
 	"math"
@@ -37,7 +40,7 @@ func TestTaskUpdatesStartupHoldCoversReconnectAndFutureGenerations(t *testing.T)
 		if session.AssignmentsAllowed() {
 			t.Fatal("cold Task admission reopened before recovery")
 		}
-		if err := session.RecordReady(testNow, 1, "test"); err != nil {
+		if err := session.RecordReady(testNow, 1, "test", buildversion.BuildProvenance{}); err != nil {
 			t.Fatal(err)
 		}
 		ready, err := registry.Ready(context.Background(), testAgentID, generation)
@@ -70,10 +73,15 @@ func TestTaskUpdatesExpiredUnchangedTaskRecoversBeforeReleasing(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if err != nil || status != testtaskjournal.TaskStatusTimedOut || !session.AssignmentsAllowed() ||
+	status, err := updates.Execute(
+		context.Background(),
+		claim.Task.Record,
+		claim.Assignment.Record.Deadline,
+		updateTestProgress(context.Background(), claim),
+	)
+	if err != nil || status.Status != testtaskjournal.TaskStatusTimedOut || !session.AssignmentsAllowed() ||
 		harness.runtime.generateCalls != 0 {
-		t.Fatalf("expired recovery = %s, %v, dispatch %t", status, err, session.AssignmentsAllowed())
+		t.Fatalf("expired recovery = %s, %v, dispatch %t", status.Status, err, session.AssignmentsAllowed())
 	}
 }
 
@@ -91,11 +99,18 @@ func TestTaskUpdatesExpiredPartialCandidateRestoresBeforeTimeout(t *testing.T) {
 	if err := updates.Restore(context.Background(), claim); err != nil {
 		t.Fatal(err)
 	}
-	status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if err != nil || status != testtaskjournal.TaskStatusTimedOut || repository.record.Record.Phase != PhaseReady ||
-		repository.record.Record.Image != testImage || repository.record.Record.Generation != initialGeneration+2 ||
+	status, err := updates.Execute(
+		context.Background(),
+		claim.Task.Record,
+		claim.Assignment.Record.Deadline,
+		updateTestProgress(context.Background(), claim),
+	)
+	if err != nil || status.Status != testtaskjournal.TaskStatusTimedOut ||
+		repository.record.Record.Phase != PhaseReady ||
+		repository.record.Record.Image != testImage ||
+		repository.record.Record.Generation != initialGeneration+2 ||
 		harness.runtime.generateCalls != 1 {
-		t.Fatalf("partial recovery = %s, %v, generation %d", status, err, repository.record.Record.Generation)
+		t.Fatalf("partial recovery = %s, %v, generation %d", status.Status, err, repository.record.Record.Generation)
 	}
 }
 
@@ -118,14 +133,25 @@ func TestTaskUpdatesUnresolvedRecoveryRetainsHoldUntilStorageReturns(t *testing.
 		t.Fatal(err)
 	}
 	defer session.Close()
-	status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) || status != "" || session.AssignmentsAllowed() {
-		t.Fatalf("unresolved recovery = %s, %v, dispatch %t", status, err, session.AssignmentsAllowed())
+	status, err := updates.Execute(
+		context.Background(),
+		claim.Task.Record,
+		claim.Assignment.Record.Deadline,
+		updateTestProgress(context.Background(), claim),
+	)
+	if !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) || status.Status != "" ||
+		session.AssignmentsAllowed() {
+		t.Fatalf("unresolved recovery = %s, %v, dispatch %t", status.Status, err, session.AssignmentsAllowed())
 	}
 	uncertain.resolutionUnavailable = false
-	status, err = updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if err != nil || status != testtaskjournal.TaskStatusTimedOut || !session.AssignmentsAllowed() {
-		t.Fatalf("resolved recovery = %s, %v, dispatch %t", status, err, session.AssignmentsAllowed())
+	status, err = updates.Execute(
+		context.Background(),
+		claim.Task.Record,
+		claim.Assignment.Record.Deadline,
+		updateTestProgress(context.Background(), claim),
+	)
+	if err != nil || status.Status != testtaskjournal.TaskStatusTimedOut || !session.AssignmentsAllowed() {
+		t.Fatalf("resolved recovery = %s, %v, dispatch %t", status.Status, err, session.AssignmentsAllowed())
 	}
 }
 
@@ -143,9 +169,14 @@ func TestTaskUpdatesColdReadyReplayDoesNotRollBackOnExpiredAcknowledgement(t *te
 		t.Fatal(err)
 	}
 	for attempt := 0; attempt < 2; attempt++ {
-		status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-		if err != nil || status != testtaskjournal.TaskStatusCompleted || harness.runtime.generateCalls != 0 {
-			t.Fatalf("ready replay = %s, %v, rotations %d", status, err, harness.runtime.generateCalls)
+		status, err := updates.Execute(
+			context.Background(),
+			claim.Task.Record,
+			claim.Assignment.Record.Deadline,
+			updateTestProgress(context.Background(), claim),
+		)
+		if err != nil || status.Status != testtaskjournal.TaskStatusCompleted || harness.runtime.generateCalls != 0 {
+			t.Fatalf("ready replay = %s, %v, rotations %d", status.Status, err, harness.runtime.generateCalls)
 		}
 	}
 }
@@ -162,9 +193,14 @@ func TestTaskUpdatesAbortWinsReadyQualificationRace(t *testing.T) {
 		t.Fatal(err)
 	}
 	lifecycle.taskID = claim.Task.Record.ID
-	status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if err != nil || status != testtaskjournal.TaskStatusAborted || !lifecycle.restored {
-		t.Fatalf("abort race = %s, %v, restored %t", status, err, lifecycle.restored)
+	status, err := updates.Execute(
+		context.Background(),
+		claim.Task.Record,
+		claim.Assignment.Record.Deadline,
+		updateTestProgress(context.Background(), claim),
+	)
+	if err != nil || status.Status != testtaskjournal.TaskStatusAborted || !lifecycle.restored {
+		t.Fatalf("abort race = %s, %v, restored %t", status.Status, err, lifecycle.restored)
 	}
 }
 
@@ -228,7 +264,7 @@ type abortAtQualificationLifecycle struct {
 }
 
 func (lifecycle *abortAtQualificationLifecycle) RecoverUpdate(
-	ctx context.Context, _ UpdateRequest, goal UpdateGoal,
+	ctx context.Context, _ UpdateRequest, goal UpdateGoal, _ *taskprogress.Failure,
 ) (UpdateResult, error) {
 	if goal == UpdateRestore {
 		lifecycle.restored = true
@@ -264,10 +300,29 @@ func TestTaskUpdatesSettlementPreservesIndependentPause(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	if _, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline); err != nil {
+	if _, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline, updateTestProgress(context.Background(), claim)); err != nil {
 		t.Fatal(err)
 	}
 	if session.AssignmentsAllowed() {
 		t.Fatal("Task completion reopened another owner's admission pause")
 	}
+}
+
+func (*abortAtQualificationLifecycle) ReplacementFailure(
+	context.Context,
+	UpdateRequest,
+) (*taskprogress.Failure, error) {
+	return nil, nil
+}
+
+type updateProgressJournal struct{}
+
+func (updateProgressJournal) AppendControllerTaskEvent(ctx context.Context, _ testtaskjournal.TaskEventInput,
+	_ time.Time,
+) (etcd.TaskEventAppend, error) {
+	return etcd.TaskEventAppend{}, ctx.Err()
+}
+
+func updateTestProgress(ctx context.Context, claim etcd.TaskAssignment) *controllertask.Progress {
+	return controllertask.NewProgress(ctx, updateProgressJournal{}, claim, func() time.Time { return testNow })
 }

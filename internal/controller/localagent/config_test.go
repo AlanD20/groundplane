@@ -3,6 +3,9 @@ package localagent
 import (
 	"context"
 	"encoding/base64"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"testing"
 	"time"
 )
@@ -64,6 +67,7 @@ func configTestRecord() Record {
 		},
 		CreatedAt: createdAt,
 		ReadyAt:   createdAt,
+		Build:     buildversion.BuildIdentity{Version: "test"},
 	}
 }
 
@@ -102,6 +106,7 @@ func (repository *configTestRepository) MarkReady(
 	uint64,
 	int64,
 	time.Time,
+	buildversion.BuildIdentity,
 ) (StoredRecord, error) {
 	return StoredRecord{}, nil
 }
@@ -110,6 +115,7 @@ func (repository *configTestRepository) BeginReplacement(
 	StoredRecord, string,
 
 	Credential,
+	*taskprogress.Failure,
 	time.Time,
 ) (StoredRecord, error) {
 	return StoredRecord{}, nil
@@ -119,6 +125,7 @@ func (repository *configTestRepository) MarkReplacementReady(
 
 	uint64,
 	int64,
+	buildversion.BuildIdentity,
 ) (StoredRecord, error) {
 	return StoredRecord{}, nil
 }
@@ -127,6 +134,12 @@ func (repository *configTestRepository) BeginDelete(context.Context, string, uin
 }
 func (repository *configTestRepository) Delete(context.Context, string, uint64, int64) error {
 	return nil
+}
+
+func (*configTestRepository) RecordReplacementFailure(context.Context, StoredRecord,
+	*taskprogress.Failure,
+) (StoredRecord, error) {
+	return StoredRecord{}, errs.New(errs.KindInternal, "unused replacement failure capture")
 }
 
 type configTestRuntime struct {

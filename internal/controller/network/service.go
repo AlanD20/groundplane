@@ -168,6 +168,7 @@ func (service *Service) CreateZone(
 ) (corenetwork.MutationResponse, error) {
 	response, err := service.zoneMutations.CreateZone(ctx, apiTypes.ZoneCreate{
 		EnvironmentID: input.EnvironmentID, Name: input.Name, Subnet: input.Subnet, Internal: input.Internal,
+		AllowGPDNS: input.AllowGPDNS,
 	}, idempotencyKey)
 	return projectMutationResponse(response), err
 }
@@ -210,7 +211,9 @@ func (service *Service) GetRoute(
 	if err != nil {
 		return corenetwork.Route{}, err
 	}
-	return projectRoute(stored.Record), nil
+	projected := projectRoute(stored.Record)
+	projected.Revision = stored.Revision
+	return projected, nil
 }
 
 func (service *Service) ListRoutes(
@@ -227,6 +230,7 @@ func (service *Service) ListRoutes(
 	items := make([]corenetwork.Route, len(stored.Items))
 	for index, item := range stored.Items {
 		items[index] = projectRoute(item.Record)
+		items[index].Revision = item.Revision
 	}
 	return corenetwork.Page[corenetwork.Route]{Items: items, NextCursor: stored.NextCursor}, nil
 }
@@ -268,7 +272,8 @@ func projectZone(record zonerecord.Record) corenetwork.Zone {
 	return corenetwork.Zone{
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Name: record.Desired.Name,
 		Subnet: record.Desired.Subnet, Internal: record.Desired.Internal,
-		OwnerKind: corenetwork.ZoneOwnerKind(record.Desired.OwnerKind), OwnerID: record.Desired.OwnerID,
+		AllowGPDNS: record.Desired.AllowGPDNS,
+		OwnerKind:  corenetwork.ZoneOwnerKind(record.Desired.OwnerKind), OwnerID: record.Desired.OwnerID,
 	}
 }
 

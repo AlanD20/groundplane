@@ -30,6 +30,7 @@ const (
 	releaseProjectionPrefix          = "/v1/runtime/service-release-projections/"
 	MaximumReleaseRenderInputBytes   = 256 << 10
 	MaximumReleasePublicationMembers = 32
+	PendingTerminalScanCursorKey     = "/v1/runtime/release-pending-terminal-scan"
 )
 
 type releaseEnvelope[T any] struct {
@@ -76,6 +77,7 @@ type ReleasePublicationMarker struct {
 	PreparedRuntimes           []executionplan.CandidateRuntime         `json:"prepared_runtimes,omitempty"`
 	BlueprintRuntimes          []executionplan.BlueprintRuntimeInput    `json:"blueprint_runtimes,omitempty"`
 	NativePredecessors         []BlueprintNativePredecessorReference    `json:"native_predecessors,omitempty"`
+	NetworkPreparationTaskID   string                                   `json:"network_preparation_task_id,omitempty"`
 	PublishedAt                time.Time                                `json:"published_at"`
 }
 
@@ -149,6 +151,8 @@ func ReleasePublicationKey(publicationID string) string {
 
 func ReleaseOperationKey(operationID string) string  { return releaseOperationPrefix + operationID }
 func ReleaseFenceSetKey(environmentID string) string { return releaseFenceSetPrefix + environmentID }
+
+func ReleaseFenceSetScopePrefix() string { return releaseFenceSetPrefix }
 
 func ReleaseEnvironmentIndexKey(environmentID, releaseID string) string {
 	return releaseEnvironmentIndexPrefix + environmentID + "/" + releaseID

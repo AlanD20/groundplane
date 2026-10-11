@@ -5,6 +5,8 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
@@ -15,22 +17,23 @@ import (
 )
 
 type authoredUnitPlanner struct {
-	input         authoredParentInput
-	project       *composetypes.Project
-	identities    map[ids.Kind]map[string]projectionrecord.OwnedIdentity
-	targets       map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
-	units         map[blueprintunits.ResourceKey]blueprintunits.Unit
-	blocked       map[blueprintunits.ResourceKey]bool
-	runtimeReady  bool
-	attachInputs  map[string]attachinputs.Generation
-	appliedAttach map[string]blueprintunits.AppliedRecord
+	input          authoredParentInput
+	project        *composetypes.Project
+	identities     map[ids.Kind]map[string]projectionrecord.OwnedIdentity
+	targets        map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
+	units          map[blueprintunits.ResourceKey]blueprintunits.Unit
+	blocked        map[blueprintunits.ResourceKey]bool
+	runtimeReady   bool
+	serviceProxies map[string]serviceproxy.Implementation
+	attachInputs   map[string]attachinputs.Generation
+	appliedAttach  map[string]blueprintunits.AppliedRecord
 }
 
 func newAuthoredUnitPlanner(
 	ctx context.Context,
 	input authoredParentInput,
 	targets []authoredOwnedUnitTarget,
-	runtimeReady bool,
+	runtime *projectionrecord.EnvironmentComposeProjection,
 	attachInputs map[string]attachinputs.Generation,
 	snapshot blueprintunits.Snapshot,
 ) (*authoredUnitPlanner, error) {
@@ -44,13 +47,14 @@ func newAuthoredUnitPlanner(
 	}
 	planner := &authoredUnitPlanner{
 		input: input, project: project,
-		identities:    make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
-		targets:       make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
-		units:         make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
-		blocked:       make(map[blueprintunits.ResourceKey]bool),
-		runtimeReady:  runtimeReady,
-		attachInputs:  attachInputs,
-		appliedAttach: make(map[string]blueprintunits.AppliedRecord),
+		identities:     make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
+		targets:        make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
+		units:          make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
+		blocked:        make(map[blueprintunits.ResourceKey]bool),
+		runtimeReady:   runtime != nil,
+		serviceProxies: make(map[string]serviceproxy.Implementation),
+		attachInputs:   attachInputs,
+		appliedAttach:  make(map[string]blueprintunits.AppliedRecord),
 	}
 	for _, applied := range snapshot.Applied {
 		if applied.Record.Target.Kind == ids.KindAttach {
@@ -66,6 +70,7 @@ func newAuthoredUnitPlanner(
 		{ids.KindVolume, input.identities.Volumes},
 		{ids.KindEnvEntry, input.identities.Entries},
 		{ids.KindRoute, input.identities.Routes},
+		{ids.KindDNSRecord, input.identities.DNSRecords},
 		{ids.KindAttach, input.identities.Attaches},
 		{ids.KindComponent, input.identities.Components},
 		{ids.KindScript, input.identities.Scripts},
@@ -81,6 +86,11 @@ func newAuthoredUnitPlanner(
 	if err := planner.validateNamedIdentityCoverage(); err != nil {
 		return nil, err
 	}
+	if runtime != nil {
+		if err := planner.bindServiceProxySelections(*runtime); err != nil {
+			return nil, err
+		}
+	}
 	return planner, nil
 }
 
@@ -93,6 +103,7 @@ func (planner *authoredUnitPlanner) validateNamedIdentityCoverage() error {
 		{"Attach", sortedAuthoredMapKeys(planner.input.desired.Input.Attachments), ids.KindAttach},
 		{"Component", sortedAuthoredMapKeys(planner.input.desired.Input.Components), ids.KindComponent},
 		{"Script", sortedAuthoredMapKeys(planner.input.desired.Input.Scripts), ids.KindScript},
+		{"DNS", sortedAuthoredMapKeys(planner.input.desired.Input.DNS), ids.KindDNSRecord},
 	} {
 		stored := planner.identities[check.kind]
 		if len(check.authored) != len(stored) {
@@ -264,20 +275,27 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if err != nil {
 			return nil, false, err
 		}
+		dnsUpstreams, err := zonedns.Upstreams(service, planner.project.Networks)
+		if err != nil {
+			return nil, false, err
+		}
 		fingerprint, err := authoredUnitFingerprint("service", struct {
-			Name          string
-			Spec          composetypes.ServiceConfig
-			Extension     core.ServiceExtensionSpec
-			Files         []core.BlueprintFile
-			Entries       []string
-			Attaches      map[string]core.AttachmentSpec
-			ReleaseGroups map[string]core.ReleaseGroupSpec
-			Scripts       map[string]core.ScriptSpec
+			Name                string
+			Spec                composetypes.ServiceConfig
+			Extension           core.ServiceExtensionSpec
+			Files               []core.BlueprintFile
+			Entries             []string
+			Attaches            map[string]core.AttachmentSpec
+			ReleaseGroups       map[string]core.ReleaseGroupSpec
+			Scripts             map[string]core.ScriptSpec
+			DNSUpstreams        []string
+			ProxyImplementation serviceproxy.Implementation
 		}{
 			name, service, planner.input.desired.Input.ServiceExtensions[name],
 			planner.serviceRuntimeFiles(service), planner.serviceEntryNames(name),
 			planner.serviceAttachments(name), planner.serviceReleaseGroups(name),
 			planner.serviceScripts(name),
+			dnsUpstreams, planner.serviceProxies[name],
 		})
 		if err != nil {
 			return nil, false, err
@@ -290,14 +308,9 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if !found {
 			return nil, false, planner.missingInput("Route", name)
 		}
-		service, found := planner.identities[ids.KindService][spec.Target]
+		_, found = planner.identities[ids.KindService][spec.Target]
 		if !found {
 			return nil, false, planner.missingInput("Route target Service", spec.Target)
-		}
-		if serviceBlocked[spec.Target] {
-			planner.block(identity)
-			complete = false
-			continue
 		}
 		fingerprint, err := authoredUnitFingerprint("route", struct {
 			Ordinal int
@@ -306,14 +319,17 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if err != nil {
 			return nil, false, err
 		}
-		dependency := authoredResourceKey(ids.KindService, service.ID)
-		planner.addUnit(
-			identity,
-			fingerprint,
-			[]blueprintunits.ResourceKey{dependency},
-			[]blueprintunits.ResourceKey{dependency},
-		)
+		// This receipt acknowledges authored Route metadata, not serving traffic.
+		// Its target id is pinned in the parent's immutable identities. Waiting
+		// for the Service runtime would cycle: router -> Route -> Service ->
+		// complete projection -> router. The router child owns the host effect.
+		planner.addUnit(identity, fingerprint, nil, nil)
 	}
+	dnsComplete, err := planner.planDNSUnits(serviceBlocked)
+	if err != nil {
+		return nil, false, err
+	}
+	complete = complete && dnsComplete
 	for name, identity := range planner.identities[ids.KindComponent] {
 		spec, found := planner.input.desired.Input.Components[name]
 		if !found {
@@ -328,15 +344,23 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			complete = false
 			continue
 		}
+		forwardingClaims := planner.componentForwardingClaims(name)
 		fingerprint, err := authoredUnitFingerprint("component", struct {
-			Capability string
-			Spec       core.ComponentSpec
-			Routes     []core.RouteSpec
-		}{name, spec, planner.componentRoutes(name)})
+			Capability       string
+			Spec             core.ComponentSpec
+			Routes           []core.RouteSpec
+			ForwardingClaims []blueprintunits.ResourceKey
+		}{name, spec, planner.componentRoutes(name), forwardingClaims})
 		if err != nil {
 			return nil, false, err
 		}
 		planner.addUnit(identity, fingerprint, reads, after)
+		if len(forwardingClaims) != 0 {
+			target := planner.targetByID(identity.ID)
+			unit := planner.units[target]
+			unit.Writes = canonicalAuthoredUnitKeys(append(unit.Writes, forwardingClaims...))
+			planner.units[target] = unit
+		}
 	}
 	for name, identity := range planner.identities[ids.KindScript] {
 		spec, found := planner.input.desired.Input.Scripts[name]

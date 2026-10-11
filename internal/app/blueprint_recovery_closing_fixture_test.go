@@ -27,6 +27,7 @@ func (fixture *ExecutedArtifactFixture) ProveRecoveryHookTerminalReconnect(
 	failedStore := &scriptSourceReferenceFailureStore{
 		releasePlanningTestStore: fixture.store,
 		failAt:                   2,
+		rootKey:                  testscriptsourceevidence.ScriptSourceRootKey(recovery.Task.Record.OperationID),
 	}
 	interrupted, err := etcd.NewTaskRepository(failedStore)
 	if err != nil {

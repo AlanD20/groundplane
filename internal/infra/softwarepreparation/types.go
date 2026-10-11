@@ -222,6 +222,12 @@ func (progress Progress) Equal(other Progress) bool {
 
 type Reporter func(context.Context, Progress) error
 
+// OperationObserver records starts and outcomes under the caller's Task claim.
+// It cannot authorize cleanup: cleanup must still run if recording is unavailable.
+type OperationObserver interface {
+	Run(context.Context, string, func(context.Context) error) error
+}
+
 // Preparer hides fixed-repository retrieval, archive validation, containerized
 // builds, managed-registry publication and operation-owned cleanup behind two
 // methods. Durable Task ownership and retention stay with its caller.

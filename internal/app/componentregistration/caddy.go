@@ -1,6 +1,7 @@
 package componentregistration
 
 import (
+	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -22,6 +23,7 @@ func registeredCaddyEnvironmentComponent(
 		ManagedConfiguration: &componentrender.EnvironmentManagedConfigurationRegistration{
 			SourcePath: registeredcaddy.CaddyfileSource,
 			ActionID:   registeredcaddy.ActivateConfigAction,
+			Activation: registeredcatalog.ContainerConfigActivationCommand,
 		},
 		Plan: func(environment core.Environment, instance core.Component) (componentsdk.EnvironmentPlan, error) {
 			input, config, err := componentrender.ProjectCaddyInput(

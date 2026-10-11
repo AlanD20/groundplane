@@ -20,12 +20,3 @@ func releaseImage(value string) (string, string, string, error) {
 	}
 	return named.String(), tag, digest, nil
 }
-
-func bytesToHex(value []byte) string {
-	const digits = "0123456789abcdef"
-	result := make([]byte, len(value)*2)
-	for index, item := range value {
-		result[index*2], result[index*2+1] = digits[item>>4], digits[item&15]
-	}
-	return string(result)
-}

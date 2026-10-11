@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	SchemaVersion                        = 3
+	SchemaVersion                        = 17
 	MaximumArtifacts                     = 16
 	MaximumArtifactYAMLBytes             = 1024 * 1024
 	MaximumPlanBytes                     = 4 * 1024 * 1024
@@ -42,6 +42,7 @@ const (
 	labelReleaseID         = "com.groundplane.release-id"
 	labelRenderGen         = "com.groundplane.render-generation"
 	labelRuntimeRole       = "com.groundplane.runtime-role"
+	labelReplicaOrdinal    = "com.groundplane.replica-ordinal"
 	labelServiceID         = "com.groundplane.service-id"
 	labelSlot              = "com.groundplane.slot"
 	labelTenantID          = "com.groundplane.tenant-id"
@@ -151,6 +152,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	}
 	if !validOperation(plan.Operation) {
 		return errs.New(errs.KindValidationFailed, "execution plan operation is unsupported")
+	}
+	if err := validateNetworkRecoveryPlan(plan); err != nil {
+		return err
 	}
 	if err := validateAnyStableID(plan.TargetId); err != nil {
 		return errs.New(errs.KindValidationFailed, "execution plan target id is invalid")

@@ -12,33 +12,19 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	migratedagentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
-	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
-	migratedscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 )
 
-type retainedUnexpectedImageResolver struct{ t *testing.T }
-
-func (r retainedUnexpectedImageResolver) ResolveWorkloadImages(
-	context.Context,
-	string,
-	[]*agentpb.WorkloadImageSelector,
-) (*agentpb.WorkloadImageResolutionResult, error) {
-	r.t.Fatal("managed-only preflight unexpectedly resolved native images")
-	return nil, nil
-}
-
 // This starts from a real published, acknowledged native Release, then uses
-// the same preflight, pre-stage merge, producer and durable replay as Apply.
+// the native Service-unit producer and durable replay used by Apply.
 func proveRetainedBlueprintProducer(
 	t *testing.T,
 	fixture *ExecutedArtifactFixture,
@@ -49,8 +35,16 @@ func proveRetainedBlueprintProducer(
 ) {
 	t.Helper()
 	ctx := context.Background()
-	nativeBefore := fixture.AcknowledgedRuntime(t, serviceID)
+	if err := resolver.EnableReleasePlans(fixture.Ledger); err != nil {
+		t.Fatal(err)
+	}
 	scope, err := fixture.Ledger.LoadPlanningScope(ctx, fixture.Environment.Record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acknowledged, err := fixture.Ledger.LoadAcknowledgedServiceRuntimesAtRevision(
+		ctx, fixture.Environment.Record.ID, []string{serviceID}, scope.ReadRevision,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,20 +60,40 @@ func proveRetainedBlueprintProducer(
 	if err := proto.Unmarshal(applied.Record.ComposeArtifact, prior); err != nil {
 		t.Fatal(err)
 	}
-	producer, err := blueprintrelease.NewService(
-		fixture.Ledger,
-		&etcd.ScriptRepository{},
-		resolver,
-		&testtaskplanning.ScriptArtifactService{},
-		&migratedscriptsourcepublication.Authority{},
-		&migratedagentregistration.Repository{},
-		retainedUnexpectedImageResolver{t},
-	)
+	seal := domain.WorkloadSeal{
+		RequestedReference: planning[0].Service.Record.Desired.Image,
+		ReplicaCount:       uint32(planning[0].Service.Record.Desired.Replicas),
+	}
+	for _, member := range prior.Services {
+		if member.ServiceId == serviceID &&
+			member.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			seal.LocalImageID = member.ImageReference
+			break
+		}
+	}
+	if seal.LocalImageID == "" {
+		t.Fatal("acknowledged native image is absent")
+	}
+	scripts, sources := fixture.HookDependencies(t)
+	if err := resolver.EnableScriptPlans(scripts); err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := testtaskplanning.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
 	if err != nil {
 		t.Fatal(err)
 	}
-	changes := []testblueprints.EnvironmentBlueprintServiceChange{
-		{Current: &planning[0].Service, Record: planning[0].Service.Record},
+	producer, err := blueprintrelease.NewService(
+		fixture.Ledger,
+		scripts,
+		resolver,
+		artifacts,
+		sources,
+		blueprintImageLookupAgent(t, fixture),
+		&mixedCandidateImageResolver{t: t, seal: seal, withPredecessor: true},
+		unexpectedBlueprintRollingObserver{t},
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
 	project := &composetypes.Project{Name: nativeProject.Name, Services: make(composetypes.Services)}
 	for name, service := range nativeProject.Services {
@@ -96,14 +110,6 @@ func proveRetainedBlueprintProducer(
 		NetworkMode: "none",
 		HealthCheck: &composetypes.HealthCheckConfig{Test: []string{"CMD", "true"}},
 	}
-	memberships, err := blueprintrelease.BuildNormalizedServiceMemberships(nativeProject, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	workloads, err := producer.Preflight(ctx, fixture.Environment.Record.ID, changes, memberships, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	task := fixture.Task(t, 1200)
 	desired, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(ctx, fixture.Environment.Record.ID)
 	if err != nil || !found {
@@ -111,9 +117,6 @@ func proveRetainedBlueprintProducer(
 	}
 	task.RenderGeneration = int32(desired.Record.RenderGeneration + 1)
 	artifactID, managedID, componentID := ids.New(ids.KindConfig), ids.New(ids.KindService), ids.New(ids.KindComponent)
-	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(taskcontract.BlueprintComposeProcedureNone)
-	task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
-	task.Params[testblueprints.EnvironmentDesiredRevisionParam] = task.ID
 	artifact, err := testcomposerender.RenderCompose(
 		testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
 			ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: fixture.Project.Record.TenantID, ProjectID: fixture.Project.Record.ID,
@@ -131,10 +134,6 @@ func proveRetainedBlueprintProducer(
 				},
 			}},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	artifact, err = producer.PrepareRuntimeArtifact(workloads, artifact, changes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,38 +178,28 @@ func proveRetainedBlueprintProducer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := producer.Prepare(
-		ctx,
-		blueprintrelease.PrepareInput{
-			DesiredRevisionID: projection.RevisionID,
-			Workloads:         workloads,
-			VolumeRoot:        "/var/lib/groundplane/vol",
-			Projection:        projection,
-			Memberships:       memberships,
-			Task:              task,
-			ServiceChanges:    changes,
-			Artifact:          artifact,
-			CreatedAt:         task.CreatedAt,
-			AllocateNamed:     func(kind ids.Kind, name string) string { return ids.DeriveAt(kind, task.CreatedAt, task.ID, name) },
-		},
-	)
-	if err != nil {
+	revision := fixture.PublishNativeBlueprintRevision(t, task, projection, nil)
+	prepared := fixture.PrepareNativeServiceUnit(t, producer, revision, serviceID, nil, nil)
+	predecessor := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(acknowledged[0].Record.Runtime.CurrentArtifact, predecessor); err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range prior.Services {
-		matched := false
-		for _, actual := range prepared.Plan.Artifacts[0].Services {
-			matched = matched || proto.Equal(expected, actual)
-		}
-		if !matched {
-			t.Fatalf("native runtime lost: %s", expected.ComposeName)
-		}
+	matchedPredecessor := false
+	for _, artifact := range prepared.Plan.Artifacts {
+		// Capture assigns a new artifact handle; every physical identity, byte,
+		// label and image must still equal the acknowledged source.
+		expected := proto.CloneOf(predecessor)
+		expected.ArtifactId = artifact.ArtifactId
+		matchedPredecessor = matchedPredecessor || proto.Equal(artifact, expected)
+	}
+	if !matchedPredecessor {
+		t.Fatal("native Service unit lost exact acknowledged predecessor artifact")
 	}
 	if servingRace {
-		fixture.RejectChangedServingPublication(t, prepared.Task, projection, prepared.Publication, serviceID)
+		fixture.RejectChangedServingChildPublication(t, revision, serviceID, prepared)
 		return
 	}
-	fixture.Publish(t, prepared.Task, projection, prepared.Publication)
+	fixture.PublishNativeServiceUnit(t, revision, serviceID, prepared)
 	encoded, err := json.Marshal(prepared.Task)
 	if err != nil {
 		t.Fatal(err)
@@ -224,21 +213,17 @@ func proveRetainedBlueprintProducer(
 		t.Fatalf("retained runtime replay: %v", err)
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, claimed, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
-	if err != nil || !claimed || claim.Task.Record.ID != task.ID {
+	claim, claimed, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second))
+	if err != nil || !claimed || claim.Task.Record.ID != prepared.Task.ID {
 		t.Fatalf("retained Task claim: %t %v", claimed, err)
 	}
-	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
+	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, prepared.Task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, prepared.Task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	latest, found, err := fixture.Hierarchy.GetEnvironmentAppliedComposeProjection(ctx, fixture.Environment.Record.ID)
-	// BP-05: Component execution advances the aggregate applied artifact, not
-	// the independent native Service receipt retained for rollout recovery.
-	if err != nil || !found || latest.Record.RevisionID != task.ID ||
-		!bytes.Equal(latest.Record.ComposeArtifact, projection.ComposeArtifact) {
-		t.Fatal("managed publication omitted its executed Component artifact")
-	}
-	if fixture.AcknowledgedRuntime(t, serviceID).Revision != nativeBefore.Revision {
-		t.Fatal("managed publication changed the native Service receipt")
+	executed, marshalErr := proto.MarshalOptions{Deterministic: true}.Marshal(prepared.Plan.Artifacts[0])
+	if err != nil || marshalErr != nil || !found || latest.Record.RevisionID != task.ID ||
+		!bytes.Equal(latest.Record.ComposeArtifact, executed) {
+		t.Fatal("native Service publication omitted its exact executed artifact")
 	}
 }

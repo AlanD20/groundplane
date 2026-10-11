@@ -7,7 +7,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
-	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -36,9 +35,22 @@ func blueprintReleaseProcedureCounts(members []releaserender.ReleaseTaskRenderMe
 	if err != nil {
 		return 0, 0, err
 	}
-	count, valid := taskcontract.BlueprintReleaseProcedureStepCount(len(members), hooks)
-	if !valid {
+	if len(members) == 0 {
 		return 0, 0, errs.New(errs.KindInternal, "durable Blueprint Release procedure shape is invalid")
+	}
+	count := hooks
+	for _, member := range members {
+		forward, err := releaseForwardStepCount(member.Render)
+		if err != nil {
+			return 0, 0, err
+		}
+		if count > int(^uint(0)>>1)-forward-2 {
+			return 0, 0, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Release procedure exceeds the supported step count",
+			)
+		}
+		count += forward + 2
 	}
 	return hooks, count, nil
 }
@@ -68,11 +80,10 @@ func blueprintReleaseProcedureStepIDs(
 		}
 		start++
 	}
-	hookCount, err := blueprintReleaseHookCount(members)
+	_, count, err := blueprintReleaseProcedureCounts(members, true)
 	if err != nil {
 		return BlueprintReleasePlanInput{}, 0, err
 	}
-	count := len(members)*5 + hookCount
 	if len(members) == 0 || start < 0 || start > len(task.Steps) || count > len(task.Steps)-start {
 		return BlueprintReleasePlanInput{}, 0, errs.New(
 			errs.KindInternal,
@@ -83,9 +94,7 @@ func blueprintReleaseProcedureStepIDs(
 		NativePredecessors: captured.NativePredecessors,
 		Members:            members,
 		PreStepIDs:         make([][]string, len(members)), PostStepIDs: make([][]string, len(members)),
-		ApplyStepIDs: make([]string, len(members)), HealthStepIDs: make([]string, len(members)),
-		SwitchStepIDs:        make([]string, len(members)),
-		RecoveryProbeStepIDs: make([]string, len(members)), RecoveryCompensateStepIDs: make([]string, len(members)),
+		MemberSteps: make([]ReleaseMemberStepIDs, len(members)),
 	}
 	cursor := start
 	readHooks := func(when core.ScriptHook, memberIndex int, target [][]string) error {
@@ -110,26 +119,31 @@ func blueprintReleaseProcedureStepIDs(
 		}
 	}
 	for index, member := range members {
-		result.ApplyStepIDs[index] = task.Steps[cursor].ID
-		cursor++
-		if member.Render.Strategy == domain.StrategyBlueGreen {
-			if err := readHooks(core.ScriptPostDeploy, index, result.PostStepIDs); err != nil {
-				return BlueprintReleasePlanInput{}, 0, err
+		forwardCount, err := releaseForwardStepCount(member.Render)
+		if err != nil {
+			return BlueprintReleasePlanInput{}, 0, err
+		}
+		anchor, err := releasePostHookIndex(member.Render)
+		if err != nil {
+			return BlueprintReleasePlanInput{}, 0, err
+		}
+		result.MemberSteps[index].Forward = make([]string, forwardCount)
+		for forwardIndex := range forwardCount {
+			result.MemberSteps[index].Forward[forwardIndex] = task.Steps[cursor].ID
+			cursor++
+			if forwardIndex == anchor {
+				if err := readHooks(core.ScriptPostDeploy, index, result.PostStepIDs); err != nil {
+					return BlueprintReleasePlanInput{}, 0, err
+				}
 			}
 		}
-		result.HealthStepIDs[index] = task.Steps[cursor].ID
-		cursor++
-		if member.Render.Strategy == domain.StrategyRecreate {
-			if err := readHooks(core.ScriptPostDeploy, index, result.PostStepIDs); err != nil {
-				return BlueprintReleasePlanInput{}, 0, err
-			}
-		}
-		result.SwitchStepIDs[index] = task.Steps[cursor].ID
-		cursor++
 	}
 	for index := range members {
-		result.RecoveryProbeStepIDs[index] = task.Steps[cursor].ID
-		result.RecoveryCompensateStepIDs[index] = task.Steps[cursor+1].ID
+		result.MemberSteps[index].Probe = task.Steps[cursor].ID
+		result.MemberSteps[index].Compensate = task.Steps[cursor+1].ID
+		if err := result.MemberSteps[index].validate(members[index].Render); err != nil {
+			return BlueprintReleasePlanInput{}, 0, err
+		}
 		cursor += 2
 	}
 	return result, cursor, nil

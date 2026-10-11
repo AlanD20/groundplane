@@ -6,8 +6,13 @@ import "slices"
 // collections when comparing the closed Component configuration variants.
 func EqualComponentConfig(left, right ComponentConfig) bool {
 	if (left.Caddy == nil) != (right.Caddy == nil) ||
+		(left.Envoy == nil) != (right.Envoy == nil) ||
 		(left.CloudflareTunnel == nil) != (right.CloudflareTunnel == nil) ||
 		(left.CoreDNS == nil) != (right.CoreDNS == nil) {
+		return false
+	}
+	if left.Envoy != nil && (left.Envoy.Alias != right.Envoy.Alias ||
+		!equalComponentSlice(left.Envoy.ZoneIDs, right.Envoy.ZoneIDs)) {
 		return false
 	}
 	if left.Caddy != nil && (left.Caddy.Alias != right.Caddy.Alias ||

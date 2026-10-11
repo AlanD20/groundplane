@@ -15,6 +15,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -205,10 +206,27 @@ func (service *Service) compileAuthoredRuntimeProjection(
 	components authoredRuntimeComponents,
 	requirements core.BlueprintRequirements,
 ) (projectionrecord.EnvironmentComposeProjection, error) {
-	desired, identities := source.desired.Record, source.identities.Record
-	if err := requireAuthoredRuntimeProjectionInputs(desired, identities, unitSnapshot); err != nil {
+	if err := requireAuthoredRuntimeProjectionInputs(source.desired.Record, source.identities.Record, unitSnapshot); err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
+	return service.compileAuthoredEnvironmentInput(ctx, parent, source, attaches,
+		authoredComponentCompileInput{
+			records: components.records, projected: components.projected, sources: components.sources,
+		}, requirements)
+}
+
+// compileAuthoredEnvironmentInput only renders exact input configuration. It
+// neither establishes acknowledged runtime nor publishes a projection; those
+// decisions belong to the receipt-checking caller and atomic runtime seal.
+func (service *Service) compileAuthoredEnvironmentInput(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	source authoredRuntimeProjectionSource,
+	attaches []etcdstore.Versioned[attachrecord.Record],
+	components authoredComponentCompileInput,
+	requirements core.BlueprintRequirements,
+) (projectionrecord.EnvironmentComposeProjection, error) {
+	desired, identities := source.desired.Record, source.identities.Record
 	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, desired, identities)
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
@@ -318,7 +336,7 @@ func (service *Service) compileAuthoredRuntimeProjection(
 		desired.EnvironmentID, desired.RevisionID, desired.RenderGeneration,
 		renderIdentities, volumeSlugs, volumeMounts, artifactValue,
 		desired.Input.NormalizedCompose, desired.Input.RuntimeFiles,
-		desired.Input.ServiceExtensions, nil, components.records, entries,
+		desired.Input.ServiceExtensions, nil, authoredComponentInputRecords(components.records), entries,
 	)
 	projection.ManagedComponentRuntimeSources = append(
 		[]projectionrecord.ManagedComponentRuntimeSource(nil), components.sources...,
@@ -339,6 +357,23 @@ func requireAuthoredRuntimeProjectionInputs(
 	identities projectionrecord.EnvironmentOwnedIdentities,
 	snapshot blueprintunits.Snapshot,
 ) error {
+	return requireAuthoredProjectionInputReceipts(desired, identities, snapshot, "")
+}
+
+// Only pre-switch planning may omit the one pending proxy's receipt. Runtime
+// publication always calls the wrapper above with no omitted receipt.
+func requireAuthoredProjectionInputReceipts(
+	desired projectionrecord.EnvironmentDesiredInput,
+	identities projectionrecord.EnvironmentOwnedIdentities,
+	snapshot blueprintunits.Snapshot,
+	pendingProxyID string,
+) error {
+	if pendingProxyID != "" && (ids.Validate(ids.KindComponent, pendingProxyID) != nil ||
+		!slices.ContainsFunc(identities.Components, func(identity projectionrecord.OwnedIdentity) bool {
+			return identity.ID == pendingProxyID && identity.Name == string(core.ComponentCapabilityHTTPRouter)
+		})) {
+		return errs.New(errs.KindValidationFailed, "Blueprint pending proxy identity is invalid")
+	}
 	if err := requireAuthoredBackupInputs(desired, identities, snapshot); err != nil {
 		return err
 	}
@@ -354,7 +389,10 @@ func requireAuthoredRuntimeProjectionInputs(
 		if !slices.ContainsFunc(identities.Components, func(identity projectionrecord.OwnedIdentity) bool {
 			return identity.ID == applied.Record.Target.ID
 		}) {
-			return errs.New(errs.KindStateConflict, "Blueprint runtime projection is waiting for omitted Component teardown")
+			return errs.New(
+				errs.KindResourceInUse,
+				"Blueprint runtime projection is waiting for omitted Component teardown",
+			)
 		}
 	}
 	for _, group := range []struct {
@@ -366,13 +404,28 @@ func requireAuthoredRuntimeProjectionInputs(
 		{ids.KindEnvEntry, identities.Entries},
 	} {
 		for _, identity := range group.identities {
+			if group.kind == ids.KindComponent && identity.ID == pendingProxyID {
+				continue
+			}
 			target := blueprintunits.ResourceKey{Kind: group.kind, ID: identity.ID}
 			if !authoredRuntimeInputApplied(snapshot, target) {
-				return errs.New(errs.KindStateConflict, "Blueprint runtime projection inputs are pending")
+				return errs.New(errs.KindResourceInUse, "Blueprint runtime projection inputs are pending")
 			}
 		}
 	}
 	return nil
+}
+
+// Live health is observation, not a reproducible configuration input. Keep it
+// out of both prepared and acknowledged rendering snapshots without changing
+// the actual Component record or its execution receipt.
+func authoredComponentInputRecords(records []componentrecord.Record) []componentrecord.Record {
+	result := make([]componentrecord.Record, len(records))
+	for index, record := range records {
+		result[index] = componentrecord.CloneRecord(record)
+		result[index].Runtime.Healthy = false
+	}
+	return result
 }
 
 func authoredRuntimeInputApplied(

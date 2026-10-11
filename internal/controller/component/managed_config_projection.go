@@ -72,7 +72,8 @@ func (projector *ConfigProjector) ProjectManagedConfigFiles(
 		if registration.Kind != component.Kind {
 			continue
 		}
-		if revision <= 0 || component.Owner != core.ComponentOwnerEnvironment || component.Config.Caddy == nil {
+		if revision <= 0 || component.Owner != core.ComponentOwnerEnvironment ||
+			!component.Kind.IsEnvironmentProxy() || component.Validate() != nil {
 			return nil, errs.New(errs.KindInternal, "managed-config preview authority is invalid")
 		}
 		environment, err := projector.environment(ctx, component.OwnerID, revision)
@@ -84,10 +85,14 @@ func (projector *ConfigProjector) ProjectManagedConfigFiles(
 			return nil, err
 		}
 		files := []apiTypes.ManagedConfigFile{}
+		template := ""
+		if component.Config.Caddy != nil {
+			template = component.Config.Caddy.CaddyfileTemplate
+		}
 		for _, file := range plan.Files {
 			if file.Path == registration.SourcePath {
 				files = append(files, apiTypes.ManagedConfigFile{
-					Path: file.Path, Template: component.Config.Caddy.CaddyfileTemplate, Rendered: string(file.Content),
+					Path: file.Path, Template: template, Rendered: string(file.Content),
 				})
 			}
 		}

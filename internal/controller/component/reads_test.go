@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -93,7 +94,11 @@ func TestGetComponentConfigDelegatesManagedFileProjection(t *testing.T) {
 		Path: "/etc/groundplane/coredns/Corefile", Template: component.Config.CoreDNS.CorefileTemplate,
 		Rendered: ". {\n    bind 127.0.0.1\n}\n",
 	}}}
-	service, err := NewReadService(managedConfigReadRepository{record: record}, projector)
+	service, err := NewReadService(
+		managedConfigReadRepository{record: record},
+		projector,
+		managedConfigSoftwareInspector{},
+	)
 	if err != nil {
 		t.Fatalf("NewReadService() error = %v", err)
 	}
@@ -105,4 +110,21 @@ func TestGetComponentConfigDelegatesManagedFileProjection(t *testing.T) {
 		response.ManagedFiles[0].Rendered != projector.files[0].Rendered {
 		t.Fatalf("GetComponentConfig() = %#v, projector component = %q", response, projector.componentID)
 	}
+}
+
+func (managedConfigReadRepository) GetComponentInstalledSoftware(
+	context.Context,
+	string,
+	int64,
+) (*buildversion.ContainerIdentity, error) {
+	return nil, nil
+}
+
+type managedConfigSoftwareInspector struct{}
+
+func (managedConfigSoftwareInspector) InspectSoftware(
+	_ context.Context,
+	identity buildversion.ContainerIdentity,
+) (buildversion.ContainerIdentity, error) {
+	return identity, nil
 }

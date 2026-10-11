@@ -166,7 +166,8 @@ func TestRenderComposeAddressableReplicaCountKeepsSingletonProxy(t *testing.T) {
 	}})
 	input.Identities.Services = []composeidentity.Resource{{ID: serviceID, Name: "api"}}
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
-		ReleaseID: releaseID, Image: "example/api:next", Strategy: domain.StrategyRecreate,
+		ProxyImplementation: testServiceProxyImplementation(),
+		ReleaseID:           releaseID, Image: "example/api:next", Strategy: domain.StrategyRecreate,
 		ProxyImage: testServiceProxyImage(),
 		Target:     domain.WorkloadSingleton, ServingTarget: domain.WorkloadSingleton,
 		ServingReleaseID: releaseID, ServingProxyGeneration: 1,

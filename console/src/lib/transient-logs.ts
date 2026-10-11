@@ -85,7 +85,7 @@ function parseLogEvent(value: unknown): TransientLogEvent {
   const line = requiredString(value, 'line')
 	const truncated = Reflect.get(value, 'truncated')
   if (typeof sequenceValue !== 'number' || !Number.isSafeInteger(sequenceValue) || sequenceValue < 1 ||
-    (slot !== 'blue' && slot !== 'green' && slot !== 'singleton') ||
+    (slot !== 'blue' && slot !== 'green' && slot !== 'singleton' && slot !== 'rolling') ||
     (stream !== 'stdout' && stream !== 'stderr') || typeof truncated !== 'boolean') {
     throw new Error('Controller returned invalid log event data')
   }

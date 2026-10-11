@@ -8,7 +8,10 @@ import { useStore } from "@/lib/store";
 import { Boxes, Server } from "lucide-react";
 import { Link } from "react-router-dom";
 import { HostAgentsTable } from "./host-agents-table";
-import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
+import {
+  SoftwareIdentity,
+  ContainerSoftwareIdentity,
+} from "@/features/image-delivery/software-identity";
 
 export default function PlatformHostPage() {
   const { host, hostLoading, hostError, platform, platformComponentError } =
@@ -101,6 +104,8 @@ export default function PlatformHostPage() {
                 description={
                   <SoftwareIdentity
                     version={host.controller.version}
+                    sourceBuild={host.controller.source?.kind === "source_ref"}
+                    sourceCommit={host.controller.source?.commit}
                     digest={host.controller.update.running_sha256}
                     showReferences={false}
                     unavailable="Installed identity unavailable"
@@ -113,10 +118,14 @@ export default function PlatformHostPage() {
                 status={<StatusBadge status={host.etcd.status} />}
                 description={
                   <span className="flex flex-col gap-1">
-                    <SoftwareIdentity
+                    <ContainerSoftwareIdentity
+                      software={host.etcd.software}
                       showReferences={false}
                       unavailable="Installed identity not reported"
                     />
+                    {host.etcd.version ? (
+                      <span>Server {host.etcd.version}</span>
+                    ) : null}
                     <span>
                       {host.etcd.dbSize} stored · Configuration and maintenance
                     </span>
@@ -133,7 +142,8 @@ export default function PlatformHostPage() {
                     status={<StatusBadge status={component.status} />}
                     description={
                       <span className="flex flex-col gap-1">
-                        <SoftwareIdentity
+                        <ContainerSoftwareIdentity
+                          software={component.software}
                           showReferences={false}
                           unavailable="Installed identity not reported"
                         />

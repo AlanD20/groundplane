@@ -45,6 +45,11 @@ func (repository *TaskRepository) ResumeTaskSourceReleases(ctx context.Context) 
 func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 	ctx context.Context, task TaskRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
+	// Check settlement releases pins for every fully cleaned outcome. Its domain
+	// finalizer owns this once, including failed and canceled probes.
+	if connectorCheckTask(task) {
+		return taskMaterializationProjectionChange{}, nil
+	}
 	if task.Configuration == nil || task.Status != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}

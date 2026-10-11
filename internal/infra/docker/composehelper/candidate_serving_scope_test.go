@@ -150,7 +150,11 @@ func testServingCompensationScope(t *testing.T, withProxy bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	selected, err := startupClosure(predecessor, servingPredecessorNames(predecessor.Services[0], proxy), false)
+	selected, err := startupClosure(
+		predecessor,
+		servingPredecessorNames([]*agentpb.ComposeService{predecessor.Services[0]}, proxy),
+		false,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

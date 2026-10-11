@@ -212,7 +212,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 				if err != nil || !found || claimed.Task.Record.ID != task.ID {
 					t.Fatalf("Controller finalizer claim: %v / %v", found, err)
 				}
-				if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second)); err != nil {
+				if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, task.CreatedAt.Add(2*time.Second)); err != nil {
 					t.Fatal(err)
 				}
 				if claimed, found, err := fixture.Tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, time.Now().UTC()); err != nil || !found || claimed.Task.Record.ID != competingTask {

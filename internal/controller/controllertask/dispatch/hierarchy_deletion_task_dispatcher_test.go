@@ -35,7 +35,7 @@ func TestHierarchyDeletionTaskDispatcherRoutesOnlyClosedDeletionTasks(t *testing
 	at := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	fallback := &recordingControllerTaskExecutor{}
 	deletions := &recordingHierarchyDeletionExecutor{}
-	dispatcher, err := NewHierarchyDispatcher(fallback, deletions)
+	dispatcher, err := testHierarchyDispatcher(fallback, deletions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestHierarchyDeletionTaskDispatcherRoutesOnlyClosedDeletionTasks(t *testing
 			testtaskjournal.TaskHierarchyDeletionTargetKindParam: "tenant",
 		},
 	}
-	if err = dispatcher.Execute(context.Background(), task); err != nil {
+	if err = dispatcher.Execute(context.Background(), task, testControllerProgress(context.Background(), task)); err != nil {
 		t.Fatal(err)
 	}
 	if deletions.calls != 1 || deletions.taskID != task.ID || fallback.calls != 0 {
@@ -58,7 +58,7 @@ func TestHierarchyDeletionTaskDispatcherRoutesOnlyClosedDeletionTasks(t *testing
 	}
 
 	task.Params[testtaskjournal.TaskResourceKindParam] = testtaskjournal.TaskResourceAgent
-	if err = dispatcher.Execute(context.Background(), task); err != nil {
+	if err = dispatcher.Execute(context.Background(), task, testControllerProgress(context.Background(), task)); err != nil {
 		t.Fatal(err)
 	}
 	if fallback.calls != 1 || deletions.calls != 1 {
@@ -69,10 +69,10 @@ func TestHierarchyDeletionTaskDispatcherRoutesOnlyClosedDeletionTasks(t *testing
 func TestHierarchyDeletionTaskDispatcherRejectsMismatchedTarget(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
-	dispatcher, err := NewHierarchyDispatcher(
+	dispatcher, err := testHierarchyDispatcher(
 		&recordingControllerTaskExecutor{},
-		&recordingHierarchyDeletionExecutor{},
-	)
+		&recordingHierarchyDeletionExecutor{})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestHierarchyDeletionTaskDispatcherRejectsMismatchedTarget(t *testing.T) {
 			testtaskjournal.TaskHierarchyDeletionTargetKindParam: "tenant",
 		},
 	}
-	err = dispatcher.Execute(context.Background(), task)
+	err = dispatcher.Execute(context.Background(), task, testControllerProgress(context.Background(), task))
 	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -97,10 +97,10 @@ func TestHierarchyDeletionTaskDispatcherAcceptsBackingFacadeProjectIdentity(t *t
 	t.Parallel()
 	at := time.Date(2026, 8, 28, 21, 0, 0, 0, time.UTC)
 	deletions := &recordingHierarchyDeletionExecutor{}
-	dispatcher, err := NewHierarchyDispatcher(
+	dispatcher, err := testHierarchyDispatcher(
 		&recordingControllerTaskExecutor{},
-		deletions,
-	)
+		deletions)
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestHierarchyDeletionTaskDispatcherAcceptsBackingFacadeProjectIdentity(t *t
 		},
 	}
 
-	if err = dispatcher.Execute(context.Background(), task); err != nil {
+	if err = dispatcher.Execute(context.Background(), task, testControllerProgress(context.Background(), task)); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if deletions.calls != 1 || deletions.taskID != task.ID {

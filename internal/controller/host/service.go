@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/version"
 
 	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,9 +26,11 @@ type SystemSnapshot struct {
 // EtcdSnapshot is the safe host-level etcd projection. Expected unavailability
 // is represented by StatusFailed, not an error or a raw endpoint diagnostic.
 type EtcdSnapshot struct {
-	Node   string
-	Status api.HealthState
-	DBSize string
+	Version  string
+	Software *version.ContainerIdentity
+	Node     string
+	Status   api.HealthState
+	DBSize   string
 }
 
 // AgentSnapshot is the non-secret local Agent projection. Credential and
@@ -62,6 +65,7 @@ type HostDependencies struct {
 	Updates           ControllerUpdateSource
 	ControllerService string
 	ControllerVersion string
+	ControllerSource  version.BuildProvenance
 }
 
 // HostService projects three independently injected observations into the one
@@ -74,9 +78,13 @@ type HostService struct {
 	updates           ControllerUpdateSource
 	controllerService string
 	controllerVersion string
+	controllerSource  version.BuildProvenance
 }
 
 func NewHostService(dependencies HostDependencies) (*HostService, error) {
+	if err := dependencies.ControllerSource.Validate(); err != nil {
+		return nil, err
+	}
 	if dependencies.System == nil {
 		return nil, errs.New(errs.KindInternal, "host system snapshot source is required")
 	}
@@ -102,6 +110,7 @@ func NewHostService(dependencies HostDependencies) (*HostService, error) {
 		updates:           dependencies.Updates,
 		controllerService: dependencies.ControllerService,
 		controllerVersion: dependencies.ControllerVersion,
+		controllerSource:  dependencies.ControllerSource,
 	}, nil
 }
 
@@ -133,6 +142,15 @@ func (service *HostService) Show(ctx context.Context) (api.Host, error) {
 		return api.Host{}, hostSourceError(ctx, err)
 	}
 
+	var source *version.BuildProvenance
+	if service.controllerSource.Known() {
+		provenance := service.controllerSource
+		source = &provenance
+	}
+	var observedEtcdVersion *string
+	if etcd.Version != "" {
+		observedEtcdVersion = &etcd.Version
+	}
 	return api.Host{
 		Hostname: system.Hostname,
 		Arch:     system.Arch,
@@ -144,14 +162,17 @@ func (service *HostService) Show(ctx context.Context) (api.Host, error) {
 		Swap:     system.Swap,
 		Docker:   system.Docker,
 		Etcd: api.HostEtcd{
-			Node:   etcd.Node,
-			Status: etcd.Status,
-			DBSize: etcd.DBSize,
+			Node:     etcd.Node,
+			Status:   etcd.Status,
+			DBSize:   etcd.DBSize,
+			Version:  observedEtcdVersion,
+			Software: etcd.Software,
 		},
 		Controller: api.HostController{
 			Service: service.controllerService,
 			Status:  api.HealthHealthy,
 			Version: service.controllerVersion,
+			Source:  source,
 			Update:  updates,
 		},
 		Agent: api.HostAgent{

@@ -95,6 +95,13 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID)},
 		},
 	}
+	if intent.Provider != nil {
+		condition, err := routeProviderRuntimeCondition(intent.Provider, intent.EnvironmentID)
+		if err != nil {
+			return routeTaskChange{}, err
+		}
+		change.conditions = append(change.conditions, condition)
+	}
 	for index, key := range keys {
 		condition := etcdstore.Condition{Key: key}
 		if parents.Values[index] != nil {
@@ -195,6 +202,14 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 		{Key: environmentchanges.RouteMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: environmentchanges.RouteMutationIntentKey(retry.ID)},
 		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+	}
+	if intent.Provider != nil {
+		condition, err := routeProviderRuntimeCondition(intent.Provider, intent.EnvironmentID)
+		if err != nil {
+			clear(encoded)
+			return routeTaskChange{}, err
+		}
+		conditions = append(conditions, condition)
 	}
 	return routeTaskChange{
 		applies:    true,

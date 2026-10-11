@@ -59,8 +59,8 @@ func TestTaskAbortServiceRejectsInternalBackupPruneBeforeMutation(t *testing.T) 
 	service, err := NewAbortService(
 		repository,
 		&fakeTaskAbortAgentChannel{terminal: make(chan error, 1)},
-		&fakeTaskAbortControllerRunner{repository: repository},
-	)
+		&fakeTaskAbortControllerRunner{repository: repository}, &fakeTaskAbortControllerRunner{repository: repository})
+
 	if err != nil {
 		t.Fatalf("NewAbortService() error = %v", err)
 	}
@@ -127,8 +127,8 @@ func TestTaskAbortServiceTerminalizesPendingTaskAndReturnsItsIdentity(t *testing
 	service, err := NewAbortService(
 		repository,
 		&fakeTaskAbortAgentChannel{terminal: make(chan error, 1)},
-		&fakeTaskAbortControllerRunner{repository: repository},
-	)
+		&fakeTaskAbortControllerRunner{repository: repository}, &fakeTaskAbortControllerRunner{repository: repository})
+
 	if err != nil {
 		t.Fatalf("NewAbortService() error = %v", err)
 	}
@@ -165,8 +165,8 @@ func TestTaskAbortServiceSubscribesBeforeFencedAgentDelivery(t *testing.T) {
 	service, err := NewAbortService(
 		repository,
 		agents,
-		&fakeTaskAbortControllerRunner{repository: repository},
-	)
+		&fakeTaskAbortControllerRunner{repository: repository}, &fakeTaskAbortControllerRunner{repository: repository})
+
 	if err != nil {
 		t.Fatalf("NewAbortService() error = %v", err)
 	}

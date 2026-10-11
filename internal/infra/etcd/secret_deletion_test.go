@@ -102,8 +102,9 @@ func TestSecretDeletionTaskFencesAndFinalizesTheCompleteSecret(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask() = %#v/%v/%v", claim, found, err)
 	}
 	terminal, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusCompleted, now.Add(4*time.Second),
-	)
+		ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		now.Add(4*time.Second))
+
 	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask() = %#v/%v", terminal, err)
 	}
@@ -114,8 +115,8 @@ func TestSecretDeletionTaskFencesAndFinalizesTheCompleteSecret(t *testing.T) {
 		}
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusCompleted, now.Add(4*time.Second),
-	); err != nil {
+		ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		now.Add(4*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
 }
@@ -161,9 +162,10 @@ func TestSecretDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testing.T
 	failed, err := tasks.AcknowledgeControllerTask(
 		ctx,
 		task.ID,
-		testtaskjournal.TaskStatusFailed,
-		now.Add(3*time.Second),
-	)
+		testtaskjournal.TaskStatusFailed, nil,
+
+		now.Add(3*time.Second))
+
 	if err != nil || failed.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeControllerTask(failed) = %#v/%v", failed, err)
 	}

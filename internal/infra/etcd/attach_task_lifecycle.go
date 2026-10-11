@@ -181,7 +181,8 @@ func (repository *TaskRepository) validateAttachTaskAcknowledgementReplay(
 	if err != nil || !applies {
 		return err
 	}
-	if task.Type == taskjournal.TaskDetach && terminalStatus == taskjournal.TaskStatusCompleted {
+	if task.Type == taskjournal.TaskDetach &&
+		(terminalStatus == taskjournal.TaskStatusCompleted || retainedAuthoredAttachAbsence(task)) {
 		return repository.validateCompletedAttachDetachReplay(ctx, task, revision)
 	}
 	current, err := repository.readTaskAttach(ctx, task, revision)
@@ -284,7 +285,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	}
 	replayTargetIndex := -1
 	markerKey := ""
-	if task.RetryOf == "" {
+	if task.RetryOf == "" && !authoredBlueprintAttachRemovalTask(task) {
 		locator := idempotencyrecord.IdempotencyLocator{
 			ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 			ScopeID:   input.EnvironmentID,

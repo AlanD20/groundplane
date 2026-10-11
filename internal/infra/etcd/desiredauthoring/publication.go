@@ -36,12 +36,34 @@ type Publication struct {
 func Prepare(ctx context.Context, store Store, environmentID string, marker idempotency.IdempotencyMarker,
 	mutate func(*core.BlueprintDesiredInput, *environmentprojection.EnvironmentComposeProjection) error,
 ) (Publication, error) {
-	current, found, err := blueprints.ReadCurrentDesiredInput(ctx, store, environmentID, 0)
+	snapshot, err := loadSnapshot(ctx, store, environmentID)
 	if err != nil {
 		return Publication{}, err
 	}
+	if err := mutate(&snapshot.input.Input, &snapshot.projection); err != nil {
+		return Publication{}, err
+	}
+	return snapshot.stage(ctx, store, marker)
+}
+
+type metadataSnapshot struct {
+	input               environmentprojection.EnvironmentDesiredInput
+	projection          environmentprojection.EnvironmentComposeProjection
+	owned               environmentprojection.EnvironmentOwnedIdentities
+	environment         hierarchy.EnvironmentRecord
+	baseRevisionID      string
+	headRevision        int64
+	environmentRevision int64
+	readRevision        int64
+}
+
+func loadSnapshot(ctx context.Context, store Store, environmentID string) (metadataSnapshot, error) {
+	current, found, err := blueprints.ReadCurrentDesiredInput(ctx, store, environmentID, 0)
+	if err != nil {
+		return metadataSnapshot{}, err
+	}
 	if current.ReadRevision <= 0 {
-		return Publication{}, errs.New(errs.KindInternal, "desired authoring snapshot is unavailable")
+		return metadataSnapshot{}, errs.New(errs.KindInternal, "desired authoring snapshot is unavailable")
 	}
 	state, err := store.GetMany(
 		ctx,
@@ -51,17 +73,17 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 		},
 	)
 	if err != nil {
-		return Publication{}, err
+		return metadataSnapshot{}, err
 	}
 	if state == nil || len(state.Values) != 1 || state.Values[0] == nil {
-		return Publication{}, errs.New(errs.KindEnvironmentNotFound, "Environment does not exist")
+		return metadataSnapshot{}, errs.New(errs.KindEnvironmentNotFound, "Environment does not exist")
 	}
 	environment, err := hierarchy.DecodeEnvironment(state.Values[0].Value)
 	if err != nil {
-		return Publication{}, err
+		return metadataSnapshot{}, err
 	}
 	if environment.ProvisioningState != hierarchy.EnvironmentProvisioningReady {
-		return Publication{}, errs.New(errs.KindResourceInUse, "Environment is not ready for desired authoring")
+		return metadataSnapshot{}, errs.New(errs.KindResourceInUse, "Environment is not ready for desired authoring")
 	}
 	revisionID := ids.New(ids.KindTask)
 	var projection environmentprojection.EnvironmentComposeProjection
@@ -74,7 +96,7 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 			current.ReadRevision,
 		)
 		if readErr != nil {
-			return Publication{}, readErr
+			return metadataSnapshot{}, readErr
 		}
 		identities, hasOwned, readErr := blueprints.ReadCurrentOwnedIdentities(
 			ctx,
@@ -83,11 +105,11 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 			current.ReadRevision,
 		)
 		if readErr != nil {
-			return Publication{}, readErr
+			return metadataSnapshot{}, readErr
 		}
 		if !hasProjection || !hasOwned || previous.Record.RevisionID != current.Record.RevisionID ||
 			identities.Record.RevisionID != current.Record.RevisionID {
-			return Publication{}, errs.New(
+			return metadataSnapshot{}, errs.New(
 				errs.KindStateConflict,
 				"desired authoring requires a complete current runtime projection",
 			)
@@ -97,11 +119,11 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 	} else {
 		projection, err = EmptyProjection(environment, revisionID)
 		if err != nil {
-			return Publication{}, err
+			return metadataSnapshot{}, err
 		}
 		owned, err = environmentprojection.OwnedIdentitiesFromProjection(projection)
 		if err != nil {
-			return Publication{}, err
+			return metadataSnapshot{}, err
 		}
 		current.Record = environmentprojection.EnvironmentDesiredInput{EnvironmentID: environmentID, RenderGeneration: 1,
 			Input: core.BlueprintDesiredInput{NormalizedCompose: append([]byte(nil), projection.NormalizedCompose...), NetworkPool: environment.NetworkPool}}
@@ -109,17 +131,26 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 	input := environmentprojection.CloneEnvironmentDesiredInput(current.Record)
 	baseRevisionID := input.RevisionID
 	input.RevisionID, projection.RevisionID, owned.RevisionID = revisionID, revisionID, revisionID
-	if err := mutate(&input.Input, &projection); err != nil {
-		return Publication{}, err
-	}
+	return metadataSnapshot{
+		input: input, projection: projection, owned: owned, environment: environment,
+		baseRevisionID: baseRevisionID, headRevision: current.Revision,
+		environmentRevision: state.Values[0].ModRevision, readRevision: current.ReadRevision,
+	}, nil
+}
+
+func (snapshot metadataSnapshot) stage(
+	ctx context.Context,
+	store Store,
+	marker idempotency.IdempotencyMarker,
+) (Publication, error) {
 	publication, err := PrepareValues(
-		input,
-		projection,
-		owned,
+		snapshot.input,
+		snapshot.projection,
+		snapshot.owned,
 		marker,
-		baseRevisionID,
-		current.Revision,
-		state.Values[0].ModRevision,
+		snapshot.baseRevisionID,
+		snapshot.headRevision,
+		snapshot.environmentRevision,
 	)
 	if err != nil {
 		return Publication{}, err

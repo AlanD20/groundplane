@@ -58,12 +58,13 @@ func (dispatcher *UpdateDispatcher) Execute(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	deadline time.Time,
-) (taskjournal.TaskStatus, error) {
+	progress *Progress,
+) (taskjournal.ControllerOutcome, error) {
 	owner, err := dispatcher.owner(task)
 	if err != nil {
-		return "", err
+		return taskjournal.ControllerOutcome{}, err
 	}
-	return owner.Execute(ctx, task, deadline)
+	return owner.Execute(ctx, task, deadline, progress)
 }
 
 func (dispatcher *UpdateDispatcher) Abort(ctx context.Context, taskID string) error {

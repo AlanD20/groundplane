@@ -263,6 +263,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	primary.Projects = slices.Clone(result.Projects)
 	primary.ProxyEvidence = slices.Clone(result.ProxyEvidence)
 	primary.RecreateEvidence = slices.Clone(result.RecreateEvidence)
+	primary.RollingEvidence = slices.Clone(result.RollingEvidence)
 	primary.CandidateAbsenceEvidence = nil
 	if result.CandidateAbsenceEvidence != nil {
 		evidence := *result.CandidateAbsenceEvidence
@@ -331,6 +332,12 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 		return status, nil, true, errs.New(
 			errs.KindStateConflict,
 			"terminal release recovery replay recreate evidence changed",
+		)
+	}
+	if !slices.Equal(task.Result.RollingEvidence, result.RollingEvidence) {
+		return status, nil, true, errs.New(
+			errs.KindStateConflict,
+			"terminal release recovery replay rolling evidence changed",
 		)
 	}
 	if !taskjournal.TaskCandidateAbsenceEvidenceEqual(
@@ -502,16 +509,35 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 			task.PlanHash != assignment.RestorationAuthority.PlanHash) {
 		return false, taskassignments.CorruptTaskAssignment()
 	}
-	recovery, err := taskassignments.DecodeReleaseRecoveryRecord(read.Values[5].Value)
-	if err != nil || recovery.TaskID != task.ID || recovery.AssignmentID != assignment.AssignmentID ||
-		recovery.OperationID != task.OperationID || recovery.PlanHash != task.PlanHash ||
-		recovery.RestorationAuthoritySHA256 != assignmentRecoveryAuthorityDigest(assignment) ||
-		!recovery.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
-		return false, taskassignments.CorruptTaskAssignment()
-	}
-	digest, err := taskassignments.ReleaseRecoveryRecordSHA256(recovery)
-	if err != nil || digest != assignment.ReleaseRecoveryRecordSHA256 {
-		return false, taskassignments.CorruptTaskAssignment()
+	if assignment.AttachRemovalAuthoritySHA256 != "" {
+		recovery, decodeErr := taskassignments.DecodeAttachRemovalRecoveryRecord(read.Values[5].Value)
+		if decodeErr != nil || taskassignments.ValidateAttachRemovalRecoveryAssignment(recovery, assignment) != nil ||
+			recovery.Authority.OperationID != task.OperationID || recovery.Authority.PlanHash != task.PlanHash {
+			return false, taskassignments.CorruptTaskAssignment()
+		}
+	} else if assignment.ManagedNetworkProcedureSHA256 != "" {
+		recovery, decodeErr := taskassignments.DecodeManagedNetworkRecoveryRecord(read.Values[5].Value)
+		digest, digestErr := taskassignments.ManagedNetworkRecoveryRecordSHA256(recovery)
+		if decodeErr != nil || digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 ||
+			recovery.TaskID != task.ID || recovery.AssignmentID != assignment.AssignmentID ||
+			recovery.OperationID != task.OperationID || recovery.PlanHash != task.PlanHash ||
+			recovery.ProcedureSHA256 != assignment.ManagedNetworkProcedureSHA256 ||
+			recovery.OriginalExecutionEpoch >= assignment.ExecutionEpoch ||
+			!recovery.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
+			return false, taskassignments.CorruptTaskAssignment()
+		}
+	} else {
+		recovery, decodeErr := taskassignments.DecodeReleaseRecoveryRecord(read.Values[5].Value)
+		if decodeErr != nil || recovery.TaskID != task.ID || recovery.AssignmentID != assignment.AssignmentID ||
+			recovery.OperationID != task.OperationID || recovery.PlanHash != task.PlanHash ||
+			recovery.RestorationAuthoritySHA256 != assignmentRecoveryAuthorityDigest(assignment) ||
+			!recovery.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
+			return false, taskassignments.CorruptTaskAssignment()
+		}
+		digest, digestErr := taskassignments.ReleaseRecoveryRecordSHA256(recovery)
+		if digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 {
+			return false, taskassignments.CorruptTaskAssignment()
+		}
 	}
 	next := assignment
 	next.RecoveryExecutionDeadline = observedAt.Add(releaseRecoveryProofExecutionBudget)

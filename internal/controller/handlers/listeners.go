@@ -12,6 +12,9 @@ import (
 // requires every HTTP server to have entered Accept; a partial binding failure
 // closes all opened listeners without ever qualifying a native upgrade.
 func (s *Server) Serve(ctx context.Context, addresses []string) error {
+	if s.hostTerminals != nil {
+		defer s.hostTerminals.Close()
+	}
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "controller HTTP context is required")
 	}

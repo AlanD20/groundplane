@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 )
 
@@ -128,6 +129,7 @@ func (host *recordingHost) StartRunner(
 	host.container = plan.Container
 	host.token = append([]byte(nil), token...)
 	return runnerallocation.RunnerRuntimeEvidence{
+		Software:    runnerSoftwareEvidence(),
 		ContainerID: repeatValue("a", 64), DaemonNonce: repeatValue("b", 64), SocketDevice: 1, SocketInode: 2,
 	}, nil
 }
@@ -171,6 +173,7 @@ func (host *recordingHost) ObserveDaemon(context.Context, corerunner.Plan) (core
 }
 func (host *recordingHost) ObserveRunner(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
 	ownership := runnerallocation.RunnerRuntimeEvidence{
+		Software:     runnerSoftwareEvidence(),
 		ContainerID:  repeatValue("a", 64),
 		DaemonNonce:  repeatValue("b", 64),
 		SocketDevice: 1,
@@ -181,6 +184,13 @@ func (host *recordingHost) ObserveRunner(context.Context, corerunner.Plan) (core
 		State:     corerunner.EffectApplied,
 		Ownership: &ownership,
 	}, nil
+}
+
+func runnerSoftwareEvidence() buildversion.ContainerIdentity {
+	return buildversion.ContainerIdentity{
+		Image:        "registry.example/runner@sha256:" + repeatValue("d", 64),
+		ConfigDigest: "sha256:" + repeatValue("e", 64),
+	}
 }
 func (host *recordingHost) ObserveRunnerAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
 	return observed(corerunner.StepStopRunner, true)

@@ -114,7 +114,11 @@ func TestReleasePostHookAnchorFollowsCandidateStart(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotID := releasePostHookAnchorStepID(task, 0, test.strategy)
+			index, err := releasePostHookIndex(testreleaserender.ReleaseRenderInput{Strategy: test.strategy})
+			if err != nil {
+				t.Fatal(err)
+			}
+			gotID := task.Steps[index].ID
 			if gotID != test.wantID {
 				t.Fatalf("post-hook anchor = %q, want %q", gotID, test.wantID)
 			}

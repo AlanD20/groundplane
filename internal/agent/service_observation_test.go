@@ -28,8 +28,10 @@ func serviceReadRequest() *agentpb.ObserveServices {
 		RequestId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Targets: []*agentpb.ServiceObservationTarget{{
 			EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			RenderGeneration: 3, ComposeName: "api-blue", RuntimeRole: "slot", Slot: "blue",
+			ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", RuntimeRole: "slot", Slot: "blue",
+			Workloads: []*agentpb.ServiceWorkloadObservation{
+				{PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 3, ComposeName: "api-blue"},
+			},
 		}},
 	}
 }

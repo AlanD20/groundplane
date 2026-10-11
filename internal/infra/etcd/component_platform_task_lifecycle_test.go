@@ -125,6 +125,9 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 		DesiredSHA256: desiredSHA256, BaselineGeneration: 1, BaselineSHA256: strings.Repeat("1", 64),
 		HostResolutionInputRevision: 1, HostResolutionSHA256: strings.Repeat("2", 64),
 		Config: *current.Record.Desired.Config.CoreDNS, GeneratedServiceID: serviceID,
+		Hosts: []testplatformcomponents.PlatformDNSHost{{
+			Address: "10.200.0.2", Hostnames: []string{"resolver.internal"},
+		}},
 		DefinitionSHA256: strings.Repeat("3", 64), CatalogSHA256: strings.Repeat("4", 64),
 		ActionID: "activate-config", ArtifactID: ids.NewAt(ids.KindConfig, now, 5),
 		ComposeArtifactID: ids.NewAt(ids.KindConfig, now, 6), OwnershipPlanID: planID, OwnershipGeneration: 1,

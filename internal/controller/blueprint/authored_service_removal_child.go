@@ -24,17 +24,31 @@ func (service *Service) prepareAuthoredServiceRemovalChild(
 			errs.KindValidationFailed, "Blueprint Service removal child identity is invalid",
 		)
 	}
-	applied, found, err := service.repository.GetEnvironmentAppliedComposeProjection(ctx, parent.Owner.EnvironmentID)
+	input, err := service.loadAuthoredParentInput(ctx, parent)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	if !found {
+	declaredRevisionID := ""
+	for _, omission := range input.identities.PendingOmissions {
+		if omission.Kind == ids.KindService && omission.ID == unit.Target.ID {
+			declaredRevisionID = omission.SourceRevisionID
+			break
+		}
+	}
+	if declaredRevisionID == "" {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
-			errs.KindStateConflict, "Blueprint Service applied projection is unavailable",
+			errs.KindStateConflict, "Blueprint Service omission has no retained declaration",
 		)
 	}
-	current, err := service.repository.GetAppliedServiceRemovalSource(ctx, applied, unit.Target.ID)
+	source, err := service.repository.GetAuthoredServiceRemovalSource(
+		ctx, parent.Owner.EnvironmentID, declaredRevisionID, unit.Target.ID,
+	)
 	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	applied, current := source.Projection, source.Service
+	if err := service.repository.ValidateBlueprintProxyServiceSource(ctx, parent.Owner.EnvironmentID,
+		parent.ID, unit.Target.ID, applied.ReadRevision); err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	if current.Record.EnvironmentID != parent.Owner.EnvironmentID {
@@ -75,6 +89,7 @@ func (service *Service) prepareAuthoredServiceRemovalChild(
 	intent, err := environmentchanges.NewAuthoredServiceRemovalIntent(
 		child.ID, current, applied, acknowledged, head.Revision, parent.ID,
 		uint64(parent.RenderGeneration), candidate, createdAt,
+		source.Kind, source.AppliedProjectionRevision,
 	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err

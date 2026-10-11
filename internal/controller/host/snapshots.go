@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/localdiag"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
@@ -73,17 +74,22 @@ func (source *SystemSource) SystemSnapshot(ctx context.Context) (SystemSnapshot,
 
 type hostEtcdProbe func(context.Context, []string) ([]localdiag.EtcdEndpoint, error)
 
+type hostEtcdSoftwareSource interface {
+	InstalledSoftware(context.Context) (*buildversion.ContainerIdentity, error)
+}
+
 type EtcdSource struct {
 	endpoints []string
 	probe     hostEtcdProbe
+	software  hostEtcdSoftwareSource
 }
 
-func NewEtcdSource(endpoints []string, probe hostEtcdProbe) *EtcdSource {
-	return &EtcdSource{endpoints: append([]string(nil), endpoints...), probe: probe}
+func NewEtcdSource(endpoints []string, probe hostEtcdProbe, software hostEtcdSoftwareSource) *EtcdSource {
+	return &EtcdSource{endpoints: append([]string(nil), endpoints...), probe: probe, software: software}
 }
 
 func (source *EtcdSource) EtcdSnapshot(ctx context.Context) (EtcdSnapshot, error) {
-	if source == nil || len(source.endpoints) == 0 || source.probe == nil {
+	if source == nil || len(source.endpoints) == 0 || source.probe == nil || source.software == nil {
 		return EtcdSnapshot{}, errs.New(errs.KindInternal, "host etcd source is incomplete")
 	}
 	rows, err := source.probe(ctx, append([]string(nil), source.endpoints...))
@@ -100,12 +106,21 @@ func (source *EtcdSource) EtcdSnapshot(ctx context.Context) (EtcdSnapshot, error
 		)
 	}
 	healthy := 0
+	observedVersion := ""
+	unavailableVersion := false
 	maximumDBSize := uint64(0)
 	for _, row := range rows {
 		if !row.Healthy {
 			continue
 		}
 		healthy++
+		if (buildversion.BuildIdentity{Version: row.Version}).Validate() != nil {
+			unavailableVersion = true
+		} else if observedVersion == "" {
+			observedVersion = row.Version
+		} else if observedVersion != row.Version {
+			unavailableVersion = true
+		}
 		if row.DBSizeBytes == nil || *row.DBSizeBytes < 0 {
 			return EtcdSnapshot{}, errs.New(errs.KindInternal, "host etcd probe returned an invalid DB size")
 		}
@@ -122,7 +137,24 @@ func (source *EtcdSource) EtcdSnapshot(ctx context.Context) (EtcdSnapshot, error
 	if healthy == len(rows) {
 		status = apiTypes.HealthHealthy
 	}
-	return EtcdSnapshot{Node: hostEtcdNodeLabel, Status: status, DBSize: dbSize}, nil
+	if unavailableVersion {
+		observedVersion = ""
+	}
+	software, softwareErr := source.software.InstalledSoftware(ctx)
+	if softwareErr != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return EtcdSnapshot{}, contextErr
+		}
+		// Missing image metadata must not make all Host observations unavailable.
+		software = nil
+	}
+	return EtcdSnapshot{
+		Node:     hostEtcdNodeLabel,
+		Status:   status,
+		DBSize:   dbSize,
+		Version:  observedVersion,
+		Software: software,
+	}, nil
 }
 
 type hostAgentHealthSource interface {

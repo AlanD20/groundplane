@@ -104,7 +104,7 @@ func testJournal(t *testing.T, store *Store, id upgrade.Digest) upgrade.Journal 
 	}
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	return upgrade.Journal{
-		Schema:   1,
+		Schema:   2,
 		TaskID:   ids.NewAt(ids.KindTask, now, 1),
 		Release:  id,
 		Manifest: manifest,

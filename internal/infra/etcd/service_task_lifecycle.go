@@ -48,6 +48,9 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	if service.Record.Runtime.RuntimeIntent != serviceLifecycleIntent(source.Type) {
 		return serviceTaskChange{}, errs.New(errs.KindStateConflict, "Service runtime intent changed before retry")
 	}
+	if service.Record.Runtime.UnconfirmedLifecycleTaskID != source.ID {
+		return serviceTaskChange{}, errs.New(errs.KindStateConflict, "Service lifecycle outcome changed before retry")
+	}
 	if values.Values[0] != nil {
 		return serviceTaskChange{}, errs.New(errs.KindResourceInUse, "Service already has an active lifecycle Task")
 	}
@@ -55,6 +58,12 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service retry render input already exists")
 	}
 	reference, err := idempotencyrecord.EncodeTaskReference(retry.ID)
+	if err != nil {
+		return serviceTaskChange{}, err
+	}
+	runtime := servicerecord.NewServiceRuntimeRecord(service.Record)
+	runtime.Runtime.UnconfirmedLifecycleTaskID = retry.ID
+	runtimeValue, err := servicerecord.EncodeServiceRuntimeRecord(runtime)
 	if err != nil {
 		return serviceTaskChange{}, err
 	}
@@ -66,6 +75,7 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 			{Key: servicerecord.ServiceLifecycleActiveKey(source.Target)},
 		},
 		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(source.Target), Value: runtimeValue},
 			{
 				Type:  etcdstore.MutationPut,
 				Key:   servicerecord.ServiceLifecycleActiveKey(source.Target),
@@ -141,9 +151,19 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 	readRevision int64,
 ) (serviceTaskChange, error) {
 	change, err := repository.prepareServiceTaskAcknowledgement(ctx, task, readRevision)
-	if err != nil || !change.applies || terminalStatus != taskjournal.TaskStatusCompleted ||
-		task.Executor != taskjournal.TaskExecutorAgent {
+	if err != nil || !change.applies || terminalStatus != taskjournal.TaskStatusCompleted {
 		return change, err
+	}
+	condition, mutation, err := servicerecord.ConfirmLifecycleRuntime(ctx, repository.store,
+		task.Target, task.ID, serviceLifecycleIntent(task.Type), readRevision)
+	if err != nil {
+		clearServiceTaskChange(change)
+		return serviceTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, condition)
+	change.mutations = append(change.mutations, mutation)
+	if task.Executor != taskjournal.TaskExecutorAgent {
+		return change, nil
 	}
 	inputRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{releaserender.ServiceLifecycleRenderInputKey(task.ID)}, Revision: readRevision,

@@ -9,7 +9,8 @@ acting. Completed fix narratives belong in Git history or the
 
 The temporary 0.0.1 deferrals and older pattern, import and oversized-file
 allowances have been retired. The [baseline](../../architecture-baseline.json)
-freezes application wiring and caps direct root-etcd code at 75,000 lines.
+freezes application wiring. Persistence code is governed by ownership, import
+boundaries and per-file limits, not an aggregate root-etcd line cap.
 [Delivery](../delivery.md#architecture-gate)
 explains what a passing architecture gate establishes. Local checks do not replace
 the live qualification below.
@@ -112,14 +113,14 @@ synthetic secret value. A separate running-Service variant removed the managed
 file without restarting the container; its absence reached the new process on
 the next Deploy.
 
-Failure, Abort, recovery and other exposure variants remain untested. Omitted
-Scripts, Backup policy, native Compose configs and native Compose secrets now
-have local reconciliation changes, but no live operator qualification. Service,
-Zone, Route and Attach omissions still preserve or reject the missing resource;
-they must not be reported as successful removal.
+Failure, Abort, recovery and other exposure variants remain unqualified on the
+current candidate. Protected Service, Zone, Route and Attach omission paths are
+locally connected to the public Apply coordinator, alongside Entry, Component
+and Environment DNS reconciliation. Scripts and Backup policy also have local
+reconciliation changes. Native Compose configs and secrets remain unavailable
+to Apply. No current live pass is established by these source changes.
 
-Closure requires completing those removal paths under their dependency and
-recovery rules, then proving the selected current candidate changes real
+Closure requires proving the selected current candidate changes real
 Environment state without orphaning data or unrelated resources.
 
 ### Other limits
@@ -129,12 +130,14 @@ Environment state without orphaning data or unrelated resources.
   A successful preview can still be rejected by Apply. Native configs/secrets,
   external networks and Volume driver options also remain unavailable to current
   Apply despite parser support. See the [Blueprint reference](../blueprint.md#native-compose-with-groundplane-policy).
-- Latest-wins Blueprint reconciliation has an accepted design but lacks complete
-  publication, late planning, handoff and runtime integration. BP-13/14/15 cannot
-  pass until that work is explicitly authorized and delivered.
-- The accepted same-Apply Custom hook path is not implemented: a new owner
-  still requires standalone Attach before a Blueprint can use its facts.
-  Hook execution and Secret retention still need live qualification.
+- Latest-wins Blueprint reconciliation is locally connected through publication,
+  late planning, hidden child Tasks and effect settlement. BP-13/14/15 still need
+  candidate-bound supersession, interruption and recovery evidence; source wiring
+  is not a pass.
+- Same-Apply Custom hook facts are locally connected: independent Zones and
+  Volumes can proceed, while Service work waits for a complete runtime projection.
+  Hook interruption, explicit Retry, supersession and Secret retention still need
+  live qualification.
 - [H84/H85](../acceptance.md#source-restore-retention-and-deletion-boundary) qualify
   selected Config, Volume and PostgreSQL Restore, key-era and retention variants.
   [H86](../acceptance.md#backup-owned-environment-deletion) proves Config/Volume

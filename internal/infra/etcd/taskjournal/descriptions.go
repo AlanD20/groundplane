@@ -11,12 +11,14 @@ import (
 
 // CaptureStepDescriptions records public-safe presentation from the sealed plan
 // before publication. It never changes execution identity or authority.
-func CaptureStepDescriptions(records []TaskStepRecord, steps []*agentpb.ExecutionStep) []TaskStepRecord {
+func CaptureStepDescriptions(records []TaskStepRecord, plan *agentpb.ExecutionPlan) []TaskStepRecord {
 	result := CloneTaskSteps(records)
-	descriptions := make(map[string]taskdescription.Description, len(steps))
-	for _, step := range steps {
+	descriptions := make(map[string]taskdescription.Description, len(plan.GetSteps()))
+	healthchecks := make(map[string][]taskdescription.ConfiguredHealthcheck)
+	for _, step := range plan.GetSteps() {
 		if step != nil {
 			descriptions[step.StepId] = taskdescription.Describe(step)
+			healthchecks[step.StepId] = taskdescription.CaptureHealthchecks(plan, step)
 		}
 	}
 	for index := range result {
@@ -25,6 +27,7 @@ func CaptureStepDescriptions(records []TaskStepRecord, steps []*agentpb.Executio
 			result[index].Description = description.Description
 			result[index].Target = description.Target
 			result[index].TimeoutSeconds = description.TimeoutSeconds
+			result[index].Healthchecks = healthchecks[result[index].ID]
 		}
 	}
 	return result
@@ -33,10 +36,10 @@ func CaptureStepDescriptions(records []TaskStepRecord, steps []*agentpb.Executio
 func validateStepDescription(step TaskStepRecord) error {
 	if !validPresentationText(step.Action, 160) || !validPresentationText(step.Description, 600) ||
 		!validPresentationText(step.Target, 160) || (step.Action == "" &&
-		(step.Description != "" || step.Target != "" || step.TimeoutSeconds != 0)) {
+		(step.Description != "" || step.Target != "" || step.TimeoutSeconds != 0 || len(step.Healthchecks) != 0)) {
 		return errs.New(errs.KindValidationFailed, "task step description is invalid")
 	}
-	return nil
+	return taskdescription.ValidateHealthchecks(step.Healthchecks)
 }
 
 func validPresentationText(value string, limit int) bool {

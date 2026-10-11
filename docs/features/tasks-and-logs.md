@@ -38,11 +38,83 @@ Unavailable failure details are
 identified explicitly, not inferred from a failed status. Exact IDs and plan
 hashes remain available under Technical details.
 
+Task details separate the original failure from recovery. The original outcome,
+failed operation, safe diagnostic and recorded exit code remain visible while
+GP restores or cleans up the captured resources. Recovery has its own progress,
+deadline and last retained failed step. Finishing recovery steps means the
+Controller is still waiting for final proof; only an accepted terminal result
+is shown as **Recovery verified**. The original action does not become successful.
+Passing a recovery deadline does not release protected resources or prove that
+the Agent stopped. Missing causes and retired progress remain unavailable,
+not reconstructed from current Service settings. API Task details and CLI Task
+Show expose the same structured failure and recovery fields. This read-only
+presentation is locally implemented; interruption/reload journeys are not yet
+qualified.
+
+Agent-executed steps can record a bounded failure cause, such as a missing file,
+permission denial, timeout, unavailable image or failed process, with its exit
+code when available. These details appear in the live timeline, expanded stage
+and structured CLI/API response. The latest per-step state retains its diagnostic
+when events are trimmed; an accepted final result retains the original cause
+separately from recovery. A later attempt can replace a step's latest state.
+GP does not copy arbitrary provider messages into these fields or infer a cause
+from successful cleanup. Native Controller Tasks retain a classified execution
+failure with their terminal outcome; duplicate acknowledgements must retain the
+same cause. This includes image operations and software preparation. Native Tasks
+do not fabricate Agent steps or exit codes. A Controller update preserves an
+observed candidate failure across process handoff and reports it after predecessor
+restoration; recovery errors cannot replace that cause. Agent updates save an
+observed candidate failure before rollback preparation and retain it with the
+restored generation. A later update cannot inherit it. Missing observations remain
+unavailable, not inferred from a rollback.
+
+Controller operations record named starts and outcomes in the same event stream.
+These include Agent enrollment, image operations, connection checks, Runner
+lifecycle, software preparation, software updates and etcd Apply. The inspector names the current
+operation, failed operation and last retained success without inventing Agent
+steps. Events use the active Task claim and the same sequence and retention rules
+as Agent events. A progress-storage failure keeps the claim unresolved rather
+than publishing an unrecorded outcome. A recorded operation is not proof of Task
+completion. Software preparation records source retrieval, component builds,
+registry publication and readback verification. Updates record preparation,
+process handoff, candidate readiness and predecessor restoration when those
+actions execute. The outgoing Controller records its wait for restart; the new
+process records its own readiness checks. A failed candidate remains a failed
+action even if restoration succeeds. These diagnostics have compiled locally;
+their live qualification remains open.
+
+Health waits record expected, observed, running and ready container counts,
+including starting checks, unhealthy containers and exited containers. Missing
+probe tools have a safe diagnostic; command output and command contents are not
+recorded. The inspector shows the Agent's elapsed wait and time limit separately
+from the Controller's receipt time. A minute without a new readiness report is
+marked as an old update, not proof that the container or executor stopped.
+The latest snapshot survives progress trimming and remains available through
+Task details and the event stream. These observations explain the wait; they
+do not replace the execution or recovery proof required for Task completion.
+This diagnostic implementation has compiled locally but is not live-qualified.
+
+Expand Configured readiness to see the check captured for each selected workload:
+its type, expected replica count, authored timing and retries. HTTP/TCP checks can
+show their loopback port; process patterns, commands and full URLs are withheld.
+An omitted timing override does not assert an image or Docker default. The display
+also says whether GP requires a healthy result or only running containers. These
+details remain tied to the original Task even after Service settings change.
+
 Task events resume by sequence. The latest 1,000 events are retained; each is
 bounded to 32 KiB. Sequence numbers never reset when older events are trimmed.
 An expired resume cursor needs a fresh snapshot. Trimming progress does not
 discard the Task's failure or recovery evidence. Terminal history has a 90-day
 retention boundary.
+
+Task details also retain summaries of earlier attempts after their detailed events
+are trimmed. These show the captured action, last recorded outcome, safe failure
+cause and Controller receipt times when available. A missing outcome is not
+success. The summary history is bounded to 64 KiB and at most 1,000 summaries;
+the inspector reports how many older summaries were discarded. It retires with
+the Task and cannot authorize Retry or prove restoration. The Console inspector,
+API Task details and structured CLI Task Show share this locally implemented
+history; trimming/restart behavior is not yet qualified.
 
 Activity and Task lists show newest-created Tasks first (descending Task ID),
 with the same scope filters and fixed-revision cursor semantics on every page.
@@ -57,7 +129,19 @@ Console pages default to five Tasks, with 5/10/25/50 choices.
 
 Retry creates a new attempt of the same operation with the captured inputs.
 It does not silently apply later configuration. Pending, running and completed
-attempts cannot be retried; only one retry may be active.
+attempts cannot ordinarily be retried; only one retry may be active.
+
+A running Blueprint Apply can instead offer **Retry captured Detach hook** when
+a Custom Detach hook started but no result was saved, and its recovery attempt
+has durably stopped. This authorizes one execution of the original command and
+inputs in the same hidden child Task. The command may already have changed the
+backing service: the operator must decide whether repeating it is safe. If
+several hooks are waiting, Retry selects the oldest eligible child, one at a time.
+Saved results and completed steps are not repeated. Lost responses replay the
+same authorization, not another command execution. Cleanup preserves the original
+failure and the Apply still fails after its children settle; a new Apply is
+required to try the desired state again. This path is locally implemented and
+compiled, not yet behavior-qualified.
 
 Feature-specific restrictions still apply. For example, a Runner retry needs a
 fresh token, old-key Restore cannot recover its request-only identity, and

@@ -89,37 +89,51 @@ func (container *fakeContainer) Remove(ctx context.Context, _ string, _ uint64) 
 }
 
 type fakeSessions struct {
-	trace         *traceLog
-	ready         <-chan struct{}
-	readySequence []<-chan struct{}
-	readyContext  context.Context
-	snapshot      SessionSnapshot
-	hasSnapshot   bool
-	stopError     error
-	revokeError   error
-	offlineError  error
-	fenceError    error
-	fencedThrough []uint64
+	trace           *traceLog
+	ready           <-chan struct{}
+	readySequence   []<-chan struct{}
+	readyContext    context.Context
+	readyGeneration uint64
+	observedReady   <-chan struct{}
+	snapshot        SessionSnapshot
+	hasSnapshot     bool
+	stopError       error
+	revokeError     error
+	offlineError    error
+	fenceError      error
+	fencedThrough   []uint64
 }
 
 func (sessions *fakeSessions) Ready(
 	ctx context.Context,
 	_ string,
-	_ uint64,
+	generation uint64,
 ) (<-chan struct{}, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	sessions.readyContext = ctx
+	sessions.readyGeneration = generation
 	if len(sessions.readySequence) != 0 {
 		ready := sessions.readySequence[0]
+		sessions.observedReady = ready
 		sessions.readySequence = sessions.readySequence[1:]
 		return ready, nil
 	}
+	sessions.observedReady = sessions.ready
 	return sessions.ready, nil
 }
 
 func (sessions *fakeSessions) Snapshot(string) (SessionSnapshot, bool) {
+	if !sessions.hasSnapshot {
+		select {
+		case <-sessions.observedReady:
+			return SessionSnapshot{Generation: sessions.readyGeneration, Online: true,
+				LastReady: testNow, Version: "test"}, true
+		default:
+			return SessionSnapshot{}, false
+		}
+	}
 	return sessions.snapshot, sessions.hasSnapshot
 }
 

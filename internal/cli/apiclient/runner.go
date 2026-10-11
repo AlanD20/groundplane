@@ -66,7 +66,11 @@ func (c *Client) ListRunners(
 		page.NextCursor = *generatedPage.NextCursor
 	}
 	for index, runner := range items {
-		page.Items[index] = runnerFromGenerated(runner)
+		converted, err := runnerFromGenerated(runner)
+		if err != nil {
+			return apiTypes.RunnerPage{}, err
+		}
+		page.Items[index] = converted
 	}
 	return page, nil
 }
@@ -202,7 +206,15 @@ func (c *Client) RemoveRunner(ctx context.Context, id string) (apiTypes.TaskAcce
 	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
 }
 
-func runnerFromGenerated(runner generated.Runner) apiTypes.Runner {
+func runnerFromGenerated(runner generated.Runner) (apiTypes.Runner, error) {
+	software, err := containerIdentityFromGenerated(runner.Software)
+	if err != nil {
+		return apiTypes.Runner{}, err
+	}
+	revision := int64(0)
+	if runner.Revision != nil {
+		revision = *runner.Revision
+	}
 	environmentID := ""
 	if runner.EnvironmentId != nil {
 		environmentID = *runner.EnvironmentId
@@ -216,13 +228,15 @@ func runnerFromGenerated(runner generated.Runner) apiTypes.Runner {
 		labels = append(labels, (*runner.Labels)...)
 	}
 	return apiTypes.Runner{
-		ID: runner.Id, Slug: runner.Slug, TenantID: runner.TenantId, ProjectID: projectID,
+		Software: software,
+		Revision: revision,
+		ID:       runner.Id, Slug: runner.Slug, TenantID: runner.TenantId, ProjectID: projectID,
 		EnvironmentID: environmentID,
 		GitHubURL:     runner.GithubUrl, Name: runner.Name, Labels: labels,
 		Lifecycle: apiTypes.RunnerLifecycle(runner.Lifecycle), CreateTaskID: runner.CreateTaskId,
 		RemoveTaskID: runner.RemoveTaskId, Online: runner.Online,
 		ObservedAt: runner.ObservedAt, CreatedAt: runner.CreatedAt,
-	}
+	}, nil
 }
 
 func generatedRunnerBody(
@@ -237,5 +251,5 @@ func generatedRunnerBody(
 			return apiTypes.Runner{}, err
 		}
 	}
-	return runnerFromGenerated(*parsed), nil
+	return runnerFromGenerated(*parsed)
 }

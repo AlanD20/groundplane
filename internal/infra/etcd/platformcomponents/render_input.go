@@ -3,7 +3,6 @@ package platformcomponents
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
@@ -42,7 +41,9 @@ type PlatformComponentTaskRenderInput struct {
 	HostResolutionSHA256           string                       `json:"host_resolution_sha256"`
 	Config                         core.CoreDNSComponentConfig  `json:"config"`
 	Hosts                          []PlatformDNSHost            `json:"hosts,omitempty"`
+	EnvironmentDNS                 []EnvironmentDNSCapture      `json:"environment_dns,omitempty"`
 	PrivateListener                string                       `json:"private_listener,omitempty"`
+	ZoneListeners                  []string                     `json:"zone_listeners,omitempty"`
 	GeneratedServiceID             string                       `json:"generated_service_id"`
 	EnsureService                  bool                         `json:"ensure_service"`
 	DisableService                 bool                         `json:"disable_service"`
@@ -107,6 +108,9 @@ func DecodePlatformComponentTaskRenderInput(value []byte) (PlatformComponentTask
 }
 
 func ValidatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInput) error {
+	if err := ValidateEnvironmentDNS(input.EnvironmentDNS, input.Hosts); err != nil {
+		return err
+	}
 	if err := dnsrecords.ValidateDNSRecords(input.Config.Records); err != nil {
 		return err
 	}
@@ -120,6 +124,9 @@ func ValidatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		if err != nil || !address.Is4() || !address.IsPrivate() || address.String() != input.PrivateListener {
 			return errs.New(errs.KindValidationFailed, "platform resolver private listener is invalid")
 		}
+	}
+	if _, err := ParseZoneListeners(input.ZoneListeners); err != nil {
+		return err
 	}
 	if ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
 		ids.Validate(ids.KindComponent, input.ComponentID) != nil ||
@@ -177,28 +184,7 @@ func ValidatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		!input.Config.UpstreamAuto && len(input.Config.UpstreamResolvers) == 0 {
 		return errs.New(errs.KindValidationFailed, "platform Component resolver mode is invalid")
 	}
-	previousAddress := netip.Addr{}
-	seenNames := make(map[string]netip.Addr)
-	for _, host := range input.Hosts {
-		address, err := netip.ParseAddr(host.Address)
-		if err != nil || !address.Is4() || address.Is4In6() || address.IsUnspecified() || address.IsMulticast() ||
-			previousAddress.IsValid() && address.Compare(previousAddress) <= 0 || len(host.Hostnames) == 0 {
-			return errs.New(errs.KindValidationFailed, "platform Component DNS hosts are invalid or unsorted")
-		}
-		previousAddress = address
-		previousName := ""
-		for _, hostname := range host.Hostnames {
-			if !resolutionrecord.ValidPlatformDNSName(hostname) || hostname <= previousName {
-				return errs.New(errs.KindValidationFailed, "platform Component DNS names are invalid or unsorted")
-			}
-			if existing, found := seenNames[hostname]; found && existing != address {
-				return errs.New(errs.KindValidationFailed, "platform Component DNS name maps to multiple addresses")
-			}
-			seenNames[hostname] = address
-			previousName = hostname
-		}
-	}
-	return nil
+	return validateDNSHosts(input.Hosts)
 }
 
 func validSelectedPlatform(input PlatformComponentTaskRenderInput) bool {
@@ -224,6 +210,8 @@ func validComponentActionToken(value string) bool {
 
 func clonePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInput) PlatformComponentTaskRenderInput {
 	clone := input
+	clone.ZoneListeners = append([]string(nil), input.ZoneListeners...)
+	clone.EnvironmentDNS = CloneEnvironmentDNS(input.EnvironmentDNS)
 	clone.ReferenceConditions = append([]keyvalue.Condition(nil), input.ReferenceConditions...)
 	clone.Config = *core.CloneComponentConfig(core.ComponentConfig{CoreDNS: &input.Config}).CoreDNS
 	clone.Hosts = make([]PlatformDNSHost, len(input.Hosts))

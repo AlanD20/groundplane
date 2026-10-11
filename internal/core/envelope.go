@@ -125,8 +125,9 @@ type ServiceExtensionSpec struct {
 // state is Controller-generated from the immutable release ledger and is not
 // accepted at the Blueprint boundary.
 type ServiceReleaseSpec struct {
-	DefaultStrategy Strategy  `yaml:"default_strategy"`
-	OnFailure       OnFailure `yaml:"on_failure,omitempty"`
+	DefaultStrategy              Strategy  `yaml:"default_strategy"`
+	OnFailure                    OnFailure `yaml:"on_failure,omitempty"`
+	RollingReplicaTimeoutSeconds uint32    `yaml:"rolling_replica_timeout_seconds,omitempty"`
 }
 
 // AttachmentSpec is one x-gp-attachments entry, keyed by attach name.

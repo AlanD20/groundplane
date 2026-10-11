@@ -1,10 +1,11 @@
 package composehelper
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -12,6 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
+	"github.com/AlanD20/groundplane/internal/common/envoyrouter"
 )
 
 type componentConfigMount struct {
@@ -35,6 +39,13 @@ func executeComponentContainerConfigAction(
 	apply *agentpb.ComponentApply,
 	recipe ComponentActionRecipe,
 ) (*agentpb.ComposeHelperResponse, error) {
+	if recipe.activation == registeredcatalog.ContainerConfigActivationHTTPDiscovery &&
+		apply.GetContainerConfigTransition() == nil ||
+		recipe.activation == registeredcatalog.ContainerConfigActivationCommand &&
+			apply.GetContainerConfigTransition() != nil {
+		return nil, errs.New(errs.KindStateConflict,
+			"Component activation mode does not match its captured configuration transition")
+	}
 	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 	fail := func(exitCode int, diagnostic agentpb.ComposeHelperDiagnostic) *agentpb.ComposeHelperResponse {
@@ -53,6 +64,7 @@ func executeComponentContainerConfigAction(
 		result, runErr := taskRunner.Run(executionCtx, runner.RunCmdOpts{
 			Name: DockerExecutable, Args: args, Dir: WorkDirectory,
 			Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true,
+			CaptureLimitBytes: envoyrouter.MaximumObservationBytes,
 		})
 		if contextErr := executionCtx.Err(); contextErr != nil {
 			return runner.Result{}, nil, contextErr
@@ -68,74 +80,11 @@ func executeComponentContainerConfigAction(
 		}
 		return result, nil, nil
 	}
-	configPath := filepath.Join(artifact.AuthorizedVolumeDir, filepath.FromSlash(recipe.relativePath))
-	var selectedService *agentpb.ComposeService
-	for _, service := range artifact.GetServices() {
-		if service.GetOwnerComponentId() == apply.GetComponentId() {
-			if selectedService != nil {
-				return nil, errs.New(errs.KindValidationFailed, "Component action service ownership is not unique")
-			}
-			selectedService = service
-		}
-	}
-	if selectedService == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Component action service ownership is absent")
-	}
-	serviceID := selectedService.GetServiceId()
-	listed, failure, err := run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
-		"container", "ls",
-		"--filter", "label=com.groundplane.managed=true",
-		"--filter", "label=com.groundplane.kind=service",
-		"--filter", "label=com.groundplane.environment-id="+artifact.OwnerId,
-		"--filter", "label=com.groundplane.component-id="+apply.GetComponentId(),
-		"--filter", "label=com.groundplane.service-id="+serviceID,
-		"--filter", "status=running", "--format", "{{.ID}}",
-	)
+	containerID, failure, err := selectComponentActionContainer(run, artifact, apply, recipe)
 	if err != nil || failure != nil {
 		return failure, err
 	}
-	containers := strings.Fields(string(listed.Stdout))
-	if len(containers) != 1 || !validComponentContainerID(containers[0]) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
-	}
-	containerID := containers[0]
-	inspectedLabels, failure, err := run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
-		"container", "inspect", "--format", "{{json .Config.Labels}}", containerID,
-	)
-	if err != nil || failure != nil {
-		return failure, err
-	}
-	labels := map[string]string{}
-	if json.Unmarshal([]byte(strings.TrimSpace(string(inspectedLabels.Stdout))), &labels) != nil ||
-		!hasAllExpectedLabels(labels, selectedService.GetExpectedLabels()) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
-	}
-	inspectedImage, failure, err := run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
-		"container",
-		"inspect",
-		"--format",
-		"{{.Config.Image}}\n{{.Image}}\n{{json .ImageManifestDescriptor}}",
-		containerID,
-	)
-	if err != nil || failure != nil {
-		return failure, err
-	}
-	if !recipe.matchesImage(inspectedImage.Stdout) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
-	}
-	inspectedMounts, failure, err := run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
-		"container", "inspect", "--format", "{{json .Mounts}}", containerID,
-	)
-	if err != nil || failure != nil {
-		return failure, err
-	}
-	mounts := []componentConfigMount{}
-	if json.Unmarshal([]byte(strings.TrimSpace(string(inspectedMounts.Stdout))), &mounts) != nil ||
-		!hasExactComponentConfigMount(mounts, configPath, recipe.containerPath) {
+	if containerID == "" {
 		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
 	if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil ||
@@ -153,6 +102,31 @@ func executeComponentContainerConfigAction(
 	if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil ||
 		!matches {
 		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), hashErr
+	}
+	if recipe.activation == registeredcatalog.ContainerConfigActivationHTTPDiscovery {
+		content, failure, err := run(
+			agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
+			"container", "exec", containerID, "cat", "--", recipe.containerPath,
+		)
+		if err != nil || failure != nil {
+			return failure, err
+		}
+		digest := sha256.Sum256(content.Stdout)
+		if !bytes.Equal(digest[:], apply.GetArtifactDigest()) {
+			return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
+		}
+		if err := activateHTTPDiscoveryConfiguration(executionCtx, taskRunner, containerID,
+			apply.GetContainerConfigTransition().GetPreviousSource(), content.Stdout); err != nil {
+			return nil, err
+		}
+		if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil ||
+			!matches {
+			return fail(
+				1,
+				agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
+			), hashErr
+		}
+		return completedResponse(), nil
 	}
 	activateCommand := append([]string{"container", "exec", containerID}, recipe.activateArgs...)
 	_, failure, err = run(

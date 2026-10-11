@@ -1,9 +1,15 @@
 "use client";
 
 import { Inspector } from "@/components/common/inspector";
+import { CompactReference } from "@/components/common/compact-reference";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ImageFetchTaskDetails } from "@/features/image-delivery/image-fetch-task-details";
+import { ConnectorCheckPanel } from "@/features/connectors/connector-check-panel";
+import { BackingCheckPanel } from "@/features/attach/backing-check-panel";
+import { EdgeCheckPanel } from "@/features/environment/edge-check-panel";
+import { DNSCheckPanel } from "@/features/platform-component/dns-check-panel";
+import { RunnerCheckPanel } from "@/features/runners/runner-check-panel";
 import { requestTask } from "@/features/task/api";
 import { taskFromAPI } from "@/features/task/journal-model";
 import {
@@ -42,6 +48,7 @@ export function TaskDetailDrawer({
   const [detailError, setDetailError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
+  const [retryReview, setRetryReview] = useState(false);
   const [reload, setReload] = useState(0);
   const suppliedId = taskId ?? entry!.id;
   const [id, setId] = useState(suppliedId);
@@ -100,6 +107,7 @@ export function TaskDetailDrawer({
         setReload((value) => value + 1);
       } else {
         const nextId = await store.retryTask(id);
+        setReload((value) => value + 1);
         setId(nextId);
         setSearch((current) => {
           const next = new URLSearchParams(current);
@@ -108,6 +116,7 @@ export function TaskDetailDrawer({
         });
       }
       setActionPending(false);
+      setRetryReview(false);
       void store.loadTaskJournal(surface, scope).catch(() => undefined);
     } catch (error) {
       setActionError(
@@ -155,13 +164,20 @@ export function TaskDetailDrawer({
               <X className="size-4" /> Cancel
             </Button>
           )}
-          {actions.retry && (
+          {actions.retry && task?.type !== "check" && (
             <Button
               size="sm"
               disabled={actionPending}
-              onClick={() => void runAction("retry")}
+              onClick={() =>
+                detail?.interruptedDetachRetry
+                  ? setRetryReview(true)
+                  : void runAction("retry")
+              }
             >
-              <RefreshCw className="size-4" /> Retry
+              <RefreshCw className="size-4" />{" "}
+              {detail?.interruptedDetachRetry
+                ? "Retry captured Detach hook"
+                : "Retry"}
             </Button>
           )}
           <Button
@@ -176,6 +192,43 @@ export function TaskDetailDrawer({
       }
     >
       <div className="flex flex-col gap-4">
+        {retryReview && detail?.interruptedDetachRetry && (
+          <section
+            className="space-y-3 rounded-lg border border-border bg-muted/30 p-4"
+            aria-label="Confirm captured Detach hook retry"
+          >
+            <h3 className="text-sm font-medium">
+              Run the captured Detach hook again?
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              The hook started, but no result was saved. It may already have
+              changed the backing service. Retry runs the original command and
+              inputs once in the same Task. Only continue if repeating it is
+              safe.
+            </p>
+            <CompactReference
+              value={detail.interruptedDetachRetry.attach_id}
+              label="Attach"
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={actionPending}
+                onClick={() => void runAction("retry")}
+              >
+                Authorize one retry
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={actionPending}
+                onClick={() => setRetryReview(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </section>
+        )}
         {detailLoading && (
           <p
             role="status"
@@ -207,7 +260,54 @@ export function TaskDetailDrawer({
                 <ImageFetchTaskDetails task={task} />
               </>
             ) : (
-              <TaskOverview task={task} />
+              <>
+                <TaskOverview task={task} />
+                {task.type === "check" &&
+                  task.resourceKind === "connector" &&
+                  task.environmentId && (
+                    <ConnectorCheckPanel
+                      environmentId={task.environmentId}
+                      identity={task.id}
+                      taskId={task.id}
+                      open
+                    />
+                  )}
+                {task.type === "check" &&
+                  task.resourceKind === "attach" &&
+                  task.environmentId && (
+                    <BackingCheckPanel
+                      environmentId={task.environmentId}
+                      taskId={task.id}
+                      open
+                    />
+                  )}
+                {task.type === "check" &&
+                  (task.resourceKind === "route" ||
+                    task.resourceKind === "component") &&
+                  task.environmentId && (
+                    <EdgeCheckPanel
+                      environmentId={task.environmentId}
+                      taskId={task.id}
+                      open
+                    />
+                  )}
+                {task.type === "check" &&
+                  task.resourceKind === "component" &&
+                  !task.environmentId && (
+                    <DNSCheckPanel
+                      componentId={task.target}
+                      taskId={task.id}
+                      open
+                    />
+                  )}
+                {task.type === "check" && task.resourceKind === "runner" && (
+                  <RunnerCheckPanel
+                    runnerId={task.target}
+                    taskId={task.id}
+                    open
+                  />
+                )}
+              </>
             )}
           </>
         )}

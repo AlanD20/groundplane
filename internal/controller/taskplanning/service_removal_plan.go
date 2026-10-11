@@ -85,7 +85,7 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 		return etcd.TaskRecord{}, err
 	}
 	prepared.PlanHash = hex.EncodeToString(plan.PlanHash)
-	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps)
+	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan)
 	return prepared, nil
 }
 

@@ -34,9 +34,10 @@ func TestEntryDeletionRetryCannotReacquireAfterScriptPreparation(t *testing.T) {
 	failed, err := tasks.AcknowledgeControllerTask(
 		ctx,
 		task.ID,
-		testtaskjournal.TaskStatusFailed,
-		task.CreatedAt.Add(2*time.Second),
-	)
+		testtaskjournal.TaskStatusFailed, nil,
+
+		task.CreatedAt.Add(2*time.Second))
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +71,7 @@ func TestEntryDeletionRetryCannotReacquireAfterScriptPreparation(t *testing.T) {
 	if _, found, err := tasks.ClaimNextControllerTask(ctx, retryAt.Add(time.Second)); err != nil || !found {
 		t.Fatalf("retry claim = %t, %v", found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, retryAt.Add(2*time.Second)); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, nil, retryAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := entries.GetEntry(ctx, current.Record.Entry.ID); !isKind(err, errs.KindEntryNotFound) {

@@ -7,6 +7,7 @@ import { AttachesCard } from "@/features/attach/environment-attaches";
 import { FactsCard } from "@/features/attach/environment-facts";
 import { BackupsCard } from "@/features/backup/environment-backups";
 import { EnvironmentConnectorManager } from "@/features/connectors/environment-connector-manager";
+import { EnvironmentDNSPanel } from "@/features/environment-dns/environment-dns";
 import { BlueprintState } from "@/features/blueprint/environment-blueprint-state";
 import { EnvVarsCard } from "@/features/entry/environment-entries";
 import { LogViewer, LogStream } from "@/features/logs/log-viewer";
@@ -130,6 +131,7 @@ export default function EnvironmentPage() {
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
     zones: <Topology env={env} onAddService={() => setAddingService(true)} />,
     routes: <RoutesCard env={env} />,
+    dns: <EnvironmentDNSPanel key={env.id} env={env} />,
     attaches: <AttachesCard env={env} />,
     router: <RouterCard env={env} />,
     blueprint: <BlueprintState env={env} />,

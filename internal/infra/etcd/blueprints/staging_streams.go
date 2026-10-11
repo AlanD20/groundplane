@@ -74,7 +74,7 @@ func encodeDesiredRevisionInput(value projectionrecord.EnvironmentDesiredInput) 
 	}
 	input := value.Input
 	resources := len(input.RuntimeFiles) + len(input.ServiceExtensions) + len(input.Requires) +
-		len(input.Attachments) + len(input.Entries) + len(input.Routes) + len(input.Scripts) +
+		len(input.Attachments) + len(input.Entries) + len(input.Routes) + len(input.DNS) + len(input.Scripts) +
 		len(input.Components) + len(input.ReleaseGroups)
 	if input.Backup != nil {
 		resources++

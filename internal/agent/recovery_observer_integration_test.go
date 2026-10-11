@@ -40,7 +40,7 @@ func TestRecoveryObserverCandidateCreationSequence(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 			defer cancel()
-			result, err := runtime.ExecuteStep(ctx, assignment, probe)
+			result, err := runtime.ExecuteStep(ctx, assignment, probe, nil)
 			if stage == "candidate ownership changed" {
 				if err == nil || !result.ReconciliationRequired {
 					t.Fatal("foreign candidate closed recovery")

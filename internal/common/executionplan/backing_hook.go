@@ -164,5 +164,10 @@ func ValidateBackingHookCheckpointAck(
 		ack.GetState() != request.GetState() || !bytes.Equal(ack.GetResultSha256(), request.GetResultSha256()) {
 		return errs.New(errs.KindStateConflict, "backing hook checkpoint acknowledgement does not match")
 	}
+	if ack.GetResultAlreadyRecorded() && (!ack.GetExisting() ||
+		request.GetEvent() != agentpb.BackingHookEvent_BACKING_HOOK_EVENT_DETACH ||
+		request.GetState() != agentpb.BackingHookCheckpointState_BACKING_HOOK_CHECKPOINT_STATE_STARTED) {
+		return errs.New(errs.KindStateConflict, "backing hook completed-result acknowledgement is invalid")
+	}
 	return nil
 }

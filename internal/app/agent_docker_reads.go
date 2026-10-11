@@ -4,13 +4,20 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/agent"
+	"github.com/AlanD20/groundplane/internal/agent/componentaction"
+	"github.com/AlanD20/groundplane/internal/infra/docker/backingaccesscheck"
 	"github.com/AlanD20/groundplane/internal/infra/docker/serviceobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/workloadimages"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/moby/moby/client"
 )
 
-func configureAgentDockerReads(ctx context.Context, target *agent.Client, resources *agentRuntimeResources) error {
+func configureAgentDockerReads(
+	ctx context.Context,
+	target *agent.Client,
+	resources *agentRuntimeResources,
+	componentActions *componentaction.Runtime,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -30,5 +37,19 @@ func configureAgentDockerReads(ctx context.Context, target *agent.Client, resour
 	if err != nil {
 		return err
 	}
-	return target.SetServiceObserver(observer)
+	if err := target.SetServiceObserver(observer); err != nil {
+		return err
+	}
+	checks, err := backingaccesscheck.NewExchange(engine)
+	if err != nil {
+		return err
+	}
+	if err := target.SetBackingAccessChecker(checks); err != nil {
+		return err
+	}
+	edgeChecks, err := componentaction.NewEdgeConnectionChecker(componentActions, engine)
+	if err != nil {
+		return err
+	}
+	return target.SetEdgeConnectionChecker(edgeChecks)
 }

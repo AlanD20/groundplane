@@ -7,10 +7,13 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
+	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
+	zonednsruntime "github.com/AlanD20/groundplane/internal/infra/docker/zonedns"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
+	"github.com/AlanD20/groundplane/internal/infra/registryimages"
 )
 
 func newComponentReadService(
@@ -21,11 +24,16 @@ func newComponentReadService(
 	network *networketcd.Repository,
 	catalog []componentrender.EnvironmentComponentRegistration,
 ) (*componentcapability.ReadService, error) {
+	zoneListeners, err := controllerdns.NewZoneListenerSource(components, zonednsruntime.Inspector{})
+	if err != nil {
+		return nil, err
+	}
 	platform, err := componentregistration.NewDNSManagedConfigProjector(
 		projections,
 		components,
 		baselines,
 		imagefetch.RegistryAddress(cfg.Listen.HTTP),
+		zoneListeners,
 	)
 	if err != nil {
 		return nil, err
@@ -42,5 +50,5 @@ func newComponentReadService(
 	if err != nil {
 		return nil, err
 	}
-	return componentcapability.NewReadService(components, projector)
+	return componentcapability.NewReadService(components, projector, registryimages.Local{})
 }

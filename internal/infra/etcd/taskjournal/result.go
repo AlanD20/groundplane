@@ -1,9 +1,11 @@
 package taskjournal
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 )
 
 type TaskObservedProjectSummary struct {
@@ -65,15 +67,18 @@ type TaskServiceAbsenceEvidence struct {
 }
 
 type TaskResultRecord struct {
+	Failure                         *taskprogress.Failure               `json:"failure,omitempty"`
 	Kind                            TaskResultKind                      `json:"kind"`
 	ExitCode                        int32                               `json:"exit_code"`
 	FailedStepID                    string                              `json:"failed_step_id,omitempty"`
 	Diagnostic                      TaskResultDiagnostic                `json:"diagnostic"`
+	DNSWithdrawalTaskID             string                              `json:"dns_withdrawal_task_id,omitempty"`
 	ReconciliationRequired          bool                                `json:"reconciliation_required"`
 	Projects                        []TaskObservedProjectSummary        `json:"projects,omitempty"`
 	BackingObservations             []backingruntimefact.Observation    `json:"backing_observations,omitempty"`
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
+	RollingEvidence                 []rollingrelease.Completion         `json:"rolling_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
 	ComponentRestorationEvidence    *TaskComponentRestorationEvidence   `json:"component_restoration_evidence,omitempty"`
 	ServiceAbsenceEvidence          *TaskServiceAbsenceEvidence         `json:"service_absence_evidence,omitempty"`

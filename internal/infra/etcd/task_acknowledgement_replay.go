@@ -54,7 +54,7 @@ func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	); err != nil {
 		return err
 	}
-	if err := repository.validateConnectorTaskAcknowledgementReplay(
+	if err := repository.validateResourceTaskAcknowledgementReplay(
 		ctx, task, terminalStatus, readRevision,
 	); err != nil {
 		return err

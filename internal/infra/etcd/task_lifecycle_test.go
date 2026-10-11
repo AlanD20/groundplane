@@ -39,11 +39,11 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 	if err != nil || decoded != record {
 		t.Fatalf("decodeTaskAssignment() = %#v, %v", decoded, err)
 	}
-	duplicate := bytes.Replace(value, []byte(`"schema":3`), []byte(`"schema":3,"schema":3`), 1)
+	duplicate := append([]byte(`{"schema":0,`), value[1:]...)
 	if _, err := testtaskassignments.DecodeTaskAssignment(duplicate); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskAssignment(duplicate) error = %v, want internal", err)
 	}
-	unknown := bytes.Replace(value, []byte(`"schema":3`), []byte(`"schema":3,"extra":true`), 1)
+	unknown := append([]byte(`{"extra":true,`), value[1:]...)
 	if _, err := testtaskassignments.DecodeTaskAssignment(unknown); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskAssignment(unknown) error = %v, want internal", err)
 	}
@@ -268,8 +268,10 @@ func TestTaskRepositoryNormalizesEqualAndRegressedLifecycleTimestamps(t *testing
 
 	terminal, err := repository.AcknowledgeControllerTask(
 		ctx,
-		task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt,
-	)
+		task.ID, testtaskjournal.TaskStatusCompleted, nil,
+
+		task.CreatedAt)
+
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask(regressed timestamp) error = %v", err)
 	}
@@ -690,9 +692,12 @@ func TestTaskRepositoryIsolatesControllerAndAgentExecutionClaims(t *testing.T) {
 	terminalAt := now.Add(3 * time.Second)
 	terminal, err := repository.AcknowledgeControllerTask(
 		ctx,
-		controllerTask.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
-	)
-	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted || terminal.Record.Result != nil {
+		controllerTask.ID, testtaskjournal.TaskStatusCompleted, nil,
+
+		terminalAt)
+
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted || terminal.Record.Result == nil ||
+		terminal.Record.Result.Kind != testtaskjournal.TaskResultController || terminal.Record.Result.Failure != nil {
 		t.Fatalf("AcknowledgeControllerTask() = %#v, %v", terminal, err)
 	}
 	assertTaskLifecycleValue(t, store, testtaskjournal.ControllerTaskClaimKey(controllerTask.ID), false)
@@ -705,9 +710,12 @@ func TestTaskRepositoryIsolatesControllerAndAgentExecutionClaims(t *testing.T) {
 	)
 	replayed, err := repository.AcknowledgeControllerTask(
 		ctx,
-		controllerTask.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
-	)
-	if err != nil || replayed.Record.Status != testtaskjournal.TaskStatusCompleted || replayed.Record.Result != nil {
+		controllerTask.ID, testtaskjournal.TaskStatusCompleted, nil,
+
+		terminalAt)
+
+	if err != nil || replayed.Record.Status != testtaskjournal.TaskStatusCompleted || replayed.Record.Result == nil ||
+		replayed.Record.Result.Kind != testtaskjournal.TaskResultController || replayed.Record.Result.Failure != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) = %#v, %v", replayed, err)
 	}
 	recovered, err = repository.ListControllerTaskClaims(ctx)

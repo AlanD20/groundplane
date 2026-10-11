@@ -14,6 +14,12 @@ import type { BackingHooks } from "@/features/backing-service/api";
 import { BackingHookFields } from "@/features/backing-service/hook-fields";
 import { ImagePicker } from "@/features/image-delivery/image-picker";
 import { HealthcheckFields } from "@/features/service/healthcheck-fields";
+import { replicaCountError } from "@/features/service/deployment-readiness";
+import { ReplicaCountField } from "@/features/service/replica-count-field";
+import {
+  RollingTimeoutField,
+  rollingTimeoutError,
+} from "@/features/service/rolling-timeout-field";
 import { portInputError } from "@/features/service/port-input";
 import { useStore } from "@/lib/store";
 import type { Service } from "@/lib/types";
@@ -82,6 +88,10 @@ export function ServiceFormBody({
     initial?.restart ?? "unless-stopped",
   );
   const [replicas, setReplicas] = useState(String(initial?.replicas ?? 1));
+  const replicaError = replicaCountError(strategy, Number(replicas));
+  const [rollingReplicaTimeout, setRollingReplicaTimeout] = useState(
+    String(initial?.rollingReplicaTimeoutSeconds || ""),
+  );
   const [hooks, setHooks] = useState<BackingHooks>(initial?.hooks ?? {});
   useDraftDirty(
     [
@@ -98,6 +108,7 @@ export function ServiceFormBody({
       expose,
       restart,
       replicas,
+      rollingReplicaTimeout,
       hooks,
     ],
     onDirtyChange,
@@ -144,7 +155,10 @@ export function ServiceFormBody({
         .map((s) => s.trim())
         .filter(Boolean),
       restart,
-      replicas: Math.max(1, parseInt(replicas, 10) || 1),
+      replicas: Number(replicas),
+      rollingReplicaTimeoutSeconds: isBacking
+        ? undefined
+        : Number(rollingReplicaTimeout),
       hooks: initial?.adapter === "custom" ? hooks : undefined,
     };
   }
@@ -157,10 +171,12 @@ export function ServiceFormBody({
     !submitting &&
     !exposeError &&
     !hookError &&
-    !healthcheckError;
+    !healthcheckError &&
+    !replicaError &&
+    (isBacking || !rollingTimeoutError(rollingReplicaTimeout));
 
   async function save() {
-    if (hookError || healthcheckError || exposeError) return;
+    if (!canSubmit) return;
     if (isBacking && onCreateBacking) {
       onCreateBacking(buildPatch(), backing.adapterKey, backing.prefix);
       return;
@@ -184,6 +200,8 @@ export function ServiceFormBody({
                 ? {
                     strategy: values.strategy,
                     onFailure: values.onFailure,
+                    rollingReplicaTimeoutSeconds:
+                      values.rollingReplicaTimeoutSeconds,
                     resources: values.resources,
                     restart: values.restart,
                     replicas: values.replicas,
@@ -375,7 +393,7 @@ export function ServiceFormBody({
                       }
                     >
                       {exposeError ??
-                        "Comma-separated ports; TCP is the default. No host ports. UDP proxy deployment is not available yet."}
+                        "Comma-separated ports, at most 32 port/protocol pairs. TCP is the default; no host ports. UDP forwarding requires Envoy and recreate."}
                     </p>
                   </div>
                 </div>
@@ -402,8 +420,10 @@ export function ServiceFormBody({
                       options={[
                         { value: "blue-green", label: "blue-green" },
                         { value: "recreate", label: "recreate" },
-                        { value: "rolling", label: "rolling (deferred)" },
-                      ]}
+                        { value: "rolling", label: "rolling" },
+                      ].filter(
+                        (option) => !isBacking || option.value === "recreate",
+                      )}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -423,6 +443,12 @@ export function ServiceFormBody({
                     />
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {!isBacking && strategy === "rolling" && (
+                      <RollingTimeoutField
+                        value={rollingReplicaTimeout}
+                        onChange={setRollingReplicaTimeout}
+                      />
+                    )}
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor="sv-restart">Restart</Label>
                       <Select
@@ -438,15 +464,11 @@ export function ServiceFormBody({
                         ]}
                       />
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="sv-replicas">Replicas</Label>
-                      <Input
-                        id="sv-replicas"
-                        value={replicas}
-                        onChange={(e) => setReplicas(e.target.value)}
-                        placeholder="1"
-                      />
-                    </div>
+                    <ReplicaCountField
+                      strategy={strategy}
+                      value={replicas}
+                      onChange={setReplicas}
+                    />
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">

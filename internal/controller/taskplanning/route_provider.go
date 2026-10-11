@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -22,6 +23,11 @@ import (
 
 type routeProviderStateReader interface {
 	SnapshotRevision(context.Context) (int64, error)
+	GetRouteProviderRuntimeAtRevision(
+		context.Context,
+		string,
+		int64,
+	) (etcdstore.Versioned[componentplanning.Runtime], bool, error)
 	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
 	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
@@ -130,15 +136,42 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	if projectionRevision <= 0 || projectionRevision > inputRevision {
 		return nil, errs.New(errs.KindStateConflict, "Route provider projection is newer than its fixed snapshot")
 	}
+	if resolver.routeState == nil {
+		return nil, errs.New(errs.KindInternal, "Route runtime snapshot reader is unavailable")
+	}
+	readRevision, err := resolver.routeState.SnapshotRevision(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if readRevision < inputRevision {
+		return nil, errs.New(errs.KindStateConflict, "Route runtime snapshot precedes its selected desired input")
+	}
+	runtime, present, err := resolver.routeState.GetRouteProviderRuntimeAtRevision(ctx, component.ID, readRevision)
+	if err != nil {
+		return nil, err
+	}
+	if runtime.ReadRevision != readRevision {
+		return nil, errs.New(errs.KindStateConflict, "Route router runtime was read at a different snapshot")
+	}
+	retained := &environmentchanges.RouteProviderRuntime{EnvironmentID: environmentID}
+	if present {
+		if runtime.Revision <= 0 || runtime.Record.EnvironmentID != environmentID ||
+			runtime.Record.Component.Desired.ID != component.ID || runtime.Record.Component.Desired.Kind != component.Kind ||
+			componentplanning.ValidateRuntime(runtime.Record) != nil {
+			return nil, errs.New(errs.KindStateConflict, "Route router runtime belongs to a different provider")
+		}
+		retained.Revision = runtime.Revision
+		retained.Artifact = append([]byte(nil), runtime.Record.Artifact...)
+	}
 	definitionDigest := registration.Definition.Digest()
 	return &environmentchanges.RouteProviderPin{
 		ComponentID:      component.ID,
 		DefinitionDigest: hex.EncodeToString(definitionDigest[:]),
 		CatalogDigest:    hex.EncodeToString(registration.CatalogDigest[:]),
-		InputRevision:    inputRevision, InputGeneration: inputGeneration,
+		InputRevision:    readRevision, InputGeneration: inputGeneration,
 		Destination: destination,
 		ActionID:    string(actionID),
-		ServiceID:   component.GeneratedServices[0], Input: input,
+		ServiceID:   component.GeneratedServices[0], Input: input, Runtime: retained,
 	}, nil
 }
 

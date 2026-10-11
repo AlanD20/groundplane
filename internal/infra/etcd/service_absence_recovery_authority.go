@@ -25,9 +25,28 @@ func (repository *TaskRepository) serviceAbsenceProcedureAtRevision(
 	if !authoredBlueprintServiceRemovalTask(task) || len(task.Steps) != 3 {
 		return nil, environmentchanges.ServiceRemovalIntent{}, nil, false, nil
 	}
+	intentRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+		Keys: []string{environmentchanges.ServiceRemovalIntentKey(task.ID)}, Revision: revision,
+	})
+	if err != nil {
+		return nil, environmentchanges.ServiceRemovalIntent{}, nil, false, err
+	}
+	if intentRead == nil || intentRead.ReadRevision != revision || len(intentRead.Values) != 1 ||
+		intentRead.Values[0] == nil {
+		return nil, environmentchanges.ServiceRemovalIntent{}, nil, false, taskassignments.CorruptTaskAssignment()
+	}
+	stored, decodeErr := environmentchanges.DecodeServiceRemovalIntent(intentRead.Values[0].Value)
+	keyvalue.ClearValues(intentRead.Values)
+	if decodeErr != nil || stored.Authored == nil || stored.Status != taskjournal.TaskStatusPending ||
+		validateServiceRemovalTaskOwner(task, stored) != nil {
+		return nil, environmentchanges.ServiceRemovalIntent{}, nil, false, taskassignments.CorruptTaskAssignment()
+	}
+	if stored.AcknowledgedRuntime != nil {
+		return nil, environmentchanges.ServiceRemovalIntent{}, nil, false, nil
+	}
 	keys := []string{
 		environmentchanges.ServiceRemovalIntentKey(task.ID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
+		environmentchanges.ServiceRemovalProjectionKey(stored),
 		servicerecord.ServiceRuntimeKey(task.Target),
 		serviceruntimerecord.Key(task.Target),
 	}
@@ -87,6 +106,11 @@ func (repository *TaskRepository) serviceAbsenceProcedureAtRevision(
 	for index, key := range keys {
 		conditions[index] = keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])}
 	}
+	definitionGuards, err := repository.declaredServiceRemovalAppliedAbsence(ctx, intent, revision)
+	if err != nil {
+		return nil, environmentchanges.ServiceRemovalIntent{}, nil, false, err
+	}
+	conditions = append(conditions, definitionGuards...)
 	return procedure, environmentchanges.CloneServiceRemovalIntent(intent), conditions, true, nil
 }
 

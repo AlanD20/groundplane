@@ -42,8 +42,29 @@ type ServiceRemovalIntent struct {
 // ServiceRemovalAuthoredRevision binds private host cleanup to the visible
 // Blueprint parent that omitted this Service.
 type ServiceRemovalAuthoredRevision struct {
-	ParentTaskID     string `json:"parent_task_id"`
-	RenderGeneration uint64 `json:"render_generation"`
+	ParentTaskID              string                         `json:"parent_task_id"`
+	RenderGeneration          uint64                         `json:"render_generation"`
+	ProjectionSource          ServiceRemovalProjectionSource `json:"projection_source"`
+	AppliedProjectionRevision int64                          `json:"applied_projection_revision"`
+}
+
+type ServiceRemovalProjectionSource string
+
+const (
+	ServiceRemovalAppliedProjection  ServiceRemovalProjectionSource = "applied"
+	ServiceRemovalDeclaredProjection ServiceRemovalProjectionSource = "declared"
+)
+
+// ServiceRemovalProjectionKey identifies the captured source without treating
+// a never-executed declaration as an acknowledged runtime projection.
+func ServiceRemovalProjectionKey(intent ServiceRemovalIntent) string {
+	if intent.Authored != nil && intent.Authored.ProjectionSource == ServiceRemovalDeclaredProjection {
+		return blueprints.EnvironmentBlueprintEffectiveProjectionKey(
+			intent.EnvironmentID,
+			intent.CurrentProjection.RevisionID,
+		)
+	}
+	return projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID)
 }
 
 func NewServiceRemovalIntent(
@@ -81,6 +102,8 @@ func NewAuthoredServiceRemovalIntent(
 	renderGeneration uint64,
 	candidate projectionrecord.EnvironmentComposeProjection,
 	createdAt time.Time,
+	projectionSource ServiceRemovalProjectionSource,
+	appliedProjectionRevision int64,
 ) (ServiceRemovalIntent, error) {
 	if service.ReadRevision != projection.ReadRevision || acknowledged.ReadRevision != projection.ReadRevision {
 		return ServiceRemovalIntent{}, errs.New(
@@ -96,6 +119,7 @@ func NewAuthoredServiceRemovalIntent(
 		ExpectedHeadRevision:        expectedHeadRevision,
 		Authored: &ServiceRemovalAuthoredRevision{
 			ParentTaskID: parentTaskID, RenderGeneration: renderGeneration,
+			ProjectionSource: projectionSource, AppliedProjectionRevision: appliedProjectionRevision,
 		},
 		CurrentProjection:   projectionrecord.CloneEnvironmentComposeProjection(projection.Record),
 		CandidateProjection: projectionrecord.CloneEnvironmentComposeProjection(candidate),
@@ -131,6 +155,20 @@ func TerminalServiceRemovalIntent(
 }
 
 func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
+	if intent.Authored != nil {
+		switch intent.Authored.ProjectionSource {
+		case ServiceRemovalAppliedProjection:
+			if intent.Authored.AppliedProjectionRevision != intent.CurrentProjectionRevision {
+				return errs.New(errs.KindValidationFailed, "Service removal applied source revision changed")
+			}
+		case ServiceRemovalDeclaredProjection:
+			if intent.AcknowledgedRuntime != nil || intent.Authored.AppliedProjectionRevision < 0 {
+				return errs.New(errs.KindValidationFailed, "Service definition removal cannot claim an applied runtime")
+			}
+		default:
+			return errs.New(errs.KindValidationFailed, "Service removal projection source is invalid")
+		}
+	}
 	if intent.AcknowledgedRuntimeRevision < 0 ||
 		(intent.AcknowledgedRuntime == nil) != (intent.AcknowledgedRuntimeRevision == 0) {
 		return errs.New(errs.KindValidationFailed, "Service removal runtime source is invalid")

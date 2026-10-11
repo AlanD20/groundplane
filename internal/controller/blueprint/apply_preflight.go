@@ -2,74 +2,28 @@ package blueprint
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
-	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
-	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
-	"github.com/AlanD20/groundplane/internal/core"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"sort"
 
+	"github.com/AlanD20/groundplane/internal/common/dnsrecords"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	"github.com/AlanD20/groundplane/internal/controller/composerender"
+	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
-	"sort"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
-// applyPreflight holds parsed inputs and workload seals before durable staging.
+// applyPreflight validates authored input before claiming its desired revision.
+// Effective files and workload execution are sealed later, after Attach facts.
 type applyPreflight struct {
 	bundle                core.BlueprintBundle
 	parsed                blueprintparser.Result
 	currentAttaches       []etcdstore.Versioned[attachrecord.Record]
-	attachReadRevision    int64
 	requirements          core.BlueprintRequirements
 	submittedServiceNames map[string]struct{}
-	priorProject          *composetypes.Project
-	desiredEnvironment    etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	workloads             blueprintrelease.WorkloadPreparation
-}
-
-type applyPreflightMode uint8
-
-const (
-	legacyTaskPreflight applyPreflightMode = iota + 1
-	deferredUnitPreflight
-)
-
-type applyPreflightSource struct {
-	mode               applyPreflightMode
-	environment        etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	project            etcdstore.Versioned[hierarchyrecord.ProjectRecord]
-	tenant             etcdstore.Versioned[hierarchyrecord.TenantRecord]
-	previousFiles      []core.BlueprintFile
-	previousVolumes    []projectionrecord.EnvironmentVolumeIdentity
-	previousExtensions map[string]core.ServiceExtensionSpec
-	previous           composeidentity.Snapshot
-	hasPrevious        bool
-	loadPrior          func(context.Context) (*composetypes.Project, error)
-}
-
-func (service *Service) prepareApplyPreflight(
-	ctx context.Context,
-	environmentID string,
-	bundle core.BlueprintBundle,
-	baseline applyBaseline,
-	preserveRoutes bool,
-) (applyPreflight, error) {
-	projection := baseline.previousProjection.Record
-	return service.prepareApplyPreflightFromSource(ctx, environmentID, bundle, applyPreflightSource{
-		mode:        legacyTaskPreflight,
-		environment: baseline.environment, project: baseline.project, tenant: baseline.tenant,
-		previousFiles: projection.RuntimeFiles, previousVolumes: projection.Volumes,
-		previousExtensions: projection.ServiceExtensions, previous: baseline.previous,
-		hasPrevious: baseline.hasProjection,
-		loadPrior: func(ctx context.Context) (*composetypes.Project, error) {
-			return composerender.LoadNormalizedEnvironmentProject(ctx, projection)
-		},
-	}, preserveRoutes)
 }
 
 func (service *Service) prepareAuthoredApplyPreflight(
@@ -87,36 +41,8 @@ func (service *Service) prepareAuthoredApplyPreflight(
 			ID: identity.ID, Slug: identity.Slug, Key: identity.Name,
 		}
 	}
-	return service.prepareApplyPreflightFromSource(ctx, environmentID, bundle, applyPreflightSource{
-		mode:        deferredUnitPreflight,
-		environment: baseline.environment, project: baseline.project, tenant: baseline.tenant,
-		previousFiles: previous.Input.RuntimeFiles, previousVolumes: volumes,
-		previousExtensions: previous.Input.ServiceExtensions, previous: baseline.previous,
-		hasPrevious: baseline.hasHead,
-		loadPrior: func(ctx context.Context) (*composetypes.Project, error) {
-			return composerender.LoadNormalizedEnvironmentDesiredProject(ctx, previous, identities)
-		},
-	}, preserveRoutes)
-}
-
-func (service *Service) prepareApplyPreflightFromSource(
-	ctx context.Context,
-	environmentID string,
-	bundle core.BlueprintBundle,
-	source applyPreflightSource,
-	preserveRoutes bool,
-) (applyPreflight, error) {
-	if source.mode != legacyTaskPreflight && source.mode != deferredUnitPreflight {
-		return applyPreflight{}, errs.New(errs.KindInternal, "Blueprint Apply preflight mode is invalid")
-	}
-	environment, project, tenant := source.environment, source.project, source.tenant
-	if preserveRoutes && source.hasPrevious {
-		// Component-only edits preserve the selected native workload, including
-		// its companion files. The revision guard above binds these bytes to
-		// the authoring document; external Blueprint inputs remain closed.
-		bundle.Files = append(
-			append([]core.BlueprintFile(nil), bundle.Files...),
-			source.previousFiles...)
+	if preserveRoutes && baseline.hasHead {
+		bundle.Files = append(append([]core.BlueprintFile(nil), bundle.Files...), previous.Input.RuntimeFiles...)
 		sort.Slice(
 			bundle.Files,
 			func(left, right int) bool { return bundle.Files[left].Path < bundle.Files[right].Path },
@@ -124,9 +50,16 @@ func (service *Service) prepareApplyPreflightFromSource(
 	}
 	parsed, err := blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
 		EnvironmentID: environmentID,
-		Tenant:        tenant.Record.Slug, Project: project.Record.Slug, Environment: environment.Record.Name,
+		Tenant:        baseline.tenant.Record.Slug, Project: baseline.project.Record.Slug,
+		Environment: baseline.environment.Record.Name,
 	}, bundle)
 	if err != nil {
+		return applyPreflight{}, err
+	}
+	if err := dnsrecords.ValidateNamespaceChanges(
+		previous.Input.DNS, parsed.Extensions.DNS,
+		baseline.tenant.Record.Slug, baseline.project.Record.Slug, baseline.environment.Record.Name,
+	); err != nil {
 		return applyPreflight{}, err
 	}
 	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
@@ -135,114 +68,54 @@ func (service *Service) prepareApplyPreflightFromSource(
 	if err := service.validateServiceSelection(ctx, environmentID, bundle, parsed); err != nil {
 		return applyPreflight{}, err
 	}
-	if source.hasPrevious && !preserveRoutes {
-		if err := requireExplicitBlueprintVolumes(parsed.Project, source.previousVolumes); err != nil {
+	if baseline.hasHead && !preserveRoutes {
+		if err := requireExplicitBlueprintVolumes(parsed.Project, volumes); err != nil {
 			return applyPreflight{}, err
 		}
 	}
-	if source.mode == deferredUnitPreflight && source.project.Record.Kind == hierarchyrecord.ProjectKindBacking {
-		checker, ok := service.repository.(interface {
-			BlueprintBackingZoneHasExternalAttaches(context.Context, string, string, string) (bool, error)
-		})
-		if !ok {
-			return applyPreflight{}, errs.New(errs.KindInternal, "Blueprint Backing Zone impact reader is unavailable")
-		}
-		for _, prior := range source.previous.Networks {
-			if _, present := parsed.Project.Networks[prior.Name]; present {
-				continue
-			}
-			external, err := checker.BlueprintBackingZoneHasExternalAttaches(
-				ctx, source.project.Record.ID, environmentID, prior.ID,
-			)
-			if err != nil {
-				return applyPreflight{}, err
-			}
-			if external {
-				return applyPreflight{}, errs.New(
-					errs.KindResourceInUse,
-					"Blueprint omits a Backing Zone with external Attaches; remove it with impact approval first",
-				)
-			}
-		}
+	if err := service.validateBlueprintZoneOmissions(
+		ctx, environmentID, baseline.project.Record, parsed, baseline.previous.Networks,
+	); err != nil {
+		return applyPreflight{}, err
 	}
 	currentAttaches, attachReadRevision, err := service.listBlueprintAttaches(ctx, environmentID)
 	if err != nil {
 		return applyPreflight{}, err
 	}
-	var preflightServices []etcdstore.Versioned[servicerecord.ServiceRecord]
-	if source.mode == legacyTaskPreflight {
-		preflightServices, err = service.listBlueprintServices(ctx, environmentID)
-		if err != nil {
-			return applyPreflight{}, err
-		}
-	}
-	if !preserveRoutes && source.mode == legacyTaskPreflight {
-		if err := service.rejectUnsupportedBlueprintOmissions(
-			ctx, environmentID, parsed, preflightServices, currentAttaches,
-		); err != nil {
-			return applyPreflight{}, err
-		}
-	}
 	requirements, err := environmentBlueprintRequirements(
-		parsed.Extensions.Requires,
-		parsed.Extensions.Attachments,
-		currentAttaches,
-		attachReadRevision,
+		parsed.Extensions.Requires, parsed.Extensions.Attachments, currentAttaches, attachReadRevision,
 	)
 	if err != nil {
 		return applyPreflight{}, err
 	}
 	submittedServiceNames := environmentBlueprintServiceNames(parsed.Project)
-	var priorProject *composetypes.Project
-	if source.hasPrevious {
-		priorProject, err = source.loadPrior(ctx)
-		if err != nil {
-			return applyPreflight{}, err
-		}
-	}
-	desiredEnvironment := environment
-	desiredEnvironment.Record.NetworkPool = parsed.Extensions.NetworkPool
 	if preserveRoutes {
+		var priorProject = parsed.Project
+		if baseline.hasHead {
+			priorProject, err = composerender.LoadNormalizedEnvironmentDesiredProject(ctx, previous, identities)
+			if err != nil {
+				return applyPreflight{}, err
+			}
+		}
 		if err := preserveEnvironmentBlueprintResources(
-			parsed.Project, priorProject, source.previous, source.previousVolumes, source.hasPrevious,
+			parsed.Project, priorProject, baseline.previous, volumes, baseline.hasHead,
 		); err != nil {
 			return applyPreflight{}, err
 		}
 	}
-	preflightExtensions := cloneEnvironmentBlueprintServiceExtensions(parsed.ServiceExtensions)
-	if preserveRoutes {
-		preflightExtensions, err = preserveEnvironmentBlueprintServiceExtensions(
-			parsed.ServiceExtensions,
-			submittedServiceNames,
-			source.previous.Services,
-			source.previousExtensions,
-		)
-		if err != nil {
-			return applyPreflight{}, err
-		}
-	}
-	var workloads blueprintrelease.WorkloadPreparation
-	if source.mode == legacyTaskPreflight {
-		workloads, err = service.blueprintReleases.PreflightBlueprint(ctx, blueprintrelease.BlueprintPreflightInput{
-			SelectedService: bundle.Service,
-			EnvironmentID:   environmentID, Project: parsed.Project, PriorProject: priorProject,
-			PreviousIdentities: source.previous, ServiceExtensions: preflightExtensions,
-			CurrentServices: preflightServices, AuthoredGroups: parsed.Extensions.ReleaseGroups,
-		})
-		if err != nil {
-			return applyPreflight{}, err
-		}
-	}
-
 	return applyPreflight{
-		bundle:                bundle,
-		parsed:                parsed,
-		currentAttaches:       currentAttaches,
-		attachReadRevision:    attachReadRevision,
-		requirements:          requirements,
-		submittedServiceNames: submittedServiceNames,
-		priorProject:          priorProject,
-		desiredEnvironment:    desiredEnvironment,
-		workloads:             workloads,
+		bundle: bundle, parsed: parsed, currentAttaches: currentAttaches,
+		requirements: requirements, submittedServiceNames: submittedServiceNames,
 	}, nil
+}
+
+// The Environment revision cannot approve removal effects on external consumers.
+func (service *Service) validateBlueprintZoneOmissions(
+	ctx context.Context, environmentID string, project hierarchyrecord.ProjectRecord,
+	parsed blueprintparser.Result, previous []composeidentity.Resource,
+) error {
+	if project.Kind != hierarchyrecord.ProjectKindBacking {
+		return nil
+	}
+	return service.requireBackingZoneOmissionApproval(ctx, project.ID, environmentID, parsed, previous)
 }

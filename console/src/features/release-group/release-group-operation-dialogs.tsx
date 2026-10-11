@@ -186,7 +186,7 @@ export function RollbackReleaseGroupDialog({
       }}
       variant="inline"
       title={`Roll back ${group.name} · ${env.name}`}
-      description="Roll back all members in order. Database migrations are not reversed."
+      description="Deploy each member’s previous image in order, keeping its current configuration, replicas and release strategy. Database migrations are not reversed."
       type="rollback"
       target={group.id}
       workspace={params.tenant}

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/moby/moby/api/types/container"
@@ -182,7 +182,12 @@ func (observer *Observer) observeProxy(
 	if inspected.Container.State.Status != container.StateRunning {
 		return agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_STOPPED, true
 	}
-	matching, valid := observer.proxyConfigMatches(ctx, containerID, target.ProxyConfigSha256)
+	matching, valid := observer.proxyConfigMatches(
+		ctx,
+		containerID,
+		target.ProxyImplementation,
+		target.ProxyConfigSha256,
+	)
 	if !valid {
 		return agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_UNSPECIFIED, false
 	}
@@ -192,15 +197,28 @@ func (observer *Observer) observeProxy(
 	return agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING, true
 }
 
-func (observer *Observer) proxyConfigMatches(ctx context.Context, containerID string, expected []byte) (bool, bool) {
+func (observer *Observer) proxyConfigMatches(ctx context.Context, containerID string,
+	implementation agentpb.ServiceProxyImplementation, expected []byte,
+) (bool, bool) {
+	selected, err := executionplan.OpenProxyImplementation(implementation)
+	if err != nil {
+		return false, false
+	}
+	command := []string{"wget", "-q", "-T", "4", "-t", "1", "-O", "-", "http://127.0.0.1:2019/config/"}
+	maximumBytes := executionplan.MaximumArtifactYAMLBytes
+	if selected == serviceproxy.Envoy {
+		command = []string{"sh", "-ec", serviceproxy.EnvoyObservation}
+		maximumBytes = serviceproxy.MaximumObservationBytes
+	}
+	tty := selected == serviceproxy.Caddy
 	created, err := observer.engine.ExecCreate(ctx, containerID, client.ExecCreateOptions{
-		TTY: true, AttachStdout: true,
-		Cmd: []string{"wget", "-q", "-T", "4", "-t", "1", "-O", "-", "http://127.0.0.1:2019/config/"},
+		TTY: tty, AttachStdout: true,
+		Cmd: command,
 	})
 	if err != nil || created.ID == "" {
 		return false, false
 	}
-	attached, err := observer.engine.ExecAttach(ctx, created.ID, client.ExecAttachOptions{TTY: true})
+	attached, err := observer.engine.ExecAttach(ctx, created.ID, client.ExecAttachOptions{TTY: tty})
 	if err != nil || attached.Conn == nil {
 		return false, false
 	}
@@ -214,14 +232,18 @@ func (observer *Observer) proxyConfigMatches(ctx context.Context, containerID st
 	if !ok || attached.Conn.SetReadDeadline(deadline) != nil {
 		return false, false
 	}
-	observed, err := io.ReadAll(io.LimitReader(attached.Reader, executionplan.MaximumArtifactYAMLBytes+1))
-	if err != nil || len(observed) == 0 || len(observed) > executionplan.MaximumArtifactYAMLBytes || ctx.Err() != nil {
+	observed, err := readProxyObservation(attached.Reader, tty, maximumBytes)
+	if err != nil || len(observed) == 0 || len(observed) > maximumBytes || ctx.Err() != nil {
 		return false, false
 	}
 	finished, err := observer.engine.ExecInspect(ctx, created.ID, client.ExecInspectOptions{})
 	if err != nil || finished.ID != created.ID || finished.ContainerID != containerID ||
 		finished.Running || finished.ExitCode != 0 {
 		return false, false
+	}
+	if selected == serviceproxy.Envoy {
+		matching, err := serviceproxy.VerifyEnvoyObservation(observed, expected)
+		return matching, err == nil
 	}
 	canonical, err := jcs.Canonicalize(observed)
 	if err != nil {

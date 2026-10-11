@@ -16,20 +16,6 @@ export type TaskPageItem = NonNullable<TaskPageResponse["items"]>[number];
 export type TaskEventResponse =
   operations["task.events"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 
-type TaskPresentationItem = TaskPageItem & {
-  failure_summary?: string;
-  resource_kind?: string;
-  result_summary?: string;
-  target_name?: string;
-  timeout_seconds?: number;
-  steps?:
-    | (NonNullable<TaskPageItem["steps"]>[number] & {
-        description?: string;
-        target?: string;
-      })[]
-    | null;
-};
-
 const taskStatuses = new Set<TaskStatus>([
   "pending",
   "running",
@@ -128,11 +114,12 @@ function taskTitle(
     fetch: "Fetch image",
     prepare: "Prepare software",
     apply: "Apply software",
+    check: "Test connection",
   };
   return `${labels[type]} · ${target}`;
 }
 export function taskFromAPI(value: TaskPageItem): ActivityEntry {
-  const task = value as TaskPresentationItem;
+  const task = value;
   if (!taskStatuses.has(task.status as TaskStatus))
     throw new Error(`Controller returned unknown Task status ${task.status}`);
   if (task.workspace_type !== "platform" && task.workspace_type !== "tenant") {
@@ -197,7 +184,11 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     executor: task.executor,
     timeoutSeconds: task.timeout_seconds,
     resultSummary: task.result_summary,
-    failureSummary: task.failure_summary,
+    failure: task.failure,
+    recovery: task.recovery,
+    preparation: task.preparation,
+    attemptHistory: task.attempt_history,
+    interruptedDetachRetry: task.interrupted_detach_retry,
     workspace:
       task.workspace_type === "platform" ? "platform" : task.tenant_id!,
     workspaceType: task.workspace_type,
@@ -219,6 +210,10 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
       timeoutSeconds: step.timeout_seconds,
       detail: step.script_slug,
       state: taskStepState(step.status),
+      healthWait: step.health_wait ?? undefined,
+      healthWaitReceivedAt: step.health_wait_received_at ?? undefined,
+      healthchecks: step.healthchecks ?? undefined,
+      failure: step.failure ?? undefined,
     })),
   };
 }
@@ -252,8 +247,14 @@ export function parseTaskEvent(data: string): TaskEventResponse {
   const event = value as Record<string, unknown>;
   const keys = Object.keys(event).sort();
   if (
-    keys.length !== taskEventKeys.length ||
-    keys.some((key, index) => key !== taskEventKeys[index])
+    taskEventKeys.some((key) => !keys.includes(key)) ||
+    keys.some(
+      (key) =>
+        !taskEventKeys.includes(key) &&
+        key !== "health_wait" &&
+        key !== "controller_operation" &&
+        key !== "failure",
+    )
   ) {
     throw new Error("task event has unexpected fields");
   }
@@ -264,7 +265,14 @@ export function parseTaskEvent(data: string): TaskEventResponse {
   ) {
     throw new Error("task event sequence is invalid");
   }
-  if (typeof event.step_id !== "string" || event.step_id.length === 0) {
+  const operation =
+    event.controller_operation === undefined
+      ? undefined
+      : parseControllerOperation(event.controller_operation);
+  if (
+    typeof event.step_id !== "string" ||
+    (event.step_id.length === 0) !== Boolean(operation)
+  ) {
     throw new Error("task event step id is invalid");
   }
   if (!isTaskEventState(event.state)) {
@@ -291,6 +299,21 @@ export function parseTaskEvent(data: string): TaskEventResponse {
     throw new Error("task event received_at is invalid");
   }
 
+  const health =
+    event.health_wait === undefined
+      ? undefined
+      : parseHealthWait(event.health_wait);
+  if (health && (event.state !== "running" || operation))
+    throw new Error("health observation requires a running step");
+  const failure =
+    event.failure === undefined ? undefined : parseFailure(event.failure);
+  if (
+    failure &&
+    (failure.status !== event.state ||
+      (failure.step_id ?? "") !== event.step_id ||
+      health)
+  )
+    throw new Error("Task failure does not match its event");
   return {
     attempt: event.attempt,
     ordinal: event.ordinal,
@@ -298,7 +321,129 @@ export function parseTaskEvent(data: string): TaskEventResponse {
     sequence: event.sequence,
     state: event.state,
     step_id: event.step_id,
+    health_wait: health,
+    failure,
+    controller_operation: operation,
   };
+}
+
+function parseControllerOperation(
+  value: unknown,
+): NonNullable<TaskEventResponse["controller_operation"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Controller operation must be an object");
+  const operation = value as Record<string, unknown>;
+  if (
+    Object.keys(operation).some((key) => key !== "stage" && key !== "name") ||
+    typeof operation.stage !== "string" ||
+    !operation.stage ||
+    operation.stage.length > 128 ||
+    typeof operation.name !== "string" ||
+    !operation.name ||
+    operation.name.length > 256
+  )
+    throw new Error("Controller operation is invalid");
+  return { stage: operation.stage, name: operation.name };
+}
+
+function parseFailure(
+  value: unknown,
+): NonNullable<TaskEventResponse["failure"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Task failure must be an object");
+  const failure = value as Record<string, unknown>;
+  if (
+    Object.keys(failure).some(
+      (key) =>
+        !["status", "step_id", "code", "summary", "exit_code"].includes(key),
+    ) ||
+    (failure.status !== "failed" &&
+      failure.status !== "timed_out" &&
+      failure.status !== "aborted") ||
+    typeof failure.summary !== "string" ||
+    failure.summary.length === 0 ||
+    failure.summary.length > 1024 ||
+    (failure.step_id !== undefined &&
+      (typeof failure.step_id !== "string" || failure.step_id.length > 128)) ||
+    (failure.code !== undefined &&
+      (typeof failure.code !== "string" || failure.code.length > 128)) ||
+    (failure.exit_code !== undefined &&
+      (typeof failure.exit_code !== "number" ||
+        !Number.isInteger(failure.exit_code) ||
+        failure.exit_code < -2147483648 ||
+        failure.exit_code > 2147483647))
+  )
+    throw new Error("Task failure is invalid");
+  return {
+    status: failure.status,
+    summary: failure.summary,
+    step_id: failure.step_id,
+    code: failure.code,
+    exit_code: failure.exit_code,
+  };
+}
+
+function parseHealthWait(
+  value: unknown,
+): NonNullable<TaskEventResponse["health_wait"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("health observation must be an object");
+  const observation = value as Record<string, unknown>;
+  const counts = [
+    "expected",
+    "observed",
+    "running",
+    "ready",
+    "starting",
+    "unhealthy",
+    "exited",
+  ];
+  const keys = [
+    ...counts,
+    "elapsed_milliseconds",
+    "timeout_milliseconds",
+    "diagnostic",
+  ];
+  if (
+    Object.keys(observation).length !== keys.length ||
+    Object.keys(observation).some((key) => !keys.includes(key))
+  ) {
+    throw new Error("health observation has unexpected fields");
+  }
+  for (const key of [
+    ...counts,
+    "elapsed_milliseconds",
+    "timeout_milliseconds",
+  ]) {
+    const number = observation[key];
+    if (
+      typeof number !== "number" ||
+      !Number.isSafeInteger(number) ||
+      number < 0 ||
+      number > (counts.includes(key) ? 65536 : 86400000)
+    ) {
+      throw new Error("health observation counts or timing are invalid");
+    }
+  }
+  const p = observation as NonNullable<TaskEventResponse["health_wait"]>;
+  if (
+    p.expected < 1 ||
+    p.timeout_milliseconds < 1 ||
+    p.ready > p.running ||
+    p.running + p.exited > p.observed ||
+    p.starting + p.unhealthy > p.observed ||
+    ![
+      "none",
+      "pgrep_missing",
+      "curl_missing",
+      "nc_missing",
+      "command_missing",
+      "command_not_executable",
+    ].includes(p.diagnostic)
+  ) {
+    throw new Error("health observation is inconsistent");
+  }
+  return p;
 }
 
 export function requireTaskId(

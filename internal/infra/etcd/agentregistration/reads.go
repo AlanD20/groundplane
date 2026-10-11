@@ -104,13 +104,13 @@ func (repository *Repository) readSingleton(ctx context.Context) (localAgentEvid
 	} else if digestValue == nil {
 		return localAgentEvidence{}, errs.New(errs.KindInternal, "active local Agent is missing credential authority")
 	}
-	record := localagentrecord.LocalAgentRecord{
-		ID: primary.ID, EnrollmentTaskID: primary.EnrollmentTaskID,
-		Image: primary.Image, Generation: primary.Generation, Phase: primary.Phase,
-		Config: config.Config, EncryptedToken: token.EncryptedToken,
-		TokenDigest: digestText, CreatedAt: primary.CreatedAt, ReadyAt: primary.ReadyAt,
-		TokenUpdatedAt: token.UpdatedAt,
-	}
+	// The primary owns lifecycle observations, including accepted build identity
+	// and replacement failure. Reassembling a field subset silently drops them.
+	record := primary
+	record.Config = config.Config
+	record.EncryptedToken = token.EncryptedToken
+	record.TokenDigest = digestText
+	record.TokenUpdatedAt = token.UpdatedAt
 	if err := localagentrecord.ValidateLocalAgentRecord(record); err != nil {
 		return localAgentEvidence{}, errs.New(errs.KindInternal, "local Agent aggregate is corrupt")
 	}

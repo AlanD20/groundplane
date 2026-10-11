@@ -24,7 +24,7 @@ service AgentChannel {
 message Authenticate {
   string agent_id = 1;
   bytes token = 2; // exactly 32 decoded bytes; never the base64url materialization
-  uint32 execution_plan_schema = 3; // exactly schema one
+  uint32 execution_plan_schema = 3; // must match the current compiled schema
   bytes process_generation = 4; // exactly 16 bytes, distinct from durable Agent generation
   bytes postgres16_managed_release_sha256 = 5; // exactly 32 bytes
 }
@@ -58,6 +58,9 @@ message AgentMessage {
     VolumeRemovalCheckpointRequest volume_removal_checkpoint_request = 12;
     ServiceObservationResult service_observation_result = 13;
     BackingHookCheckpointRequest backing_hook_checkpoint_request = 14;
+    BackingAccessResult backing_access_result = 15;
+    DNSConnectionResult dns_connection_result = 16;
+    EdgeConnectionResult edge_connection_result = 17;
     BackupConfigTransfer backup_config_transfer = 32;
     BackupConfigCredit backup_config_credit = 33;
     BackupStagingInventory backup_staging_inventory = 34;
@@ -76,6 +79,12 @@ message Ready {
   string architecture = 4;
   string architecture_variant = 5;
   optional bool terminal_delivery_clean = 6; // presence required, including false
+  BuildProvenance source = 7; // exact immutable binary build provenance, when recorded
+}
+
+message BuildProvenance {
+  string kind = 1; // source_ref or release; never inferred from a version/digest
+  string commit = 2; // exact resolved lowercase Git SHA-1
 }
 
 // Ephemeral read-only image lookup; never an execution Task or pull request.
@@ -126,16 +135,25 @@ message ServiceObservationTarget {
   string environment_id = 1;
   string service_id = 2;
   string release_id = 3;
-  string plan_id = 4;
-  uint64 render_generation = 5;
-  string compose_name = 6;
-  string runtime_role = 7; // exactly singleton, slot, or backing (no Release)
+  repeated ServiceWorkloadObservation workloads = 4;
+  reserved 5, 6;
+  string runtime_role = 7; // singleton, slot, replica, backing or component (last two have no Release)
   string slot = 8; // empty for singleton; blue or green for slot
   string proxy_compose_name = 9; // empty for a portless Service
   string proxy_plan_id = 10;
   uint64 proxy_render_generation = 11;
-  bytes proxy_config_sha256 = 12; // exact acknowledged active Caddy configuration
+  bytes proxy_config_sha256 = 12; // exact acknowledged active proxy configuration
   DatabaseVersionProbe database_probe = 13; // closed read-only Restore preflight
+  string component_id = 14; // required only for an acknowledged Component singleton
+  string compose_project = 15; // required only for a Component; exact captured Compose project
+  ServiceProxyImplementation proxy_implementation = 16;
+}
+
+message ServiceWorkloadObservation {
+  string plan_id = 1;
+  uint64 render_generation = 2;
+  string compose_name = 3;
+  uint32 replica_ordinal = 4; // 1..N for rolling singleton members; otherwise 0
 }
 
 message DatabaseVersionProbe {
@@ -216,6 +234,26 @@ message TaskEvent {
   TaskState state = 6;
   bytes chunk = 7; // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
   string assignment_id = 8;
+  HealthWaitProgress health_wait = 9; // bounded, output-free readiness observation
+  StepFailure failure = 10; // closed diagnostic code, never provider text
+}
+
+message StepFailure {
+  string code = 1; // validated by the shared Task diagnostic catalog
+  int32 exit_code = 2; // zero means no nonzero exit was reported
+}
+
+message HealthWaitProgress {
+  uint32 expected = 1;
+  uint32 observed = 2;
+  uint32 running = 3;
+  uint32 ready = 4;
+  uint32 starting = 5;
+  uint32 unhealthy = 6;
+  uint32 exited = 7;
+  uint64 elapsed_milliseconds = 8;
+  uint64 timeout_milliseconds = 9;
+  ComposeHelperDiagnostic diagnostic = 10;
 }
 
 message TaskEventAck {
@@ -226,6 +264,12 @@ message TaskEventAck {
   uint64 ordinal = 5;
   TaskState state = 6;
   string assignment_id = 7;
+  RollingStepBudget rolling_budget = 8; // first Running acknowledgement only; captured durable budget
+}
+
+message RollingStepBudget {
+  google.protobuf.Timestamp deadline = 1;
+  google.protobuf.Timestamp drain_until = 2;
 }
 
 enum TaskState {
@@ -331,6 +375,7 @@ message TaskAck {
 message BackupTaskResult {
   string failed_step_id = 1;
   optional bool recovery_required = 2; // presence required
+  StepFailure failure = 3;
 }
 
 message ComposeTaskResult {
@@ -345,6 +390,19 @@ message ComposeTaskResult {
   CandidateAbsenceEvidence candidate_absence_evidence = 9;
   ComponentRestorationEvidence component_restoration_evidence = 10;
   ServiceAbsenceEvidence service_absence_evidence = 11;
+  StepFailure failure = 12;
+  repeated RollingReleaseEvidence rolling_evidence = 13;
+}
+
+message RollingReleaseEvidence {
+  string service_id = 1;
+  string release_id = 2;
+  string artifact_id = 3;
+  bytes runtime_sha256 = 4;
+  uint32 replicas = 5;
+  uint64 proxy_generation = 6;
+  bytes proxy_config_sha256 = 7;
+  bool compensated = 8;
 }
 
 // ServiceAbsenceEvidence proves that every exact Compose identity captured by
@@ -449,6 +507,7 @@ message EnvironmentDirectoryTaskResult {
   uint32 mutation_count = 3;
   bool complete = 4;
   bytes response_sha256 = 5;
+  StepFailure failure = 6;
 }
 
 enum TaskTerminal {
@@ -480,7 +539,13 @@ message ControllerMessage {
     CancelServiceObservation cancel_service_observation = 15;
     BackingHookCheckpointAck backing_hook_checkpoint_ack = 16;
     LogCredit log_credit = 17;
+    CheckBackingAccess check_backing_access = 18;
+    CancelBackingAccess cancel_backing_access = 19;
+    CheckDNSConnections check_dns_connections = 20;
+    CancelDNSConnections cancel_dns_connections = 21;
     TaskEventAck task_event_ack = 22;
+    CheckEdgeConnections check_edge_connections = 23;
+    CancelEdgeConnections cancel_edge_connections = 24;
     BackupConfigTransfer backup_config_transfer = 32;
     BackupConfigCredit backup_config_credit = 33;
     BackupStagingRecoveryPlan backup_staging_recovery_plan = 34;
@@ -530,6 +595,7 @@ enum LogSlot {
   LOG_SLOT_BLUE = 1;
   LOG_SLOT_GREEN = 2;
   LOG_SLOT_SINGLETON = 3;
+  LOG_SLOT_ROLLING = 4;
 }
 
 enum LogEndReason {
@@ -897,10 +963,12 @@ message BackingHookCheckpointAck {
   BackingHookCheckpointState state = 8;
   bytes result_sha256 = 9;
   bool existing = 10;
+  // A captured Detach result survived interruption; do not run its hook again.
+  bool result_already_recorded = 11;
 }
 
 message ExecutionPlan {
-  uint32 schema = 1; // exactly 1
+  uint32 schema = 1; // exact compiled machine-contract version
   string plan_id = 2;
   bytes plan_hash = 3; // SHA-256 of deterministic serialization with this field cleared
   uint64 render_generation = 4;
@@ -920,6 +988,35 @@ message ExecutionPlan {
   BackupPlanScope backup_scope = 18;
   ComponentRecoveryProcedure component_recovery_procedure = 19;
   ServiceAbsenceRecoveryProcedure service_absence_recovery_procedure = 20;
+  ManagedNetworkRecoveryProcedure managed_network_recovery_procedure = 21;
+}
+
+// ManagedNetworkRecoveryProcedure captures one closed network operation.
+// Removal may repeat its idempotent removal. Preparation recovery only observes
+// its captured bridges; it never repeats Ensure or modifies a workload.
+message ManagedNetworkRecoveryProcedure {
+  string environment_id = 1;
+  oneof operation {
+    ManagedNetworkRemovalRecovery removal = 2;
+    ManagedNetworkPreparationRecovery preparation = 3;
+  }
+}
+
+message ManagedNetworkRemovalRecovery {
+  string step_id = 1;
+  string network_id = 2;
+  string docker_name = 3;
+}
+
+message ManagedNetworkPreparationRecovery {
+  string artifact_id = 1;
+  repeated ManagedNetworkPreparationMember members = 2;
+}
+
+message ManagedNetworkPreparationMember {
+  string network_id = 1;
+  string ensure_step_id = 2;
+  string probe_step_id = 3;
 }
 
 // ServiceAbsenceRecoveryProcedure is the immutable recovery-only authority for
@@ -945,6 +1042,37 @@ message ComponentRecoveryProcedure {
     ComponentPredecessorRestoration predecessor = 5;
     ComponentCandidateAbsenceRestoration candidate_absence = 6;
   }
+  oneof configuration_source {
+    // Update recovery reuses the forward action's captured source pair.
+    string configuration_action_step_id = 7;
+    // Disable/omission or an engine change has no predecessor activation action.
+    // The closed retained source owns read-only active/restart confirmation.
+    ComponentRetainedConfiguration retained_configuration = 8;
+  }
+}
+
+message ComponentRetainedConfiguration {
+  oneof file_source {
+    string materialize_step_id = 1;
+    // A predecessor file not written by this Task. This is observation evidence,
+    // never permission to materialize a file or execute a Component action.
+    ComponentUnchangedConfigurationFile unchanged_file = 7;
+  }
+  bytes definition_digest = 2;
+  bytes catalog_digest = 3;
+  string action_id = 4;
+  bytes source = 5;
+  uint64 generation = 6;
+}
+
+message ComponentUnchangedConfigurationFile {
+  string materialization_id = 1;
+  string environment_id = 2;
+  string destination = 3;
+  bytes sha256 = 4;
+  string prior_snapshot_id = 5;
+  bytes prior_snapshot_sha256 = 6;
+  uint64 prior_snapshot_generation = 7;
 }
 
 message ComponentPredecessorRestoration {
@@ -1031,6 +1159,37 @@ message CandidateReleaseMember {
   repeated string forward_step_ids = 4;
   ServingPredecessorRestoration serving_predecessor = 5;
   CandidateAbsenceRestoration candidate_absence = 6;
+  RollingReleaseProcedure rolling = 7;
+}
+
+// Exact per-replica forward authority; ordinary Deploy and Blueprint share it.
+message RollingReleaseProcedure {
+  uint32 replica_timeout_seconds = 1;
+  repeated RollingReplica prior = 2;
+  repeated RollingReplica candidate = 3;
+  repeated RollingReplicaChange changes = 4;
+  string acknowledge_step_id = 5;
+  bool has_proxy = 6;
+  repeated RollingReplica retained = 7; // inactive blue-green slot; remove after the final candidate serves
+  ServiceProxyImplementation proxy_implementation = 8; // required exactly when has_proxy is true
+}
+
+message RollingReplica {
+  string release_id = 1;
+  string artifact_id = 2;
+  string compose_name = 3;
+  uint32 ordinal = 4;
+  string container_id = 5; // scaled recreate predecessor only; observed full Docker id
+  string container_name = 6; // observed Docker DNS name, never synthesized
+  uint32 compose_replica = 7; // captured com.docker.compose.container-number
+}
+
+message RollingReplicaChange {
+  uint32 ordinal = 1;
+  repeated string step_ids = 2; // phase order derived from captured prior/candidate counts
+  uint64 proxy_generation = 3;
+  bytes proxy_config_json = 4;
+  bytes proxy_config_sha256 = 5;
 }
 
 message ServingPredecessorRestoration {
@@ -1142,6 +1301,15 @@ message ComposeService {
   string image_variant = 17;
   bytes image_config_digest = 18;
   string postgres_tools_image = 19;
+  string image_selected_tag = 20; // tag captured with the immutable image selection, not a current registry lookup
+  uint32 rolling_replica_ordinal = 21;
+  ServiceProxyImplementation proxy_implementation = 22; // required only for the stable proxy role
+}
+
+enum ServiceProxyImplementation {
+  SERVICE_PROXY_IMPLEMENTATION_UNSPECIFIED = 0;
+  SERVICE_PROXY_IMPLEMENTATION_CADDY = 1;
+  SERVICE_PROXY_IMPLEMENTATION_ENVOY = 2;
 }
 
 enum ComposeServiceRole {
@@ -1149,6 +1317,7 @@ enum ComposeServiceRole {
   COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT = 1;
   COMPOSE_SERVICE_ROLE_STABLE_PROXY = 2;
   COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON = 3;
+  COMPOSE_SERVICE_ROLE_ROLLING_REPLICA = 4;
 }
 
 message ComposeNetwork {
@@ -1211,6 +1380,11 @@ message ExecutionStep {
     ComponentRestorationProbe component_restoration_probe = 38;
     ComponentRestorationCompensate component_restoration_compensate = 39;
     ServiceAbsenceProbe service_absence_probe = 40;
+    ComposeWorkloadRemove compose_workload_remove = 41;
+    RollingTrafficSwitch rolling_traffic_switch = 42;
+    RollingReplicaDrain rolling_replica_drain = 43;
+    RollingReleaseAcknowledge rolling_release_acknowledge = 44;
+    ManagedNetworkPreparationProbe managed_network_preparation_probe = 45;
   }
   ExecutionStepPolicy policy = 30;
   string prerequisite_step_id = 31;
@@ -1223,6 +1397,13 @@ message ServiceAbsenceProbe {
 
 // Resource-only preparation of one owned network from an immutable artifact.
 message ManagedNetworkEnsure {
+  string artifact_id = 1;
+  string network_id = 2;
+}
+
+// Read-only reconciliation of an owned bridge: exact captured identity and
+// configuration if present, or definitive absence. No bridge/container mutation.
+message ManagedNetworkPreparationProbe {
   string artifact_id = 1;
   string network_id = 2;
 }
@@ -3055,12 +3236,37 @@ message ComposeWorkloadApply {
   string service_id = 2;
   string target = 3;
   bool ensure_proxy = 4;
+  uint32 rolling_replica_ordinal = 5; // mutually exclusive with target
 }
 
 message WaitWorkloadHealthy {
   string artifact_id = 1;
   string service_id = 2;
   string target = 3;
+  uint32 rolling_replica_ordinal = 4; // mutually exclusive with target
+}
+
+// Removes only one sealed physical workload, not its proxy, siblings or data.
+message ComposeWorkloadRemove {
+  string artifact_id = 1;
+  string service_id = 2;
+  string target = 3;
+  uint32 rolling_replica_ordinal = 4;
+}
+
+// Select a stage from the immutable member procedure, never a new routing set.
+message RollingTrafficSwitch {
+  string service_id = 1;
+  uint32 change_ordinal = 2;
+}
+
+message RollingReplicaDrain {
+  string service_id = 1;
+  uint32 change_ordinal = 2;
+}
+
+message RollingReleaseAcknowledge {
+  string service_id = 1;
 }
 
 message ServiceProxySwitch {
@@ -3217,6 +3423,81 @@ message ManagedNetworkRemove {
 
 // ComponentApply is the generic catalog action reference accepted by the Agent.
 // Artifact content travels through the separately validated execution bundle.
+// Read-only DNS diagnostics against the captured acknowledged resolver. The
+// compiled observation action supplies paths, image and listener configuration;
+// the caller cannot supply executable commands or arbitrary upstream endpoints.
+message CheckDNSConnections {
+  string request_id = 1;
+  ComponentApply action = 2;
+  ComposeArtifact runtime = 3;
+  DNSResolverObservationEvidence prior_observation = 4;
+  repeated DNSConnectionQuery queries = 5;
+}
+
+message DNSConnectionQuery {
+  string domain = 1;
+  string name = 2;
+  DNSQueryType type = 3;
+}
+
+message CancelDNSConnections {
+  string request_id = 1;
+}
+
+message DNSConnectionAnswer {
+  string domain = 1;
+  string name = 2;
+  string server = 3;
+  DNSQueryType type = 4;
+  bool through_resolver = 5;
+  string outcome = 6; // closed connection outcome; no provider text
+  optional uint32 rcode = 7;
+  bool used_tcp = 8;
+  repeated DNSAnswerRecord answers = 9; // bounded sample, not a packet dump
+  uint32 total_answers = 10;
+  uint32 elapsed_milliseconds = 11;
+}
+
+message DNSConnectionResult {
+  string request_id = 1;
+  string component_id = 2;
+  string artifact_id = 3;
+  uint64 render_generation = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  repeated DNSConnectionAnswer answers = 6;
+  string failure = 7; // empty, runtime_unavailable, configuration_changed,
+                     // query_selection_invalid, or execution_failed
+}
+
+// Closed read-only connector/Route check. Runtime and action are captured
+// acknowledged authority. Private JSON uses the bounded edge-check helper
+// contract, not arbitrary command input or a provider credential.
+message CheckEdgeConnections {
+  string request_id = 1;
+  string task_id = 2; // immutable original helper Task, also for cleanup Retry
+  string connector_container_id = 3;
+  string helper_image = 4;
+  bytes parameters_json = 5;
+  ComponentApply action = 6;
+  ComposeArtifact runtime = 7;
+  bool cleanup_only = 8;
+}
+
+message CancelEdgeConnections {
+  string request_id = 1;
+}
+
+message EdgeConnectionResult {
+  string request_id = 1;
+  string task_id = 2;
+  string connector_container_id = 3;
+  string helper_name = 4;
+  bool cleanup_required = 5;
+  bytes private_result_json = 6;
+  string failure = 7;
+  bool cleanup_only = 8;
+}
+
 message ComponentApply {
   string component_id = 1;
   bytes definition_digest = 2;
@@ -3229,6 +3510,16 @@ message ComponentApply {
   bytes expected_previous_artifact_digest = 9;
   string expected_previous_artifact_id = 10;
   uint64 expected_previous_generation = 11;
+  ContainerConfigTransition container_config_transition = 12;
+}
+
+// Non-secret immutable provider bytes captured before this Task's file change.
+// An explicitly empty source denotes a new router; a missing message does not.
+// Host managed-config lifecycle fields remain separate authority.
+message ContainerConfigTransition {
+  bytes previous_source = 1;
+  bytes previous_source_sha256 = 2;
+  bytes desired_source = 3;
 }
 
 // Host resolution mutations are closed Agent procedures. Paths and file
@@ -3366,6 +3657,16 @@ message ComposeHelperResponse {
   ServiceProxyEvidence proxy_evidence = 5;
   ServiceRecreateEvidence recreate_evidence = 6;
   CandidateAbsenceEvidence candidate_absence_evidence = 7;
+  RollingProxyEvidence rolling_proxy_evidence = 8;
+  RollingReleaseEvidence rolling_evidence = 9;
+  ComponentRestorationEvidence component_restoration_evidence = 10;
+}
+
+message RollingProxyEvidence {
+  string service_id = 1;
+  uint32 change_ordinal = 2;
+  uint64 proxy_generation = 3;
+  bytes config_sha256 = 4;
 }
 
 enum ComposeHelperOutcome {
@@ -3408,3 +3709,57 @@ message ConfigUpdate {
 }
 
 message Shutdown {}
+
+// A captured consumer access check owned by a native Controller Task. This is
+// not arbitrary network execution: only the fixed PostgreSQL/MySQL/Valkey
+// procedures are admitted. Password bytes are transient channel/private stdin.
+message CheckBackingAccess {
+  string request_id = 1;
+  string task_id = 2;
+  string helper_image = 3;
+  string consumer_container_id = 4;
+  ServiceObservationTarget consumer_runtime = 5;
+  BackingAccessParameters parameters = 6;
+  bool cleanup_only = 7;
+}
+
+message BackingAccessParameters {
+  string attach_id = 1;
+  string credential_attach_id = 2;
+  string environment_id = 3;
+  string service_id = 4;
+  string backing_service_id = 5;
+  string family = 6;
+  string authentication = 7;
+  string host = 8;
+  uint32 port = 9;
+  string database = 10;
+  string username = 11;
+  bytes password = 12;
+}
+
+message CancelBackingAccess {
+  string request_id = 1;
+}
+
+message BackingAccessResult {
+  string request_id = 1;
+  string task_id = 2;
+  string helper_name = 3;
+  bool cleanup_required = 4;
+  BackingAccessObservation observation = 5;
+  string failure = 6; // closed safe reason; never provider/credential text
+}
+
+message BackingAccessObservation {
+  google.protobuf.Timestamp started_at = 1;
+  google.protobuf.Timestamp finished_at = 2;
+  repeated BackingAccessStage stages = 3;
+}
+
+message BackingAccessStage {
+  string name = 1;
+  string outcome = 2;
+  string failure = 3;
+  int64 elapsed_nanoseconds = 4;
+}

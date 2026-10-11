@@ -29,6 +29,19 @@ type attachRuntimeCapture interface {
 	) (taskplanning.EntryMutationRuntime, error)
 }
 
+// AuthoredDetachRenderScope carries only the exact predecessor hierarchy and
+// applied projection. The new desired head is intentionally not a render
+// source for omission cleanup.
+type AuthoredDetachRenderScope struct {
+	Tenant             etcdstore.Versioned[hierarchyrecord.TenantRecord]
+	Project            etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	Environment        etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	AppliedProjection  etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
+	BackingProject     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	BackingEnvironment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	BackingService     etcdstore.Versioned[servicerecord.ServiceRecord]
+}
+
 func newAttachMutationTask(
 	project hierarchyrecord.ProjectRecord,
 	environment hierarchyrecord.EnvironmentRecord,
@@ -84,6 +97,17 @@ func attachTaskStepCount(
 	return grantCount + 2
 }
 
+// AuthoredDetachStepCount returns the ordinary native Detach step shape for a
+// captured source. The caller still seals the complete plan and hash.
+func AuthoredDetachStepCount(
+	adapter adapters.Adapter,
+	authentication core.BackingAuthentication,
+	record attachrecord.Record,
+	detachHook bool,
+) int {
+	return attachTaskStepCount(adapter, authentication, len(record.GrantAttachIDs), record.OwnsCredential(), detachHook)
+}
+
 func buildAttachTaskRenderInput(
 	scope etcd.AttachCreateScope,
 	runtime taskplanning.EntryMutationRuntime,
@@ -92,19 +116,64 @@ func buildAttachTaskRenderInput(
 	task etcd.TaskRecord,
 	artifactID string,
 ) (attachrender.AttachTaskRenderInput, error) {
-	if scope.Tenant.Revision <= 0 || scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 ||
-		scope.DesiredHead.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
-		scope.BackingProject.Revision <= 0 || scope.BackingEnvironment.Revision <= 0 ||
-		scope.BackingService.Revision <= 0 {
+	if scope.DesiredHead.Revision <= 0 || scope.DesiredHead.Record.EnvironmentID != record.EnvironmentID ||
+		scope.ComposeProjection.Record.RevisionID != scope.DesiredHead.Record.RevisionID {
+		return attachrender.AttachTaskRenderInput{}, errs.New(
+			errs.KindScopeUnauthorized,
+			"Attach render desired head is invalid",
+		)
+	}
+	return buildAttachTaskRenderInputAtRevision(
+		scope.Tenant, scope.Project, scope.Environment, scope.ComposeProjection,
+		scope.BackingProject, scope.BackingEnvironment, scope.BackingService,
+		runtime, record, attaches, task, artifactID, scope.DesiredHead.Record.RevisionID,
+	)
+}
+
+// BuildAuthoredDetachTaskRenderInput derives cleanup solely from the exact
+// applied predecessor. It cannot substitute the newer authored desired head.
+func BuildAuthoredDetachTaskRenderInput(
+	scope AuthoredDetachRenderScope,
+	runtime taskplanning.EntryMutationRuntime,
+	record attachrecord.Record,
+	attaches []etcdstore.Versioned[attachrecord.Record],
+	task etcd.TaskRecord,
+	artifactID string,
+) (attachrender.AttachTaskRenderInput, error) {
+	return buildAttachTaskRenderInputAtRevision(
+		scope.Tenant, scope.Project, scope.Environment, scope.AppliedProjection,
+		scope.BackingProject, scope.BackingEnvironment, scope.BackingService,
+		runtime, record, attaches, task, artifactID, scope.AppliedProjection.Record.RevisionID,
+	)
+}
+
+func buildAttachTaskRenderInputAtRevision(
+	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	backingProject etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	backingEnvironment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	backingService etcdstore.Versioned[servicerecord.ServiceRecord],
+	runtime taskplanning.EntryMutationRuntime,
+	record attachrecord.Record,
+	attaches []etcdstore.Versioned[attachrecord.Record],
+	task etcd.TaskRecord,
+	artifactID string,
+	desiredRevisionID string,
+) (attachrender.AttachTaskRenderInput, error) {
+	if tenant.Revision <= 0 || project.Revision <= 0 || environment.Revision <= 0 ||
+		projection.Revision <= 0 || backingProject.Revision <= 0 || backingEnvironment.Revision <= 0 ||
+		backingService.Revision <= 0 || desiredRevisionID != projection.Record.RevisionID {
 		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach render scope records must be versioned",
 		)
 	}
 	if runtime.EpochRevision <= 0 ||
-		runtime.Projection.EnvironmentID != scope.ComposeProjection.Record.EnvironmentID ||
-		runtime.Projection.RevisionID != scope.ComposeProjection.Record.RevisionID ||
-		runtime.Projection.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration {
+		runtime.Projection.EnvironmentID != projection.Record.EnvironmentID ||
+		runtime.Projection.RevisionID != projection.Record.RevisionID ||
+		runtime.Projection.RenderGeneration != projection.Record.RenderGeneration {
 		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindStateConflict,
 			"Attach captured runtime does not match the desired projection",
@@ -112,26 +181,22 @@ func buildAttachTaskRenderInput(
 	}
 	if ids.Validate(ids.KindPlan, task.PlanID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil ||
 		task.Target != record.ID || task.RenderGeneration <= 0 ||
-		uint64(task.RenderGeneration) != scope.ComposeProjection.Record.RenderGeneration {
+		uint64(task.RenderGeneration) != projection.Record.RenderGeneration {
 		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach render Task identity is invalid",
 		)
 	}
-	if scope.Tenant.Record.ID != scope.Project.Record.TenantID ||
-		scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
-		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
-		record.EnvironmentID != scope.Environment.Record.ID ||
-		scope.DesiredHead.Record.EnvironmentID != record.EnvironmentID ||
-		scope.ComposeProjection.Record.EnvironmentID != record.EnvironmentID ||
-		scope.ComposeProjection.Record.RevisionID != scope.DesiredHead.Record.RevisionID ||
-		scope.BackingProject.Record.Kind != hierarchyrecord.ProjectKindBacking ||
-		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
-		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
-		record.BackingProjectID != scope.BackingProject.Record.ID ||
-		record.BackingEnvironmentID != scope.BackingEnvironment.Record.ID ||
-		record.BackingServiceID != scope.BackingService.Record.Desired.ID ||
-		record.BackingNetworkID != scope.BackingService.Record.BackingNetworkID {
+	if tenant.Record.ID != project.Record.TenantID || project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		environment.Record.ProjectID != project.Record.ID || record.EnvironmentID != environment.Record.ID ||
+		projection.Record.EnvironmentID != record.EnvironmentID ||
+		backingProject.Record.Kind != hierarchyrecord.ProjectKindBacking ||
+		backingEnvironment.Record.ProjectID != backingProject.Record.ID ||
+		backingService.Record.EnvironmentID != backingEnvironment.Record.ID ||
+		record.BackingProjectID != backingProject.Record.ID ||
+		record.BackingEnvironmentID != backingEnvironment.Record.ID ||
+		record.BackingServiceID != backingService.Record.Desired.ID ||
+		record.BackingNetworkID != backingService.Record.BackingNetworkID {
 		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"Attach render hierarchy is invalid",
@@ -173,7 +238,7 @@ func buildAttachTaskRenderInput(
 
 	joins, err := taskplanning.ResolveAttachNetworkJoins(
 		record.EnvironmentID,
-		scope.ComposeProjection.Record,
+		projection.Record,
 		unionRecords,
 		excludedAttachID,
 	)
@@ -183,29 +248,29 @@ func buildAttachTaskRenderInput(
 	return attachrender.AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: record.ID,
 		AttachName: record.Name,
-		TenantID:   scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
-		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
-		EnvironmentID: record.EnvironmentID, EnvironmentName: scope.Environment.Record.Name,
-		AuthorizedVolumeDir:      scope.Environment.Record.VolumeDir,
+		TenantID:   tenant.Record.ID, TenantSlug: tenant.Record.Slug,
+		ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
+		EnvironmentID: record.EnvironmentID, EnvironmentName: environment.Record.Name,
+		AuthorizedVolumeDir:      environment.Record.VolumeDir,
 		BackingServiceID:         record.BackingServiceID,
 		BackingProjectID:         record.BackingProjectID,
-		AdapterKey:               scope.BackingService.Record.Desired.Adapter,
-		Authentication:           scope.BackingService.Record.Desired.Authentication,
-		HookConfiguration:        backinghook.CloneConfiguration(scope.BackingService.Record.Desired.Hooks),
-		DesiredRevisionID:        scope.DesiredHead.Record.RevisionID,
+		AdapterKey:               backingService.Record.Desired.Adapter,
+		Authentication:           backingService.Record.Desired.Authentication,
+		HookConfiguration:        backinghook.CloneConfiguration(backingService.Record.Desired.Hooks),
+		DesiredRevisionID:        desiredRevisionID,
 		ArtifactID:               artifactID,
-		RenderGeneration:         scope.ComposeProjection.Record.RenderGeneration,
+		RenderGeneration:         projection.Record.RenderGeneration,
 		EnvironmentEpochRevision: runtime.EpochRevision,
 		RuntimeProjection:        runtime.Projection,
 		RunningServiceIDs:        slices.Sorted(slices.Values(runtime.RunningServiceIDs)),
-		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
-		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
-		Volumes:                  slices.Clone(scope.ComposeProjection.Record.Volumes),
-		VolumeMounts:             slices.Clone(scope.ComposeProjection.Record.VolumeMounts),
+		Services:                 attachTaskServiceSnapshots(projection.Record.DesiredServices),
+		Networks:                 attachTaskOwnedNetworkSnapshots(projection.Record.DesiredZones),
+		Volumes:                  slices.Clone(projection.Record.Volumes),
+		VolumeMounts:             slices.Clone(projection.Record.VolumeMounts),
 		NetworkJoins:             joins,
 		ConsumerServiceIDs:       []string{record.ServiceID},
 		GrantAttachIDs:           append([]string(nil), record.GrantAttachIDs...),
-		ServiceDependencyPlans:   scope.ComposeProjection.Record.ServiceDependencyPlans.Clone(),
+		ServiceDependencyPlans:   projection.Record.ServiceDependencyPlans.Clone(),
 	}, nil
 }
 

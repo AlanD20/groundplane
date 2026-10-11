@@ -140,6 +140,9 @@ func (input ServiceLifecycleRenderInput) RenderGeneration() uint64 {
 
 func (input ServiceLifecycleRenderInput) RuntimeMemberCount() int {
 	count := 1
+	if input.Release != nil && input.Release.Current.Rolling != nil {
+		count = len(input.Release.Current.Rolling.Candidate)
+	}
 	if input.Release != nil && len(input.Release.Current.ProxyPorts) != 0 {
 		count++
 	}

@@ -65,6 +65,17 @@ func stage(ctx context.Context, store Store, publication Publication) (Publicati
 	}
 	head := publication.Mutations[len(publication.Mutations)-1]
 	head.Value = append([]byte(nil), head.Value...)
-	final.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: descriptorMutation.Key}, head}
+	// The staging owner becomes the published revision's retention owner in the
+	// same transaction as its head. It does not invent a Task for a metadata edit.
+	descriptor.State = blueprints.EnvironmentBlueprintStagePublishedMetadata
+	published, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)
+	if err != nil {
+		clear(head.Value)
+		return Publication{}, err
+	}
+	final.Mutations = []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: descriptorMutation.Key, Value: published},
+		head,
+	}
 	return final, nil
 }

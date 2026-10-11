@@ -74,7 +74,7 @@ func (s *Server) registerTasks() {
 	}, s.showTask)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "task.retry", Method: http.MethodPost, Path: "/tasks/{id}/retry",
-		Summary: "Retry a failed task", Tags: []string{"Task"}, DefaultStatus: http.StatusAccepted,
+		Summary: "Retry a failed Task or authorize a captured Blueprint Detach hook", Tags: []string{"Task"}, DefaultStatus: http.StatusAccepted,
 		Middlewares: huma.Middlewares{s.rejectTaskMutationBody, s.rejectTaskMutationQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.retryTask)
@@ -203,7 +203,7 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
-	if taskjournal.IsBlueprintChild(task.Record.Params) {
+	if taskjournal.IsInternalChild(task.Record.Params) {
 		return nil, errs.Newf(errs.KindTaskNotFound, "task not found: %s", request.ID)
 	}
 	events, err := s.tasks.ListTaskEvents(ctx, task.Record.ID, task.ReadRevision)
@@ -213,6 +213,36 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 	response, err := taskResponse(task.Record, events)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
+	}
+	recovery, err := s.tasks.GetTaskRecovery(ctx, task.Record, task.ReadRevision)
+	if err != nil {
+		return nil, normalizeTaskRouteError(err)
+	}
+	if err := applyTaskRecovery(&response, task.Record, events, recovery); err != nil {
+		return nil, normalizeTaskRouteError(err)
+	}
+	preparation, err := s.tasks.GetReleasePreparation(ctx, task.Record, task.ReadRevision)
+	if err != nil {
+		return nil, normalizeTaskRouteError(err)
+	}
+	response.Preparation = taskPreparationResponse(preparation)
+	history, err := s.tasks.GetTaskAttemptHistory(ctx, task.Record, events)
+	if err != nil {
+		return nil, normalizeTaskRouteError(err)
+	}
+	response.AttemptHistory, err = taskAttemptHistoryResponse(task.Record, history)
+	if err != nil {
+		return nil, normalizeTaskRouteError(err)
+	}
+	if task.Record.Executor == taskjournal.TaskExecutorBlueprint &&
+		task.Record.Status == taskjournal.TaskStatusRunning {
+		retry, err := s.tasks.GetInterruptedDetachRetry(ctx, task.Record.ID)
+		if err != nil {
+			return nil, normalizeTaskRouteError(err)
+		}
+		if retry != nil {
+			response.InterruptedDetachRetry = &apiTypes.TaskDetachRetry{AttachID: retry.AttachID, StepID: retry.StepID}
+		}
 	}
 	return &taskOutput{Body: response}, nil
 }
@@ -255,9 +285,9 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 		ID:                     record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
 		PlanHash: record.PlanHash, Type: taskType, Target: record.Target, Status: status,
 		Executor: string(record.Executor), TimeoutSeconds: record.TimeoutSeconds,
-		TargetName:     record.TargetName,
-		ResourceKind:   taskResourceKind(record),
-		FailureSummary: taskFailureSummary(record), ResultSummary: taskResultSummary(record),
+		TargetName:   record.TargetName,
+		ResourceKind: taskResourceKind(record),
+		Failure:      taskFailure(record), ResultSummary: taskResultSummary(record),
 		WorkspaceType: workspace, TenantID: record.Owner.TenantID, ProjectID: record.Owner.ProjectID,
 		EnvironmentID: record.Owner.EnvironmentID, Actor: actor,
 		CreatedAt: record.CreatedAt.UTC(), UpdatedAt: record.UpdatedAt.UTC(),

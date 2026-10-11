@@ -89,6 +89,7 @@ export function softwareIdentityPresentation({
   artifactReference,
   artifactLabel = "Registry output",
   digest,
+  selectedTag,
   sourceBuild = false,
   sourceCommit,
   unavailable = "Identity not reported by the Controller",
@@ -97,22 +98,31 @@ export function softwareIdentityPresentation({
   artifactReference?: string | null;
   artifactLabel?: string;
   digest?: string | null;
+  selectedTag?: string | null;
   sourceBuild?: boolean;
   sourceCommit?: string | null;
   unavailable?: string;
   version?: string | null;
 }): SoftwareIdentityPresentation {
   const recordedVersion = version?.trim() ?? "";
-  // A commit is presentation authority only when the API explicitly records
-  // both source-build provenance and the resolved commit.
-  const recordedCommit = sourceBuild ? (sourceCommit?.trim() ?? "") : "";
+  // Only an explicitly recorded commit is presentation authority. Release
+  // builds keep it in details; source builds lead with it rather than a digest.
+  const recordedCommit = sourceCommit?.trim() ?? "";
   const recordedDigest = digest?.trim() ?? "";
   const recordedArtifact = artifactReference?.trim() ?? "";
+  const recordedTag = selectedTag?.trim() ?? "";
   const immutableArtifact = isDigestReference(recordedArtifact)
     ? recordedArtifact
     : "";
   const fallbackDigest = recordedDigest || immutableArtifact;
   const references: SoftwareIdentityReference[] = [];
+
+  if (recordedTag && immutableArtifact) {
+    references.push({
+      label: "Installed from tag",
+      value: `${immutableArtifact.slice(0, immutableArtifact.lastIndexOf("@"))}:${recordedTag}`,
+    });
+  }
 
   if (recordedCommit) {
     references.push({
@@ -141,11 +151,19 @@ export function softwareIdentityPresentation({
     });
   }
 
-  if (recordedVersion) {
+  if (sourceBuild && recordedCommit) {
+    return {
+      available: true,
+      qualifier: "Source build",
+      references,
+      title: recordedCommit.slice(0, 12),
+    };
+  }
+  if (recordedTag || recordedVersion) {
     return {
       available: true,
       references,
-      title: recordedVersion,
+      title: recordedTag || recordedVersion,
     };
   }
   if (recordedCommit) {

@@ -87,7 +87,8 @@ func ProjectEnvironmentComponents(
 			)
 		}
 		image := composeidentity.ComponentImage{Repository: generated.Definition.Image.Repository,
-			IndexDigest: generated.Definition.Image.IndexDigest, Reference: reference, Platform: platform}
+			IndexDigest: generated.Definition.Image.IndexDigest, Reference: reference, Platform: platform,
+			SelectedTag: generated.Definition.Image.Tag}
 		service, environmentFile, err := projectEnvironmentComponentService(environment, generated, image)
 		if err != nil {
 			return EnvironmentComponentComposeProjection{}, err
@@ -295,6 +296,7 @@ func bindEnvironmentComponentImage(
 			return errs.New(errs.KindInternal, "Component Service image differs from compiled authority")
 		}
 		service.ImageReference, service.ImageRepository = reference, image.Repository
+		service.ImageSelectedTag = image.SelectedTag
 		service.ImageIndexDigest = mustDecodePlatformDigest(image.IndexDigest)
 		service.ImageChildDigest = mustDecodePlatformDigest(platform.ChildDigest)
 		service.ImageConfigDigest = mustDecodePlatformDigest(platform.ConfigDigest)
@@ -318,7 +320,8 @@ func bindEnvironmentComponentImage(
 
 func validateSelectedComponentImage(image composeidentity.ComponentImage) error {
 	p := image.Platform
-	if !validPlatformSHA256(image.IndexDigest) || !validPlatformSHA256(p.ChildDigest) ||
+	if !componentsdk.ValidOCIImageTag(image.SelectedTag) || !validPlatformSHA256(image.IndexDigest) ||
+		!validPlatformSHA256(p.ChildDigest) ||
 		!validPlatformSHA256(p.ConfigDigest) ||
 		!imageref.IsDigestPinned(image.Reference) ||
 		image.Reference != image.Repository+"@sha256:"+p.ChildDigest ||
@@ -339,6 +342,7 @@ func PinnedComponentServiceIdentity(
 		Repository:  service.GetImageRepository(),
 		Reference:   service.GetImageReference(),
 		IndexDigest: hex.EncodeToString(service.GetImageIndexDigest()),
+		SelectedTag: service.GetImageSelectedTag(),
 		Platform: componentsdk.OCIPlatform{
 			OS: service.GetImageOs(), Architecture: service.GetImageArchitecture(), Variant: service.GetImageVariant(),
 			ChildDigest: hex.EncodeToString(

@@ -12,11 +12,11 @@ import (
 // durable Route effects belong only to Task acknowledgement.
 func TestControllerTaskHandlerAcceptsExactRouteMutation(t *testing.T) {
 	t.Parallel()
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		&fakeControllerTaskLocalAgents{},
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
-	)
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
@@ -28,7 +28,7 @@ func TestControllerTaskHandlerAcceptsExactRouteMutation(t *testing.T) {
 			testtaskjournal.TaskRouteEnvironmentParam: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 	}
-	if err := handler.Execute(context.Background(), valid); err != nil {
+	if err := handler.Execute(context.Background(), valid, testControllerProgress(context.Background(), valid)); err != nil {
 		t.Fatalf("Execute(valid Route removal) error = %v", err)
 	}
 	for name, mutate := range map[string]func(*etcd.TaskRecord){
@@ -49,7 +49,7 @@ func TestControllerTaskHandlerAcceptsExactRouteMutation(t *testing.T) {
 				testtaskjournal.TaskRouteEnvironmentParam: valid.Params[testtaskjournal.TaskRouteEnvironmentParam],
 			}
 			mutate(&candidate)
-			if err := handler.Execute(context.Background(), candidate); err == nil {
+			if err := handler.Execute(context.Background(), candidate, testControllerProgress(context.Background(), candidate)); err == nil {
 				t.Fatal("Execute(invalid Route removal) succeeded")
 			}
 		})

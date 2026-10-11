@@ -35,8 +35,12 @@ func ordinaryTaskEnvironmentMutationTarget(
 	if task.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
 		targets = append(targets, task.Params[taskjournal.TaskZoneEnvironmentParam])
 	}
-	if connectorChange {
-		targets = append(targets, task.Params[TaskConnectorEnvironmentParam])
+	if connectorChange && !dnsCheckTask(task) && !runnerCheckTask(task) {
+		if task.Type == taskjournal.TaskCheck {
+			targets = append(targets, task.Owner.EnvironmentID)
+		} else {
+			targets = append(targets, task.Params[TaskConnectorEnvironmentParam])
+		}
 	}
 	if len(targets) == 0 {
 		return "", false, nil

@@ -58,7 +58,8 @@ func TestRouteMutationFileWriterCapturesConfigurationNewerThanDesiredHead(t *tes
 	}
 	candidate.RevisionID = task.ID
 	intent.CandidateProjection = &candidate
-	intent.Provider = routeRepositoryTestProviderPin(target.Record.Desired.ID)
+	intent.Provider = routeRepositoryTestProviderPin(environment.Record.ID, target.Record.Desired.ID)
+	sealRouteRepositoryTestExecutionPlan(t, &task, &intent.Plan, intent.Provider, false)
 	marker := routeMutationAcceptanceMarker(t, task, environment.Record.ID, http.MethodPost, "/routes")
 	result, err := repository.BeginRouteMutationWithTask(
 		ctx, environment, project, target, nil, record, intent, task, marker,
@@ -88,9 +89,10 @@ func TestRouteRemovalFileWriterPublishesConfigurationAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	task, marker, tombstone, intent := routeDeletionTestRecords(t, project, environment, current, projection)
-	intent.Provider = routeRepositoryTestProviderPin(target.Record.Desired.ID)
+	intent.Provider = routeRepositoryTestProviderPin(environment.Record.ID, target.Record.Desired.ID)
 	task.Executor = testtaskjournal.TaskExecutorAgent
 	task.TimeoutSeconds = 120
+	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Params = map[string]string{
 		testtaskjournal.TaskRouteEnvironmentParam:           environment.Record.ID,
 		testtaskjournal.TaskMaterializationEnvironmentParam: environment.Record.ID,
@@ -98,6 +100,7 @@ func TestRouteRemovalFileWriterPublishesConfigurationAuthority(t *testing.T) {
 		testtaskjournal.TaskComposeArtifactParam:            ids.New(ids.KindConfig),
 	}
 	attachComponentConfiguration(t, &task, environment.Record.ID, intent.CandidateProjection.RevisionID)
+	sealRouteRepositoryTestExecutionPlan(t, &task, &intent.Plan, intent.Provider, true)
 	tombstone.Phase = testdeletions.DeletionPhaseHostEffects
 	result, err := repository.BeginRouteDeletionWithTask(
 		ctx, environment, project, target, current, &projection, tombstone, intent, task, marker,

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -82,31 +84,23 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
-	var sources []*agentpb.ComposeArtifact
+	runtimes := make([]serviceruntimerecord.Record, 0, len(runtimeSources))
 	for _, source := range runtimeSources {
 		if source.Record.Runtime.ReleaseID != serving[source.Record.Runtime.ServiceID] {
 			return EntryMutationRuntime{}, errs.New(errs.KindStateConflict, "Entry acknowledged runtime is not serving")
 		}
-		for _, value := range [][]byte{
-			source.Record.Runtime.CurrentArtifact,
-			source.Record.Runtime.RetainedPriorArtifact,
-		} {
-			if len(value) == 0 {
-				continue
-			}
-			artifact := new(agentpb.ComposeArtifact)
-			if proto.Unmarshal(value, artifact) != nil {
-				return EntryMutationRuntime{}, errs.New(errs.KindInternal, "Entry acknowledged runtime is corrupt")
-			}
-			sources = append(sources, artifact)
-		}
+		runtimes = append(runtimes, source.Record)
 	}
 	if len(running) > 0 {
+		sources, err := retainedRuntimeArtifacts(current.Record.EnvironmentID, runtimes, running)
+		if err != nil {
+			return EntryMutationRuntime{}, err
+		}
 		baseline, err = entryRuntimeWithoutReplacedProxyConfigs(baseline, sources)
 		if err != nil {
 			return EntryMutationRuntime{}, err
 		}
-		baseline, err = RetainBlueprintNativeRuntimeSources(baseline, sources, running)
+		baseline, err = RetainBlueprintNativeRuntimeSources(baseline, runtimes, running)
 		if err != nil {
 			return EntryMutationRuntime{}, err
 		}
@@ -180,11 +174,19 @@ func entryRuntimeWithoutReplacedProxyConfigs(
 		}
 		config := configs.Content[index+1]
 		contentIndex := composerender.MappingIndex(config, "content")
+		implementation, err := executionplan.OpenProxyImplementation(service.GetProxyImplementation())
+		if err != nil {
+			return nil, err
+		}
+		runtimeSource, err := serviceproxy.PrepareRuntimeSource(implementation, service.GetProxyConfigJson())
+		if err != nil {
+			return nil, err
+		}
 		digest := sha256.Sum256(service.ProxyConfigJson)
 		if len(config.Content) != 2 || contentIndex < 0 || len(service.ProxyConfigJson) == 0 ||
 			!bytes.Equal(digest[:], service.ProxyConfigSha256) ||
 			config.Content[contentIndex+1].Kind != yaml.ScalarNode ||
-			config.Content[contentIndex+1].Value != string(service.ProxyConfigJson) {
+			config.Content[contentIndex+1].Value != string(runtimeSource.Content) {
 			return nil, errs.New(errs.KindStateConflict, "Entry proxy config differs from sealed metadata")
 		}
 		for index := 0; index < len(services.Content); index += 2 {

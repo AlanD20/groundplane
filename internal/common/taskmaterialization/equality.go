@@ -22,7 +22,10 @@ func EqualRecords(left, right []Record) bool {
 
 func equalSource(left, right Source) bool {
 	if left.Kind != right.Kind || !equalReference(left.BlueprintFile, right.BlueprintFile) ||
-		!equalReference(left.ComponentFile, right.ComponentFile) || !equalReference(left.EntryValue, right.EntryValue) ||
+		!equalReference(
+			left.ComponentFile,
+			right.ComponentFile,
+		) || !equalReference(left.EntryValue, right.EntryValue) ||
 		(left.GeneratedEnvironment == nil) != (right.GeneratedEnvironment == nil) {
 		return false
 	}

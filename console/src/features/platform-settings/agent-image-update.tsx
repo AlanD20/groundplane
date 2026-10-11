@@ -36,7 +36,12 @@ export function AgentImageUpdate({ agent }: { agent: PlatformAgent }) {
         label="Installed Agent"
         value={
           <SoftwareIdentity
+            artifactReference={agent.installedImage}
+            sourceBuild={agent.source?.kind === "source_ref"}
+            sourceCommit={agent.source?.commit}
+            artifactLabel="Installed image"
             version={agent.version}
+            showReferences={false}
             unavailable="Installed version not reported"
           />
         }
@@ -45,6 +50,10 @@ export function AgentImageUpdate({ agent }: { agent: PlatformAgent }) {
         label="Installed image"
         value={
           <SoftwareIdentity
+            artifactReference={agent.installedImage}
+            sourceBuild={agent.source?.kind === "source_ref"}
+            sourceCommit={agent.source?.commit}
+            artifactLabel="Installed image"
             unavailable="Image identity not reported by the Controller"
           />
         }

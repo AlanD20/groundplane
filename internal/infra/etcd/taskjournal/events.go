@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -67,20 +68,34 @@ func ValidateTaskEventIdentity(identity TaskEventIdentity) error {
 	if err := recordcodec.ValidateID(ids.KindAssignment, identity.AssignmentID); err != nil {
 		return err
 	}
-	if err := recordcodec.ValidateID(ids.KindAgent, identity.AgentID); err != nil {
-		return err
-	}
-	if identity.AgentGeneration == 0 {
-		return errs.New(errs.KindValidationFailed, "task event Agent generation must be positive")
-	}
 	if err := recordcodec.ValidateID(ids.KindTask, identity.TaskID); err != nil {
 		return err
 	}
-	if err := recordcodec.ValidateID(ids.KindStep, identity.StepID); err != nil {
-		return err
+	if !identity.ControllerOperation() {
+		if recordcodec.ValidateID(ids.KindAgent, identity.AgentID) != nil || identity.AgentGeneration == 0 ||
+			recordcodec.ValidateID(ids.KindStep, identity.StepID) != nil {
+			return errs.New(errs.KindValidationFailed, "task event Agent and step identity is invalid")
+		}
 	}
 	if identity.Attempt == 0 || identity.Ordinal == 0 {
 		return errs.New(errs.KindValidationFailed, "task event attempt and ordinal must start at one")
+	}
+	return nil
+}
+
+// ControllerOperation is task-scoped; it deliberately has no fabricated Agent
+// or sealed step identity. Mixed native/Agent identities remain invalid.
+func (identity TaskEventIdentity) ControllerOperation() bool {
+	return identity.AgentID == "" && identity.AgentGeneration == 0 && identity.StepID == ""
+}
+
+func ValidateEventObservationIdentity(identity TaskEventIdentity, value json.RawMessage) error {
+	payload, err := taskprogress.DecodePayload(value)
+	if err != nil {
+		return err
+	}
+	if identity.ControllerOperation() != (payload.ControllerOperation != nil) {
+		return errs.New(errs.KindValidationFailed, "Task observation does not match its executor")
 	}
 	return nil
 }
@@ -105,7 +120,7 @@ func validateTaskEventRecord(record TaskEventRecord) error {
 	if !bytes.Equal(payload, record.Payload) || hash != record.PayloadSHA256 {
 		return errs.New(errs.KindInternal, "task event payload or digest is not canonical")
 	}
-	return nil
+	return ValidateEventObservationIdentity(record.Identity, payload)
 }
 
 func ValidateTaskEventDedupRecord(record TaskEventDedupRecord) error {
@@ -134,6 +149,15 @@ func CanonicalTaskEventPayload(state TaskEventState, value json.RawMessage) (jso
 	}
 	if len(value) == 0 || recordcodec.RejectDuplicateFields(value) != nil {
 		return nil, "", errs.New(errs.KindValidationFailed, "task event payload must be one valid JSON value")
+	}
+	observation, err := taskprogress.DecodePayload(value)
+	if err != nil {
+		return nil, "", err
+	}
+	if observation.HealthWait != nil && state != TaskEventStateRunning ||
+		observation.Failure != nil && state != TaskEventStateFailed && state != TaskEventStateTimedOut &&
+			state != TaskEventStateAborted {
+		return nil, "", errs.New(errs.KindValidationFailed, "task event observation does not match its state")
 	}
 	var compact bytes.Buffer
 	if err := json.Compact(&compact, value); err != nil {

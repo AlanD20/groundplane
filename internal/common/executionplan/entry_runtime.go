@@ -26,16 +26,16 @@ func PrepareEntryRuntime(
 	if err != nil {
 		return CandidateRuntime{}, invalidEntryRuntime()
 	}
-	priorWorkload, priorProxy, err := nativePredecessorServices(priorCurrent, previous.ServiceID)
-	if err != nil || priorWorkload == nil {
+	_, priorProxy, err := nativePredecessorServices(priorCurrent, previous.ServiceID)
+	if err != nil {
 		return CandidateRuntime{}, invalidEntryRuntime()
 	}
-	selected, err := entryRuntimeWorkload(source, previous.ServiceID, previous.ReleaseID, previous.Target)
-	if err != nil || selected.GetComposeName() != priorWorkload.GetComposeName() {
+	selected, err := entryRuntimeWorkloads(source, previous.ServiceID, previous.ReleaseID, previous.Target)
+	if err != nil {
 		return CandidateRuntime{}, invalidEntryRuntime()
 	}
 	current, err := projectAttachRuntimeArtifact(
-		source, selected, priorCurrent, priorWorkload, priorProxy, previous.ReleaseID, previous.Target,
+		source, selected, priorCurrent, priorProxy, previous.ReleaseID, previous.Target,
 	)
 	if err != nil {
 		return CandidateRuntime{}, err
@@ -61,19 +61,20 @@ func PrepareEntryRuntime(
 		if openErr != nil {
 			return CandidateRuntime{}, invalidEntryRuntime()
 		}
-		retainedWorkload, retainedProxy, selectErr := nativePredecessorServices(priorRetained, previous.ServiceID)
-		if selectErr != nil || retainedWorkload == nil || retainedProxy != nil {
+		retainedWorkloads, retainedProxy, selectErr := nativePredecessorServices(priorRetained, previous.ServiceID)
+		if selectErr != nil || len(retainedWorkloads) != 1 || retainedProxy != nil {
 			return CandidateRuntime{}, invalidEntryRuntime()
 		}
+		retainedWorkload := retainedWorkloads[0]
 		retainedRelease, retainedTarget := nativePredecessorReleaseID(retainedWorkload), attachRuntimeTarget(retainedWorkload)
-		selectedRetained, selectErr := entryRuntimeWorkload(
+		selectedRetained, selectErr := entryRuntimeWorkloads(
 			source, previous.ServiceID, retainedRelease, retainedTarget,
 		)
-		if selectErr != nil || selectedRetained.GetComposeName() != retainedWorkload.GetComposeName() {
+		if selectErr != nil {
 			return CandidateRuntime{}, invalidEntryRuntime()
 		}
 		retained, projectErr := projectAttachRuntimeArtifact(
-			source, selectedRetained, priorRetained, retainedWorkload, nil, retainedRelease, retainedTarget,
+			source, selectedRetained, priorRetained, nil, retainedRelease, retainedTarget,
 		)
 		if projectErr != nil {
 			return CandidateRuntime{}, projectErr
@@ -96,23 +97,20 @@ func PrepareEntryRuntime(
 	return result, nil
 }
 
-func entryRuntimeWorkload(
+func entryRuntimeWorkloads(
 	artifact *agentpb.ComposeArtifact,
 	serviceID, releaseID, target string,
-) (*agentpb.ComposeService, error) {
-	var selected *agentpb.ComposeService
+) ([]*agentpb.ComposeService, error) {
+	var selected []*agentpb.ComposeService
 	for _, service := range artifact.GetServices() {
 		if service.GetServiceId() != serviceID ||
 			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY ||
 			nativePredecessorReleaseID(service) != releaseID || attachRuntimeTarget(service) != target {
 			continue
 		}
-		if selected != nil {
-			return nil, invalidEntryRuntime()
-		}
-		selected = service
+		selected = append(selected, service)
 	}
-	if selected == nil {
+	if len(selected) == 0 {
 		return nil, invalidEntryRuntime()
 	}
 	return selected, nil

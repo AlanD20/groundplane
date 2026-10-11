@@ -12,7 +12,7 @@ import (
 func retainCandidateRuntimeProxy(
 	candidate *agentpb.ComposeArtifact,
 	acknowledged *agentpb.ComposeArtifact,
-	serviceID, target string,
+	serviceID string, workloadNames []string,
 ) (*agentpb.ComposeArtifact, error) {
 	if candidate == nil || acknowledged == nil ||
 		candidate.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
@@ -33,8 +33,7 @@ func retainCandidateRuntimeProxy(
 		}
 		sourceProxy = service
 	}
-	workload := releaseTargetService(candidate, serviceID, target)
-	if sourceProxy == nil || workload == nil {
+	if sourceProxy == nil || len(workloadNames) == 0 {
 		return nil, invalidCandidateRuntimeProxySource()
 	}
 	hybrid := proto.CloneOf(candidate)
@@ -55,7 +54,7 @@ func retainCandidateRuntimeProxy(
 	}
 	canonical, references, err := retainCandidateRuntimeProxyYAML(
 		candidate,
-		workload.GetComposeName(),
+		workloadNames,
 		acknowledged,
 		sourceProxy.GetComposeName(),
 	)
@@ -82,7 +81,7 @@ func retainCandidateRuntimeProxy(
 
 func retainCandidateRuntimeProxyYAML(
 	candidate *agentpb.ComposeArtifact,
-	workloadName string,
+	workloadNames []string,
 	acknowledged *agentpb.ComposeArtifact,
 	proxyName string,
 ) ([]byte, map[string]map[string]bool, error) {
@@ -93,10 +92,6 @@ func retainCandidateRuntimeProxyYAML(
 		return nil, nil, invalidCandidateRuntimeProxySource()
 	}
 	candidateRoot, acknowledgedRoot := candidateDocument.Content[0], acknowledgedDocument.Content[0]
-	workload, err := attachRuntimeYAMLService(candidateRoot, workloadName)
-	if err != nil {
-		return nil, nil, invalidCandidateRuntimeProxySource()
-	}
 	proxy, err := attachRuntimeYAMLService(acknowledgedRoot, proxyName)
 	if err != nil {
 		return nil, nil, invalidCandidateRuntimeProxySource()
@@ -109,8 +104,13 @@ func retainCandidateRuntimeProxyYAML(
 
 	workloadReferences := make(map[string]map[string]bool, 4)
 	proxyReferences := make(map[string]map[string]bool, 4)
-	if candidateRuntimeResourceReferences(workload, workloadReferences) != nil ||
-		candidateRuntimeResourceReferences(proxy, proxyReferences) != nil {
+	for _, name := range workloadNames {
+		workload, err := attachRuntimeYAMLService(candidateRoot, name)
+		if err != nil || candidateRuntimeResourceReferences(workload, workloadReferences) != nil {
+			return nil, nil, invalidCandidateRuntimeProxySource()
+		}
+	}
+	if candidateRuntimeResourceReferences(proxy, proxyReferences) != nil {
 		return nil, nil, invalidCandidateRuntimeProxySource()
 	}
 	for _, section := range []string{"networks", "volumes", "configs", "secrets"} {
@@ -132,6 +132,12 @@ func retainCandidateRuntimeProxyYAML(
 			); replaceErr != nil {
 				return nil, nil, invalidCandidateRuntimeProxySource()
 			}
+		}
+		if proxyReferences[section] == nil {
+			proxyReferences[section] = make(map[string]bool)
+		}
+		for name := range workloadReferences[section] {
+			proxyReferences[section][name] = true
 		}
 	}
 	candidateServices.Content[proxyIndex+1] = proxy

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -14,6 +15,17 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 	}
 	if err := executionplan.RejectUnknown(response); err != nil {
 		return err
+	}
+	evidenceCount := 0
+	for _, present := range []bool{response.ProxyEvidence != nil, response.RecreateEvidence != nil,
+		response.CandidateAbsenceEvidence != nil, response.RollingEvidence != nil, response.RollingProxyEvidence != nil,
+		response.ComponentRestorationEvidence != nil} {
+		if present {
+			evidenceCount++
+		}
+	}
+	if evidenceCount > 1 {
+		return errs.New(errs.KindValidationFailed, "Compose helper response carries conflicting release evidence")
 	}
 	switch response.Outcome {
 	case agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED:
@@ -38,12 +50,32 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 				return errs.New(errs.KindValidationFailed, "completed candidate absence evidence is invalid")
 			}
 		}
+		if evidence := response.GetRollingEvidence(); evidence != nil {
+			if !evidence.GetCompensated() ||
+				rollingrelease.ValidateCompletion(executionplan.RollingCompletion(evidence)) != nil {
+				return errs.New(
+					errs.KindValidationFailed,
+					"completed Compose helper rolling restoration evidence is invalid",
+				)
+			}
+		}
+		if evidence := response.GetRollingProxyEvidence(); evidence != nil &&
+			(evidence.GetServiceId() == "" || evidence.GetChangeOrdinal() == 0 || evidence.GetProxyGeneration() == 0 ||
+				len(evidence.GetConfigSha256()) != sha256.Size) {
+			return errs.New(errs.KindValidationFailed, "completed Compose helper rolling proxy evidence is invalid")
+		}
+		if evidence := response.GetComponentRestorationEvidence(); evidence != nil &&
+			(evidence.GetComponentId() == "" || evidence.GetArtifactId() == "" || evidence.GetServiceId() == "" ||
+				evidence.GetComposeProjectName() == "" || evidence.GetTarget() != agentpb.ComponentRestorationTarget_COMPONENT_RESTORATION_TARGET_PREDECESSOR) {
+			return errs.New(
+				errs.KindValidationFailed,
+				"completed Component configuration restoration evidence is invalid",
+			)
+		}
 	case agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_RESTORATION_REQUIRED:
 		if response.ExitCode != 0 ||
 			response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE ||
-			response.ProxyEvidence != nil ||
-			response.RecreateEvidence != nil ||
-			response.CandidateAbsenceEvidence != nil {
+			evidenceCount != 0 {
 			return errs.New(errs.KindValidationFailed, "unrestored Compose helper observation is inconsistent")
 		}
 	case agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED:
@@ -54,8 +86,7 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED) {
 			return errs.New(errs.KindValidationFailed, "failed Compose helper response is inconsistent")
 		}
-		if response.ProxyEvidence != nil || response.RecreateEvidence != nil ||
-			response.CandidateAbsenceEvidence != nil {
+		if evidenceCount != 0 {
 			return errs.New(errs.KindValidationFailed, "failed Compose helper response carries release evidence")
 		}
 	default:

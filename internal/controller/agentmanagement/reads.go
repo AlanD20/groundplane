@@ -2,8 +2,9 @@ package agentmanagement
 
 import (
 	"context"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"strings"
+
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -124,9 +125,19 @@ func (service *ReadService) projectAgent(
 		readyAt := health.Agent.ReadyAt.UTC()
 		agent.ReadyAt = &readyAt
 	}
-	if health.Version != "" {
-		version := health.Version
-		agent.Version = &version
+	// Replacement records name the candidate before it is acknowledged. Only
+	// the ready lifecycle phase is authority for an installed image/version.
+	if health.Agent.Phase == localagent.PhaseReady {
+		image := health.Agent.Image
+		agent.InstalledImage = &image
+		if health.Agent.Build.Version != "" {
+			version := health.Agent.Build.Version
+			agent.Version = &version
+		}
+		if health.Agent.Build.Source.Known() {
+			source := health.Agent.Build.Source
+			agent.Source = &source
+		}
 	}
 	if !health.LastReady.IsZero() {
 		lastReportAt := health.LastReady.UTC()

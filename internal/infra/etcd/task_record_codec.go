@@ -36,6 +36,7 @@ type taskRecordData struct {
 	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
 	Status             taskjournal.TaskStatus                    `json:"status"`
 	Result             *taskjournal.TaskResultData               `json:"result,omitempty"`
+	BlueprintFailure   *taskjournal.BlueprintFailure             `json:"blueprint_failure,omitempty"`
 	TerminalAssignment *taskjournal.TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                                    `json:"next_event_sequence"`
 	EventCount         uint32                                    `json:"event_count"`
@@ -101,8 +102,9 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		EntryRuntime:     taskjournal.CloneEntryTaskRuntime(record.EntryRuntime),
 		Configuration:    taskconfiguration.CloneTaskConfiguration(record.Configuration),
 		Status:           record.Status, NextEventSequence: record.NextEventSequence,
-		EventCheckpoints:   append([]taskjournal.TaskEventCheckpoint(nil), record.EventCheckpoints...),
+		EventCheckpoints:   taskjournal.CloneEventCheckpoints(record.EventCheckpoints),
 		Result:             taskjournal.TaskResultToData(record.Result),
+		BlueprintFailure:   taskjournal.CloneBlueprintFailure(record.BlueprintFailure),
 		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(record.TerminalAssignment),
 		EventCount:         record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt:         record.UpdatedAt.UTC().Format(time.RFC3339Nano),
@@ -139,7 +141,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		return TaskRecord{}, err
 	}
 	return TaskRecord{
-		EventCheckpoints: append([]taskjournal.TaskEventCheckpoint(nil), data.EventCheckpoints...),
+		EventCheckpoints: taskjournal.CloneEventCheckpoints(data.EventCheckpoints),
 		ID:               data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
 		IdempotencyKey: data.IdempotencyKey, Owner: data.Owner, Actor: data.Actor,
 		Executor: data.Executor, PlanID: data.PlanID,
@@ -155,6 +157,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		Configuration:    data.Configuration,
 		TimeoutSeconds:   data.TimeoutSeconds, Status: data.Status,
 		Result:             result,
+		BlueprintFailure:   taskjournal.CloneBlueprintFailure(data.BlueprintFailure),
 		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(data.TerminalAssignment),
 		NextEventSequence:  data.NextEventSequence, EventCount: data.EventCount,
 		CreatedAt: createdAt, UpdatedAt: updatedAt, StartedAt: startedAt, FinishedAt: finishedAt,
@@ -164,7 +167,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 
 func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned := record
-	cloned.EventCheckpoints = append([]taskjournal.TaskEventCheckpoint(nil), record.EventCheckpoints...)
+	cloned.EventCheckpoints = taskjournal.CloneEventCheckpoints(record.EventCheckpoints)
 	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
 	cloned.ManagedComponentTeardownSources = projectionrecord.CloneManagedComponentRuntimeSources(
 		record.ManagedComponentTeardownSources,
@@ -178,6 +181,7 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)
 	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)
 	cloned.Result = taskjournal.CloneTaskResult(record.Result)
+	cloned.BlueprintFailure = taskjournal.CloneBlueprintFailure(record.BlueprintFailure)
 	cloned.TerminalAssignment = taskjournal.CloneTaskTerminalAssignment(record.TerminalAssignment)
 	cloned.idempotencyMarker = cloneIdempotencyLocator(record.idempotencyMarker)
 	return cloned

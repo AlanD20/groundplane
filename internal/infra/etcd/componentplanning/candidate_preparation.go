@@ -40,6 +40,9 @@ type ComponentTaskPreparation struct {
 	appliedProjectionRevision int64
 	desiredProjectionRevision int64
 	unitRuntimeCondition      *etcdstore.Condition
+	proxyServicePreflight     *ProxyServicePreflight
+	proxyServiceConditions    []etcdstore.Condition
+	proxySourceMutations      []etcdstore.Mutation
 	addresses                 []componentTaskAddressPreparation
 }
 
@@ -95,7 +98,7 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		current := input.Current.Record.Desired
 		candidate := input.Candidate
 		if current.ID == previousID || candidate.ID != current.ID || candidate.Owner != current.Owner ||
-			candidate.OwnerID != current.OwnerID || candidate.Kind != current.Kind ||
+			candidate.OwnerID != current.OwnerID || !current.Kind.SharesEnvironmentCapability(candidate.Kind) ||
 			candidate.Owner != core.ComponentOwnerEnvironment || candidate.OwnerID != environmentID {
 			return ComponentTaskPreparation{}, errs.New(
 				errs.KindValidationFailed,
@@ -358,6 +361,8 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		appliedProjectionRevision: selected.Revision,
 		desiredProjectionRevision: authority.desiredHeadRevision,
 		unitRuntimeCondition:      authority.unitRuntimeCondition,
+		proxyServicePreflight:     cloneProxyServicePreflight(authority.proxyServicePreflight),
+		proxyServiceConditions:    append([]etcdstore.Condition(nil), authority.proxyServiceConditions...),
 		addresses:                 addresses,
 	}
 	if err := ValidateComponentTaskPreparation(preparation); err != nil {
@@ -428,17 +433,17 @@ func componentCandidateZones(
 }
 
 func projectedComponentCandidateZone(component core.Component) (string, bool, error) {
-	if component.Kind != core.ComponentKindIngressCaddy || !component.Enabled {
+	if !component.Kind.IsEnvironmentProxy() || !component.Enabled {
 		return "", false, nil
 	}
-	if component.Config.Caddy == nil || len(component.Config.Caddy.ZoneIDs) == 0 ||
-		ids.Validate(ids.KindNetwork, component.Config.Caddy.ZoneIDs[0]) != nil {
+	zoneIDs := component.HTTPRouterZoneIDs()
+	if len(zoneIDs) == 0 || ids.Validate(ids.KindNetwork, zoneIDs[0]) != nil {
 		return "", false, errs.New(
 			errs.KindValidationFailed,
-			"enabled Caddy Component candidate has an invalid Zone",
+			"enabled router Component candidate has an invalid Zone",
 		)
 	}
-	return component.Config.Caddy.ZoneIDs[0], true, nil
+	return zoneIDs[0], true, nil
 }
 
 func validatePreparedCurrentComponentReservations(
@@ -460,6 +465,23 @@ func validatePreparedCurrentComponentReservations(
 func ValidateComponentTaskPreparation(preparation ComponentTaskPreparation) error {
 	if err := environmentchanges.ValidateComponentTaskIntent(preparation.Intent); err != nil {
 		return err
+	}
+	if preparation.proxyServicePreflight != nil {
+		if err := preparation.proxyServicePreflight.validate(); err != nil {
+			return err
+		}
+		if len(preparation.Intent.Candidates) != 1 ||
+			preparation.proxyServicePreflight.EnvironmentID != preparation.Intent.EnvironmentID ||
+			string(
+				preparation.proxyServicePreflight.Implementation,
+			) != string(
+				preparation.Intent.Candidates[0].Candidate.Desired.Kind,
+			) ||
+			len(preparation.proxyServiceConditions) != 2+3*len(preparation.proxyServicePreflight.Services) {
+			return errs.New(errs.KindValidationFailed, "Component router Service preflight changed")
+		}
+	} else if len(preparation.proxyServiceConditions) != 0 {
+		return errs.New(errs.KindValidationFailed, "Component router Service preflight is missing")
 	}
 	if len(preparation.managedRuntimeSources) > projectionrecord.MaximumManagedComponentRuntimeSources {
 		return errs.New(errs.KindValidationFailed, "Component candidate managed runtime source count is invalid")
@@ -516,6 +538,9 @@ func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) Compone
 		appliedProjectionRevision: preparation.appliedProjectionRevision,
 		desiredProjectionRevision: preparation.desiredProjectionRevision,
 		unitRuntimeCondition:      preparation.unitRuntimeCondition,
+		proxyServicePreflight:     cloneProxyServicePreflight(preparation.proxyServicePreflight),
+		proxyServiceConditions:    append([]etcdstore.Condition(nil), preparation.proxyServiceConditions...),
+		proxySourceMutations:      cloneProxySourceMutations(preparation.proxySourceMutations),
 		addresses:                 make([]componentTaskAddressPreparation, len(preparation.addresses)),
 	}
 	if preparation.unitRuntimeCondition != nil {

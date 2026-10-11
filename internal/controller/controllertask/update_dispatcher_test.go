@@ -34,7 +34,7 @@ func TestUpdateDispatcherKeepsRecoveryOwnersSeparate(t *testing.T) {
 			if err := dispatcher.Restore(context.Background(), claim); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := dispatcher.Execute(context.Background(), task, time.Now()); err != nil {
+			if _, err := dispatcher.Execute(context.Background(), task, time.Now(), nil); err != nil {
 				t.Fatal(err)
 			}
 			if kind == testtaskjournal.TaskResourceAgent && (agent.executions != 1 || native.executions != 0) ||

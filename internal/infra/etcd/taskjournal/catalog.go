@@ -1,5 +1,7 @@
 package taskjournal
 
+import "github.com/AlanD20/groundplane/internal/common/taskdescription"
+
 // TaskType is the closed durable task catalog. It is a persistence DTO rather
 // than a controller model so infra remains independent of controller and core.
 type TaskType string
@@ -25,6 +27,7 @@ const (
 	TaskFetch       TaskType = "fetch"
 	TaskPrepare     TaskType = "prepare"
 	TaskApply       TaskType = "apply"
+	TaskCheck       TaskType = "check"
 )
 
 // TaskExecutor is the immutable authority allowed to claim a Task. It is
@@ -87,14 +90,15 @@ const (
 // TaskStepRecord is the immutable execution procedure stored with a Task.
 // ID is stable within the task and participates in Agent event identity.
 type TaskStepRecord struct {
-	Kind           TaskStepKind `json:"kind"`
-	ID             string       `json:"id"`
-	ScriptID       string       `json:"script_id,omitempty"`
-	ScriptSlug     string       `json:"script_slug,omitempty"`
-	Action         string       `json:"action,omitempty"`
-	Description    string       `json:"description,omitempty"`
-	Target         string       `json:"target,omitempty"`
-	TimeoutSeconds uint32       `json:"timeout_seconds,omitempty"`
+	Kind           TaskStepKind                            `json:"kind"`
+	ID             string                                  `json:"id"`
+	ScriptID       string                                  `json:"script_id,omitempty"`
+	ScriptSlug     string                                  `json:"script_slug,omitempty"`
+	Action         string                                  `json:"action,omitempty"`
+	Description    string                                  `json:"description,omitempty"`
+	Target         string                                  `json:"target,omitempty"`
+	TimeoutSeconds uint32                                  `json:"timeout_seconds,omitempty"`
+	Healthchecks   []taskdescription.ConfiguredHealthcheck `json:"healthchecks,omitempty"`
 }
 
 type TaskResultKind string
@@ -103,6 +107,7 @@ const (
 	TaskResultCompose              TaskResultKind = "compose"
 	TaskResultEnvironmentDirectory TaskResultKind = "environment_directory"
 	TaskResultBackup               TaskResultKind = "backup"
+	TaskResultController           TaskResultKind = "controller"
 )
 
 type TaskResultDiagnostic string
@@ -112,6 +117,11 @@ const (
 	TaskResultDiagnosticConfigRejected                  TaskResultDiagnostic = "config_rejected"
 	TaskResultDiagnosticComposeFailed                   TaskResultDiagnostic = "compose_failed"
 	TaskResultDiagnosticTimeoutBeforeEffect             TaskResultDiagnostic = "timeout_before_effect"
+	TaskResultDiagnosticDNSWithdrawalFailed             TaskResultDiagnostic = "dns_withdrawal_failed"
+	TaskResultDiagnosticDNSWithdrawalTimedOut           TaskResultDiagnostic = "dns_withdrawal_timed_out"
+	TaskResultDiagnosticReleaseNetworkFailed            TaskResultDiagnostic = "release_network_failed"
+	TaskResultDiagnosticDNSActivationFailed             TaskResultDiagnostic = "dns_activation_failed"
+	TaskResultDiagnosticDNSActivationTimedOut           TaskResultDiagnostic = "dns_activation_timed_out"
 	TaskResultDiagnosticHealthcheckPgrepMissing         TaskResultDiagnostic = "healthcheck_pgrep_missing"
 	TaskResultDiagnosticHealthcheckCurlMissing          TaskResultDiagnostic = "healthcheck_curl_missing"
 	TaskResultDiagnosticHealthcheckNCMissing            TaskResultDiagnostic = "healthcheck_nc_missing"

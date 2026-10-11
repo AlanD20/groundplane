@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/databaseversion"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -38,10 +39,16 @@ func ValidateRequest(request *agentpb.ObserveServices) error {
 	seenNames := make(map[string]bool, len(request.Targets))
 	for _, target := range request.Targets {
 		if ValidateTarget(target) != nil || target.EnvironmentId != request.Targets[0].EnvironmentId ||
-			seen[target.ServiceId] || seenNames[target.ComposeName] {
+			seen[target.ServiceId] {
 			return invalid()
 		}
-		seen[target.ServiceId], seenNames[target.ComposeName] = true, true
+		seen[target.ServiceId] = true
+		for _, workload := range target.Workloads {
+			if seenNames[workload.ComposeName] {
+				return invalid()
+			}
+			seenNames[workload.ComposeName] = true
+		}
 	}
 	return nil
 }
@@ -50,17 +57,37 @@ func ValidateRequest(request *agentpb.ObserveServices) error {
 func ValidateTarget(target *agentpb.ServiceObservationTarget) error {
 	if target == nil || len(target.ProtoReflect().GetUnknown()) != 0 ||
 		ids.Validate(ids.KindEnvironment, target.EnvironmentId) != nil ||
-		ids.Validate(ids.KindService, target.ServiceId) != nil ||
-		ids.Validate(
-			ids.KindPlan,
-			target.PlanId,
-		) != nil || target.RenderGeneration == 0 || !composeNameValid(target.ComposeName) {
+		ids.Validate(ids.KindService, target.ServiceId) != nil || len(target.Workloads) == 0 ||
+		len(
+			target.Workloads,
+		) > rollingrelease.MaximumReplicas || target.RuntimeRole != "replica" && len(target.Workloads) != 1 {
 		return invalid()
+	}
+	seen := make(map[string]bool, len(target.Workloads))
+	for index, workload := range target.Workloads {
+		if workload == nil || len(workload.ProtoReflect().GetUnknown()) != 0 ||
+			ids.Validate(ids.KindPlan, workload.PlanId) != nil || workload.RenderGeneration == 0 ||
+			!composeNameValid(
+				workload.ComposeName,
+			) || seen[workload.ComposeName] || workload.ComposeName == target.ProxyComposeName {
+			return invalid()
+		}
+		if target.RuntimeRole == "replica" {
+			name, err := rollingrelease.ReplicaComposeName(target.ReleaseId, uint32(index+1))
+			if err != nil || workload.ReplicaOrdinal != uint32(index+1) || workload.ComposeName != name {
+				return invalid()
+			}
+		} else if workload.ReplicaOrdinal != 0 {
+			return invalid()
+		}
+		seen[workload.ComposeName] = true
 	}
 	if probe := target.DatabaseProbe; probe != nil {
 		if len(probe.ProtoReflect().GetUnknown()) != 0 || probe.Authority == nil ||
 			len(probe.Authority.ProtoReflect().GetUnknown()) != 0 || probe.Authority.GetRestore() == nil ||
-			len(probe.Services) == 0 || len(probe.Artifacts) == 0 || target.ProxyComposeName != "" {
+			len(
+				probe.Services,
+			) == 0 || len(probe.Artifacts) == 0 || target.ProxyComposeName != "" || target.RuntimeRole == "replica" {
 			return invalid()
 		}
 		serviceID := probe.Authority.GetRestore().GetPostgres().GetDatabaseServiceId()
@@ -71,25 +98,35 @@ func ValidateTarget(target *agentpb.ServiceObservationTarget) error {
 			return invalid()
 		}
 	}
-	if target.RuntimeRole == "backing" {
+	if target.RuntimeRole == "component" {
+		if ids.Validate(ids.KindComponent, target.ComponentId) != nil || !composeNameValid(target.ComposeProject) ||
+			target.ReleaseId != "" || target.Slot != "" || target.ProxyComposeName != "" || target.DatabaseProbe != nil {
+			return invalid()
+		}
+	} else if target.ComponentId != "" || target.ComposeProject != "" {
+		return invalid()
+	} else if target.RuntimeRole == "backing" {
 		if target.ReleaseId != "" || target.Slot != "" || target.ProxyComposeName != "" {
 			return invalid()
 		}
 	} else if ids.Validate(ids.KindDeployment, target.ReleaseId) != nil ||
-		target.RuntimeRole == "singleton" && target.Slot != "" ||
+		(target.RuntimeRole == "singleton" || target.RuntimeRole == "replica") && target.Slot != "" ||
 		target.RuntimeRole == "slot" && target.Slot != "blue" && target.Slot != "green" ||
-		target.RuntimeRole != "singleton" && target.RuntimeRole != "slot" {
+		target.RuntimeRole != "singleton" && target.RuntimeRole != "slot" && target.RuntimeRole != "replica" {
 		return invalid()
 	}
 	proxyFields := target.ProxyPlanId != "" || target.ProxyRenderGeneration != 0 ||
-		len(target.ProxyConfigSha256) != 0
+		len(
+			target.ProxyConfigSha256,
+		) != 0 || target.ProxyImplementation != agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_UNSPECIFIED
 	if target.ProxyComposeName == "" && proxyFields {
 		return invalid()
 	}
 	if target.ProxyComposeName != "" && (!composeNameValid(target.ProxyComposeName) ||
+		(target.ProxyImplementation != agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY &&
+			target.ProxyImplementation != agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_ENVOY) ||
 		ids.Validate(ids.KindPlan, target.ProxyPlanId) != nil || target.ProxyRenderGeneration == 0 ||
-		len(target.ProxyConfigSha256) != sha256.Size || target.ProxyComposeName == target.ComposeName ||
-		target.ProxyComposeName == "") {
+		len(target.ProxyConfigSha256) != sha256.Size) {
 		return invalid()
 	}
 	return nil
@@ -124,6 +161,13 @@ func ValidateResult(request *agentpb.ObserveServices, result *agentpb.ServiceObs
 			total += Total(outcome.Replicas)
 			if !validContainers(row.Containers, outcome.Replicas) {
 				return invalid()
+			}
+			if target.RuntimeRole == "replica" {
+				for _, container := range row.Containers {
+					if container.Replica > uint32(len(target.Workloads)) {
+						return invalid()
+					}
+				}
 			}
 			if !validProxyState(target, row.ProxyState, false) {
 				return invalid()

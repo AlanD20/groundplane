@@ -19,6 +19,18 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+type unexpectedManualScriptImageResolver struct {
+	t *testing.T
+}
+
+func (resolver unexpectedManualScriptImageResolver) ResolveWorkloadImages(
+	context.Context, string, []*agentpb.WorkloadImageSelector,
+) (*agentpb.WorkloadImageResolutionResult, error) {
+	resolver.t.Helper()
+	resolver.t.Fatal("manual Script preparation must use its captured images")
+	return nil, nil
+}
+
 // CreateManualScript uses ordinary persisted Script creation after the fixture
 // has published and acknowledged a real generated Release plan.
 func (fixture *ExecutedArtifactFixture) CreateManualScript(
@@ -186,7 +198,7 @@ func (fixture *ExecutedArtifactFixture) RemoveCompletedManualScript(
 	if err != nil || !found || claim.Task.Record.ID != task.ID {
 		t.Fatalf("Script removal claim = %t, %v", found, err)
 	}
-	if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second)); err != nil {
+	if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := scripts.GetScript(ctx, scriptID); !isKind(err, errs.KindScriptNotFound) {

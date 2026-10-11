@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
@@ -28,6 +29,13 @@ import (
 )
 
 type environmentBlueprintRepository interface {
+	StageBlueprintProxyCandidateInput(context.Context, componentplanning.ChildExecution,
+		projectionrecord.EnvironmentComposeProjection, int64,
+	) (etcdstore.Versioned[componentplanning.ProxyCandidateInputReference], error)
+	StageBlueprintDisabledProxyCandidateInput(context.Context, etcd.TaskRecord, string,
+		componentrecord.Record, projectionrecord.EnvironmentComposeProjection, int64,
+	) (etcdstore.Versioned[componentplanning.ProxyCandidateInputReference], error)
+	ReadZoneDNSActivation(context.Context, []string) (etcd.ZoneDNSActivation, error)
 	HasActiveEnvironmentBlueprintApply(context.Context, string) (bool, error)
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
@@ -75,11 +83,12 @@ type environmentBlueprintRepository interface {
 	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
 	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
-	GetAppliedServiceRemovalSource(
+	GetAuthoredServiceRemovalSource(
 		context.Context,
-		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 		string,
-	) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
+		string,
+		string,
+	) (etcd.AuthoredServiceRemovalSource, error)
 	GetServiceRemovalRuntime(
 		context.Context,
 		string,
@@ -132,6 +141,9 @@ type environmentBlueprintRepository interface {
 		componentplanning.FrozenProjectionAuthorityInput,
 		etcdstore.Versioned[componentrecord.Record],
 	) (componentplanning.FrozenProjectionAuthority, error)
+	PrepareFrozenProxyServicePreflight(context.Context, componentplanning.FrozenProjectionAuthority,
+		string, core.ComponentKind, []core.Service) (componentplanning.FrozenProjectionAuthority, error)
+	ValidateBlueprintProxyServiceSource(context.Context, string, string, string, int64) error
 	PrepareComponentTaskPublication(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],

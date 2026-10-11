@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -17,9 +18,9 @@ const failureCheckpointTimeout = 5 * time.Second
 // Execute resumes only the frozen native Task input. Published outputs are
 // skipped after managed-registry readback; no ref or release tag is resolved
 // during execution.
-func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if ctx == nil {
-		return errs.New(errs.KindInternal, "software preparation context is required")
+func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord, observation *controllertask.Progress) error {
+	if ctx == nil || observation == nil {
+		return errs.New(errs.KindInternal, "software preparation context and Task observation are required")
 	}
 	if task.Status != taskjournal.TaskStatusRunning {
 		return errs.New(errs.KindValidationFailed, "software preparation requires a running Controller Task")
@@ -52,7 +53,12 @@ func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error
 		}
 		return errs.Wrap(errs.KindRequestUnavailable, err)
 	}
-	result, executionErr := service.preparer.Prepare(ctx, input, current.Record.Progress.Result, report)
+	result, executionErr := service.preparer.Prepare(ctx, input, current.Record.Progress.Result, report, observation)
+	if recordErr := observation.Err(); recordErr != nil {
+		// Preserve any published output below, but never make a recording outage
+		// a permanent build failure. The native runner retains this Task claim.
+		executionErr = errs.WrapJoined(errs.KindRequestUnavailable, recordErr, executionErr)
+	}
 	if executionErr == nil {
 		return nil
 	}

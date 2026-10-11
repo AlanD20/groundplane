@@ -394,7 +394,7 @@ func newEnvironmentCreationTask(
 		},
 		Steps: taskjournal.CaptureStepDescriptions(
 			[]taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}},
-			plan.Steps,
+			plan,
 		),
 		TimeoutSeconds: environmentCreationTimeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,

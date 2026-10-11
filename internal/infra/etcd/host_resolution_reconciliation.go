@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
@@ -92,8 +93,9 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	materializationChange taskMaterializationProjectionChange,
 ) (hostResolutionReconciliationChange, error) {
 	resource := task.Params[taskjournal.TaskResourceKindParam]
-	if resource != taskjournal.TaskResourceRoute && resource != taskjournal.TaskResourceComponent &&
-		task.Params[componentTaskBlueprintProcedureParam] == "" {
+	if dnsCheckTask(task) ||
+		resource != taskjournal.TaskResourceRoute && resource != taskjournal.TaskResourceComponent &&
+			task.Params[componentTaskBlueprintProcedureParam] == "" {
 		return hostResolutionReconciliationChange{}, nil
 	}
 	if revision <= 0 {
@@ -288,6 +290,15 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		}
 		stale := stored == nil || stored.InputRevision != input.HostResolutionInputRevision ||
 			stored.InputSHA256 != input.HostResolutionSHA256
+		selection, dnsConditions, dnsErr := dnsrecords.NewReader(repository.store).ResolveEnvironmentDNS(ctx, revision)
+		if dnsErr != nil {
+			clearHostResolutionReconciliationChange(change)
+			return hostResolutionReconciliationChange{}, dnsErr
+		}
+		for _, condition := range dnsConditions {
+			change.conditions = appendHostResolutionCondition(change.conditions, condition)
+		}
+		stale = stale || !platformcomponents.SameEnvironmentDNSBindings(input.EnvironmentDNS, selection.Captures)
 		if !stale {
 			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 				Key: active.Key, ModRevision: active.ModRevision,

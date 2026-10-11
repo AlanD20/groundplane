@@ -2,95 +2,113 @@ package release
 
 import (
 	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/core/serviceports"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const MaximumProxyPorts = 32
-
 type ProxyConfig struct {
-	JSON   []byte
-	SHA256 [sha256.Size]byte
-}
-
-func ProxyPorts(exposures []string) ([]uint16, error) {
-	ports := make([]uint16, 0, len(exposures))
-	seen := make(map[uint16]struct{}, len(exposures))
-	for _, raw := range exposures {
-		declaration, err := serviceports.Parse(raw)
-		if err != nil {
-			return nil, err
-		}
-		if declaration.Protocol == serviceports.UDP {
-			return nil, errs.New(
-				errs.KindValidationFailed,
-				fmt.Sprintf("Service proxy cannot forward UDP port %q; UDP proxy deployment is not implemented", raw),
-			)
-		}
-		if declaration.First != declaration.Last {
-			return nil, errs.New(
-				errs.KindValidationFailed,
-				fmt.Sprintf("Service proxy requires individual TCP ports, not range %q", raw),
-			)
-		}
-		port := declaration.First
-		if _, duplicate := seen[port]; duplicate {
-			continue
-		}
-		seen[port] = struct{}{}
-		ports = append(ports, port)
-	}
-	if len(ports) == 0 || len(ports) > MaximumProxyPorts {
-		return nil, errs.New(errs.KindValidationFailed, "release proxy requires between 1 and 32 TCP ports")
-	}
-	slices.Sort(ports)
-	return ports, nil
+	Implementation serviceproxy.Implementation
+	JSON           []byte
+	SHA256         [sha256.Size]byte
 }
 
 func RenderProxyConfig(
+	implementation serviceproxy.Implementation,
 	serviceName, releaseID string,
 	target WorkloadTarget,
 	generation uint64,
-	ports []uint16,
+	ports []ProxyPort,
 ) (ProxyConfig, error) {
 	if serviceName == "" || strings.ContainsAny(serviceName, "/\\\x00") ||
-		target.Validate() != nil || generation == 0 || releaseID == "" ||
-		len(ports) == 0 || len(ports) > MaximumProxyPorts {
+		target.Validate() != nil || generation == 0 || releaseID == "" {
 		return ProxyConfig{}, errs.New(errs.KindValidationFailed, "release proxy config identity is invalid")
+	}
+	if err := ValidateProxyForwarding(implementation, ports); err != nil {
+		return ProxyConfig{}, err
 	}
 	workloadName, err := WorkloadComposeName(serviceName, target)
 	if err != nil {
 		return ProxyConfig{}, err
 	}
-	servers := make(map[string]any, len(ports))
-	for _, port := range ports {
-		if port == 0 {
-			return ProxyConfig{}, errs.New(errs.KindValidationFailed, "release proxy port is invalid")
-		}
-		name := fmt.Sprintf("gp_g%d_%s_p%d", generation, strings.ToLower(releaseID), port)
-		servers[name] = map[string]any{
-			"listen": []string{fmt.Sprintf(":%d", port)},
-			"routes": []any{map[string]any{
-				"handle": []any{map[string]any{
-					"handler": "reverse_proxy",
-					"upstreams": []any{map[string]any{
-						"dial": fmt.Sprintf("%s:%d", workloadName, port),
-					}},
-				}},
-			}},
-		}
+	return renderProxyUpstreams(implementation, releaseID, generation, ports, []string{workloadName})
+}
+
+// RenderRollingProxyConfig seals one mixed old/new routing set. Readiness and
+// current-stage checks belong to execution; rendering is not promotion proof.
+func RenderRollingProxyConfig(
+	implementation serviceproxy.Implementation,
+	plan rollingrelease.Plan,
+	changeOrdinal uint32,
+	generation uint64,
+	ports []ProxyPort,
+) (ProxyConfig, error) {
+	changes, err := plan.Changes()
+	if err != nil {
+		return ProxyConfig{}, err
 	}
-	encoded, err := json.Marshal(map[string]any{
-		"admin": map[string]any{"listen": "127.0.0.1:2019"},
-		"apps":  map[string]any{"http": map[string]any{"servers": servers}},
+	if changeOrdinal == 0 || changeOrdinal > uint32(len(changes)) || generation == 0 {
+		return ProxyConfig{}, errs.New(errs.KindValidationFailed, "rolling proxy change is invalid")
+	}
+	if err := serviceproxy.ValidateTrafficSwitchPorts(implementation, proxyConfigurationPorts(ports)); err != nil {
+		return ProxyConfig{}, err
+	}
+	active := changes[changeOrdinal-1].After
+	names := make([]string, len(active))
+	for index, replica := range active {
+		names[index] = replica.RoutingName()
+	}
+	slices.Sort(names)
+	return renderProxyUpstreams(implementation, plan.ReleaseID, generation, ports, names)
+}
+
+// RenderRollingInitialProxyConfig does not make an unproven first candidate
+// addressable. With no predecessor the listener returns 503 until promotion.
+func RenderRollingInitialProxyConfig(
+	implementation serviceproxy.Implementation,
+	plan rollingrelease.Plan,
+	generation uint64,
+	ports []ProxyPort,
+) (ProxyConfig, error) {
+	if err := plan.Validate(); err != nil {
+		return ProxyConfig{}, err
+	}
+	if generation == 0 {
+		return ProxyConfig{}, errs.New(errs.KindValidationFailed, "rolling initial proxy generation is invalid")
+	}
+	if err := serviceproxy.ValidateTrafficSwitchPorts(implementation, proxyConfigurationPorts(ports)); err != nil {
+		return ProxyConfig{}, err
+	}
+	names := make([]string, len(plan.Prior))
+	for index, replica := range plan.Prior {
+		names[index] = replica.RoutingName()
+	}
+	slices.Sort(names)
+	return renderProxyUpstreams(implementation, plan.ReleaseID, generation, ports, names)
+}
+
+func renderProxyUpstreams(
+	implementation serviceproxy.Implementation,
+	releaseID string,
+	generation uint64,
+	ports []ProxyPort,
+	names []string,
+) (ProxyConfig, error) {
+	if len(names) > rollingrelease.MaximumReplicas {
+		return ProxyConfig{}, errs.New(
+			errs.KindValidationFailed,
+			"Service proxy upstream count exceeds the replica limit",
+		)
+	}
+	encoded, err := serviceproxy.Render(serviceproxy.Configuration{
+		Implementation: implementation, ReleaseID: releaseID, Generation: generation,
+		Ports: proxyConfigurationPorts(ports), Upstreams: names,
 	})
 	if err != nil {
-		return ProxyConfig{}, errs.Wrap(errs.KindInternal, err)
+		return ProxyConfig{}, err
 	}
-	return ProxyConfig{JSON: encoded, SHA256: sha256.Sum256(encoded)}, nil
+	return ProxyConfig{Implementation: implementation, JSON: encoded, SHA256: sha256.Sum256(encoded)}, nil
 }

@@ -10,12 +10,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const (
-	ManifestSchema         = 1
-	StorageEpoch           = 10
+	ManifestSchema         = 2
+	StorageEpoch           = 31
 	MaxManifestBytes       = 4096
 	TaskTimeoutSeconds     = 600
 	DrainTimeoutSeconds    = 120
@@ -44,12 +45,13 @@ func Hash(raw []byte) Digest {
 // Manifest is the complete immutable upgrade input. Compatibility epochs are
 // explicitly advanced whenever a release can no longer roll back its writes.
 type Manifest struct {
-	Schema            int    `json:"schema"`
-	ControllerSHA256  Digest `json:"controller_sha256"`
-	ControllerVersion string `json:"controller_version"`
-	AgentImage        string `json:"agent_image"`
-	StorageEpoch      int    `json:"storage_epoch"`
-	ChannelSchema     int    `json:"channel_schema"`
+	Schema            int                          `json:"schema"`
+	ControllerSHA256  Digest                       `json:"controller_sha256"`
+	ControllerVersion string                       `json:"controller_version"`
+	ControllerSource  buildversion.BuildProvenance `json:"controller_source"`
+	AgentImage        string                       `json:"agent_image"`
+	StorageEpoch      int                          `json:"storage_epoch"`
+	ChannelSchema     int                          `json:"channel_schema"`
 }
 
 // ParseManifest accepts byte-exact canonical JSON so every publisher and reader
@@ -92,7 +94,9 @@ func (manifest Manifest) ValidateRecord() error {
 		return errs.New(errs.KindValidationFailed, "controller release record format is invalid")
 	}
 	if !manifest.ControllerSHA256.Valid() || !imageref.IsDigestPinned(manifest.AgentImage) ||
-		len(manifest.AgentImage) > 1024 || !validVersion(manifest.ControllerVersion) {
+		len(
+			manifest.AgentImage,
+		) > 1024 || !validVersion(manifest.ControllerVersion) || manifest.ControllerSource.Validate() != nil {
 		return errs.New(errs.KindValidationFailed, "controller release identities are invalid")
 	}
 	return nil

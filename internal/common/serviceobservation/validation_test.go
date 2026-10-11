@@ -13,8 +13,10 @@ func observationRequest() *agentpb.ObserveServices {
 		RequestId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Targets: []*agentpb.ServiceObservationTarget{{
 			EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			RenderGeneration: 3, ComposeName: "api--blue", RuntimeRole: "slot", Slot: "blue",
+			ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", RuntimeRole: "slot", Slot: "blue",
+			Workloads: []*agentpb.ServiceWorkloadObservation{
+				{PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 3, ComposeName: "api--blue"},
+			},
 		}},
 	}
 }
@@ -47,17 +49,17 @@ func TestObservationRequestIsClosedAndBounded(t *testing.T) {
 		"mixed Environment": func(r *agentpb.ObserveServices) {
 			other := proto.CloneOf(r.Targets[0])
 			other.EnvironmentId = "env_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-			other.ServiceId, other.ComposeName = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW", "worker"
+			other.ServiceId, other.Workloads[0].ComposeName = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW", "worker"
 			r.Targets = append(r.Targets, other)
 		},
 		"unknown request": func(r *agentpb.ObserveServices) { r.ProtoReflect().SetUnknown([]byte{0x78, 1}) },
 		"unknown target":  func(r *agentpb.ObserveServices) { r.Targets[0].ProtoReflect().SetUnknown([]byte{0x78, 1}) },
-		"no plan":         func(r *agentpb.ObserveServices) { r.Targets[0].PlanId = "" },
-		"zero generation": func(r *agentpb.ObserveServices) { r.Targets[0].RenderGeneration = 0 },
+		"no plan":         func(r *agentpb.ObserveServices) { r.Targets[0].Workloads[0].PlanId = "" },
+		"zero generation": func(r *agentpb.ObserveServices) { r.Targets[0].Workloads[0].RenderGeneration = 0 },
 		"proxy":           func(r *agentpb.ObserveServices) { r.Targets[0].RuntimeRole = "proxy" },
 		"invalid slot":    func(r *agentpb.ObserveServices) { r.Targets[0].Slot = "candidate" },
 		"mixed role":      func(r *agentpb.ObserveServices) { r.Targets[0].RuntimeRole = "singleton" },
-		"Compose path":    func(r *agentpb.ObserveServices) { r.Targets[0].ComposeName = "../../host" },
+		"Compose path":    func(r *agentpb.ObserveServices) { r.Targets[0].Workloads[0].ComposeName = "../../host" },
 		"too many": func(r *agentpb.ObserveServices) {
 			r.Targets = make([]*agentpb.ServiceObservationTarget, MaximumTargets+1)
 		},
@@ -128,6 +130,7 @@ func TestObservationProxyWireRequiresCompleteAuthorityAndOutcome(t *testing.T) {
 	request := observationRequest()
 	target := request.Targets[0]
 	target.ProxyComposeName = "api"
+	target.ProxyImplementation = agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY
 	target.ProxyPlanId = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	target.ProxyRenderGeneration = 4
 	target.ProxyConfigSha256 = make([]byte, 32)

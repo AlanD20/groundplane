@@ -12,6 +12,9 @@ type sessionEventKind uint8
 const (
 	sessionEnded sessionEventKind = iota
 	sessionObservation
+	sessionBackingAccess
+	sessionDNSCheck
+	sessionEdgeCheck
 	sessionImage
 	sessionReadiness
 	sessionReceived
@@ -21,21 +24,33 @@ const (
 )
 
 type sessionEvent struct {
-	kind        sessionEventKind
-	observation *agentpb.ServiceObservationResult
-	image       imageOutput
-	received    receiveResult
-	worker      WorkerOutput
-	log         *agentpb.AgentMessage
-	bulk        *backupBulkFrame
+	kind          sessionEventKind
+	observation   *agentpb.ServiceObservationResult
+	backingAccess *agentpb.BackingAccessResult
+	dnsCheck      *agentpb.DNSConnectionResult
+	edgeCheck     *agentpb.EdgeConnectionResult
+	image         imageOutput
+	received      receiveResult
+	worker        WorkerOutput
+	log           *agentpb.AgentMessage
+	bulk          *backupBulkFrame
 }
 
 // Prefer ready control traffic, but force a queued bulk frame after at most
 // four control events. After each bulk frame, ready control wins again. Only
 // the session writer consumes these channels or writes the underlying stream.
-func nextSessionEvent(ctx context.Context, pool *WorkerPool, observations *observationSession,
-	images *imageSession, received <-chan receiveResult, logs <-chan *agentpb.AgentMessage,
-	ticks <-chan time.Time, controlBurst int,
+func nextSessionEvent(
+	ctx context.Context,
+	pool *WorkerPool,
+	observations *observationSession,
+	images *imageSession,
+	backingAccess *backingAccessSession,
+	dnsChecks *dnsCheckSession,
+	edgeChecks *edgeCheckSession,
+	received <-chan receiveResult,
+	logs <-chan *agentpb.AgentMessage,
+	ticks <-chan time.Time,
+	controlBurst int,
 ) sessionEvent {
 	select {
 	case <-ctx.Done():
@@ -54,6 +69,12 @@ func nextSessionEvent(ctx context.Context, pool *WorkerPool, observations *obser
 		return sessionEvent{kind: sessionEnded}
 	case result := <-observations.outputs:
 		return sessionEvent{kind: sessionObservation, observation: result}
+	case result := <-backingAccess.outputs:
+		return sessionEvent{kind: sessionBackingAccess, backingAccess: result}
+	case result := <-dnsChecks.outputs:
+		return sessionEvent{kind: sessionDNSCheck, dnsCheck: result}
+	case result := <-edgeChecks.outputs:
+		return sessionEvent{kind: sessionEdgeCheck, edgeCheck: result}
 	case result := <-images.outputs:
 		return sessionEvent{kind: sessionImage, image: result}
 	case <-ticks:
@@ -71,6 +92,12 @@ func nextSessionEvent(ctx context.Context, pool *WorkerPool, observations *obser
 		return sessionEvent{kind: sessionEnded}
 	case result := <-observations.outputs:
 		return sessionEvent{kind: sessionObservation, observation: result}
+	case result := <-backingAccess.outputs:
+		return sessionEvent{kind: sessionBackingAccess, backingAccess: result}
+	case result := <-dnsChecks.outputs:
+		return sessionEvent{kind: sessionDNSCheck, dnsCheck: result}
+	case result := <-edgeChecks.outputs:
+		return sessionEvent{kind: sessionEdgeCheck, edgeCheck: result}
 	case result := <-images.outputs:
 		return sessionEvent{kind: sessionImage, image: result}
 	case <-ticks:

@@ -2,11 +2,14 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
@@ -15,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: a private Agent child must be published with its durable unit
@@ -22,14 +26,16 @@ import (
 // become an unfinishable running Task.
 func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	ctx := context.Background()
-	store := newMemoryTaskStore()
-	repository, err := newTaskRepository(store)
+	store := &releasePlanningTestStore{memoryHierarchyStore: newMemoryHierarchyStore()}
+	repository, err := NewTaskRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := taskJournalTime()
 	parent := validTaskRecord(now)
 	parent.Executor = taskjournal.TaskExecutorBlueprint
+	parent.Owner.WorkspaceType = taskjournal.TaskWorkspaceTenant
+	parent.Owner.TenantID = ids.NewAt(ids.KindTenant, now, 79)
 	parent.Owner.ProjectID = ids.NewAt(ids.KindProject, now, 80)
 	parent.Owner.EnvironmentID = ids.NewAt(ids.KindEnvironment, now, 81)
 	parent.Target = parent.Owner.EnvironmentID
@@ -104,20 +110,71 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	child.PlanID = ids.NewAt(ids.KindPlan, now, 85)
 	child.IdempotencyKey = child.ID
 	child.Actor = taskjournal.TaskActorSystem
+	child.Executor = taskjournal.TaskExecutorAgent
 	child.Owner = parent.Owner
 	child.Target = parent.Owner.EnvironmentID
 	publicationID := ids.NewULID()
+	artifactID := ids.NewAt(ids.KindConfig, now, 88)
+	releaseID := ids.NewAt(ids.KindDeployment, now, 87)
 	child.Params = map[string]string{
-		taskjournal.TaskBlueprintParentParam:       parent.ID,
-		blueprints.EnvironmentDesiredRevisionParam: parent.ID,
-		releaserender.TaskReleasePublicationParam:  publicationID,
+		taskjournal.TaskBlueprintParentParam:            parent.ID,
+		blueprints.EnvironmentDesiredRevisionParam:      parent.ID,
+		releaserender.TaskReleasePublicationParam:       publicationID,
+		taskjournal.TaskMaterializationEnvironmentParam: parent.Owner.EnvironmentID,
+		taskjournal.TaskComposeArtifactParam:            artifactID,
+	}
+	child.Steps = []taskjournal.TaskStepRecord{
+		{Kind: taskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 89)},
+		{Kind: taskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 90)},
+		{Kind: taskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 91)},
+		{Kind: taskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 92)},
+		{Kind: taskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 93)},
+	}
+	nativePlan := blueprintRequirementGateCandidatePlan(
+		t,
+		child,
+		core.Service{ID: service.ID, Name: "worker", Image: "registry.example/worker:next"},
+		releaseID,
+		releaseTestWorkloadSeal("registry.example/worker:next"),
+	)
+	descriptor, err := executionplan.DescribeCandidateRelease(nativePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child.PlanHash = hex.EncodeToString(descriptor.PlanHash)
+	nativePlanValue, err := proto.MarshalOptions{Deterministic: true}.Marshal(nativePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseLedger, err := NewReleaseLedger(store, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollout, err := releaseLedger.StageBlueprintServiceRollout(
+		ctx,
+		releaserender.BlueprintServiceRolloutCapture{
+			TaskID: child.ID, OperationID: child.OperationID, Owner: child.Owner,
+			TimeoutSeconds: child.TimeoutSeconds, Params: child.Params, Steps: child.Steps,
+			NativePlan: nativePlanValue,
+		},
+	)
+	if err != nil {
+		t.Fatalf("stage native Blueprint Service rollout: %v", err)
 	}
 	manifest := releases.ReleaseStagedManifest{
-		PublicationID: publicationID, OperationID: child.OperationID, Digest: strings.Repeat("a", 64),
+		PublicationID: publicationID, OperationID: child.OperationID,
 		Members: []releases.ReleaseStagedMemberRef{
-			{ServiceID: service.ID, ReleaseID: ids.NewAt(ids.KindDeployment, now, 87)},
+			{
+				ServiceID: service.ID, ReleaseID: releaseID,
+				IntentDigest: strings.Repeat("a", 64), RenderDigest: strings.Repeat("b", 64),
+				CheckpointDigest: strings.Repeat("c", 64),
+			},
 		},
 		CreatedAt: now,
+	}
+	manifest.Digest, err = blueprintCandidateManifestDigest(manifest)
+	if err != nil {
+		t.Fatal(err)
 	}
 	manifestValue, err := releases.EncodeReleaseRecord("release-staged-manifest", manifest)
 	if err != nil {
@@ -133,8 +190,18 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	if err != nil || !staged.Succeeded {
 		t.Fatalf("stage Release manifest = %#v, %v", staged, err)
 	}
+	executedArtifact, err := proto.MarshalOptions{Deterministic: true}.Marshal(nativePlan.Artifacts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimes, err := executionplan.PrepareBlueprintRuntimeInputs(nativePlan, artifactID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	publicationValue, err := releases.EncodeReleaseRecord("release-publication", releases.ReleasePublicationMarker{
-		PublicationID: publicationID, OperationID: child.OperationID, ManifestDigest: manifest.Digest, PublishedAt: now,
+		PublicationID: publicationID, OperationID: child.OperationID, ManifestDigest: manifest.Digest,
+		CandidateReleaseDescriptor: descriptor, ExecutedComposeArtifact: executedArtifact,
+		BlueprintRuntimes: runtimes, PublishedAt: now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -143,6 +210,10 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 		EnvironmentID: child.Owner.EnvironmentID, OperationID: child.OperationID,
 		Conditions: []keyvalue.Condition{
 			{Key: releases.ReleaseManifestStagingKey(publicationID), ModRevision: staged.Revision},
+			{
+				Key:         BlueprintServiceRolloutKey(child.Owner.EnvironmentID, parent.ID, child.ID),
+				ModRevision: rollout.Revision,
+			},
 			{Key: releases.ReleasePublicationKey(publicationID)},
 		},
 		Mutations: []keyvalue.Mutation{
@@ -153,13 +224,23 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	created, err := repository.PublishBlueprintChild(
-		ctx, parent.ID, child, unit, publication, testcomponentplanning.Publication{},
+		ctx,
+		parent.ID,
+		child,
+		unit,
+		publication,
+		testcomponentplanning.Publication{},
+		BlueprintEntryRemovalPublication{},
+		BlueprintServiceRemovalPublication{},
+		BlueprintZoneRemovalPublication{},
+		nil,
 	)
 	if err != nil || created.Record.ID != child.ID {
 		t.Fatalf("publish child = %#v, %v", created, err)
 	}
 	if _, err := repository.PublishBlueprintChild(
 		ctx, parent.ID, child, unit, publication, testcomponentplanning.Publication{},
+		BlueprintEntryRemovalPublication{}, BlueprintServiceRemovalPublication{}, BlueprintZoneRemovalPublication{}, nil,
 	); err == nil {
 		t.Fatal("same ready unit was published twice")
 	}

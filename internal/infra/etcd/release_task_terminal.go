@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -43,7 +44,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		return false, releases.CorruptReleaseRecord()
 	}
 	if terminalStatus != taskjournal.TaskStatusCompleted && result.FailedStepID == "" &&
-		!unassignedReleaseAbort(task, terminalStatus) &&
+		!unassignedReleaseTerminal(task, terminalStatus) &&
 		result.Diagnostic != taskjournal.TaskResultDiagnosticTimeoutBeforeEffect {
 		return false, errs.New(errs.KindStateConflict, "release failure is missing its failed step identity")
 	}
@@ -153,7 +154,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			proofConditions...)
 	}
 
-	failedOrdinal, err := releaseFailedMemberOrdinal(task, terminalStatus, result)
+	failedOrdinal, err := releaseFailedMemberOrdinal(task, terminalStatus, result, marker, head.Members)
 	if err != nil {
 		return false, err
 	}
@@ -207,7 +208,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		}
 		proxy, hasProxy := releaseProxyEvidence(result, member.ServiceID)
 		recreate, hasRecreate := releaseRecreateEvidence(result, member.ServiceID)
-		if hasProxy && hasRecreate {
+		rolling, hasRolling := releaseRollingEvidence(result, member.ServiceID)
+		if hasProxy && hasRecreate || hasRolling && (hasProxy || hasRecreate) {
 			return false, errs.New(errs.KindStateConflict, "release serving evidence uses the wrong strategy authority")
 		}
 		observedReleaseID := proxy.ReleaseID
@@ -216,6 +218,10 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		if hasRecreate {
 			observedReleaseID, compensated = recreate.ReleaseID, hasRecreate && recreate.Compensated
 			observedTarget = recreate.Target
+		}
+		if hasRolling {
+			observedReleaseID, observedTarget = rolling.ReleaseID, "rolling"
+			compensated = rolling.Compensated
 		}
 		state, serving, recovery := releaseMemberTerminalState(
 			head,
@@ -229,10 +235,14 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		if serving {
 			if hasProxy && (proxy.Compensated || proxy.ReleaseID != intent.ID) ||
 				hasRecreate && (recreate.Compensated || recreate.ReleaseID != intent.ID) ||
-				!hasProxy && !hasRecreate {
+				hasRolling &&
+					(rolling.Compensated || rolling.ReleaseID != intent.ID) || !hasProxy && !hasRecreate && !hasRolling {
 				return false, errs.New(errs.KindStateConflict, "release serving evidence does not match its candidate")
 			}
-			stepID := task.Steps[index*5+2].ID
+			stepID, stepErr := releaseCompletionStep(marker, member.ServiceID)
+			if stepErr != nil {
+				return false, stepErr
+			}
 			if member.Ordinal == failedOrdinal && terminalStatus != taskjournal.TaskStatusCompleted {
 				stepID = result.FailedStepID
 			}
@@ -254,6 +264,9 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 				effect.ObservedSlot, effect.RouterConfigurationDigest, effect.ObservedRouterTarget = domain.WorkloadTarget(proxy.Target).
 					Slot(),
 					proxy.ConfigSHA256, proxy.Target
+			}
+			if hasRolling && rolling.ProxyGeneration != 0 {
+				effect.RouterConfigurationDigest, effect.ObservedRouterTarget = rolling.ProxyConfigSHA256, "rolling"
 			}
 			evidence = []domain.EffectEvidence{effect}
 		} else if compensated {
@@ -346,6 +359,13 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 				mutations,
 				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[5], Value: runtimeValue},
 			)
+			intentCondition, intentMutation, err := servicerecord.AcknowledgeRunningRuntime(ctx, repository.store,
+				task.Owner.EnvironmentID, member.ServiceID, readRevision)
+			if err != nil {
+				return false, err
+			}
+			conditions = append(conditions, intentCondition)
+			mutations = append(mutations, intentMutation)
 		}
 		budget, err := repository.store.MeasureTransaction(
 			ctx,

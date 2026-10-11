@@ -6,15 +6,18 @@ import (
 	"context"
 	"runtime"
 
+	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	"github.com/AlanD20/groundplane/internal/common/envoyrouter"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type Recipe struct {
-	Path      string
-	Image     componentsdk.OCIImage
-	Arguments []string
+	Path       string
+	Image      componentsdk.OCIImage
+	Arguments  []string
+	Activation registeredcatalog.ContainerConfigActivation
 }
 
 type RecipeResolver func(componentsdk.ActionEnvelope) (Recipe, error)
@@ -49,6 +52,15 @@ func (validator *Validator) ValidateComponentFile(
 	if destination == "" || recipe.Path != destination || recipe.Image.Validate() != nil || !found ||
 		len(recipe.Arguments) == 0 || len(content) == 0 {
 		return errs.New(errs.KindValidationFailed, "Component file preflight recipe does not match its materialization")
+	}
+	switch recipe.Activation {
+	case registeredcatalog.ContainerConfigActivationCommand:
+	case registeredcatalog.ContainerConfigActivationHTTPDiscovery:
+		if _, err := envoyrouter.Read(content); err != nil {
+			return err
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "Component file preflight activation is not registered")
 	}
 	return validator.execute.ValidateToExit(ctx, managedconfighelpercontainer.ValidatorImage{
 		Reference: reference, Platform: platform,

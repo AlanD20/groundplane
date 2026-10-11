@@ -187,6 +187,21 @@ func connectorEditIntent(
 	revision int64,
 	input apiTypes.ConnectorEditRequest,
 ) requestidempotency.CanonicalIntentV1 {
+	return requestidempotency.CanonicalIntentV1{
+		Method: http.MethodPatch, Route: "/api/v1/connectors/{id}",
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: id}},
+		Query: requestidempotency.Object(
+			requestidempotency.Field{
+				Name:  "revision",
+				Value: requestidempotency.String(strconv.FormatInt(revision, 10)),
+			},
+		),
+		Body: requestidempotency.JSONBody(connectorEditBody(input)),
+	}
+}
+
+func connectorEditBody(input apiTypes.ConnectorEditRequest) requestidempotency.Value {
 	optional := func(value *string) requestidempotency.Value {
 		if value == nil {
 			return requestidempotency.Null()
@@ -211,24 +226,13 @@ func connectorEditIntent(
 			requestidempotency.Field{Name: "value", Value: requestidempotency.String(credential.Value)},
 		))
 	}
-	return requestidempotency.CanonicalIntentV1{
-		Method: http.MethodPatch, Route: "/api/v1/connectors/{id}",
-		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
-		Path:  []requestidempotency.PathBinding{{Name: "id", Value: id}},
-		Query: requestidempotency.Object(
-			requestidempotency.Field{
-				Name:  "revision",
-				Value: requestidempotency.String(strconv.FormatInt(revision, 10)),
-			},
-		),
-		Body: requestidempotency.JSONBody(requestidempotency.Object(
-			requestidempotency.Field{Name: "name", Value: optional(input.Name)},
-			requestidempotency.Field{Name: "endpoint", Value: optional(input.Endpoint)},
-			requestidempotency.Field{Name: "bucket", Value: optional(input.Bucket)},
-			requestidempotency.Field{Name: "prefix", Value: optional(input.Prefix)},
-			requestidempotency.Field{Name: "region", Value: optional(input.Region)},
-			requestidempotency.Field{Name: "path_style", Value: pathStyle},
-			requestidempotency.Field{Name: "credentials", Value: requestidempotency.List(credentials...)},
-		)),
-	}
+	return requestidempotency.Object(
+		requestidempotency.Field{Name: "name", Value: optional(input.Name)},
+		requestidempotency.Field{Name: "endpoint", Value: optional(input.Endpoint)},
+		requestidempotency.Field{Name: "bucket", Value: optional(input.Bucket)},
+		requestidempotency.Field{Name: "prefix", Value: optional(input.Prefix)},
+		requestidempotency.Field{Name: "region", Value: optional(input.Region)},
+		requestidempotency.Field{Name: "path_style", Value: pathStyle},
+		requestidempotency.Field{Name: "credentials", Value: requestidempotency.List(credentials...)},
+	)
 }

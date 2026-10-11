@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"net/netip"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"gopkg.in/yaml.v3"
@@ -23,6 +25,7 @@ type ensuredNetwork struct {
 	Name        string            `yaml:"name"`
 	Driver      string            `yaml:"driver"`
 	Internal    bool              `yaml:"internal"`
+	AllowGPDNS  bool              `yaml:"x-gp-allow-dns"`
 	External    bool              `yaml:"external"`
 	EnableIPv4  *bool             `yaml:"enable_ipv4"`
 	EnableIPv6  bool              `yaml:"enable_ipv6"`
@@ -81,6 +84,9 @@ func selectedEnsuredNetwork(
 		return ensuredNetwork{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	network, found := document.Networks[selected.GetComposeName()]
+	if err := zonedns.Validate(network.Internal, network.AllowGPDNS); err != nil {
+		return ensuredNetwork{}, err
+	}
 	if len(network.IPAM.Options) != 0 {
 		return ensuredNetwork{}, errs.New(errs.KindValidationFailed, "owned network IPAM options are unsupported")
 	}
@@ -179,6 +185,20 @@ func executeManagedNetworkEnsure(
 		}
 		return result, nil
 	}
+	if network.AllowGPDNS {
+		version, err := run("version", "--format", "{{.Server.Version}}")
+		if err != nil {
+			return nil, err
+		}
+		majorText, _, _ := strings.Cut(strings.TrimSpace(string(version.Stdout)), ".")
+		major, err := strconv.Atoi(majorText)
+		if err != nil || major < 27 {
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Allow GP DNS requires Docker Engine 27 or newer; upgrade Docker before applying this internal Zone",
+			)
+		}
+	}
 	listed, err := run(
 		"network",
 		"ls",
@@ -264,6 +284,9 @@ func ownedNetworkMatches(actual inspectedOwnedNetwork, expected ensuredNetwork) 
 	}
 	gateway, err := netip.ParseAddr(pool.Gateway)
 	if err != nil || !prefix.Contains(gateway) {
+		return false
+	}
+	if expected.AllowGPDNS && gateway != prefix.Addr().Next() {
 		return false
 	}
 	for key, value := range expected.Labels {

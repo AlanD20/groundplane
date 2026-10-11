@@ -74,6 +74,12 @@ type componentActionObserverStub struct {
 	evidence *agentpb.DNSResolverObservationEvidence
 }
 
+func (*componentActionObserverStub) CheckConnections(
+	context.Context, dnsresolverobserver.Request, []dnsresolverobserver.ConnectionQuery,
+) (dnsresolverobserver.ConnectionCheckResult, error) {
+	return dnsresolverobserver.ConnectionCheckResult{}, errors.New("unexpected DNS connection check")
+}
+
 func (observer *componentActionObserverStub) Observe(
 	_ context.Context,
 	request dnsresolverobserver.Request,

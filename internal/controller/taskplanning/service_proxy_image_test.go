@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
+
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -26,8 +29,8 @@ func TestRenderComposeStableProxySealsManagedImageAuthority(t *testing.T) {
 	}}})
 	input.Identities.Services = []testcomposeidentity.Resource{{ID: serviceID, Name: "api"}}
 	input.Releases = map[string]testcomposerender.ComposeReleaseIdentity{serviceID: {
-		ProxyImage: testServiceProxyImage(),
-		ReleaseID:  composeIdentityTestID(ids.KindDeployment, 34), Image: "example/api:next",
+		ProxyImplementation: testServiceProxyImplementation(), ProxyImage: testServiceProxyImage(),
+		ReleaseID: composeIdentityTestID(ids.KindDeployment, 34), Image: "example/api:next",
 		Strategy: domain.StrategyRecreate, Target: domain.WorkloadSingleton,
 		ServingTarget: domain.WorkloadSingleton,
 	}}
@@ -68,23 +71,41 @@ func TestRenderComposeStableProxySealsManagedImageAuthority(t *testing.T) {
 func TestPrepareReleaseProxyImageRetainsHistoricalAuthority(t *testing.T) {
 	current := testServiceProxyImage()
 	current.Platform.ConfigDigest = strings.Repeat("d", 64)
-	resolver := &TaskPlanResolver{serviceProxyImage: current}
+	resolver := &TaskPlanResolver{
+		serviceProxyImages: map[serviceproxy.Implementation]*domain.ProxyImage{serviceproxy.Caddy: current},
+	}
 	old := testServiceProxyImage()
-	prior := testreleaserender.ReleaseRenderInput{ServiceID: "service", EnvironmentID: "environment", ProxyImage: old}
+	prior := testreleaserender.ReleaseRenderInput{
+		ServiceID: "service", ServiceName: "api", EnvironmentID: "environment", Strategy: domain.StrategyRecreate,
+		ProxyImplementation: testServiceProxyImplementation(),
+		ProxyPorts:          []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}}, ProxyImage: old,
+	}
 	for _, test := range []struct {
-		name      string
-		prior     *testreleaserender.ReleaseRenderInput
-		image     *domain.ProxyImage
-		wantError bool
+		name       string
+		prior      *testreleaserender.ReleaseRenderInput
+		image      *domain.ProxyImage
+		historical bool
+		wantError  bool
 	}{
-		{name: "historical read", prior: &prior},
+		{name: "historical read", prior: &prior, historical: true},
 		{name: "already frozen", image: old},
-		{name: "missing historical", wantError: true},
-		{name: "partial historical", prior: &testreleaserender.ReleaseRenderInput{ServiceID: "service", EnvironmentID: "environment"}, wantError: true},
+		{name: "missing historical", historical: true, wantError: true},
+		{name: "partial historical", prior: &testreleaserender.ReleaseRenderInput{
+			ServiceID: "service", ServiceName: "api", EnvironmentID: "environment", Strategy: domain.StrategyRecreate,
+			ProxyImplementation: testServiceProxyImplementation(),
+			ProxyPorts:          []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+		}, historical: true, wantError: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			render := testreleaserender.ReleaseRenderInput{ServiceID: "service", EnvironmentID: "environment",
-				ProxyPorts: []uint16{8080}, PriorArtifactID: "prior-artifact", ProxyImage: test.image}
+				ServiceName: "api", Strategy: domain.StrategyRecreate,
+				ProxyImplementation: testServiceProxyImplementation(),
+				ProxyPorts: []domain.ProxyPort{
+					{Port: 8080, Protocol: serviceports.TCP},
+				}, ProxyImage: test.image}
+			if test.historical {
+				render.PriorArtifactID = "prior-artifact"
+			}
 			err := resolver.PrepareReleaseProxyImage(&render, test.prior)
 			if (err != nil) != test.wantError {
 				t.Fatalf("prepare error = %v", err)
@@ -99,19 +120,32 @@ func TestPrepareReleaseProxyImageRetainsHistoricalAuthority(t *testing.T) {
 // Rationale: only the first addressable release selects the compiled asset;
 // a portless release neither needs nor acquires proxy authority.
 func TestPrepareReleaseProxyImageFirstSelection(t *testing.T) {
-	resolver := &TaskPlanResolver{serviceProxyImage: testServiceProxyImage()}
-	render := testreleaserender.ReleaseRenderInput{ProxyPorts: []uint16{8080}}
+	resolver := &TaskPlanResolver{
+		serviceProxyImages: map[serviceproxy.Implementation]*domain.ProxyImage{
+			serviceproxy.Caddy: testServiceProxyImage(),
+		},
+	}
+	render := testreleaserender.ReleaseRenderInput{
+		ServiceName: "api", Strategy: domain.StrategyRecreate,
+		ProxyImplementation: testServiceProxyImplementation(),
+		ProxyPorts:          []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+	}
 	if err := resolver.PrepareReleaseProxyImage(&render, nil); err != nil {
 		t.Fatal(err)
 	}
-	if render.ProxyImage == resolver.serviceProxyImage || *render.ProxyImage != *resolver.serviceProxyImage {
+	if render.ProxyImage == resolver.serviceProxyImages[serviceproxy.Caddy] ||
+		*render.ProxyImage != *resolver.serviceProxyImages[serviceproxy.Caddy] {
 		t.Fatal("first proxy selection is not independently frozen")
 	}
-	portless := testreleaserender.ReleaseRenderInput{}
+	portless := testreleaserender.ReleaseRenderInput{Strategy: domain.StrategyRecreate}
 	if err := resolver.PrepareReleaseProxyImage(&portless, nil); err != nil || portless.ProxyImage != nil {
 		t.Fatalf("portless selection = %#v, error = %v", portless.ProxyImage, err)
 	}
-	if err := (&TaskPlanResolver{}).PrepareReleaseProxyImage(&testreleaserender.ReleaseRenderInput{ProxyPorts: []uint16{8080}}, nil); err == nil {
+	if err := (&TaskPlanResolver{}).PrepareReleaseProxyImage(&testreleaserender.ReleaseRenderInput{
+		ServiceName: "api", Strategy: domain.StrategyRecreate,
+		ProxyImplementation: testServiceProxyImplementation(),
+		ProxyPorts:          []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+	}, nil); err == nil {
 		t.Fatal("accepted missing compiled proxy authority")
 	}
 }
@@ -120,4 +154,8 @@ func testServiceProxyImage() *domain.ProxyImage {
 	return &domain.ProxyImage{Repository: "docker.io/library/caddy", IndexDigest: strings.Repeat("a", 64),
 		Platform: componentsdk.OCIPlatform{OS: "linux", Architecture: "amd64",
 			ChildDigest: strings.Repeat("b", 64), ConfigDigest: strings.Repeat("c", 64)}}
+}
+
+func testServiceProxyImplementation() serviceproxy.Implementation {
+	return serviceproxy.Caddy
 }

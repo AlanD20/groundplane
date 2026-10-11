@@ -6,10 +6,13 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -22,26 +25,56 @@ import (
 // Rationale: native HTTP recreate restores a replicated singleton through its
 // sealed recreate probe, even when that same artifact includes a stable proxy.
 func TestNativeRecreateRecoveryProofWithStableProxy(t *testing.T) {
-	artifact := &agentpb.ComposeArtifact{ArtifactId: "prior", Services: []*agentpb.ComposeService{
-		{ServiceId: "service", Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
-			ExpectedReplicas: 2, ExpectedLabels: []*agentpb.LabelPair{{Key: "com.groundplane.release-id", Value: "release"}}},
-		{ServiceId: "service", Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY},
-	}}
-	encoded, err := proto.Marshal(artifact)
+	now := time.Date(2026, 9, 4, 19, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	serviceID := ids.NewAt(ids.KindService, now, 2)
+	releaseID := ids.NewAt(ids.KindDeployment, now, 3)
+	artifactID := ids.NewAt(ids.KindConfig, now, 4)
+	config, err := serviceproxy.Render(serviceproxy.Configuration{
+		Implementation: serviceproxy.Caddy, ReleaseID: releaseID, Generation: 1,
+		Ports: []serviceproxy.Port{{Number: 8080, Protocol: serviceproxy.TCP}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	configDigest := sha256.Sum256(config)
+	artifact := &agentpb.ComposeArtifact{
+		ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId: environmentID, ProjectName: "gp-" + strings.ToLower(environmentID), Services: []*agentpb.ComposeService{
+			{
+				ServiceId: serviceID, ComposeName: "worker",
+				ImageReference:   "sha256:" + strings.Repeat("a", 64),
+				Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+				ExpectedReplicas: 2, ExpectedLabels: []*agentpb.LabelPair{
+					{Key: "com.groundplane.release-id", Value: releaseID},
+					{Key: "com.groundplane.runtime-role", Value: "singleton"},
+				},
+			},
+			{
+				ServiceId: serviceID, ComposeName: "proxy",
+				Role:                agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+				ProxyImplementation: agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY,
+				ProxyConfigJson:     config, ProxyConfigSha256: configDigest[:],
+				ExpectedLabels: []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "proxy"}},
+			},
+		},
+	}
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assignment := testtaskassignments.TaskAssignmentRecord{
 		RestorationAuthority: &testtaskassignments.ReleaseRestorationAuthority{
+			EnvironmentID: environmentID,
 			Candidates: []testtaskassignments.ReleaseRestorationCandidate{
-				{ServiceID: "service", Target: testtaskassignments.ReleaseRestorationServingPredecessor},
+				{ServiceID: serviceID, Target: testtaskassignments.ReleaseRestorationServingPredecessor},
 			},
 		},
 	}
 	result := testtaskjournal.TaskResultRecord{RecreateEvidence: []testtaskjournal.TaskRecreateEvidence{{
-		ServiceID: "service", ArtifactID: "prior", ReleaseID: "release", Target: "singleton", Compensated: true,
+		ServiceID: serviceID, ArtifactID: artifactID, ReleaseID: releaseID, Target: "singleton", Compensated: true,
 	}}}
-	if err := validateReleaseRecoveryProof(assignment, nil, result, []releaseRecoveryProofExpectation{{kind: releaseRecoveryProofRecreate, priorTopologyArtifactID: "prior", nativeArtifact: encoded}}); err != nil {
+	if err := validateReleaseRecoveryProof(assignment, nil, result, []releaseRecoveryProofExpectation{{kind: releaseRecoveryProofRecreate, priorTopologyArtifactID: artifactID, nativeArtifact: encoded}}); err != nil {
 		t.Fatalf("exact native recreate recovery proof rejected: %v", err)
 	}
 }
@@ -175,7 +208,13 @@ func recoveryProofFixture(
 	priorRelease := ids.NewAt(ids.KindDeployment, f.now, 200)
 	priorArtifact := ids.NewAt(ids.KindConfig, f.now, 201)
 	priorTopologyArtifact := ids.NewAt(ids.KindConfig, f.now, 203)
-	config := []byte(`{"apps":{"http":{"servers":{"gp_g1_` + strings.ToLower(priorRelease) + `_p":{}}}}}`)
+	config, err := serviceproxy.Render(serviceproxy.Configuration{
+		Implementation: serviceproxy.Caddy, ReleaseID: priorRelease, Generation: 1,
+		Ports: []serviceproxy.Port{{Number: 8080, Protocol: serviceproxy.TCP}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	configDigest := sha256.Sum256(config)
 	artifact := &agentpb.ComposeArtifact{
 		ArtifactId:  priorArtifact,
@@ -196,12 +235,13 @@ func recoveryProofFixture(
 				},
 			},
 			{
-				ServiceId:         f.serviceID,
-				ComposeName:       "proxy",
-				Role:              agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-				ProxyConfigJson:   config,
-				ProxyConfigSha256: configDigest[:],
-				ExpectedLabels:    []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "proxy"}},
+				ServiceId:           f.serviceID,
+				ComposeName:         "proxy",
+				Role:                agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+				ProxyImplementation: agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY,
+				ProxyConfigJson:     config,
+				ProxyConfigSha256:   configDigest[:],
+				ExpectedLabels:      []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "proxy"}},
 			},
 		},
 	}
@@ -239,6 +279,9 @@ func recoveryProofFixture(
 	render.ReleaseID, render.PlanID, render.ArtifactID = f.releaseID, task.PlanID, f.artifactID
 	render.ServiceID, render.EnvironmentID = f.serviceID, task.Owner.EnvironmentID
 	render.Projection.EnvironmentID = task.Owner.EnvironmentID
+	for index := range render.Projection.Components {
+		render.Projection.Components[index].Desired.OwnerID = task.Owner.EnvironmentID
+	}
 	render.Projection.DesiredServices[0].EnvironmentID = task.Owner.EnvironmentID
 	render.Projection.DesiredServices[0].Desired.ID = f.serviceID
 	// Ordinary publication compiles a fresh prior topology from a newer desired
@@ -251,7 +294,10 @@ func recoveryProofFixture(
 	)
 	render.PriorRuntime = &authority.NativePredecessors[0]
 	render.CandidateWorkload.ReplicaCount, render.PriorWorkload.ReplicaCount = 3, 2
-	render.ProxyPorts, render.ProxyImage = []uint16{8080}, addressableReleaseProxyFixture().ProxyImage
+	render.ProxyPorts, render.ProxyImage = []domain.ProxyPort{
+		{Port: 8080, Protocol: serviceports.TCP},
+	}, addressableReleaseProxyFixture().ProxyImage
+	render.ProxyImplementation = serviceproxy.Caddy
 	render.ProxyGeneration, render.PriorProxyGeneration = 2, 1
 	render.ProxyConfigDigest, render.PriorProxyDigest = strings.Repeat("a", 64), hex.EncodeToString(configDigest[:])
 	if blueGreen {

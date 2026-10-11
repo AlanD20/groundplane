@@ -23,6 +23,7 @@ func authoredOwnedIdentities(
 	attaches []composeidentity.Resource,
 	components []composeidentity.Resource,
 	scripts []composeidentity.Resource,
+	dnsRecords []composeidentity.Resource,
 ) (projectionrecord.EnvironmentOwnedIdentities, error) {
 	result := projectionrecord.EnvironmentOwnedIdentities{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: generation,
@@ -75,6 +76,10 @@ func authoredOwnedIdentities(
 	if err != nil {
 		return projectionrecord.EnvironmentOwnedIdentities{}, err
 	}
+	result.DNSRecords, err = carryOwnedIdentities(dnsRecords, previous.DNSRecords, revisionID, nil, nil)
+	if err != nil {
+		return projectionrecord.EnvironmentOwnedIdentities{}, err
+	}
 	result.Attaches, err = carryOwnedIdentities(attaches, previous.Attaches, revisionID, nil, nil)
 	if err != nil {
 		return projectionrecord.EnvironmentOwnedIdentities{}, err
@@ -87,6 +92,7 @@ func authoredOwnedIdentities(
 	if err != nil {
 		return projectionrecord.EnvironmentOwnedIdentities{}, err
 	}
+	result.PendingOmissions = projectionrecord.RetainOwnedOmissions(result, previous)
 	if err := projectionrecord.ValidateEnvironmentOwnedIdentities(result); err != nil {
 		return projectionrecord.EnvironmentOwnedIdentities{}, err
 	}

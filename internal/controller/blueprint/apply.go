@@ -72,7 +72,10 @@ func NewService(
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
 	if executionTimeout < 40*time.Minute || executionTimeout > 24*time.Hour || executionTimeout%time.Second != 0 {
-		return nil, errs.New(errs.KindValidationFailed, "Blueprint execution timeout must be an integral duration from 40m through 24h")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint execution timeout must be an integral duration from 40m through 24h",
+		)
 	}
 	plans, err := taskplanning.NewTaskPlanResolverWithBlueprints(volumeRoot, repository, componentCatalog)
 	if err != nil {
@@ -144,7 +147,7 @@ func (service *Service) applyBlueprint(
 		)
 	}
 	for attempt := 0; attempt < maximumEnvironmentBlueprintAttempts; attempt++ {
-		response, err := service.applyBlueprintOnce(
+		response, err := service.applyAuthoredOnce(
 			ctx,
 			environmentID,
 			taskTarget,

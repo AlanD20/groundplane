@@ -93,6 +93,9 @@ func AddEnvironmentZoneArtifact(
 	if addition.Zone.Internal {
 		setMappingTypedScalar(network, "internal", "!!bool", "true")
 	}
+	if addition.Zone.AllowGPDNS {
+		setMappingTypedScalar(network, "x-gp-allow-dns", "!!bool", "true")
+	}
 	config := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	AppendMappingValue(config, "subnet", scalarNode(addition.Zone.Subnet))
 	setMappingNode(network, "ipam", &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"slices"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,7 +15,7 @@ import (
 
 // restorationProxyProven uses the exact container whose owner and actual
 // managed image were checked by the inventory. It never returns authored
-// configuration as though it were an observation of Caddy's active state.
+// configuration as though it were an observation of the proxy's active state.
 func restorationProxyProven(
 	ctx context.Context,
 	taskRunner runner.Runner,
@@ -25,35 +26,52 @@ func restorationProxyProven(
 	if !validComponentContainerID(containerID) || proxy == nil || len(proxy.GetProxyConfigSha256()) != sha256.Size {
 		return false, errs.New(errs.KindValidationFailed, "restoration proxy identity is incomplete")
 	}
-	canonical, err := canonicalProxyJSON(proxy.GetProxyConfigJson())
-	if err != nil || !bytes.Equal(canonical, proxy.GetProxyConfigJson()) {
+	if _, err := executionplan.OpenProxyConfiguration(proxy); err != nil {
 		return false, errs.New(errs.KindValidationFailed, "restoration proxy configuration is not canonical")
 	}
-	digest := sha256.Sum256(canonical)
+	digest := sha256.Sum256(proxy.GetProxyConfigJson())
 	if !bytes.Equal(digest[:], proxy.GetProxyConfigSha256()) {
 		return false, errs.New(errs.KindValidationFailed, "restoration proxy configuration digest diverges")
 	}
-	proven, err := observeRestorationProxy(ctx, taskRunner, containerID, digest[:])
+	proven, err := observeRestorationProxy(ctx, taskRunner, containerID, proxy.GetProxyImplementation(), digest[:])
 	if err != nil || proven || !compensate {
 		return proven, err
 	}
-	result, err := taskRunner.Run(ctx, runner.RunCmdOpts{
-		Name: DockerExecutable, Args: []string{"exec", "--interactive", containerID, "sh", "-ec", serviceproxy.Activate},
-		Dir: WorkDirectory, Env: slices.Clone(fixedEnvironment), ReplaceEnv: true,
-		Stdin: slices.Clone(canonical), CaptureLimitBytes: maximumComponentConfig,
-	})
-	if err != nil || result.ExitCode != 0 {
+	failure, err := activateCapturedProxy(
+		ctx,
+		taskRunner,
+		containerID,
+		proxy.GetProxyImplementation(),
+		proxy.GetProxyConfigJson(),
+	)
+	if err != nil || failure != nil {
 		return false, errs.New(errs.KindRequestFailed, "restoration proxy reload failed")
 	}
-	return observeRestorationProxy(ctx, taskRunner, containerID, digest[:])
+	return awaitRestorationProxy(ctx, taskRunner, containerID, proxy.GetProxyImplementation(), digest[:])
 }
 
 func observeRestorationProxy(
 	ctx context.Context,
 	taskRunner runner.Runner,
 	containerID string,
+	implementation agentpb.ServiceProxyImplementation,
 	digest []byte,
 ) (bool, error) {
+	selected, err := executionplan.OpenProxyImplementation(implementation)
+	if err != nil {
+		return false, err
+	}
+	if selected == serviceproxy.Envoy {
+		result, err := taskRunner.Run(ctx, runner.RunCmdOpts{
+			Name: DockerExecutable, Args: []string{"exec", containerID, "sh", "-ec", serviceproxy.EnvoyObservation},
+			Dir: WorkDirectory, Env: slices.Clone(fixedEnvironment), ReplaceEnv: true,
+			CaptureLimitBytes: serviceproxy.MaximumObservationBytes,
+		})
+		if err != nil || result.ExitCode != 0 {
+			return false, errs.New(errs.KindRequestFailed, "Envoy active and restart configuration could not be read")
+		}
+		return serviceproxy.VerifyEnvoyObservation(result.Stdout, digest)
+	}
 	result, err := taskRunner.Run(ctx, runner.RunCmdOpts{
 		Name: DockerExecutable, Args: []string{"exec", containerID, "wget", "--quiet", "--output-document=-", "http://127.0.0.1:2019/config/"},
 		Dir: WorkDirectory, Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, CaptureLimitBytes: maximumComponentConfig,

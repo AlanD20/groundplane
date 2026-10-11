@@ -91,6 +91,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		environmentchanges.EntryRemovalIntentKey(task.ID),
 		attachments.BlueprintAttachTaskIntentKey(task.ID),
 		environmentchanges.ServiceRemovalIntentKey(task.ID),
+		environmentchanges.AttachRemovalIntentKey(task.ID),
 	}
 	environmentDeletionFenceStart := -1
 	var environmentDeletionFenceKeys []string
@@ -234,6 +235,15 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateServiceRemovalTaskOwner(task, serviceIntent) != nil ||
 			serviceIntent.Status != task.Status || serviceIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!serviceIntent.TerminalAt.Equal(*task.FinishedAt) {
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
+		}
+	}
+	if companions.Values[10] != nil {
+		attachIntent, decodeErr := environmentchanges.DecodeAttachRemovalIntent(companions.Values[10].Value)
+		if decodeErr != nil || !authoredBlueprintAttachRemovalTask(task) ||
+			validateAuthoredAttachRemovalTaskOwner(task, attachIntent) != nil ||
+			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
@@ -402,6 +412,14 @@ func (repository *TaskRepository) beginTaskPrune(
 		})
 	}
 	conditions = append(conditions, serviceCondition)
+	attachCondition := etcdstore.Condition{Key: environmentchanges.AttachRemovalIntentKey(task.ID)}
+	if companions.Values[10] != nil {
+		attachCondition.ModRevision = companions.Values[10].ModRevision
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: environmentchanges.AttachRemovalIntentKey(task.ID),
+		})
+	}
+	conditions = append(conditions, attachCondition)
 	if planReferenceIndex >= 0 {
 		planReferenceValue := companions.Values[planReferenceIndex]
 		conditions = append(conditions, etcdstore.Condition{

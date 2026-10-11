@@ -128,7 +128,7 @@ func (sealer *Sealer) SealDraft(
 	if err != nil {
 		return etcd.TaskRecord{}, serviceruntimerecord.AttachPreparation{}, err
 	}
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan)
 	task.PlanHash, task.TargetName = prepared.PlanHash, current.Record.Name
 	return task, prepared, nil
 }

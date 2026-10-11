@@ -27,7 +27,7 @@ func TestEnableComponentSendsOptionalTypedConfig(t *testing.T) {
 					ZoneIDs: []string{"net_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 				},
 			}},
-			body: `{"config":{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAV"]}}`,
+			body: `{"config":{"implementation":"caddy","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAV"]}}`,
 		},
 	}
 	for _, test := range tests {

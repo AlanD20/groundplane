@@ -1,17 +1,23 @@
 package taskjournal
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"slices"
 )
 
 func TaskResultsEqual(left, right TaskResultRecord) bool {
-	if left.Kind != right.Kind || left.ExitCode != right.ExitCode || left.ExecutionEpoch != right.ExecutionEpoch ||
+	if !taskprogress.FailuresEqual(left.Failure, right.Failure) || left.Kind != right.Kind ||
+		left.ExitCode != right.ExitCode ||
+		left.ExecutionEpoch != right.ExecutionEpoch ||
 		left.AssignmentGeneration != right.AssignmentGeneration ||
 		left.ReleaseRecoveryRecordSHA256 != right.ReleaseRecoveryRecordSHA256 ||
-		left.FailedStepID != right.FailedStepID || left.Diagnostic != right.Diagnostic ||
-		left.ReconciliationRequired != right.ReconciliationRequired || len(left.Projects) != len(right.Projects) ||
+		left.FailedStepID != right.FailedStepID ||
+		left.Diagnostic != right.Diagnostic ||
+		left.ReconciliationRequired != right.ReconciliationRequired ||
+		len(left.Projects) != len(right.Projects) ||
 		len(left.ProxyEvidence) != len(right.ProxyEvidence) ||
 		len(left.RecreateEvidence) != len(right.RecreateEvidence) ||
+		!slices.Equal(left.RollingEvidence, right.RollingEvidence) ||
 		!TaskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) ||
 		!TaskComponentRestorationEvidenceEqual(left.ComponentRestorationEvidence, right.ComponentRestorationEvidence) {
 

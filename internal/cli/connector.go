@@ -100,6 +100,7 @@ func newConnectorCmd() *cobra.Command {
 	add.Flags().StringVar(&secretKeyValueFile, "secret-key-value-file", "", "read direct secret_key from PATH, or -")
 	cmd.AddCommand(add)
 	cmd.AddCommand(newConnectorEditCmd())
+	cmd.AddCommand(newConnectorCheckCmd(), newConnectorCheckResultCmd())
 
 	cmd.AddCommand(&cobra.Command{
 		Use: "show <name>", Short: "Show connector metadata", Args: cobra.ExactArgs(1),

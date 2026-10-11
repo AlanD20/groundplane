@@ -224,15 +224,22 @@ func (p *WorkerPool) probeReleaseRecoveryWithoutEvent(
 		result, err := p.executeReleaseConfigurationStep(stepCtx, reservation.assignment, step)
 		return result.RestorationRequired, err
 	}
-	result, err := p.compose.ExecuteStep(stepCtx, reservation.assignment, step)
+	result, err := p.compose.ExecuteStep(stepCtx, reservation.assignment, step, nil)
 	if err != nil {
 		return false, err
 	}
 	if result.ProxyEvidence != nil {
 		state.evidence[result.ProxyEvidence.GetServiceId()] = proto.CloneOf(result.ProxyEvidence)
+		delete(state.rolling, result.ProxyEvidence.GetServiceId())
 	}
 	if result.RecreateEvidence != nil {
 		state.recreate[result.RecreateEvidence.GetServiceId()] = proto.CloneOf(result.RecreateEvidence)
+		delete(state.rolling, result.RecreateEvidence.GetServiceId())
+	}
+	if result.RollingEvidence != nil {
+		state.rolling[result.RollingEvidence.GetServiceId()] = proto.CloneOf(result.RollingEvidence)
+		delete(state.evidence, result.RollingEvidence.GetServiceId())
+		delete(state.recreate, result.RollingEvidence.GetServiceId())
 	}
 	if result.CandidateAbsenceEvidence != nil {
 		if err := state.recordAbsenceEvidence(result.CandidateAbsenceEvidence); err != nil {

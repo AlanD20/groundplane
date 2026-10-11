@@ -119,7 +119,7 @@ func PrepareInitialAbsencePublication(
 
 func supportsInitialAbsence(kind ids.Kind) bool {
 	switch kind {
-	case ids.KindService, ids.KindNetwork, ids.KindVolume, ids.KindEnvEntry, ids.KindRoute,
+	case ids.KindService, ids.KindNetwork, ids.KindVolume, ids.KindEnvEntry, ids.KindRoute, ids.KindDNSRecord,
 		ids.KindAttach, ids.KindComponent, ids.KindScript:
 		return true
 	default:

@@ -34,11 +34,15 @@ func ReadAcknowledgedInput(
 	if err != nil {
 		return result, err
 	}
+	artifactSHA256 := input.ArtifactSHA256
+	if input.DisableService {
+		artifactSHA256 = input.ExpectedPreviousArtifactSHA256
+	}
 	if input.PlanID != taskPlanID ||
 		input.ComponentID != observation.ComponentID ||
-		input.TaskID != observation.TaskID ||
 		input.OwnershipPlanID != observation.PlanID ||
-		input.ArtifactSHA256 != observation.CorefileSHA256 {
+		input.DisableService == observation.Enabled ||
+		artifactSHA256 != observation.CorefileSHA256 {
 		return result, errs.New(errs.KindStateConflict, "acknowledged resolver input identity changed")
 	}
 	return etcdstore.Versioned[PlatformComponentTaskRenderInput]{

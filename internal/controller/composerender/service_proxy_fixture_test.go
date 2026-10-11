@@ -4,8 +4,13 @@ import (
 	strings "strings"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	serviceproxy "github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 )
+
+func testServiceProxyImplementation() serviceproxy.Implementation {
+	return serviceproxy.Caddy
+}
 
 func testServiceProxyImage() *domain.ProxyImage {
 	return &domain.ProxyImage{Repository: "docker.io/library/caddy", IndexDigest: strings.Repeat("a", 64),

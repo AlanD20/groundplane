@@ -25,6 +25,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type routeRemovalPlanStateReader interface {
@@ -125,12 +126,24 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		return etcd.RouteRemovalTaskPreparation{}, err
 	}
 	task.Materializations = []materializationrecord.Record{materialization}
-	plan, err := resolver.buildRouteRemovalPlan(ctx, task, intent)
+	task, err = resolver.prepareRouteContainerConfiguration(ctx, task, pin.InputRevision)
+	if err != nil {
+		return etcd.RouteRemovalTaskPreparation{}, err
+	}
+	input, err := resolver.buildRouteRemovalInput(ctx, task, intent)
+	if err != nil {
+		return etcd.RouteRemovalTaskPreparation{}, err
+	}
+	task, plan, err := resolver.sealRouteRecoveryPlan(ctx, task, intent.Provider, input)
 	if err != nil {
 		return etcd.RouteRemovalTaskPreparation{}, err
 	}
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
+	intent.Plan, err = (proto.MarshalOptions{Deterministic: true}).Marshal(plan)
+	if err != nil {
+		return etcd.RouteRemovalTaskPreparation{}, errs.Wrap(errs.KindInternal, err)
+	}
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan)
 	return etcd.RouteRemovalTaskPreparation{Intent: intent, Task: task}, nil
 }
 
@@ -149,14 +162,24 @@ func (resolver *TaskPlanResolver) resolveRouteRemovalPlan(
 	if !found {
 		return nil, errs.New(errs.KindInternal, "Route removal intent is missing")
 	}
-	return resolver.buildRouteRemovalPlan(ctx, task, stored.Record)
+	intent := stored.Record
+	if task.ID != intent.TaskID || task.Type != taskjournal.TaskRemove || task.Target != intent.RouteID ||
+		!task.CreatedAt.Equal(intent.CreatedAt) || intent.Status != taskjournal.TaskStatusPending {
+		return nil, errs.New(errs.KindStateConflict, "Route removal intent does not belong to its Task")
+	}
+	plan, err := environmentchanges.OpenRouteExecutionPlan(stored.Record.Plan, stored.Record.Provider,
+		stored.Record.EnvironmentID, stored.Record.RouteID, intent.CandidateProjection.RenderGeneration, true)
+	if err != nil {
+		return nil, err
+	}
+	return resolver.validateSealedRouteTask(task, plan, intent.Provider, intent.CandidateProjection, true)
 }
 
-func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
+func (resolver *TaskPlanResolver) buildRouteRemovalInput(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	intent environmentchanges.RouteRemovalIntent,
-) (*agentpb.ExecutionPlan, error) {
+) (taskplan.BuildInput, error) {
 	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindRoute, task.Target) != nil ||
@@ -172,7 +195,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		len(task.Params) != 4 ||
 		len(task.Steps) != 3 ||
 		len(task.Materializations) != 1 {
-		return nil, errs.New(errs.KindInternal, "durable Route removal Task shape is invalid")
+		return taskplan.BuildInput{}, errs.New(errs.KindInternal, "durable Route removal Task shape is invalid")
 	}
 	pin := *intent.Provider
 	candidate := *intent.CandidateProjection
@@ -187,7 +210,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil ||
 		ids.Validate(ids.KindStep, task.Steps[1].ID) != nil ||
 		ids.Validate(ids.KindStep, task.Steps[2].ID) != nil {
-		return nil, errs.New(errs.KindInternal, "durable Route removal Task parameters are invalid")
+		return taskplan.BuildInput{}, errs.New(errs.KindInternal, "durable Route removal Task parameters are invalid")
 	}
 	reference := task.Materializations[0]
 	componentFile := reference.Source.ComponentFile
@@ -205,37 +228,37 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		componentFile.ComponentID != pin.ComponentID ||
 		componentFile.Path != pin.Destination ||
 		componentFile.RouteTaskID != task.ID {
-		return nil, errs.New(errs.KindInternal, "durable Route removal materialization is invalid")
+		return taskplan.BuildInput{}, errs.New(errs.KindInternal, "durable Route removal materialization is invalid")
 	}
 	content, err := resolver.loadComponentMaterialization(ctx, reference, uint64(task.RenderGeneration))
 	if err != nil {
-		return nil, err
+		return taskplan.BuildInput{}, err
 	}
 	digest := sha256.Sum256(content)
 	lengthMatches := reference.Length == uint64(len(content))
 	clear(content)
 	storedDigest, err := hex.DecodeString(reference.SHA256)
 	if err != nil || !lengthMatches || !bytes.Equal(storedDigest, digest[:]) {
-		return nil, errs.New(errs.KindInternal, "durable Route managed configuration changed")
+		return taskplan.BuildInput{}, errs.New(errs.KindInternal, "durable Route managed configuration changed")
 	}
 	environment, err := resolver.blueprints.GetEnvironment(ctx, intent.EnvironmentID)
 	if err != nil {
-		return nil, err
+		return taskplan.BuildInput{}, err
 	}
 	project, err := resolver.blueprints.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return nil, err
+		return taskplan.BuildInput{}, err
 	}
 	tenant, err := resolver.blueprints.GetTenant(ctx, project.Record.TenantID)
 	if err != nil {
-		return nil, err
+		return taskplan.BuildInput{}, err
 	}
 	if environment.Record.ID != intent.EnvironmentID ||
 		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		project.Record.ID != environment.Record.ProjectID ||
 		project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		tenant.Record.ID != project.Record.TenantID {
-		return nil, errs.New(errs.KindInternal, "Route removal Environment hierarchy is invalid")
+		return taskplan.BuildInput{}, errs.New(errs.KindInternal, "Route removal Environment hierarchy is invalid")
 	}
 	identity := pinnedEnvironmentIdentity{
 		TenantID:            tenant.Record.ID,
@@ -256,7 +279,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		nil,
 	)
 	if err != nil {
-		return nil, err
+		return taskplan.BuildInput{}, err
 	}
 	materializationStep, err := taskmaterialization.BuildTaskMaterializationStep(
 		reference,
@@ -264,7 +287,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		uint32(task.TimeoutSeconds),
 	)
 	if err != nil {
-		return nil, err
+		return taskplan.BuildInput{}, err
 	}
 	definitionDigest, _ := hex.DecodeString(pin.DefinitionDigest)
 	catalogDigest, _ := hex.DecodeString(pin.CatalogDigest)
@@ -282,39 +305,40 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		uint64(task.RenderGeneration),
 	)
 	if err != nil {
-		return nil, err
+		return taskplan.BuildInput{}, err
 	}
-	return taskplan.Build(
-		taskplan.BuildInput{
-			VolumeRoot:       resolver.volumeRoot,
-			PlanID:           task.PlanID,
-			RenderGeneration: uint64(task.RenderGeneration),
-			Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE,
-			TargetID:         task.Target,
-			Artifacts:        []*agentpb.ComposeArtifact{artifact},
-			Steps: []*agentpb.ExecutionStep{
-				materializationStep,
-				{
-					StepId:             task.Steps[1].ID,
-					TimeoutSeconds:     uint32(task.TimeoutSeconds),
-					PrerequisiteStepId: materializationStep.GetStepId(),
-					Payload: &agentpb.ExecutionStep_ComposeApply{
-						ComposeApply: &agentpb.ComposeApply{
-							ArtifactId:     artifactID,
-							ServiceIds:     []string{pin.ServiceID},
-							NoDependencies: true,
-						},
+	if err := resolver.bindContainerConfigTransition(ctx, task, action); err != nil {
+		return taskplan.BuildInput{}, err
+	}
+	return taskplan.BuildInput{
+		VolumeRoot:       resolver.volumeRoot,
+		PlanID:           task.PlanID,
+		RenderGeneration: uint64(task.RenderGeneration),
+		Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE,
+		TargetID:         task.Target,
+		Artifacts:        []*agentpb.ComposeArtifact{artifact},
+		Steps: []*agentpb.ExecutionStep{
+			materializationStep,
+			{
+				StepId:             task.Steps[1].ID,
+				TimeoutSeconds:     uint32(task.TimeoutSeconds),
+				PrerequisiteStepId: materializationStep.GetStepId(),
+				Payload: &agentpb.ExecutionStep_ComposeApply{
+					ComposeApply: &agentpb.ComposeApply{
+						ArtifactId:     artifactID,
+						ServiceIds:     []string{pin.ServiceID},
+						NoDependencies: true,
 					},
 				},
-				{
-					StepId:             task.Steps[2].ID,
-					TimeoutSeconds:     uint32(task.TimeoutSeconds),
-					PrerequisiteStepId: task.Steps[1].ID,
-					Payload:            &agentpb.ExecutionStep_ComponentApply{ComponentApply: action},
-				},
+			},
+			{
+				StepId:             task.Steps[2].ID,
+				TimeoutSeconds:     uint32(task.TimeoutSeconds),
+				PrerequisiteStepId: task.Steps[1].ID,
+				Payload:            &agentpb.ExecutionStep_ComponentApply{ComponentApply: action},
 			},
 		},
-	)
+	}, nil
 }
 
 func (resolver *TaskPlanResolver) routeProviderFile(

@@ -715,7 +715,7 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 func TestServerRejectsMissingAssignmentIdentityOnAgentWrites(t *testing.T) {
 	t.Parallel()
 	server := &Server{}
-	if err := server.recordTaskEvent(
+	if _, err := server.recordTaskEvent(
 		context.Background(), testAgentID, 1,
 		&agentpb.TaskEvent{PlanHash: make([]byte, 32), ExecutionEpoch: 1, Ordinal: 1},
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {

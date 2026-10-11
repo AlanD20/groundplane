@@ -277,8 +277,8 @@ func TestBackupRuntimeRepositoryRoutesCompletedAcknowledgement(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		context.Background(), run.TaskID, testtaskjournal.TaskStatusCompleted, run.CreatedAt.Add(time.Second),
-	); !isKind(err, errs.KindStateConflict) {
+		context.Background(), run.TaskID, testtaskjournal.TaskStatusCompleted, nil,
+		run.CreatedAt.Add(time.Second)); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("AcknowledgeControllerTask(Backup) error = %v", err)
 	}
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 1993)

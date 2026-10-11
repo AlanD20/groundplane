@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 )
 
 type sessionState struct {
@@ -19,6 +20,7 @@ type sessionState struct {
 	readyReported         bool
 	capacity              int32
 	version               string
+	source                buildversion.BuildProvenance
 	cancel                context.CancelFunc
 	dispatchWake          chan struct{}
 	sendPermit            chan struct{}
@@ -34,6 +36,12 @@ type sessionState struct {
 	activeImage           *imageCommand
 	observationCommands   chan *observationCommand
 	activeObservation     *observationCommand
+	backingAccessCommands chan *backingAccessCommand
+	activeBackingAccess   *backingAccessCommand
+	dnsCheckCommands      chan *dnsCheckCommand
+	activeDNSCheck        *dnsCheckCommand
+	edgeCheckCommands     chan *edgeCheckCommand
+	activeEdgeCheck       *edgeCheckCommand
 }
 
 func newSessionState(
@@ -50,7 +58,10 @@ func newSessionState(
 		sendFence: make(chan struct{}), done: ctx.Done(), aborts: make(chan taskAbortCommand),
 		logCommands: make(chan logCommand), imageCommands: make(chan *imageCommand),
 		imageCounter: ids.NewImageCorrelationCounter(), offline: make(chan struct{}),
-		observationCommands: make(chan *observationCommand),
+		observationCommands:   make(chan *observationCommand),
+		backingAccessCommands: make(chan *backingAccessCommand),
+		dnsCheckCommands:      make(chan *dnsCheckCommand),
+		edgeCheckCommands:     make(chan *edgeCheckCommand),
 	}
 	if stopped {
 		state.fenceAssignmentSendsLocked()

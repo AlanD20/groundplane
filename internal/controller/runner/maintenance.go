@@ -156,7 +156,8 @@ func (maintenance *Maintenance) refreshOne(ctx context.Context, runnerID string)
 	if err != nil {
 		return maintenance.offline(ctx, runnerID, err)
 	}
-	if !evidence.Valid() || evidence.ContainerID != current.Record.ContainerID {
+	if !evidence.Valid() || evidence.ContainerID != current.Record.ContainerID ||
+		evidence.Software != current.Record.Software {
 		return maintenance.offline(
 			ctx,
 			runnerID,

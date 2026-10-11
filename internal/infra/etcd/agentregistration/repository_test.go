@@ -8,6 +8,7 @@ import (
 	errors "errors"
 	agentprotocol "github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/version"
 	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	errs "github.com/AlanD20/groundplane/pkg/errs"
 	strings "strings"
@@ -62,7 +63,14 @@ func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 	}
 
 	readyAt := record.CreatedAt.Add(time.Second)
-	ready, err := repository.MarkReady(ctx, record.ID, record.Generation, stored.Revision, readyAt)
+	ready, err := repository.MarkReady(
+		ctx,
+		record.ID,
+		record.Generation,
+		stored.Revision,
+		readyAt,
+		version.BuildIdentity{Version: "test"},
+	)
 	if err != nil {
 		t.Fatalf("MarkReady() error = %v", err)
 	}
@@ -110,7 +118,14 @@ func TestLocalAgentRepositoryAtomicallyRotatesReplacementGeneration(t *testing.T
 		t.Fatalf("CreateSingleton() error = %v", err)
 	}
 	firstReadyAt := record.CreatedAt.Add(time.Second)
-	ready, err := repository.MarkReady(ctx, record.ID, record.Generation, created.Revision, firstReadyAt)
+	ready, err := repository.MarkReady(
+		ctx,
+		record.ID,
+		record.Generation,
+		created.Revision,
+		firstReadyAt,
+		version.BuildIdentity{Version: "test"},
+	)
 	if err != nil {
 		t.Fatalf("MarkReady() error = %v", err)
 	}
@@ -125,6 +140,7 @@ func TestLocalAgentRepositoryAtomicallyRotatesReplacementGeneration(t *testing.T
 		newImage,
 		[]byte("new-age-encrypted-token"),
 		newDigest,
+		nil,
 		firstReadyAt.Add(time.Second),
 	)
 	if err != nil {
@@ -154,6 +170,7 @@ func TestLocalAgentRepositoryAtomicallyRotatesReplacementGeneration(t *testing.T
 		record.ID,
 		replaced.Record.Generation,
 		replaced.Revision,
+		version.BuildIdentity{Version: "test"},
 	)
 	if err != nil {
 		t.Fatalf("MarkReplacementReady() error = %v", err)

@@ -142,7 +142,7 @@ func (service *BackupRunService) RetryBackupTask(
 		return etcd.IdempotencyTransactionResult{}, err
 	}
 	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed.Steps)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed)
 	return prepared.Publication.Publish(ctx, task, sealed, marker)
 }
 
@@ -256,7 +256,7 @@ func (service *BackupRunService) runBackup(
 	// The sealed digest is task metadata, not a parameter or materialization.
 	// The persistence seam validates this exact digest before publication.
 	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed.Steps)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed)
 
 	responseBody, err := json.Marshal(struct {
 		TaskID string `json:"task_id"`

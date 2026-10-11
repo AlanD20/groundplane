@@ -26,6 +26,9 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskClaim(
 	task TaskRecord,
 	revision int64,
 ) (blueprintAttachTaskChange, error) {
+	if authoredBlueprintAttachRemovalTask(task) {
+		return repository.prepareBlueprintAttachRemovalClaim(ctx, task, revision)
+	}
 	intentValue, intent, found, err := repository.readBlueprintAttachTaskIntent(ctx, task, revision)
 	if err != nil || !found {
 		return blueprintAttachTaskChange{}, err
@@ -51,6 +54,11 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 	terminalAt time.Time,
 	revision int64,
 ) (blueprintAttachTaskChange, error) {
+	if authoredBlueprintAttachRemovalTask(task) {
+		return repository.prepareBlueprintAttachRemovalAcknowledgement(
+			ctx, task, terminalStatus, terminalAt, revision,
+		)
+	}
 	intentValue, intent, found, err := repository.readBlueprintAttachTaskIntent(ctx, task, revision)
 	if err != nil || !found {
 		return blueprintAttachTaskChange{}, err
@@ -116,6 +124,11 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (blueprintAttachTaskChange, error) {
+	if authoredBlueprintAttachRemovalTask(source) {
+		return blueprintAttachTaskChange{}, errs.New(
+			errs.KindStateConflict, "authored Blueprint Attach removal requires a new Apply",
+		)
+	}
 	intentValue, intent, found, err := repository.readBlueprintAttachTaskIntent(ctx, source, revision)
 	if err != nil || !found {
 		return blueprintAttachTaskChange{}, err
@@ -223,6 +236,11 @@ func (repository *TaskRepository) validateBlueprintAttachTaskAcknowledgementRepl
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
+	if authoredBlueprintAttachRemovalTask(task) {
+		return repository.validateBlueprintAttachRemovalAcknowledgementReplay(
+			ctx, task, terminalStatus, revision,
+		)
+	}
 	_, intent, found, err := repository.readBlueprintAttachTaskIntent(ctx, task, revision)
 	if err != nil || !found {
 		return err

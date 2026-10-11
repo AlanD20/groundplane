@@ -26,12 +26,12 @@ func NewDispatcher(fallback Handler, rotations BackupKeyRotationExecutor) (*Disp
 	return &Dispatcher{fallback: fallback, rotations: rotations}, nil
 }
 
-func (dispatcher *Dispatcher) Execute(ctx context.Context, task etcd.TaskRecord) error {
+func (dispatcher *Dispatcher) Execute(ctx context.Context, task etcd.TaskRecord, progress *Progress) error {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "Controller Task context is required")
 	}
 	if task.Type != taskjournal.TaskRotate {
-		return dispatcher.fallback.Execute(ctx, task)
+		return dispatcher.fallback.Execute(ctx, task, progress)
 	}
 	if task.Executor != taskjournal.TaskExecutorController ||
 		task.Status != taskjournal.TaskStatusRunning ||
@@ -47,5 +47,7 @@ func (dispatcher *Dispatcher) Execute(ctx context.Context, task etcd.TaskRecord)
 		len(task.Steps) != 0 {
 		return errs.New(errs.KindValidationFailed, "Controller backup key rotation Task is invalid")
 	}
-	return dispatcher.rotations.Execute(ctx, task)
+	return progress.Run(ctx, "backup_key_rotate", func(ctx context.Context) error {
+		return dispatcher.rotations.Execute(ctx, task)
+	})
 }

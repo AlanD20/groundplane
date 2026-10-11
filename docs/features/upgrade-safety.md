@@ -26,6 +26,12 @@ Docker on the GP host for its architecture; host Go/Node toolchains are not
 required. Both resolves one source commit, or the matching component release
 tags. Published release inputs download verified artifacts instead of rebuilding.
 
+Controller build descriptors retain the exact source kind and resolved commit
+alongside the binary hash. Preparation checks those fields against its captured
+source selection; staging preserves them in the immutable release manifest.
+Candidate details show that recorded commit for source builds. A candidate is not
+the running Controller, even when their readable version labels match.
+
 **Platform Settings → Software updates** retains preparation progress and
 Task links. Prepare never activates software. Apply is a separate action using
 the verified outputs in GP's registry, pinned by manifest digest. Both completes

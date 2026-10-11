@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -22,10 +23,11 @@ import (
 // for one disabled Component, including an omitted singleton. Persistence rechecks it
 // against the immutable authored records and current singleton before receipt.
 type BlueprintDisabledComponentSelection struct {
-	Capability core.ComponentCapability
-	Spec       core.ComponentSpec
-	Identity   projectionrecord.OwnedIdentity
-	Component  componentrecord.Record
+	Capability     core.ComponentCapability
+	Spec           core.ComponentSpec
+	Identity       projectionrecord.OwnedIdentity
+	Component      componentrecord.Record
+	ProxyAuthority componentplanning.FrozenProjectionAuthority
 }
 
 // SettleBlueprintDisabledComponent publishes disabled singleton settings with
@@ -49,10 +51,18 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 		selection.Component.Desired.ID != unit.Target.ID ||
 		selection.Component.Desired.Owner != core.ComponentOwnerEnvironment ||
 		selection.Component.Desired.OwnerID != parent.Owner.EnvironmentID ||
-		selection.Component.Desired.Kind != selection.Spec.Implementation ||
+		!selection.Component.Desired.Kind.SharesEnvironmentCapability(selection.Spec.Implementation) ||
+		selection.Spec.Validate(selection.Capability) != nil ||
 		selection.Component.Desired.Enabled || len(selection.Component.Runtime.GeneratedServices) != 0 ||
 		selection.Component.Runtime.PinnedIPv4 != "" || selection.Component.Runtime.Healthy {
 		return errs.New(errs.KindValidationFailed, "Blueprint disabled Component settlement identity is invalid")
+	}
+	if selection.Capability != core.ComponentCapabilityHTTPRouter && len(unit.Writes) != 1 {
+		return errs.New(errs.KindValidationFailed, "only the router capability may claim Service forwarding resources")
+	}
+	engineChange := selection.Component.Desired.Kind != selection.Spec.Implementation
+	if engineChange != selection.ProxyAuthority.HasProxyServicePreflight() {
+		return errs.New(errs.KindStateConflict, "disabled proxy selection requires the exact affected-Service capture")
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {
@@ -151,18 +161,37 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 		return errs.New(errs.KindStateConflict, "disabled Component may retain an unacknowledged effect")
 	}
 	candidate := current
+	candidate.Desired.Kind = selection.Spec.Implementation
 	candidate.Desired.Config = core.ComponentConfigForSpec(selection.Spec)
 	if err := componentrecord.ValidateRecord(candidate); err != nil {
 		return err
 	}
 	retireRuntime := runtimePresent &&
-		(unit.Removal || !core.EqualComponentConfig(current.Desired.Config, candidate.Desired.Config))
+		(unit.Removal || current.Desired.Kind != candidate.Desired.Kind ||
+			!core.EqualComponentConfig(current.Desired.Config, candidate.Desired.Config))
 	runtimeRevision := int64(0)
 	if runtimePresent && !retireRuntime {
 		runtimeRevision = runtime.Revision
 	}
+	operationID := ids.New(ids.KindOperation)
+	if captured, found := selection.ProxyAuthority.ControllerProxyOperationID(); found {
+		operationID = captured
+	}
+	proxyPublication := componentplanning.ControllerProxyPublication{}
+	if engineChange {
+		proxyPublication, err = selection.ProxyAuthority.PrepareControllerProxySelection(ctx, repository.store,
+			unit.Target.ID, operationID, storedParent.OperationID)
+		if err != nil {
+			return err
+		}
+		defer proxyPublication.Clear()
+		if err := proxyPublication.Validate(parent.Owner.EnvironmentID, parent.ID, unit.Target.ID,
+			serviceproxy.Implementation(candidate.Desired.Kind)); err != nil {
+			return err
+		}
+	}
 	receipt, err := blueprintunits.PrepareControllerDisabledComponentSettlement(
-		snapshot, unit, ids.New(ids.KindOperation), read.Values[4].ModRevision, runtimeRevision,
+		snapshot, unit, operationID, read.Values[4].ModRevision, runtimeRevision, engineChange,
 	)
 	if err != nil {
 		return err
@@ -182,6 +211,7 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 		runtimeCondition.ModRevision = runtime.Revision
 	}
 	conditions = append(conditions, runtimeCondition)
+	conditions = append(conditions, proxyPublication.Conditions()...)
 	secretConditions, secretMutations, err := componentplanning.PrepareDisabledComponentSecretReplacement(
 		ctx, repository.store, parent.Owner.ProjectID, current, candidate, snapshot.ReadRevision,
 	)
@@ -195,6 +225,7 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 	}
 	defer clear(value)
 	mutations := append(receipt.Mutations(), secretMutations...)
+	mutations = append(mutations, proxyPublication.Mutations()...)
 	mutations = append(
 		mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: componentKey, Value: value},
@@ -206,7 +237,7 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintDisabledCompone
 	if retireRuntime {
 		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: runtimeCondition.Key})
 	}
-	result, err := repository.store.Transact(ctx, conditions, mutations)
+	result, err := executeEnvironmentBlueprintTransaction(ctx, repository.transactions, conditions, mutations)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return err

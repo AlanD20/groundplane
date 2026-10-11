@@ -1,22 +1,25 @@
 package core
 
+import "github.com/AlanD20/groundplane/internal/common/dnsrecords"
+
 // BlueprintDesiredInput is the normalized, replayable operator input for an
 // Environment revision. It contains no rendered artifact, observed runtime,
 // generated path, or secret plaintext. A coordinator must not reparse the
 // accepted audit bundle to recover these decisions after a restart.
 type BlueprintDesiredInput struct {
-	NormalizedCompose []byte                          `json:"normalized_compose"`
-	RuntimeFiles      []BlueprintFile                 `json:"runtime_files,omitempty"`
-	ServiceExtensions map[string]ServiceExtensionSpec `json:"service_extensions,omitempty"`
-	NetworkPool       string                          `json:"network_pool"`
-	Requires          []Requirement                   `json:"requires,omitempty"`
-	Attachments       map[string]AttachmentSpec       `json:"attachments,omitempty"`
-	Entries           map[string]EntrySpec            `json:"entries,omitempty"`
-	Routes            []RouteSpec                     `json:"routes,omitempty"`
-	Scripts           map[string]ScriptSpec           `json:"scripts,omitempty"`
-	Components        map[string]ComponentSpec        `json:"components,omitempty"`
-	Backup            *BackupSpec                     `json:"backup,omitempty"`
-	ReleaseGroups     map[string]ReleaseGroupSpec     `json:"release_groups,omitempty"`
+	NormalizedCompose []byte                                `json:"normalized_compose"`
+	RuntimeFiles      []BlueprintFile                       `json:"runtime_files,omitempty"`
+	ServiceExtensions map[string]ServiceExtensionSpec       `json:"service_extensions,omitempty"`
+	NetworkPool       string                                `json:"network_pool"`
+	Requires          []Requirement                         `json:"requires,omitempty"`
+	Attachments       map[string]AttachmentSpec             `json:"attachments,omitempty"`
+	Entries           map[string]EntrySpec                  `json:"entries,omitempty"`
+	Routes            []RouteSpec                           `json:"routes,omitempty"`
+	DNS               map[string]dnsrecords.EnvironmentSpec `json:"dns,omitempty"`
+	Scripts           map[string]ScriptSpec                 `json:"scripts,omitempty"`
+	Components        map[string]ComponentSpec              `json:"components,omitempty"`
+	Backup            *BackupSpec                           `json:"backup,omitempty"`
+	ReleaseGroups     map[string]ReleaseGroupSpec           `json:"release_groups,omitempty"`
 }
 
 // CloneBlueprintDesiredInput returns a detached copy suitable for immutable
@@ -72,6 +75,12 @@ func CloneBlueprintDesiredInput(source BlueprintDesiredInput) BlueprintDesiredIn
 		}
 	}
 	clone.Routes = append([]RouteSpec(nil), source.Routes...)
+	if source.DNS != nil {
+		clone.DNS = make(map[string]dnsrecords.EnvironmentSpec, len(source.DNS))
+		for label, spec := range source.DNS {
+			clone.DNS[label] = spec
+		}
+	}
 	if source.Scripts != nil {
 		clone.Scripts = make(map[string]ScriptSpec, len(source.Scripts))
 		for key, script := range source.Scripts {

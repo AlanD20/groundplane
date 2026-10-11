@@ -19,6 +19,9 @@ func (repository *TaskRepository) componentRecoveryProcedureAtRevision(
 	revision int64,
 ) (*agentpb.ExecutionPlan, *agentpb.ComponentRecoveryProcedure, etcdstore.Condition, error) {
 	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] == "" {
+		if componentRecoveryTask(task) {
+			return repository.routeRecoveryPlanAtRevision(ctx, task, revision)
+		}
 		return nil, nil, etcdstore.Condition{}, errs.New(
 			errs.KindStateConflict,
 			"Task is not a Blueprint Component child",
@@ -92,6 +95,12 @@ func componentRecoveryAuthorityDigest(procedure *agentpb.ComponentRecoveryProced
 }
 
 func assignmentRecoveryKey(taskID string, assignment taskassignments.TaskAssignmentRecord) string {
+	if assignment.AttachRemovalAuthoritySHA256 != "" {
+		return taskassignments.AttachRemovalRecoveryKey(taskID)
+	}
+	if assignment.ManagedNetworkProcedureSHA256 != "" {
+		return taskassignments.ManagedNetworkRecoveryKey(taskID)
+	}
 	if assignment.ComponentRecoveryProcedureSHA256 != "" {
 		return taskassignments.ComponentRecoveryKey(taskID)
 	}
@@ -102,6 +111,12 @@ func assignmentRecoveryKey(taskID string, assignment taskassignments.TaskAssignm
 }
 
 func assignmentRecoveryAuthorityDigest(assignment taskassignments.TaskAssignmentRecord) string {
+	if assignment.AttachRemovalAuthoritySHA256 != "" {
+		return assignment.AttachRemovalAuthoritySHA256
+	}
+	if assignment.ManagedNetworkProcedureSHA256 != "" {
+		return assignment.ManagedNetworkProcedureSHA256
+	}
 	if assignment.ComponentRecoveryProcedureSHA256 != "" {
 		return assignment.ComponentRecoveryProcedureSHA256
 	}

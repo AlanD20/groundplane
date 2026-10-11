@@ -136,6 +136,7 @@ func authoredOwnedIdentitySnapshot(
 		!sameOwnedNames(networkNames, identities.Networks) ||
 		!sameOwnedNames(volumeNames, identities.Volumes) ||
 		!sameOwnedNames(entryNames, identities.Entries) ||
+		!sameOwnedNames(sortedAuthoredMapKeys(desired.Input.DNS), identities.DNSRecords) ||
 		!sameOwnedNames(routeNames, identities.Routes) {
 		return composeidentity.Snapshot{}, errs.New(
 			errs.KindInternal,

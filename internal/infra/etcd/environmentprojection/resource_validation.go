@@ -105,17 +105,21 @@ func validateEnvironmentComponentProjection(environmentID string, values []compo
 	previousKind := core.ComponentKind("")
 	seenIDs := make(map[string]struct{}, len(values))
 	serviceOwners := make(map[string]string)
+	proxyCount := 0
 	for _, value := range values {
 		kind := value.Desired.Kind
 		if componentrecord.ValidateRecord(value) != nil || value.Desired.Owner != core.ComponentOwnerEnvironment ||
 			value.Desired.OwnerID != environmentID || kind <= previousKind ||
-			(kind != core.ComponentKindIngressCaddy && kind != core.ComponentKindEdgeCloudflare) {
+			(!kind.IsEnvironmentProxy() && kind != core.ComponentKindEdgeCloudflare) {
 			return errs.New(errs.KindValidationFailed, "Environment Component projection is invalid or unsorted")
 		}
 		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {
 			return errs.New(errs.KindValidationFailed, "Environment Component projection id is duplicated")
 		}
 		seenIDs[value.Desired.ID] = struct{}{}
+		if kind.IsEnvironmentProxy() {
+			proxyCount++
+		}
 		for _, serviceID := range value.Runtime.GeneratedServices {
 			if owner, exists := serviceOwners[serviceID]; exists && owner != value.Desired.ID {
 				return errs.New(errs.KindValidationFailed, "Environment generated Service ownership is duplicated")
@@ -123,6 +127,12 @@ func validateEnvironmentComponentProjection(environmentID string, values []compo
 			serviceOwners[serviceID] = value.Desired.ID
 		}
 		previousKind = kind
+	}
+	if proxyCount != 1 {
+		return errs.New(
+			errs.KindValidationFailed,
+			"Environment Component projection requires one proxy singleton and one Tunnel singleton",
+		)
 	}
 	return nil
 }

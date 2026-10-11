@@ -149,7 +149,8 @@ func testDurableDNSProof(
 
 func completedComposeTaskResult() testtaskjournal.TaskResultRecord {
 	return testtaskjournal.TaskResultRecord{
-		Kind:       testtaskjournal.TaskResultCompose,
-		Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+		Kind:           testtaskjournal.TaskResultCompose,
+		Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+		ExecutionEpoch: 1,
 	}
 }

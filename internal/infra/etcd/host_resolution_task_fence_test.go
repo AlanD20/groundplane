@@ -124,12 +124,15 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 			HostResolutionInputRevision: input.InputRevision,
 			HostResolutionSHA256:        input.InputSHA256,
 			Config:                      *component.Record.Desired.Config.CoreDNS,
-			GeneratedServiceID:          serviceID,
-			DefinitionSHA256:            strings.Repeat("b", 64),
-			CatalogSHA256:               strings.Repeat("c", 64),
-			ActionID:                    "activate-config",
-			ArtifactID:                  ids.NewAt(ids.KindConfig, now, 2),
-			ComposeArtifactID:           ids.NewAt(ids.KindConfig, now, 3),
+			Hosts: []testplatformcomponents.PlatformDNSHost{{
+				Address: "10.200.0.2", Hostnames: []string{"resolver.internal"},
+			}},
+			GeneratedServiceID: serviceID,
+			DefinitionSHA256:   strings.Repeat("b", 64),
+			CatalogSHA256:      strings.Repeat("c", 64),
+			ActionID:           "activate-config",
+			ArtifactID:         ids.NewAt(ids.KindConfig, now, 2),
+			ComposeArtifactID:  ids.NewAt(ids.KindConfig, now, 3),
 			ComposeArtifact: testPlatformComponentComposeArtifact(
 				ids.NewAt(ids.KindConfig, now, 3),
 				serviceID,
@@ -357,6 +360,9 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		DNSRecords: []core.DNSRecord{
 			{Hostname: "old.internal", ServiceID: serviceID, ZoneID: ids.NewAt(ids.KindNetwork, now, 20)},
 		},
+		ResolvedDNSHosts: []testplatformcomponents.PlatformDNSHost{{
+			Address: "10.200.0.2", Hostnames: []string{"old.internal", "resolver.internal"},
+		}},
 		ComponentID: secondInput.ComponentID, ServiceID: secondInput.GeneratedServiceID,
 		PlanID: secondInput.OwnershipPlanID, ComposeArtifactID: secondInput.ComposeArtifactID,
 		Enabled: true, Healthy: true, DesiredGeneration: uint64(current.Revision),

@@ -23,6 +23,9 @@ func (repository *TaskRepository) pruneChildOwnedBlueprintAttachOutput(
 	retention etcdstore.KeyValue,
 	readRevision int64,
 ) (bool, error) {
+	if authoredBlueprintAttachRemovalTask(task) {
+		return false, nil
+	}
 	parentID := task.Params[taskjournal.TaskBlueprintParentParam]
 	attachID := task.Params[attachinputs.TaskAttachIDParam]
 	if parentID == "" || attachID == "" {

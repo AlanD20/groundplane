@@ -347,7 +347,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   componentrecord.EnvironmentKindKey(creation.Environment.ID, component.Desired.Kind),
+				Key:   componentrecord.EnvironmentSingletonKey(component.Desired),
 				Value: []byte(component.Desired.ID),
 			},
 		)

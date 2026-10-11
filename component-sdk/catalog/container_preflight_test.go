@@ -13,7 +13,8 @@ func TestContainerConfigRecipeRequiresAndSealsPreflight(t *testing.T) {
 	image := testOCIImage("example/router", "a")
 	makeRecipe := func(args []string) (ContainerConfigActionRecipe, error) {
 		return NewContainerConfigActionRecipe("activate-config", "router/config", "/config/file",
-			args, []string{"validate", "/config/file"}, []string{"reload", "/config/file"}, image)
+			args, []string{"validate", "/config/file"}, []string{"reload", "/config/file"},
+			ContainerConfigActivationCommand, image)
 	}
 	if _, err := makeRecipe(nil); err == nil {
 		t.Fatal("missing preflight command was accepted")

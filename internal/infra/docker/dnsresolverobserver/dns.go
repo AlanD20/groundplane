@@ -51,6 +51,23 @@ func (prober networkDNSProber) Query(
 	name string,
 	queryType agentpb.DNSQueryType,
 ) (*agentpb.DNSQueryProof, error) {
+	return prober.query(ctx, endpoint, name, queryType, false)
+}
+
+func (prober networkDNSProber) QueryTCP(
+	ctx context.Context,
+	endpoint, name string,
+	queryType agentpb.DNSQueryType,
+) (*agentpb.DNSQueryProof, error) {
+	return prober.query(ctx, endpoint, name, queryType, true)
+}
+
+func (prober networkDNSProber) query(
+	ctx context.Context,
+	endpoint, name string,
+	queryType agentpb.DNSQueryType,
+	tcp bool,
+) (*agentpb.DNSQueryProof, error) {
 	messageType := dnsmessage.TypeA
 	if queryType == agentpb.DNSQueryType_DNS_QUERY_TYPE_NS {
 		messageType = dnsmessage.TypeNS
@@ -74,15 +91,15 @@ func (prober networkDNSProber) Query(
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	response, err := prober.exchangeMessage(ctx, endpoint, encoded, false)
+	response, err := prober.exchangeMessage(ctx, endpoint, encoded, tcp)
 	if err != nil {
 		return nil, err
 	}
 	parsed := dnsmessage.Message{}
-	if !unpackExactDNSResponse(&parsed, response, id, query.Questions[0], true) {
-		return nil, errs.New(errs.KindRequestFailed, "DNS UDP response is invalid")
+	if !unpackExactDNSResponse(&parsed, response, id, query.Questions[0], !tcp) {
+		return nil, errs.New(errs.KindRequestFailed, "DNS response is invalid")
 	}
-	usedTCP := false
+	usedTCP := tcp
 	if parsed.Header.Truncated {
 		response, err = prober.exchangeMessage(ctx, endpoint, encoded, true)
 		if err != nil {

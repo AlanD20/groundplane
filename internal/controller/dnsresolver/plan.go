@@ -73,6 +73,7 @@ func BuildIntent(
 		resolverInput.Baseline.Resolvers,
 	)
 	input.PrivateListener = resolverInput.PrivateListener
+	input.ZoneListeners = append([]netip.Addr(nil), resolverInput.ZoneListeners...)
 	if err != nil {
 		return componentdns.Intent{}, err
 	}
@@ -142,9 +143,11 @@ func BuildRenderInput(
 	config Config,
 	baseline []componentdns.ResolverEndpoint,
 	privateListener netip.Addr,
+	zoneListeners []netip.Addr,
 ) (componentdns.RenderInput, error) {
 	input, err := buildRenderInput(hosts, config, baseline)
 	input.PrivateListener = privateListener
+	input.ZoneListeners = append([]netip.Addr(nil), zoneListeners...)
 	return input, err
 }
 

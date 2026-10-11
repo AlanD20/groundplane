@@ -43,8 +43,40 @@ function environmentComponentFromAPI(
     status: componentHealthState(item.status),
     dependencies: [] as string[],
     generatedServices: item.generated_services ?? [],
+    software: item.software,
   };
   const config = item.config;
+  if (item.kind === "envoy") {
+    if (!config) {
+      return {
+        ...common,
+        kind: "envoy",
+        config: null,
+        state: item.pinned_ipv4 ? { pinnedIPv4: item.pinned_ipv4 } : {},
+      };
+    }
+    if (
+      config.implementation !== "envoy" ||
+      !Array.isArray(config.zone_ids) ||
+      config.zone_ids.length === 0 ||
+      config.zone_ids.some((id) => typeof id !== "string") ||
+      new Set(config.zone_ids).size !== config.zone_ids.length ||
+      (config.alias !== undefined && typeof config.alias !== "string")
+    ) {
+      throw new Error(
+        "Controller returned invalid Envoy Component configuration",
+      );
+    }
+    return {
+      ...common,
+      kind: "envoy",
+      config: {
+        zone_ids: [...config.zone_ids],
+        ...(config.alias === undefined ? {} : { alias: config.alias }),
+      },
+      state: item.pinned_ipv4 ? { pinnedIPv4: item.pinned_ipv4 } : {},
+    };
+  }
   if (item.kind === "caddy") {
     if (!config) {
       return {
@@ -53,6 +85,9 @@ function environmentComponentFromAPI(
         config: null,
         state: item.pinned_ipv4 ? { pinnedIPv4: item.pinned_ipv4 } : {},
       };
+    }
+    if (config.implementation !== "caddy") {
+      throw new Error("Controller returned a config that does not match Caddy");
     }
     const zoneIDs = "zone_ids" in config ? config.zone_ids : undefined;
     const caddyfileTemplate =
@@ -87,6 +122,11 @@ function environmentComponentFromAPI(
   if (item.kind === "cloudflare-tunnel") {
     if (!config) {
       return { ...common, kind: "cloudflare-tunnel", config: null, state: {} };
+    }
+    if (config.implementation !== "cloudflare-tunnel") {
+      throw new Error(
+        "Controller returned a config that does not match Cloudflare Tunnel",
+      );
     }
     const secretID = "secret_id" in config ? config.secret_id : undefined;
     const zoneIDs = "zone_ids" in config ? config.zone_ids : undefined;

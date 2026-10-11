@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -48,6 +49,10 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	if err := hierarchy.ValidateEnvironment(environment.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if len(input.DesiredInput.Input.DNS) != 0 && project.Record.Kind != hierarchy.ProjectKindTenant {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed,
+			"tenantless Backing Environments cannot own scoped DNS records; use platform DNS settings")
+	}
 	if project.Revision <= 0 || environment.Revision <= 0 ||
 		environment.Record.ProjectID != project.Record.ID ||
 		environment.Record.ProvisioningState != hierarchy.EnvironmentProvisioningReady ||
@@ -79,7 +84,10 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	}
 	if input.ScriptPublication.IsZero() {
 		if len(input.OwnedIdentities.Scripts) != 0 {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Blueprint Script set has not been prepared")
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Script set has not been prepared",
+			)
 		}
 	} else {
 		set, err := scriptrecord.DecodeScriptSetGeneration(input.ScriptPublication.mutations[0].Value)
@@ -113,6 +121,13 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(desiredValue)
+	nameConditions, nameMutations, err := dnsrecords.NewReader(repository.store).PrepareAuthoredDNSPublication(
+		ctx, input.DesiredInput, input.OwnedIdentities, environment.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(nameMutations)
 	prerequisites, err := prepareBlueprintPrerequisiteAuthorityPublication(
 		input.PrerequisiteAuthority, input.DesiredInput,
 	)
@@ -185,6 +200,8 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		prerequisites.mutation,
 	}
 	conditions = append(conditions, prerequisites.conditions...)
+	conditions = append(conditions, nameConditions...)
+	mutations = append(mutations, nameMutations...)
 	conditions = append(conditions, initialAbsence.Conditions()...)
 	mutations = append(mutations, initialAbsence.Mutations()...)
 	conditions = append(conditions, input.ScriptPublication.conditions...)
@@ -235,7 +252,7 @@ func newbornBlueprintUnitTargets(
 	targets := make([]blueprintunits.ResourceKey, 0,
 		len(identities.Services)+len(identities.Networks)+len(identities.Volumes)+
 			len(identities.Entries)+len(identities.Routes)+len(identities.Attaches)+
-			len(identities.Components)+len(identities.Scripts))
+			len(identities.Components)+len(identities.Scripts)+len(identities.DNSRecords))
 	for _, identity := range identities.Services {
 		if identity.BirthRevisionID == birthRevisionID {
 			targets = append(targets, blueprintunits.ResourceKey{Kind: ids.KindService, ID: identity.ID})
@@ -259,6 +276,11 @@ func newbornBlueprintUnitTargets(
 	for _, identity := range identities.Routes {
 		if identity.BirthRevisionID == birthRevisionID {
 			targets = append(targets, blueprintunits.ResourceKey{Kind: ids.KindRoute, ID: identity.ID})
+		}
+	}
+	for _, identity := range identities.DNSRecords {
+		if identity.BirthRevisionID == birthRevisionID {
+			targets = append(targets, blueprintunits.ResourceKey{Kind: ids.KindDNSRecord, ID: identity.ID})
 		}
 	}
 	for _, identity := range identities.Attaches {

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"testing"
 	"time"
 
@@ -58,7 +59,7 @@ func TestStaleAgentTaskMaintenanceUsesExactReadyBoundary(t *testing.T) {
 		t.Fatalf("Open() error = %v", err)
 	}
 	defer session.Close()
-	if err := session.RecordReady(now.Add(-30*time.Second), 2, "v0.4.2"); err != nil {
+	if err := session.RecordReady(now.Add(-30*time.Second), 2, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("RecordReady() error = %v", err)
 	}
 	tasks := &fakeStaleAgentTaskTimeout{}
@@ -102,7 +103,7 @@ func TestStaleAgentTaskMaintenanceRequiresObservedMatchingReady(t *testing.T) {
 		t.Fatalf("Open(old generation) error = %v", err)
 	}
 	defer session.Close()
-	if err := session.RecordReady(now.Add(-time.Hour), 1, "v0.4.2"); err != nil {
+	if err := session.RecordReady(now.Add(-time.Hour), 1, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("RecordReady(old generation) error = %v", err)
 	}
 	if count, err := maintenance.ExpireStaleAgentTasks(context.Background(), now); err != nil || count != 0 {

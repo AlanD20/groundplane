@@ -13,6 +13,13 @@ func ComponentConfigForSpec(spec ComponentSpec) ComponentConfig {
 			ZoneIDs:           append([]string(nil), spec.Settings.ZoneIDs...),
 			CaddyfileTemplate: spec.ImplementationConfig.CaddyfileTemplate, Alias: spec.Settings.Alias,
 		}}
+	case ComponentKindIngressEnvoy:
+		if len(spec.Settings.ZoneIDs) == 0 && spec.Settings.Alias == "" {
+			return ComponentConfig{}
+		}
+		return ComponentConfig{Envoy: &EnvoyComponentConfig{
+			ZoneIDs: append([]string(nil), spec.Settings.ZoneIDs...), Alias: spec.Settings.Alias,
+		}}
 	case ComponentKindEdgeCloudflare:
 		if spec.Settings.SecretID == "" && len(spec.Settings.ZoneIDs) == 0 {
 			return ComponentConfig{}

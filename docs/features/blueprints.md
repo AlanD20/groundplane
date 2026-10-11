@@ -88,8 +88,12 @@ groundplane task events task_01J00000000000000000000000
 
 Replace the illustrative id with the actual result. Acceptance does not imply
 successful application. Required workload images must already exist in the host
-Docker daemon. While the Apply Task is pending or running, a second Apply to
-that Environment is refused; wait for settlement.
+Docker daemon. A newer accepted Apply supersedes the Environment's earlier
+desired input, even while its Task is pending or running. Conflicting work waits
+for the older execution to stop and its effects to be accounted for; accepting
+the new input does not prove that the old work has stopped. Each Apply keeps its
+own Task and history. See [latest-wins](#latest-wins-implemented-locally-not-yet-qualified)
+for the current qualification boundary.
 
 Apply uses each affected Service's declared release strategy and failure policy.
 Blue-green keeps the serving workload until candidate health passes and traffic
@@ -197,12 +201,13 @@ Attaches, use its impact-approved Remove action before omitting it from the
 Blueprint; this Environment's `If-Match` does not approve disruption to those
 consumers.
 
-Current Validate rejects omission of existing Services, Zones, Attaches and
-Routes because protected removal through that preview path is unavailable.
-Use their explicit dependency-checked Remove/Detach actions before exporting
-and editing the next Blueprint. Other omission paths can still retain or reject
-resources; see [implementation limits](../issues/runtime-qualification.md#incomplete-features).
-The Console must not promise removal that the Controller retains or rejects.
+Full Apply removes omitted Services, Zones, Attaches, Routes, Entries and
+Environment-owned DNS records through their protected operation paths. Omitting
+an optional Component disables it. Validate previews these removals without
+executing them. References, dependency ordering and verified cleanup still apply;
+acceptance does not mean removal has completed. Selected-Service Apply preserves
+unrelated resources. These paths are implemented locally but are
+[not fully qualified](../issues/runtime-qualification.md#incomplete-features).
 
 Blueprint Entry keys identify their reconciliation identity, separately from
 destination env keys or file paths. Source/exposure edits retain the Entry id;
@@ -222,9 +227,10 @@ those facts in the same Apply. The authored input remains fixed; only facts
 produced by that Apply may extend its effective plan. A failed hook leaves its
 dependent work pending or failed rather than substituting later values.
 
-This same-Apply path is not implemented yet. Today, create the Custom Attach
-separately and wait until it is ready before a Blueprint uses its facts or
-credential owner. See [Custom backing hooks](backing-services.md).
+This same-Apply path is locally implemented. Independent Zones and Volumes can
+proceed while Services wait for the complete fact-derived runtime projection.
+Its failure, interruption and supersession behavior still requires qualification.
+See [Custom backing hooks](backing-services.md).
 
 Retry/recovery use the captured input, not the latest desired document.
 Partial failure must remain visible. Pinned configuration recovery is limited to
@@ -235,7 +241,7 @@ fails. GP does not retry that child automatically; the operator submits a new
 Apply after correcting the cause. Unknown effects keep their claims and prevent
 premature completion.
 
-## Latest-wins design: not yet available end to end
+## Latest-wins: implemented locally, not yet qualified
 
 The accepted design compares resource-level effective inputs and cancels obsolete
 work when a newer valid input supersedes it. Conflicting work waits for proven
@@ -246,8 +252,12 @@ repair from accounted-but-diverged effects. Unknown effects remain restricted.
 This does not authorize replaying Scripts or superseding ordinary Deploy,
 Backup, upgrade or destructive operations.
 
-The selector exists, but unit persistence, late plan preparation, safe handoff
-and full runtime integration remain incomplete. Do not depend on automatic
+Public Apply, the coordinator and protected omission paths are connected locally;
+full runtime qualification remains incomplete. Preparation conflicts retry
+when the captured head or unit ledger changed. An unchanged prerequisite failure
+closes the Apply's forward-publication gate and records its failed phase; already
+started children still require settlement. Resource-in-use waits and transient
+storage failures retain their existing wait behavior. Do not depend on automatic
 supersession in production.
 
 ## Design and qualification

@@ -85,7 +85,7 @@ func unavailableSnapshot(
 
 func releaseResponse(release upgrade.Release) *apiTypes.ControllerRelease {
 	manifest := release.Manifest
-	return &apiTypes.ControllerRelease{
+	response := &apiTypes.ControllerRelease{
 		Release:           string(release.Release),
 		ControllerSHA256:  string(manifest.ControllerSHA256),
 		ControllerVersion: manifest.ControllerVersion,
@@ -93,4 +93,9 @@ func releaseResponse(release upgrade.Release) *apiTypes.ControllerRelease {
 		StorageEpoch:      manifest.StorageEpoch,
 		ChannelSchema:     manifest.ChannelSchema,
 	}
+	if manifest.ControllerSource.Known() {
+		source := manifest.ControllerSource
+		response.ControllerSource = &source
+	}
+	return response
 }

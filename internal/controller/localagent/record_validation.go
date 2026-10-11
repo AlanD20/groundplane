@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
 	"time"
@@ -60,6 +61,13 @@ func validateAgentID(agentID string) error {
 }
 
 func validateStored(stored StoredRecord) error {
+	if err := stored.Record.ReplacementFailure.Validate(); err != nil {
+		return err
+	}
+	if stored.Record.ReplacementFailure != nil && (stored.Record.Generation < 2 ||
+		stored.Record.Phase == PhaseProvisioning || stored.Record.ReplacementFailure.ExitCode != 0) {
+		return errs.New(errs.KindInternal, "local agent replacement failure has no candidate generation")
+	}
 	if stored.Revision <= 0 {
 		return errs.New(errs.KindInternal, "local agent record has an invalid revision")
 	}
@@ -80,12 +88,15 @@ func validateStored(stored StoredRecord) error {
 	}
 	switch stored.Record.Phase {
 	case PhaseProvisioning:
-		if !stored.Record.ReadyAt.IsZero() {
-			return errs.New(errs.KindInternal, "provisioning local agent has a Ready timestamp")
+		if !stored.Record.ReadyAt.IsZero() || stored.Record.Build != (buildversion.BuildIdentity{}) {
+			return errs.New(errs.KindInternal, "provisioning local agent has an accepted build or Ready timestamp")
 		}
 	case PhaseReady, PhaseUpdating, PhaseDeleting:
 		if !isNonzeroUTC(stored.Record.ReadyAt) || stored.Record.ReadyAt.Before(stored.Record.CreatedAt) {
 			return errs.New(errs.KindInternal, "local agent record has an invalid Ready timestamp")
+		}
+		if err := stored.Record.Build.Validate(); err != nil {
+			return errs.Wrap(errs.KindInternal, err)
 		}
 	}
 	if stored.Record.Config.PullIntervalSeconds <= 0 || stored.Record.Config.MaxConcurrentTasks <= 0 {

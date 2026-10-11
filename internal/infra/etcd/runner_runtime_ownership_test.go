@@ -166,8 +166,8 @@ func TestRunnerSuccessfulCreateAcknowledgementFailsClosedWithoutReadinessProof(t
 		t.Fatalf("claim create found/error = %t/%v", found, err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-	); err == nil {
+		ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		task.CreatedAt.Add(2*time.Second)); err == nil {
 		t.Fatal("successful create acknowledgement published without exact readiness proof")
 	}
 	current, err := repository.GetRunner(ctx, desired.ID)
@@ -203,8 +203,9 @@ func TestRunnerSuccessfulCreateAcknowledgementConsumesExactReadinessProof(t *tes
 	}
 	proof := runnerTestRecordReadinessProof(t, repository, task)
 	terminal, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-	)
+		ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		task.CreatedAt.Add(2*time.Second))
+
 	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask() = %#v, %v", terminal, err)
 	}
@@ -217,8 +218,8 @@ func TestRunnerSuccessfulCreateAcknowledgementConsumesExactReadinessProof(t *tes
 		t.Fatalf("ready Runner = %#v, %v", ready, err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-	); err != nil {
+		ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
 }
@@ -285,8 +286,8 @@ func TestRunnerRuntimeOwnershipCleanupFencesRemoval(t *testing.T) {
 		t.Fatalf("claim removal found/error = %t/%v", found, err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, removeTask.ID, testtaskjournal.TaskStatusCompleted, removeTask.CreatedAt.Add(2*time.Second),
-	); err != nil {
+		ctx, removeTask.ID, testtaskjournal.TaskStatusCompleted, nil,
+		removeTask.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repository.GetRunner(ctx, desired.ID); err == nil {

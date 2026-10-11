@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -49,14 +50,14 @@ func (opener repositoryTaskEventStreamOpener) OpenTaskEventStream(
 	if err != nil {
 		return nil, err
 	}
-	if taskjournal.IsBlueprintChild(task.Record.Params) {
+	if taskjournal.IsInternalChild(task.Record.Params) {
 		return nil, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 	}
 	return opener.repository.OpenTaskEventStream(ctx, taskID, after)
 }
 
 func (s *Server) registerTaskEventStream() {
-	s.API.OpenAPI().Components.Schemas.Map()["TaskEvent"] = taskEventOpenAPISchema()
+	openAPISchema[apiTypes.TaskEvent](s.API.OpenAPI().Components.Schemas, "TaskEvent")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "task.events", Method: http.MethodGet, Path: "/tasks/{id}/events",
 		Summary:     "Stream durable Task events",
@@ -208,9 +209,23 @@ func taskEventSSEFrame(record taskjournal.TaskEventRecord) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	payload, err := taskprogress.DecodePayload(record.Payload)
+	if err != nil {
+		return nil, err
+	}
+	var operation *apiTypes.TaskControllerOperation
+	if payload.ControllerOperation != nil {
+		operation = &apiTypes.TaskControllerOperation{
+			Stage: payload.ControllerOperation.Stage,
+			Name:  payload.ControllerOperation.Name(),
+		}
+	}
 	data, err := json.Marshal(apiTypes.TaskEvent{
-		Sequence: record.Sequence, StepID: record.Identity.StepID, State: state,
+		ControllerOperation: operation,
+		Sequence:            record.Sequence, StepID: record.Identity.StepID, State: state,
 		Attempt: record.Identity.Attempt, Ordinal: record.Identity.Ordinal, ReceivedAt: record.ReceivedAt,
+		HealthWait: payload.HealthWait,
+		Failure:    taskStepFailure(string(state), record.Identity.StepID, payload.Failure),
 	})
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
@@ -250,22 +265,6 @@ func requestHasBody(r *http.Request) bool {
 		(r.Body != nil && r.Body != http.NoBody)
 }
 
-func taskEventOpenAPISchema() *huma.Schema {
-	return &huma.Schema{
-		Type: huma.TypeObject,
-		Properties: map[string]*huma.Schema{
-			"sequence":    {Type: huma.TypeInteger, Format: "int64"},
-			"step_id":     {Type: huma.TypeString},
-			"state":       {Type: huma.TypeString, Enum: taskEventStateOpenAPIValues()},
-			"attempt":     {Type: huma.TypeInteger, Format: "int32"},
-			"ordinal":     {Type: huma.TypeInteger, Format: "int64"},
-			"received_at": {Type: huma.TypeString, Format: "date-time"},
-		},
-		Required:             []string{"sequence", "step_id", "state", "attempt", "ordinal", "received_at"},
-		AdditionalProperties: false,
-	}
-}
-
 func taskEventStreamOpenAPISchema() *huma.Schema {
 	return &huma.Schema{
 		Title:       "Task event stream",
@@ -280,16 +279,5 @@ func taskEventStreamOpenAPISchema() *huma.Schema {
 			Required:             []string{"id", "data"},
 			AdditionalProperties: false,
 		},
-	}
-}
-
-func taskEventStateOpenAPIValues() []any {
-	return []any{
-		string(apiTypes.TaskPending),
-		string(apiTypes.TaskRunning),
-		string(apiTypes.TaskCompleted),
-		string(apiTypes.TaskFailed),
-		string(apiTypes.TaskAborted),
-		string(apiTypes.TaskTimedOut),
 	}
 }

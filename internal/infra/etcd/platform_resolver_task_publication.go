@@ -330,13 +330,14 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		Keys: []string{
 			platformcomponents.PlatformComponentOwnerKey(current.Record.Desired.ID),
 			platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind),
+			platformcomponents.ResolverConfigurationAttemptKey(current.Record.Desired.ID),
 		},
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
-	if indexes == nil || indexes.ReadRevision != current.ReadRevision || len(indexes.Values) != 2 ||
+	if indexes == nil || indexes.ReadRevision != current.ReadRevision || len(indexes.Values) != 3 ||
 		indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		string(
 			indexes.Values[0].Value,
@@ -368,6 +369,28 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		clear(reference)
 		return hostResolutionReconciliationChange{}, err
 	}
+	var requestValue []byte
+	if renderInput.PredecessorTaskID != "" {
+		fingerprint, fingerprintErr := platformcomponents.ResolverConfigurationFingerprint(
+			renderInput.PrivateListener,
+			renderInput.EnvironmentDNS,
+			renderInput.ZoneListeners,
+		)
+		if fingerprintErr == nil {
+			requestValue, fingerprintErr = platformcomponents.EncodeResolverConfigurationAttempt(
+				platformcomponents.ResolverConfigurationAttempt{
+					Fingerprint: fingerprint, TaskID: task.ID, PredecessorTaskID: renderInput.PredecessorTaskID,
+				},
+			)
+		}
+		if fingerprintErr != nil {
+			clear(renderValue)
+			clear(taskValue)
+			clear(reference)
+			clear(markerValue)
+			return hostResolutionReconciliationChange{}, fingerprintErr
+		}
+	}
 	conditions := append([]etcdstore.Condition(nil), baseConditions...)
 	for _, condition := range []etcdstore.Condition{
 		{Key: markerKey},
@@ -388,6 +411,12 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	conditions = appendHostResolutionCondition(conditions, activeCondition)
 	for _, condition := range renderInput.ReferenceConditions {
 		conditions = appendHostResolutionCondition(conditions, condition)
+	}
+	if requestValue != nil {
+		conditions = appendHostResolutionCondition(conditions, etcdstore.Condition{
+			Key:         platformcomponents.ResolverConfigurationAttemptKey(current.Record.Desired.ID),
+			ModRevision: etcdstore.RevisionOf(indexes.Values[2]),
+		})
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
@@ -411,8 +440,12 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 			Value: []byte(task.ID),
 		},
 	}
+	if requestValue != nil {
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut,
+			Key: platformcomponents.ResolverConfigurationAttemptKey(current.Record.Desired.ID), Value: requestValue})
+	}
 	return hostResolutionReconciliationChange{
 		applies: true, conditions: conditions, mutations: mutations,
-		values: [][]byte{renderValue, taskValue, reference, markerValue, []byte(task.ID)},
+		values: [][]byte{renderValue, taskValue, reference, markerValue, []byte(task.ID), requestValue},
 	}, nil
 }

@@ -33,8 +33,15 @@ func (repository *TaskRepository) closeReleaseOperation(
 	if result.ReconciliationRequired {
 		state = domain.StateRecoveryRequired
 	}
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		base.Values[0].Value,
+		"release-publication",
+	)
+	if err != nil || marker.PublicationID != head.PublicationID || marker.OperationID != task.OperationID {
+		return false, releases.CorruptReleaseRecord()
+	}
 	if head.Progress != nil {
-		progress, err := releaseTerminalGroupProgress(head, task, terminalStatus, result, terminalAt)
+		progress, err := releaseTerminalGroupProgress(head, task, terminalStatus, result, terminalAt, marker)
 		if err != nil {
 			return false, err
 		}
@@ -43,7 +50,10 @@ func (repository *TaskRepository) closeReleaseOperation(
 	head.State = state
 	if state == domain.StateRecoveryRequired {
 		head.RecoveryOutcome = releaseOperationTerminalState(terminalStatus)
-		head.FailedMemberOrdinal = releaseFailedOrdinalFromResult(task, result)
+		head.FailedMemberOrdinal, err = releaseFailedOrdinalFromResult(task, result, marker, head.Members)
+		if err != nil {
+			return false, err
+		}
 	} else {
 		head.RecoveryOutcome = ""
 		head.FailedMemberOrdinal = 0

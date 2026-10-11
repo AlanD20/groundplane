@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -45,6 +46,7 @@ type Observation struct {
 	Target             string
 	Proxy              *ProxyObservation
 	RecreateArtifactID string
+	Rolling            *rollingrelease.Completion
 }
 
 type ProxyObservation struct {
@@ -63,8 +65,18 @@ func AcknowledgeRelease(
 	source Acknowledgement,
 	observed Observation,
 ) (Record, error) {
-	if runtime.ReleaseID != observed.ReleaseID || runtime.Target != observed.Target ||
-		(observed.Proxy == nil) == (observed.RecreateArtifactID == "") {
+	variants := 0
+	if observed.Proxy != nil {
+		variants++
+	}
+	if observed.RecreateArtifactID != "" {
+		variants++
+	}
+	if observed.Rolling != nil {
+		variants++
+	}
+	if runtime.ReleaseID != observed.ReleaseID || runtime.Target != observed.Target || variants != 1 ||
+		(runtime.Target == "rolling") != (observed.Rolling != nil) {
 		return Record{}, errs.New(
 			errs.KindStateConflict,
 			"release runtime acknowledgement differs from sealed activation",
@@ -73,6 +85,11 @@ func AcknowledgeRelease(
 	if observed.Proxy != nil && (runtime.ProxyGeneration != observed.Proxy.ProxyGeneration ||
 		hex.EncodeToString(runtime.ProxyConfigSHA256) != observed.Proxy.ProxyConfigHash) {
 		return Record{}, errs.New(errs.KindStateConflict, "release runtime proxy proof differs from sealed activation")
+	}
+	if observed.Rolling != nil {
+		if err := executionplan.ValidateRollingCompletion(runtime, *observed.Rolling); err != nil {
+			return Record{}, err
+		}
 	}
 	record := Record{EnvironmentID: environmentID, Runtime: runtime, Source: source}
 	if err := Validate(record); err != nil {
@@ -128,7 +145,11 @@ func validateRuntimeIdentity(runtime executionplan.CandidateRuntime) error {
 		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			hasProxy = true
 			digest := sha256.Sum256(service.GetProxyConfigJson())
-			generation, err := executionplan.ProxyConfigGeneration(service.GetProxyConfigJson(), runtime.ReleaseID)
+			generation, err := executionplan.ProxyConfigGeneration(
+				service.GetProxyImplementation(),
+				service.GetProxyConfigJson(),
+				runtime.ReleaseID,
+			)
 			if err != nil || generation != runtime.ProxyGeneration ||
 				!bytes.Equal(
 					digest[:],
@@ -141,6 +162,8 @@ func validateRuntimeIdentity(runtime executionplan.CandidateRuntime) error {
 		target := "singleton"
 		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
 			target = service.GetSlot()
+		} else if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA {
+			target = "rolling"
 		}
 		matchedRelease := false
 		for _, label := range service.GetExpectedLabels() {

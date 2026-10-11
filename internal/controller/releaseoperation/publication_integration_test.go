@@ -107,7 +107,10 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	}
 	serviceID, networkID := ids.New(ids.KindService), ids.New(ids.KindNetwork)
 	projectInput := &composetypes.Project{Services: composetypes.Services{"api": {
-		Name: "api", Image: "api:first", Expose: []string{"8080"}, Networks: map[string]*composetypes.ServiceNetworkConfig{"backend": {}},
+		Name:        "api",
+		Image:       "api:first",
+		Expose:      []string{"8080"},
+		Networks:    map[string]*composetypes.ServiceNetworkConfig{"backend": {}},
 		HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}},
 	}}, Networks: composetypes.Networks{"backend": {Driver: "bridge", Ipam: composetypes.IPAMConfig{Config: []*composetypes.IPAMPool{{Subnet: "10.96.10.0/24"}}}}}}
 	if profileDisabled {
@@ -131,8 +134,15 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		}}
 	}
 	artifact, err := testcomposerender.RenderCompose(testcomposerender.ComposeRenderInput{
-		Project: projectInput, ArtifactID: ids.New(ids.KindConfig), ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant,
-		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, AuthorizedVolumeDir: volumeDir,
+		Project:             projectInput,
+		ArtifactID:          ids.New(ids.KindConfig),
+		ProjectOwnerKind:    testcomposerender.ComposeProjectOwnerTenant,
+		TenantID:            tenant.Record.ID,
+		ProjectID:           project.Record.ID,
+		EnvironmentID:       environmentID,
+		PlanID:              ids.New(ids.KindPlan),
+		RenderGeneration:    1,
+		AuthorizedVolumeDir: volumeDir,
 		Identities: testcomposeidentity.Snapshot{
 			Services: []testcomposeidentity.Resource{{ID: serviceID, Name: "api"}},
 			Networks: []testcomposeidentity.Resource{{ID: networkID, Name: "backend"}},
@@ -161,6 +171,7 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		RenderGeneration:  1,
 		ComposeArtifact:   artifactBytes,
 		NormalizedCompose: normalized,
+		Components:        releaseOperationProxyProjection(environmentID).Components,
 		DesiredServices: []testservices.EnvironmentServiceProjection{
 			{EnvironmentID: environmentID, Desired: desired},
 		},
@@ -229,7 +240,9 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 			},
 		},
 	}
-	if err := plans.EnableServiceProxyImage(proxyImage); err != nil {
+	envoyImage := proxyImage
+	envoyImage.Repository = "docker.io/envoyproxy/envoy"
+	if err := plans.EnableServiceProxyImages(proxyImage, envoyImage); err != nil {
 		t.Fatal(err)
 	}
 	protector, err := secretvalue.NewProtector(releaseOperationTestCipher{}, releaseOperationTestCipher{})
@@ -494,6 +507,17 @@ type directPublicationStore struct {
 	revision         int64
 	values           map[string]*testkeyvalue.KeyValue
 	failAbortCleanup bool
+}
+
+func (store *directPublicationStore) TransactBlueprintChild(
+	ctx context.Context,
+	transaction etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	conditions, mutations, err := transaction.Operations()
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	return store.Transact(ctx, conditions, mutations)
 }
 
 func (s *directPublicationStore) Health(context.Context) error { return nil }

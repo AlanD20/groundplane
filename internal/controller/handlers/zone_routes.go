@@ -167,6 +167,7 @@ func (s *Server) createZone(
 		Name:          input.Name,
 		Subnet:        input.Subnet,
 		Internal:      input.Internal,
+		AllowGPDNS:    input.AllowGPDNS,
 	}, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
@@ -225,16 +226,22 @@ func decodeZoneCreate(body []byte) (apiTypes.ZoneCreate, error) {
 			case "subnet":
 				input.Subnet = value
 			}
-		case "internal":
-			if err := decoder.Decode(&input.Internal); err != nil {
+		case "internal", "allow_gp_dns":
+			var value bool
+			if err := decoder.Decode(&value); err != nil {
 				var typeError *json.UnmarshalTypeError
 				if errors.As(err, &typeError) {
 					return apiTypes.ZoneCreate{}, errs.New(
 						errs.KindValidationFailed,
-						"Zone creation internal member must be a boolean",
+						"Zone creation internal and allow_gp_dns members must be booleans",
 					)
 				}
 				return apiTypes.ZoneCreate{}, zoneCreateJSONError(err)
+			}
+			if key == "internal" {
+				input.Internal = value
+			} else {
+				input.AllowGPDNS = value
 			}
 		default:
 			return apiTypes.ZoneCreate{}, errs.New(
@@ -341,7 +348,8 @@ func zoneResponse(record corenetwork.Zone) apiTypes.Zone {
 	return apiTypes.Zone{
 		ID: record.ID, EnvironmentID: record.EnvironmentID, Name: record.Name,
 		Subnet: record.Subnet, Internal: record.Internal,
-		OwnerKind: apiTypes.ZoneOwnerKind(record.OwnerKind), OwnerID: record.OwnerID,
+		AllowGPDNS: record.AllowGPDNS,
+		OwnerKind:  apiTypes.ZoneOwnerKind(record.OwnerKind), OwnerID: record.OwnerID,
 	}
 }
 

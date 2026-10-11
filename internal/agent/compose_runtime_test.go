@@ -60,7 +60,7 @@ func TestComposeRuntimeMutatesThenObserves(t *testing.T) {
 	}
 	assignment, step := composeRuntimeAssignment()
 
-	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 	if err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}
@@ -92,7 +92,7 @@ func TestComposeRuntimeWaitHealthyTranslatesStableServiceIDs(t *testing.T) {
 	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
 		ArtifactId: "artifact_platform", ServiceIds: []string{"svc_api"},
 	}}}
-	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 	if err != nil {
 		t.Fatalf("waitHealthy() error = %v", err)
 	}
@@ -116,7 +116,7 @@ func TestComposeRuntimeReturnsBoundedHelperFailure(t *testing.T) {
 	}
 	assignment, step := composeRuntimeAssignment()
 
-	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 	if result.ExitCode != 17 || !result.ReconciliationRequired ||
 		!errors.Is(err, errs.New(errs.KindRequestFailed, "")) {
 		t.Fatalf("executeStep() result = %#v, error = %v", result, err)

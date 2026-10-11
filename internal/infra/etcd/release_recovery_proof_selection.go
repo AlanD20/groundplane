@@ -17,7 +17,6 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 type releaseRecoveryProofKind uint8
@@ -40,7 +39,7 @@ func validateReleaseRecoveryProof(
 	if authority == nil || result.ReconciliationRequired || len(expectations) != len(authority.Candidates) {
 		return taskassignments.CorruptTaskAssignment()
 	}
-	absenceIndex, proxyIndex, recreateIndex := 0, 0, 0
+	absenceIndex, proxyIndex, recreateIndex, rollingIndex := 0, 0, 0, 0
 	for memberIndex, candidate := range authority.Candidates {
 		expectation := expectations[memberIndex]
 		kind := expectation.kind
@@ -66,45 +65,38 @@ func validateReleaseRecoveryProof(
 			}
 			absenceIndex++
 		case taskassignments.ReleaseRestorationServingPredecessor:
-			artifact := &agentpb.ComposeArtifact{}
-			if len(expectation.nativeArtifact) == 0 || proto.Unmarshal(expectation.nativeArtifact, artifact) != nil {
-				return taskassignments.CorruptTaskAssignment()
-			}
-			var workload, proxy *agentpb.ComposeService
-			for _, item := range artifact.GetServices() {
-				if item.GetServiceId() != candidate.ServiceID {
-					continue
-				}
-				switch item.GetRole() {
-				case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
-					if proxy != nil {
-						return taskassignments.CorruptTaskAssignment()
-					}
-					proxy = item
-				case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-					agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON:
-					if composeServiceReleaseID(item) == "" {
-						continue
-					}
-					if workload != nil {
-						return taskassignments.CorruptTaskAssignment()
-					}
-					workload = item
+			var retained []byte
+			for _, witness := range authority.NativePredecessors {
+				if witness.ServiceID == candidate.ServiceID {
+					retained = witness.RetainedPriorArtifact
 				}
 			}
-			if workload == nil {
+			serving, err := executionplan.OpenNativeServingRuntime(authority.EnvironmentID, candidate.ServiceID,
+				expectation.nativeArtifact, retained)
+			if err != nil {
 				return taskassignments.CorruptTaskAssignment()
 			}
-			target := workload.GetSlot()
-			if target == "" {
-				target = "singleton"
+			if serving.Rolling != nil {
+				if kind != releaseRecoveryProofCaptured || rollingIndex >= len(result.RollingEvidence) ||
+					result.RollingEvidence[rollingIndex] != executionplan.RollingCompletion(serving.Rolling) {
+					return errs.New(
+						errs.KindStateConflict,
+						"release recovery replica set differs from the captured predecessor",
+					)
+				}
+				rollingIndex++
+				continue
 			}
-			releaseID := composeServiceReleaseID(workload)
+			artifact, proxy, target, releaseID := serving.Artifact, serving.Proxy, serving.Target, serving.ReleaseID
 			if kind == releaseRecoveryProofProxy && proxy == nil {
 				return taskassignments.CorruptTaskAssignment()
 			}
 			if kind == releaseRecoveryProofProxy || kind == releaseRecoveryProofCaptured && proxy != nil {
-				generation, generationErr := executionplan.ProxyConfigGeneration(proxy.GetProxyConfigJson(), releaseID)
+				generation, generationErr := executionplan.ProxyConfigGeneration(
+					proxy.GetProxyImplementation(),
+					proxy.GetProxyConfigJson(),
+					releaseID,
+				)
 				if proxyIndex >= len(result.ProxyEvidence) {
 					return errs.New(errs.KindStateConflict, "release recovery proxy evidence is missing")
 				}
@@ -151,6 +143,7 @@ func validateReleaseRecoveryProof(
 		}
 	}
 	if proxyIndex != len(result.ProxyEvidence) || recreateIndex != len(result.RecreateEvidence) ||
+		rollingIndex != len(result.RollingEvidence) ||
 		absenceIndex == 0 && result.CandidateAbsenceEvidence != nil ||
 		absenceIndex > 0 &&
 			(result.CandidateAbsenceEvidence == nil || absenceIndex != len(result.CandidateAbsenceEvidence.Candidates)) {
@@ -324,10 +317,12 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 		expectation.kind, expectation.priorTopologyArtifactID = releaseRecoveryProofRecreate, render.PriorArtifactID
 	case domain.StrategyBlueGreen:
 		expectation.kind = releaseRecoveryProofProxy
+	case domain.StrategyRolling:
+		expectation.kind = releaseRecoveryProofCaptured
 	default:
 		return releaseRecoveryProofExpectation{}, nil, releases.CorruptReleaseRecord()
 	}
-	if len(render.PriorRuntime.RetainedPriorArtifact) != 0 {
+	if len(render.PriorRuntime.RetainedPriorArtifact) != 0 || render.PriorTarget == domain.WorkloadRolling {
 		expectation.kind, expectation.priorTopologyArtifactID = releaseRecoveryProofCaptured, ""
 	}
 	return expectation, []etcdstore.Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
@@ -393,30 +388,18 @@ func recoveryRenderMatchesPredecessor(
 	if len(encoded) == 0 {
 		return false
 	}
-	artifact := &agentpb.ComposeArtifact{}
-	if proto.Unmarshal(encoded, artifact) != nil || artifact.ArtifactId != render.PriorArtifactID {
+	serving, err := executionplan.OpenNativeServingRuntime(render.EnvironmentID, render.ServiceID, encoded,
+		render.PriorRuntime.RetainedPriorArtifact)
+	if err != nil || serving.Artifact.GetArtifactId() != render.PriorArtifactID ||
+		serving.ReleaseID != intent.PriorServingReleaseID || serving.Target != string(render.PriorTarget) {
 		return false
 	}
-	found := false
-	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() != render.ServiceID || composeServiceReleaseID(service) == "" {
-			continue
-		}
-		if service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT &&
-			service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
-			continue
-		}
-		target := service.GetSlot()
-		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
-			target = string(domain.WorkloadSingleton)
-		}
-		if found || composeServiceReleaseID(service) != intent.PriorServingReleaseID ||
-			target != string(render.PriorTarget) ||
-			service.GetImageReference() != render.PriorWorkload.LocalImageID ||
-			service.GetExpectedReplicas() != render.PriorWorkload.ReplicaCount {
+	var replicas uint32
+	for _, service := range serving.Workloads {
+		if service.GetImageReference() != render.PriorWorkload.LocalImageID {
 			return false
 		}
-		found = true
+		replicas += service.GetExpectedReplicas()
 	}
-	return found
+	return replicas == render.PriorWorkload.ReplicaCount
 }

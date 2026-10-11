@@ -39,6 +39,7 @@ type TaskRecord struct {
 	Status             taskjournal.TaskStatus                    `json:"status"`
 	ImageFetchProgress imagefetch.Progress                       `json:"image_fetch_progress,omitzero"`
 	Result             *taskjournal.TaskResultRecord             `json:"result,omitempty"`
+	BlueprintFailure   *taskjournal.BlueprintFailure             `json:"blueprint_failure,omitempty"`
 	TerminalAssignment *taskjournal.TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                                    `json:"next_event_sequence"`
 	EventCount         uint32                                    `json:"event_count"`
@@ -90,10 +91,9 @@ func TransitionTaskStatus(
 			record.Status,
 		)
 	}
-	backupQueueTimeout := expected == taskjournal.TaskStatusPending && next == taskjournal.TaskStatusTimedOut &&
-		(record.Type == taskjournal.TaskBackup || record.Type == taskjournal.TaskBackupPrune || record.Type == taskjournal.TaskRestore) &&
-		!at.Before(record.CreatedAt.Add(time.Duration(record.TimeoutSeconds)*time.Second))
-	if expected == next || (!taskjournal.ValidTaskTransition(expected, next) && !backupQueueTimeout) {
+	if expected == next || !taskjournal.ValidTaskTransition(expected, next) ||
+		expected == taskjournal.TaskStatusPending && next == taskjournal.TaskStatusTimedOut &&
+			at.Before(record.CreatedAt.Add(time.Duration(record.TimeoutSeconds)*time.Second)) {
 		return TaskRecord{}, errs.Newf(
 			errs.KindStateConflict,
 			"task %s cannot transition from %s to %s",

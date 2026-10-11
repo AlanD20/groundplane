@@ -3,7 +3,8 @@ package taskjournal
 func ValidTaskTransition(current TaskStatus, next TaskStatus) bool {
 	switch current {
 	case TaskStatusPending:
-		return next == TaskStatusRunning || next == TaskStatusAborted
+		return next == TaskStatusRunning || next == TaskStatusAborted || next == TaskStatusFailed ||
+			next == TaskStatusTimedOut
 	case TaskStatusRunning:
 		return IsTerminalTaskStatus(next)
 	default:
@@ -24,7 +25,7 @@ func ValidTaskType(taskType TaskType) bool {
 	switch taskType {
 	case TaskDeploy, TaskRollback, TaskBackup, TaskBackupPrune, TaskRestore, TaskAttach, TaskDetach,
 		TaskRun, TaskScript, TaskProvision, TaskCreate, TaskUpdate, TaskRemove,
-		TaskStart, TaskStop, TaskDestroy, TaskRotate, TaskFetch, TaskPrepare, TaskApply:
+		TaskStart, TaskStop, TaskDestroy, TaskRotate, TaskFetch, TaskPrepare, TaskApply, TaskCheck:
 		return true
 	default:
 		return false

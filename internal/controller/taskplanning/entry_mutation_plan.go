@@ -87,7 +87,7 @@ func (runtime EntryMutationRuntime) PrepareTask(
 		return etcd.TaskRecord{}, err
 	}
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan)
 	return task, nil
 }
 
@@ -139,6 +139,9 @@ func (resolver *TaskPlanResolver) resolveUpdatePlan(
 	}
 	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry {
 		return resolver.resolveEntryMutationPlan(ctx, task)
+	}
+	if taskjournal.IsBlueprintChild(task.Params) {
+		return resolver.resolveCapturedBlueprintServicePlan(ctx, task)
 	}
 	return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
 }

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -50,9 +51,10 @@ type PlatformResolverComponentSelector func(
 // TaskEventAppend reports the durable sequence allocated by the Controller.
 // Duplicate is true only when the same Agent event was already committed.
 type TaskEventAppend struct {
-	Sequence  uint64
-	Revision  int64
-	Duplicate bool
+	Sequence      uint64
+	Revision      int64
+	Duplicate     bool
+	RollingBudget *rollingrelease.StepBudget
 }
 
 // TaskEventSnapshot is one complete, fixed-revision event journal. A Task has
@@ -92,6 +94,7 @@ type TaskRepository struct {
 	*groupstore.Preparer
 	store                        taskRepositoryStore
 	blueprintTerminalStore       blueprintTaskTerminalStore
+	blueprintChildStore          blueprintChildTransactionStore
 	retryPolicy                  taskCASRetryPolicy
 	platformResolverTaskPreparer PlatformResolverTaskPreparer
 	platformResolverSelector     PlatformResolverComponentSelector
@@ -279,7 +282,7 @@ func (repository *TaskRepository) GetSystemTaskInitiation(
 }
 
 func visibleOperatorTask(record TaskRecord) bool {
-	return !taskjournal.IsBlueprintChild(record.Params)
+	return !taskjournal.IsInternalChild(record.Params)
 }
 
 // ListTasksByScope returns the selected immutable journal at one fixed MVCC

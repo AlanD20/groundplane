@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -26,7 +27,13 @@ func terminalRuntimeFixture(
 	environmentID, serviceID, releaseID, planID, artifactID string,
 ) executionplan.CandidateRuntime {
 	t.Helper()
-	config := []byte(`{"apps":{"http":{"servers":{"gp_g1_` + strings.ToLower(releaseID) + `_p8080":{}}}}}`)
+	config, err := serviceproxy.Render(serviceproxy.Configuration{
+		Implementation: serviceproxy.Caddy, ReleaseID: releaseID, Generation: 1,
+		Ports: []serviceproxy.Port{{Number: 8080, Protocol: serviceproxy.TCP}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	configHash := sha256.Sum256(config)
 	yaml := []byte("services:\n  api-blue:\n    image: sha256:" + strings.Repeat("a", 64) +
 		"\n    networks: [current-backing]\nnetworks:\n  current-backing:\n    external: true\n")
@@ -46,7 +53,8 @@ func terminalRuntimeFixture(
 			},
 		}, {
 			ServiceId: serviceID, ComposeName: "api-proxy", Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			ProxyConfigJson: config, ProxyConfigSha256: configHash[:],
+			ProxyImplementation: agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY,
+			ProxyConfigJson:     config, ProxyConfigSha256: configHash[:],
 			ExpectedLabels: []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "proxy"}},
 		}},
 	}

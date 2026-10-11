@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/composekey"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -35,9 +36,17 @@ func ValidateRecord(record Record) error {
 	if err := composekey.Validate(record.Desired.Name); err != nil {
 		return err
 	}
+	if err := zonedns.Validate(record.Desired.Internal, record.Desired.AllowGPDNS); err != nil {
+		return err
+	}
 	subnet, err := ipam.ParseIPv4Prefix(record.Desired.Subnet)
 	if err != nil || subnet.String() != record.Desired.Subnet {
 		return errs.New(errs.KindValidationFailed, "Zone subnet must be a canonical IPv4 CIDR")
+	}
+	if record.Desired.AllowGPDNS {
+		if _, err := zonedns.Gateway(record.Desired.Subnet); err != nil {
+			return err
+		}
 	}
 	switch record.Desired.OwnerKind {
 	case core.ZoneOwnerEnvironment:

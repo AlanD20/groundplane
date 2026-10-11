@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"context"
 	"errors"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"testing"
 	"time"
 
@@ -15,8 +16,12 @@ import (
 func servingTargets() []*agentpb.ServiceObservationTarget {
 	return []*agentpb.ServiceObservationTarget{{
 		EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		RenderGeneration: 3, ComposeName: "api-blue", RuntimeRole: "slot", Slot: "blue",
+		ReleaseId:   "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		RuntimeRole: "slot", Slot: "blue",
+		Workloads: []*agentpb.ServiceWorkloadObservation{{
+			PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 3,
+			ComposeName: "api-blue",
+		}},
 	}}
 }
 
@@ -79,7 +84,7 @@ func TestServiceObservationCorrelationAndIndependence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if err := s.RecordReady(time.Now(), 0, "1.0.0"); err != nil {
+	if err := s.RecordReady(time.Now(), 0, "1.0.0", buildversion.BuildProvenance{}); err != nil {
 		t.Fatal(err)
 	}
 	started := time.Now()
@@ -124,7 +129,7 @@ func TestServiceObservationCorrelationAndIndependence(t *testing.T) {
 	}
 	s.acceptObservationResult(ctx, servingResult(command.request))
 	assertServingReply(t, awaitServiceRead(t, ctx, done), command.request.RequestId)
-	if err := s.RecordReady(time.Now(), 0, "1.0.0"); err != nil {
+	if err := s.RecordReady(time.Now(), 0, "1.0.0", buildversion.BuildProvenance{}); err != nil {
 		t.Fatal("observation closed session")
 	}
 }
@@ -199,7 +204,7 @@ func TestServiceObservationRejectsMalformedResults(t *testing.T) {
 			if !errors.Is(reply.err, errs.New(errs.KindValidationFailed, "")) || reply.result != nil {
 				t.Fatalf("malformed read=%v", reply)
 			}
-			if err := s.RecordReady(time.Now(), 1, "1.0.0"); err != nil {
+			if err := s.RecordReady(time.Now(), 1, "1.0.0", buildversion.BuildProvenance{}); err != nil {
 				t.Fatal(err)
 			}
 		})

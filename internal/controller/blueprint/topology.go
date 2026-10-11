@@ -30,16 +30,22 @@ func prepareEnvironmentBlueprintZoneChanges(
 	changes := make([]blueprints.EnvironmentBlueprintZoneChange, 0, len(desired))
 	for _, next := range desired {
 		if existing, found := currentByID[next.ID]; found {
-			if existing.Record.Desired != next {
+			immutable := next
+			immutable.AllowGPDNS = existing.Record.Desired.AllowGPDNS
+			if existing.Record.Desired != immutable {
 				return nil, errs.New(
 					errs.KindValidationFailed,
 					"Blueprint changed an immutable Zone; add a new Zone and move Services explicitly",
 				)
 			}
+			record, err := zonerecord.NewRecord(environmentID, next)
+			if err != nil {
+				return nil, err
+			}
 			currentCopy := existing
 			changes = append(changes, blueprints.EnvironmentBlueprintZoneChange{
 				Current: &currentCopy,
-				Record:  existing.Record,
+				Record:  record,
 			})
 			delete(currentByID, next.ID)
 			continue

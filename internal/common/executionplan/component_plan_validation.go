@@ -182,6 +182,9 @@ func validateComponentAction(action *agentpb.ComponentApply) error {
 		(len(action.GetExpectedPreviousArtifactDigest()) != 0 && !action.GetManagedConfigContent()) {
 		return errs.New(errs.KindValidationFailed, "component action identity, generation, or digest is invalid")
 	}
+	if err := validateContainerConfigTransition(action); err != nil {
+		return err
+	}
 	return nil
 }
 

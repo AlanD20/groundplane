@@ -4,22 +4,33 @@ import "testing"
 
 // L0 — pure function tests. See docs/standards.md, section 13.
 
-func TestServiceValidate_RejectsRollingStrategy(t *testing.T) {
-	// Rationale: "rolling" is declared-deferred (mvp.md, "Release
-	// strategy rules (locked in)") — Validate must reject it at the
-	// type level so the Controller's schema validation and the domain
-	// model agree, rather than only being caught by an API-layer check.
-	svc := Service{ID: "svc_x", Name: "app-api", Image: "app:latest", Strategy: StrategyRolling}
-	if err := svc.Validate(); err == nil {
-		t.Error("expected Validate() to reject strategy=rolling, got nil")
+func TestServiceValidate_RejectsInvalidRollingStrategyInputs(t *testing.T) {
+	// Rationale: rolling is supported only for ordinary Services with at most
+	// sixteen replicas; invalid desired state must fail before release planning.
+	for name, svc := range map[string]Service{
+		"negative replicas": {
+			ID: "svc_x", Name: "app-api", Image: "app:latest", Strategy: StrategyRolling, Replicas: -1,
+		},
+		"too many replicas": {
+			ID: "svc_x", Name: "app-api", Image: "app:latest", Strategy: StrategyRolling, Replicas: 17,
+		},
+		"backing service": {
+			ID: "svc_x", Name: "app-api", Image: "app:latest", Strategy: StrategyRolling, Adapter: "custom",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := svc.Validate(); err == nil {
+				t.Fatal("Validate() accepted invalid rolling desired state")
+			}
+		})
 	}
 }
 
 func TestServiceValidate_AcceptsImplementedStrategies(t *testing.T) {
-	// Rationale: the inverse of the above — blue-green, recreate, and
+	// Rationale: the inverse of the above — blue-green, recreate, rolling, and
 	// the unset (declared-default) case must all pass, or every fixture
 	// and every real deploy would fail validation.
-	for _, strat := range []Strategy{"", StrategyBlueGreen, StrategyRecreate} {
+	for _, strat := range []Strategy{"", StrategyBlueGreen, StrategyRecreate, StrategyRolling} {
 		svc := Service{ID: "svc_x", Name: "app-api", Image: "app:latest", Strategy: strat}
 		if err := svc.Validate(); err != nil {
 			t.Errorf("Validate() with strategy=%q: unexpected error: %v", strat, err)

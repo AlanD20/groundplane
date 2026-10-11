@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,32 +22,29 @@ const (
 	TaskConnectorNameParam        = "connector_name"
 )
 
-type connectorTaskChange struct {
-	applies    bool
-	conditions []etcdstore.Condition
-	mutations  []etcdstore.Mutation
-	values     [][]byte
-}
-
 func (repository *TaskRepository) prepareConnectorTaskRetry(
 	ctx context.Context,
 	source TaskRecord,
 	retry TaskRecord,
 	revision int64,
-) (connectorTaskChange, error) {
+) (resourceTaskChange, error) {
+	if source.Type == taskjournal.TaskCheck &&
+		source.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceConnector {
+		return repository.prepareConnectorCheckRetry(ctx, source, retry, revision)
+	}
 	applies, err := taskOwnsConnectorRemoval(source)
 	if err != nil || !applies {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	retryApplies, err := taskOwnsConnectorRemoval(retry)
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	if !retryApplies || retry.Type != source.Type || retry.Target != source.Target ||
 		retry.TimeoutSeconds != source.TimeoutSeconds ||
 		retry.Params[TaskConnectorEnvironmentParam] != source.Params[TaskConnectorEnvironmentParam] ||
 		retry.Params[TaskConnectorNameParam] != source.Params[TaskConnectorNameParam] {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector retry changed its durable target")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector retry changed its durable target")
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -57,22 +55,22 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		Revision: revision,
 	})
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != 3 {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector retry evidence is incomplete")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector retry evidence is incomplete")
 	}
 	if stored.Values[0] == nil || stored.Values[1] != nil || stored.Values[2] != nil {
-		return connectorTaskChange{}, errs.New(errs.KindStateConflict, "connector is not available for deletion retry")
+		return resourceTaskChange{}, errs.New(errs.KindStateConflict, "connector is not available for deletion retry")
 	}
 	record, err := connectorrecord.DecodeRecord(stored.Values[0].Value)
 	if err != nil || record.Connector.ID != source.Target {
-		return connectorTaskChange{}, connectorrecord.CorruptRecord()
+		return resourceTaskChange{}, connectorrecord.CorruptRecord()
 	}
 	connector := record.Connector
 	if connector.EnvironmentID != source.Params[TaskConnectorEnvironmentParam] ||
 		connector.Name != source.Params[TaskConnectorNameParam] {
-		return connectorTaskChange{}, errs.New(
+		return resourceTaskChange{}, errs.New(
 			errs.KindInternal,
 			"connector deletion task target metadata is corrupt",
 		)
@@ -88,41 +86,41 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		Revision: revision,
 	})
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	if dependencies == nil || dependencies.ReadRevision != revision || len(dependencies.Values) != 5 {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector retry evidence is incomplete")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector retry evidence is incomplete")
 	}
 	if dependencies.Values[0] == nil || string(dependencies.Values[0].Value) != connector.ID {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector environment index is missing or corrupt")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector environment index is missing or corrupt")
 	}
 	if dependencies.Values[1] == nil || string(dependencies.Values[1].Value) != connector.ID {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector name index is missing or corrupt")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector name index is missing or corrupt")
 	}
 	if dependencies.Values[2] == nil {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are missing")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector credentials are missing")
 	}
 	credentials, err := connectorrecord.DecodeEncryptedCredentials(dependencies.Values[2].Value)
 	if err != nil || credentials.ConnectorID != connector.ID {
 		clear(credentials.Ciphertext)
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
 	}
 	clear(credentials.Ciphertext)
 	referenceConditions, err := connectormutations.RequireConnectorReferencesUnused(
 		ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
 	)
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	if dependencies.Values[3] == nil {
-		return connectorTaskChange{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
+		return resourceTaskChange{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
 	if dependencies.Values[4] != nil {
-		return connectorTaskChange{}, errs.New(errs.KindResourceInUse, "environment is being deleted")
+		return resourceTaskChange{}, errs.New(errs.KindResourceInUse, "environment is being deleted")
 	}
 	environment, err := hierarchyrecord.DecodeEnvironment(dependencies.Values[3].Value)
 	if err != nil || environment.ID != connector.EnvironmentID {
-		return connectorTaskChange{}, recordcodec.CorruptRecord()
+		return resourceTaskChange{}, recordcodec.CorruptRecord()
 	}
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -132,22 +130,22 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		Revision: revision,
 	})
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	if parents == nil || parents.ReadRevision != revision || len(parents.Values) != 2 {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector owner evidence is incomplete")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector owner evidence is incomplete")
 	}
 	if parents.Values[0] == nil {
-		return connectorTaskChange{}, errs.New(errs.KindProjectNotFound, "project was not found")
+		return resourceTaskChange{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	if parents.Values[1] != nil {
-		return connectorTaskChange{}, errs.New(errs.KindResourceInUse, "project is being deleted")
+		return resourceTaskChange{}, errs.New(errs.KindResourceInUse, "project is being deleted")
 	}
 	project, err := hierarchyrecord.DecodeProject(parents.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
-		return connectorTaskChange{}, recordcodec.CorruptRecord()
+		return resourceTaskChange{}, recordcodec.CorruptRecord()
 	}
-	change := connectorTaskChange{
+	change := resourceTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: connectorrecord.RecordKey(connector.ID), ModRevision: stored.Values[0].ModRevision},
@@ -177,13 +175,13 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			Revision: revision,
 		})
 		if err != nil {
-			return connectorTaskChange{}, err
+			return resourceTaskChange{}, err
 		}
 		if tenantFence == nil || tenantFence.ReadRevision != revision || len(tenantFence.Values) != 1 {
-			return connectorTaskChange{}, errs.New(errs.KindInternal, "connector tenant fence evidence is incomplete")
+			return resourceTaskChange{}, errs.New(errs.KindInternal, "connector tenant fence evidence is incomplete")
 		}
 		if tenantFence.Values[0] != nil {
-			return connectorTaskChange{}, errs.New(errs.KindResourceInUse, "tenant is being deleted")
+			return resourceTaskChange{}, errs.New(errs.KindResourceInUse, "tenant is being deleted")
 		}
 		change.conditions = append(change.conditions, etcdstore.Condition{
 			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
@@ -198,16 +196,16 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		retry.ID, connector.EnvironmentID, connector.ID, stored.Values[0].ModRevision, retry.CreatedAt,
 	)
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	intentValue, err := connectorrecord.EncodeRemovalIntent(intent)
 	if err != nil {
 		clear(tombstoneValue)
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	change.values = append(change.values, tombstoneValue, intentValue)
 	change.mutations = append(
@@ -231,10 +229,15 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	task TaskRecord,
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
-) (connectorTaskChange, error) {
+	terminalAt time.Time,
+) (resourceTaskChange, error) {
+	if task.Type == taskjournal.TaskCheck &&
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceConnector {
+		return repository.prepareConnectorCheckTerminal(ctx, task, terminalStatus, revision, terminalAt)
+	}
 	applies, err := taskOwnsConnectorRemoval(task)
 	if err != nil || !applies {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -245,20 +248,20 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		Revision: revision,
 	})
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != 3 || stored.Values[0] == nil ||
 		stored.Values[1] == nil || stored.Values[2] == nil {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector deletion state is inconsistent")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector deletion state is inconsistent")
 	}
 	record, err := connectorrecord.DecodeRecord(stored.Values[0].Value)
 	if err != nil || record.Connector.ID != task.Target {
-		return connectorTaskChange{}, connectorrecord.CorruptRecord()
+		return resourceTaskChange{}, connectorrecord.CorruptRecord()
 	}
 	connector := record.Connector
 	if connector.EnvironmentID != task.Params[TaskConnectorEnvironmentParam] ||
 		connector.Name != task.Params[TaskConnectorNameParam] {
-		return connectorTaskChange{}, errs.New(
+		return resourceTaskChange{}, errs.New(
 			errs.KindInternal,
 			"connector deletion task target metadata is corrupt",
 		)
@@ -269,7 +272,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		tombstone.TargetRevision != stored.Values[0].ModRevision ||
 		tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
-		return connectorTaskChange{}, errs.New(
+		return resourceTaskChange{}, errs.New(
 			errs.KindStateConflict,
 			"connector deletion tombstone does not match its task",
 		)
@@ -278,7 +281,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	if err != nil || intent.TaskID != task.ID || intent.EnvironmentID != connector.EnvironmentID ||
 		intent.ConnectorID != task.Target || intent.ConnectorRevision != stored.Values[0].ModRevision ||
 		!intent.CreatedAt.Equal(task.CreatedAt) {
-		return connectorTaskChange{}, errs.New(
+		return resourceTaskChange{}, errs.New(
 			errs.KindStateConflict,
 			"connector deletion intent does not match its task",
 		)
@@ -292,24 +295,24 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		Revision: revision,
 	})
 	if err != nil {
-		return connectorTaskChange{}, err
+		return resourceTaskChange{}, err
 	}
 	if dependencies == nil || dependencies.ReadRevision != revision || len(dependencies.Values) != 3 {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector deletion evidence is incomplete")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector deletion evidence is incomplete")
 	}
 	if dependencies.Values[0] == nil || string(dependencies.Values[0].Value) != connector.ID {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector environment index is missing or corrupt")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector environment index is missing or corrupt")
 	}
 	if dependencies.Values[1] == nil || string(dependencies.Values[1].Value) != connector.ID {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector name index is missing or corrupt")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector name index is missing or corrupt")
 	}
 	if dependencies.Values[2] == nil {
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are missing")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector credentials are missing")
 	}
 	credentials, err := connectorrecord.DecodeEncryptedCredentials(dependencies.Values[2].Value)
 	if err != nil || credentials.ConnectorID != connector.ID {
 		clear(credentials.Ciphertext)
-		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
+		return resourceTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
 	}
 	clear(credentials.Ciphertext)
 	referenceConditions := []etcdstore.Condition(nil)
@@ -318,10 +321,10 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 			ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
 		)
 		if err != nil {
-			return connectorTaskChange{}, err
+			return resourceTaskChange{}, err
 		}
 	}
-	change := connectorTaskChange{
+	change := resourceTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: connectorrecord.RecordKey(task.Target), ModRevision: stored.Values[0].ModRevision},
@@ -373,6 +376,9 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
+	if connectorCheckTask(task) {
+		return repository.validateConnectorCheckReplay(ctx, task, revision)
+	}
 	applies, err := taskOwnsConnectorRemoval(task)
 	if err != nil || !applies {
 		return err
@@ -479,6 +485,9 @@ func taskOwnsConnectorRemoval(task TaskRecord) (bool, error) {
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceConnector {
 		return false, nil
 	}
+	if task.Type == taskjournal.TaskCheck {
+		return false, nil
+	}
 	if task.Type != taskjournal.TaskRemove || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
 		len(task.Params) != 3 || ids.Validate(ids.KindConnector, task.Target) != nil ||
 		ids.Validate(ids.KindEnvironment, task.Params[TaskConnectorEnvironmentParam]) != nil ||
@@ -486,10 +495,4 @@ func taskOwnsConnectorRemoval(task TaskRecord) (bool, error) {
 		return false, errs.New(errs.KindInternal, "connector deletion task has invalid durable input")
 	}
 	return true, nil
-}
-
-func clearConnectorTaskChange(change connectorTaskChange) {
-	for _, value := range change.values {
-		clear(value)
-	}
 }

@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
@@ -125,6 +126,10 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		)
 	}
 	revision := mutationContext.ReadRevision()
+	checkCondition, err := backingchecks.RequireAttachIdle(ctx, repository.store, current.Record.ID, revision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	exclusionCondition, err := attachrecord.RequireAttachBackupSourceExclusionAbsent(
 		ctx, repository.store, current.Record.ID, revision,
 	)
@@ -277,6 +282,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		rootCondition,
 	}
 	conditions = append(conditions, desiredHeadConditions...)
+	conditions = append(conditions, checkCondition)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{
@@ -469,7 +475,7 @@ func validateAttachDetachTask(
 }
 
 func attachDetachWithTaskOperationCount(record attachrecord.Record) int {
-	operations := 45 + (2 * len(record.GrantAttachIDs))
+	operations := 46 + (2 * len(record.GrantAttachIDs))
 	if len(record.GrantAttachIDs) != 0 {
 		operations += 2
 	}

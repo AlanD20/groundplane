@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/AlanD20/groundplane/internal/common/dnsrecords"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -41,12 +44,10 @@ func (repository *durableRepository) GetService(
 	return repository.services.GetService(ctx, id)
 }
 
-func (repository *durableRepository) GetAppliedServiceRemovalSource(
-	ctx context.Context,
-	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	serviceID string,
-) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
-	return repository.services.GetAppliedServiceRemovalSource(ctx, projection, serviceID)
+func (repository *durableRepository) GetAuthoredServiceRemovalSource(
+	ctx context.Context, environmentID, declaredRevisionID, serviceID string,
+) (etcd.AuthoredServiceRemovalSource, error) {
+	return repository.services.GetAuthoredServiceRemovalSource(ctx, environmentID, declaredRevisionID, serviceID)
 }
 
 func (repository *durableRepository) GetServiceRemovalRuntime(
@@ -120,6 +121,12 @@ func (service *Service) ValidateBlueprint(
 	if err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
+	if err := dnsrecords.ValidateNamespaceChanges(
+		snapshot.desired.Record.Input.DNS, parsed.Extensions.DNS,
+		snapshot.tenant.Record.Slug, snapshot.project.Record.Slug, snapshot.environment.Record.Name,
+	); err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
 	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
@@ -131,15 +138,15 @@ func (service *Service) ValidateBlueprint(
 			return apiTypes.EnvironmentBlueprintValidation{}, err
 		}
 	}
-	services, err := service.listBlueprintServices(ctx, environmentID)
-	if err != nil {
-		return apiTypes.EnvironmentBlueprintValidation{}, err
-	}
 	attaches, readRevision, err := service.listBlueprintAttaches(ctx, environmentID)
 	if err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
-	if err := service.rejectUnsupportedBlueprintOmissions(ctx, environmentID, parsed, services, attaches); err != nil {
+	priorZones := make([]composeidentity.Resource, len(snapshot.identities.Record.Networks))
+	for index, identity := range snapshot.identities.Record.Networks {
+		priorZones[index] = composeidentity.Resource{ID: identity.ID, Name: identity.Name}
+	}
+	if err := service.validateBlueprintZoneOmissions(ctx, environmentID, snapshot.project.Record, parsed, priorZones); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
 	if parsed.Extensions.Backup != nil {
@@ -217,12 +224,11 @@ func (service *Service) loadEnvironmentBlueprintSnapshot(
 	if err != nil {
 		return environmentBlueprintSnapshot{}, err
 	}
-	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
+	tenant, err := service.authoredOwnerTenant(ctx, project.Record)
 	if err != nil {
 		return environmentBlueprintSnapshot{}, err
 	}
-	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID ||
-		project.Record.Kind != hierarchyrecord.ProjectKindTenant {
+	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID {
 		return environmentBlueprintSnapshot{}, errs.New(errs.KindInternal, "Environment hierarchy is inconsistent")
 	}
 	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, environmentID)
@@ -309,6 +315,7 @@ func (service *Service) environmentBlueprintAuthoringDocument(
 		input.Attachments = desired.Attachments
 		input.Entries = desired.Entries
 		input.Routes = desired.Routes
+		input.DNS = desired.DNS
 		input.Scripts = desired.Scripts
 		input.Components = desired.Components
 		input.Backup = desired.Backup
@@ -372,6 +379,12 @@ func environmentBlueprintChanges(
 	}
 	for key := range candidate.Extensions.Entries {
 		addBlueprintResourceKey(candidateKeys, "entry", key)
+	}
+	for key := range current.DNS {
+		addBlueprintResourceKey(currentKeys, "dns", key)
+	}
+	for key := range candidate.Extensions.DNS {
+		addBlueprintResourceKey(candidateKeys, "dns", key)
 	}
 	for key := range current.Scripts {
 		addBlueprintResourceKey(currentKeys, "script", key)

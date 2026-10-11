@@ -72,10 +72,18 @@ func validateAndCopyAssignment(
 		if assignment.RecoveryProofRequired {
 			deadline = assignment.Deadline
 		}
-		releaseRecovery := assignment.ReleaseRecoveryDirective != nil && len(assignment.ReleaseRecoveryRecordSHA256) == 32 &&
-			bytes.Equal(assignment.ReleaseRecoveryDirective.GetReleaseRecoveryRecordSha256(), assignment.ReleaseRecoveryRecordSHA256)
-		componentRecovery := assignment.ComponentRecoveryDirective != nil && len(assignment.ComponentRecoveryRecordSHA256) == 32 &&
-			bytes.Equal(assignment.ComponentRecoveryDirective.GetComponentRecoveryRecordSha256(), assignment.ComponentRecoveryRecordSHA256)
+		releaseRecovery := assignment.ReleaseRecoveryDirective != nil &&
+			len(assignment.ReleaseRecoveryRecordSHA256) == 32 &&
+			bytes.Equal(
+				assignment.ReleaseRecoveryDirective.GetReleaseRecoveryRecordSha256(),
+				assignment.ReleaseRecoveryRecordSHA256,
+			)
+		componentRecovery := assignment.ComponentRecoveryDirective != nil &&
+			len(assignment.ComponentRecoveryRecordSHA256) == 32 &&
+			bytes.Equal(
+				assignment.ComponentRecoveryDirective.GetComponentRecoveryRecordSha256(),
+				assignment.ComponentRecoveryRecordSHA256,
+			)
 		if releaseRecovery == componentRecovery ||
 			assignment.RecoveryProofRequired && !assignment.Deadline.After(assignment.RecoveryDeadline) {
 			return taskassignment.Assignment{}, errs.New(

@@ -63,7 +63,7 @@ func TestBlueprintManagedHealthWithoutCandidateReleaseScopesRetainedRuntime(t *t
 					ArtifactId: artifact.ArtifactId, ServiceIds: []string{"svc_api"},
 				}},
 			}
-			result, err := runtime.ExecuteStep(t.Context(), assignment, step)
+			result, err := runtime.ExecuteStep(t.Context(), assignment, step, nil)
 			if scenario == "retained native" {
 				if err != nil || result.ReconciliationRequired || observer.calls != 2 {
 					t.Fatalf(

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane-component-sdk/catalog"
 	component "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/runner"
@@ -41,13 +42,36 @@ const (
 
 type componentCatalogFake struct{}
 
-func (componentCatalogFake) ResolveContainerConfigAction(*agentpb.ComponentApply) (ComponentActionRecipe, error) {
+func (componentCatalogFake) ResolveContainerConfigAction(
+	*agentpb.ComponentApply,
+) (ComponentActionRecipe, error) {
 	return NewComponentActionRecipe(
-		componentConfigRelativePath, componentConfigContainerPath, componentImageReference, component.OCIPlatform{
-			OS: "linux", Architecture: "amd64", ChildDigest: strings.Split(componentImageReference, "@sha256:")[1], ConfigDigest: strings.Repeat("b", 64),
+		componentConfigRelativePath,
+		componentConfigContainerPath,
+		componentImageReference,
+		component.OCIPlatform{
+			OS:           "linux",
+			Architecture: "amd64",
+			ChildDigest:  strings.Split(componentImageReference, "@sha256:")[1],
+			ConfigDigest: strings.Repeat("b", 64),
 		},
-		[]string{"caddy", "validate", "--config", componentConfigContainerPath, "--adapter", "caddyfile"},
-		[]string{"caddy", "reload", "--config", componentConfigContainerPath, "--adapter", "caddyfile"},
+		[]string{
+			"caddy",
+			"validate",
+			"--config",
+			componentConfigContainerPath,
+			"--adapter",
+			"caddyfile",
+		},
+		[]string{
+			"caddy",
+			"reload",
+			"--config",
+			componentConfigContainerPath,
+			"--adapter",
+			"caddyfile",
+		},
+		catalog.ContainerConfigActivationCommand,
 	)
 }
 
@@ -112,7 +136,10 @@ func TestExecuteApplyUsesExactComposeProcedure(t *testing.T) {
 	}
 	for index, call := range fake.Calls {
 		if call.Name != DockerExecutable || call.Dir != WorkDirectory || !call.ReplaceEnv ||
-			!reflect.DeepEqual(call.Env, wantEnvironment) || !reflect.DeepEqual(call.Args, wantArgs[index]) ||
+			!reflect.DeepEqual(
+				call.Env,
+				wantEnvironment,
+			) || !reflect.DeepEqual(call.Args, wantArgs[index]) ||
 			!bytes.Equal(call.Stdin, request.Plan.Artifacts[0].CanonicalYaml) {
 			t.Fatalf("Runner call %d = %#v", index, call)
 		}
@@ -130,9 +157,11 @@ func TestExecuteEmptyFullReconcileUsesComposeDown(t *testing.T) {
 	)
 	digest := sha256.Sum256(request.Plan.Artifacts[0].CanonicalYaml)
 	request.Plan.Artifacts[0].YamlSha256 = digest[:]
-	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-		ArtifactId: helperArtifactID, FullReconcile: true,
-	}}
+	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_ComposeApply{
+		ComposeApply: &agentpb.ComposeApply{
+			ArtifactId: helperArtifactID, FullReconcile: true,
+		},
+	}
 	sealed, err := executionplan.Seal(request.Plan)
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
@@ -142,7 +171,8 @@ func TestExecuteEmptyFullReconcileUsesComposeDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if response.Outcome != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED || len(fake.Calls) != 2 {
+	if response.Outcome != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED ||
+		len(fake.Calls) != 2 {
 		t.Fatalf("response = %#v, Runner calls = %d", response, len(fake.Calls))
 	}
 	want := []string{
@@ -160,9 +190,11 @@ func TestExecuteWholeProjectRemovalRemovesNamedVolumes(t *testing.T) {
 	request := validRequest(t)
 	request.Plan.PlanHash = nil
 	request.Plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_REMOVE
-	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{
-		ArtifactId: helperArtifactID, WholeProject: true,
-	}}
+	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_ComposeRemove{
+		ComposeRemove: &agentpb.ComposeRemove{
+			ArtifactId: helperArtifactID, WholeProject: true,
+		},
+	}
 	sealed, err := executionplan.Seal(request.Plan)
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
@@ -172,12 +204,21 @@ func TestExecuteWholeProjectRemovalRemovesNamedVolumes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if response.Outcome != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED || len(fake.Calls) != 1 {
+	if response.Outcome != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED ||
+		len(fake.Calls) != 1 {
 		t.Fatalf("response = %#v, Runner calls = %d", response, len(fake.Calls))
 	}
 	want := []string{
-		"compose", "--project-name", "groundplane-infra",
-		"--project-directory", WorkDirectory, "--file", "-", "down", "--remove-orphans", "--volumes",
+		"compose",
+		"--project-name",
+		"groundplane-infra",
+		"--project-directory",
+		WorkDirectory,
+		"--file",
+		"-",
+		"down",
+		"--remove-orphans",
+		"--volumes",
 	}
 	if !reflect.DeepEqual(fake.Calls[0].Args, want) {
 		t.Fatalf("whole-project removal mutation = %#v", fake.Calls[0])
@@ -185,7 +226,9 @@ func TestExecuteWholeProjectRemovalRemovesNamedVolumes(t *testing.T) {
 }
 
 func TestComposeProjectDirectoryUsesAuthorizedEnvironmentVolumeDirectory(t *testing.T) {
-	artifact := &agentpb.ComposeArtifact{AuthorizedVolumeDir: "/var/lib/groundplane/vol/tenant/project/environment"}
+	artifact := &agentpb.ComposeArtifact{
+		AuthorizedVolumeDir: "/var/lib/groundplane/vol/tenant/project/environment",
+	}
 	if got := composeProjectDirectory(artifact); got != artifact.AuthorizedVolumeDir {
 		t.Fatalf("composeProjectDirectory() = %q, want %q", got, artifact.AuthorizedVolumeDir)
 	}
@@ -199,7 +242,12 @@ func TestComposeProjectDirectoryUsesAuthorizedEnvironmentVolumeDirectory(t *test
 func TestExecuteConfigFailureStopsBeforeMutation(t *testing.T) {
 	fake := runner.NewFake()
 	fake.RunFunc = func(context.Context, runner.RunCmdOpts) (runner.Result, error) {
-		return runner.Result{ExitCode: 15, Stderr: []byte("secret-like raw diagnostic")}, errors.New("exit status 15")
+		return runner.Result{
+			ExitCode: 15,
+			Stderr:   []byte("secret-like raw diagnostic"),
+		}, errors.New(
+			"exit status 15",
+		)
 	}
 	response, err := Execute(context.Background(), fake, validRequest(t))
 	if err != nil {
@@ -216,9 +264,11 @@ func TestExecuteConfigFailureStopsBeforeMutation(t *testing.T) {
 func TestMarshalRequestRejectsWaitHealthy(t *testing.T) {
 	request := validRequest(t)
 	request.Plan.PlanHash = nil
-	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
-		ArtifactId: helperArtifactID, ServiceIds: []string{helperServiceID},
-	}}
+	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_WaitHealthy{
+		WaitHealthy: &agentpb.WaitHealthy{
+			ArtifactId: helperArtifactID, ServiceIds: []string{helperServiceID},
+		},
+	}
 	sealed, err := executionplan.Seal(request.Plan)
 	if err != nil {
 		t.Fatalf("seal wait plan: %v", err)
@@ -235,7 +285,12 @@ func TestMarshalRequestRejectsWaitHealthy(t *testing.T) {
 func TestExecuteComponentConfigValidatesBeforeActivation(t *testing.T) {
 	request, configPath := validComponentConfigRequest(t)
 	fake := componentConfigRunner(t, configPath, 0)
-	response, err := ExecuteWithComponentCatalog(context.Background(), fake, request, componentCatalogFake{})
+	response, err := ExecuteWithComponentCatalog(
+		context.Background(),
+		fake,
+		request,
+		componentCatalogFake{},
+	)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -244,7 +299,10 @@ func TestExecuteComponentConfigValidatesBeforeActivation(t *testing.T) {
 		t.Fatalf("response = %#v", response)
 	}
 	if len(fake.Calls) != 8 {
-		t.Fatalf("Runner calls = %d, want lookup, three inspections, two hashes, validate, activate", len(fake.Calls))
+		t.Fatalf(
+			"Runner calls = %d, want lookup, three inspections, two hashes, validate, activate",
+			len(fake.Calls),
+		)
 	}
 	if !reflect.DeepEqual(fake.Calls[5].Args, []string{
 		"container", "exec", "0123456789abcdef", "caddy", "validate",
@@ -262,7 +320,10 @@ func TestExecuteComponentConfigValidatesBeforeActivation(t *testing.T) {
 // candidate while retaining unique Component ownership checks.
 func TestArtifactForRequestBlueprintComponentUsesMaterializedArtifact(t *testing.T) {
 	request := blueprintComponentRequestWithRetainedPrior(t)
-	request.Plan.Artifacts = []*agentpb.ComposeArtifact{request.Plan.Artifacts[1], request.Plan.Artifacts[0]}
+	request.Plan.Artifacts = []*agentpb.ComposeArtifact{
+		request.Plan.Artifacts[1],
+		request.Plan.Artifacts[0],
+	}
 	if err := sealComponentRequest(request); err != nil {
 		t.Fatalf("Seal() error = %v", err)
 	}
@@ -272,7 +333,11 @@ func TestArtifactForRequestBlueprintComponentUsesMaterializedArtifact(t *testing
 		t.Fatalf("ArtifactForRequest() error = %v", err)
 	}
 	if artifact == nil || artifact.ArtifactId != helperArtifactID {
-		t.Fatalf("ArtifactForRequest() artifact = %#v, want bound candidate %q", artifact, helperArtifactID)
+		t.Fatalf(
+			"ArtifactForRequest() artifact = %#v, want bound candidate %q",
+			artifact,
+			helperArtifactID,
+		)
 	}
 }
 
@@ -296,7 +361,10 @@ func TestArtifactForRequestBlueprintComponentRejectsInvalidSelection(t *testing.
 		}},
 		{name: "duplicate selected service", mutate: func(request *agentpb.ComposeHelperRequest) {
 			duplicate := proto.CloneOf(request.Plan.Artifacts[0].Services[0])
-			request.Plan.Artifacts[0].Services = append(request.Plan.Artifacts[0].Services, duplicate)
+			request.Plan.Artifacts[0].Services = append(
+				request.Plan.Artifacts[0].Services,
+				duplicate,
+			)
 		}},
 		{name: "ordinary global ownership", mutate: func(request *agentpb.ComposeHelperRequest) {
 			request.Plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
@@ -347,7 +415,12 @@ func sealComponentRequest(request *agentpb.ComposeHelperRequest) error {
 func TestExecuteComponentConfigRejectionStopsBeforeActivation(t *testing.T) {
 	request, configPath := validComponentConfigRequest(t)
 	fake := componentConfigRunner(t, configPath, 15)
-	response, err := ExecuteWithComponentCatalog(context.Background(), fake, request, componentCatalogFake{})
+	response, err := ExecuteWithComponentCatalog(
+		context.Background(),
+		fake,
+		request,
+		componentCatalogFake{},
+	)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -359,10 +432,11 @@ func TestExecuteComponentConfigRejectionStopsBeforeActivation(t *testing.T) {
 
 func TestExecuteComponentConfigRejectsForgedRuntimeAuthorityBeforeActivation(t *testing.T) {
 	tests := []struct {
-		name   string
-		mutate func(*runner.FakeRunner)
+		name              string
+		wantStateConflict bool
+		mutate            func(*runner.FakeRunner)
 	}{
-		{name: "incomplete labels", mutate: func(fake *runner.FakeRunner) {
+		{name: "incomplete labels", wantStateConflict: true, mutate: func(fake *runner.FakeRunner) {
 			base := fake.RunFunc
 			fake.RunFunc = func(ctx context.Context, options runner.RunCmdOpts) (runner.Result, error) {
 				if strings.Contains(strings.Join(options.Args, " "), ".Config.Labels") {
@@ -371,19 +445,23 @@ func TestExecuteComponentConfigRejectsForgedRuntimeAuthorityBeforeActivation(t *
 				return base(ctx, options)
 			}
 		}},
-		{name: "wrong immutable image", mutate: func(fake *runner.FakeRunner) {
-			base := fake.RunFunc
-			fake.RunFunc = func(ctx context.Context, options runner.RunCmdOpts) (runner.Result, error) {
-				if strings.Contains(strings.Join(options.Args, " "), ".Config.Image") {
-					return runner.Result{
-						Stdout: []byte(
-							"docker.io/library/caddy@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
-						),
-					}, nil
+		{
+			name:              "wrong immutable image",
+			wantStateConflict: true,
+			mutate: func(fake *runner.FakeRunner) {
+				base := fake.RunFunc
+				fake.RunFunc = func(ctx context.Context, options runner.RunCmdOpts) (runner.Result, error) {
+					if strings.Contains(strings.Join(options.Args, " "), ".Config.Image") {
+						return runner.Result{
+							Stdout: []byte(
+								"docker.io/library/caddy@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+							),
+						}, nil
+					}
+					return base(ctx, options)
 				}
-				return base(ctx, options)
-			}
-		}},
+			},
+		},
 		{name: "container bytes replaced after validation", mutate: func(fake *runner.FakeRunner) {
 			base := fake.RunFunc
 			hashes := 0
@@ -392,7 +470,12 @@ func TestExecuteComponentConfigRejectsForgedRuntimeAuthorityBeforeActivation(t *
 					hashes++
 					if hashes == 2 {
 						return runner.Result{
-							Stdout: []byte(strings.Repeat("a", 64) + "  " + componentConfigContainerPath + "\n"),
+							Stdout: []byte(
+								strings.Repeat(
+									"a",
+									64,
+								) + "  " + componentConfigContainerPath + "\n",
+							),
 						}, nil
 					}
 				}
@@ -408,10 +491,11 @@ func TestExecuteComponentConfigRejectsForgedRuntimeAuthorityBeforeActivation(t *
 			response, err := ExecuteWithComponentCatalog(
 				context.Background(), fake, request, componentCatalogFake{},
 			)
-			if err != nil {
-				t.Fatalf("ExecuteWithComponentCatalog() error = %v", err)
-			}
-			if response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED {
+			if test.wantStateConflict {
+				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || response != nil {
+					t.Fatalf("forged runtime result = %#v, %v; want state conflict", response, err)
+				}
+			} else if err != nil || response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED {
 				t.Fatalf("response = %#v", response)
 			}
 			for _, call := range fake.Calls {
@@ -500,7 +584,12 @@ func TestRouteRemovalTargetedApplyRefreshesRuntimeBeforeComponentActivation(t *t
 		}
 	}
 	if !applied || applyCall < 0 || activateCall <= applyCall {
-		t.Fatalf("Route removal call order = apply %d activate %d calls %#v", applyCall, activateCall, fake.Calls)
+		t.Fatalf(
+			"Route removal call order = apply %d activate %d calls %#v",
+			applyCall,
+			activateCall,
+			fake.Calls,
+		)
 	}
 }
 
@@ -541,13 +630,24 @@ func validComponentConfigRequest(t *testing.T) (*agentpb.ComposeHelperRequest, s
 	service.ImageReference = componentImageReference
 	service.ImageRepository = strings.Split(componentImageReference, "@")[0]
 	service.ImageIndexDigest = bytes.Repeat([]byte{0xa}, sha256.Size)
-	service.ImageChildDigest, _ = hex.DecodeString(strings.Split(componentImageReference, "@sha256:")[1])
+	service.ImageChildDigest, _ = hex.DecodeString(
+		strings.Split(componentImageReference, "@sha256:")[1],
+	)
 	service.ImageConfigDigest = bytes.Repeat([]byte{0xbb}, sha256.Size)
 	service.ImageOs, service.ImageArchitecture = "linux", "amd64"
 	service.ExpectedLabels = append(service.ExpectedLabels[:2], append([]*agentpb.LabelPair{
-		{Key: "com.groundplane.image-child-digest", Value: "sha256:" + hex.EncodeToString(service.ImageChildDigest)},
-		{Key: "com.groundplane.image-config-digest", Value: "sha256:" + hex.EncodeToString(service.ImageConfigDigest)},
-		{Key: "com.groundplane.image-index-digest", Value: "sha256:" + hex.EncodeToString(service.ImageIndexDigest)},
+		{
+			Key:   "com.groundplane.image-child-digest",
+			Value: "sha256:" + hex.EncodeToString(service.ImageChildDigest),
+		},
+		{
+			Key:   "com.groundplane.image-config-digest",
+			Value: "sha256:" + hex.EncodeToString(service.ImageConfigDigest),
+		},
+		{
+			Key:   "com.groundplane.image-index-digest",
+			Value: "sha256:" + hex.EncodeToString(service.ImageIndexDigest),
+		},
 		{Key: "com.groundplane.image-platform", Value: "linux/amd64"},
 	}, service.ExpectedLabels[2:]...)...)
 	request.Plan.Steps = []*agentpb.ExecutionStep{{
@@ -593,9 +693,14 @@ func componentConfigRunner(t *testing.T, configPath string, validationExit int) 
 	if err != nil {
 		t.Fatalf("Marshal(labels) error = %v", err)
 	}
-	mounts, err := json.Marshal([]componentConfigMount{{
-		Type: "bind", Source: filepath.Dir(configPath), Destination: filepath.Dir(componentConfigContainerPath), RW: false,
-	}})
+	mounts, err := json.Marshal([]componentConfigMount{
+		{
+			Type:        "bind",
+			Source:      filepath.Dir(configPath),
+			Destination: filepath.Dir(componentConfigContainerPath),
+			RW:          false,
+		},
+	})
 	if err != nil {
 		t.Fatalf("Marshal(mounts) error = %v", err)
 	}
@@ -609,14 +714,18 @@ func componentConfigRunner(t *testing.T, configPath string, validationExit int) 
 			return runner.Result{Stdout: append(labels, '\n')}, nil
 		case strings.Contains(joined, ".Config.Image"):
 			return runner.Result{
-				Stdout: []byte(componentImageReference + "\nsha256:" + strings.Repeat("b", 64) + "\nnull\n"),
+				Stdout: []byte(
+					componentImageReference + "\nsha256:" + strings.Repeat("b", 64) + "\nnull\n",
+				),
 			}, nil
 		case strings.Contains(joined, ".Mounts"):
 			return runner.Result{Stdout: append(mounts, '\n')}, nil
 		case strings.Contains(joined, " sha256sum "):
 			digest := sha256.Sum256([]byte("http:// {\n\trespond 404\n}\n"))
 			return runner.Result{
-				Stdout: []byte(hex.EncodeToString(digest[:]) + "  " + componentConfigContainerPath + "\n"),
+				Stdout: []byte(
+					hex.EncodeToString(digest[:]) + "  " + componentConfigContainerPath + "\n",
+				),
 			}, nil
 		case strings.Contains(joined, " caddy validate ") && validationExit != 0:
 			return runner.Result{ExitCode: validationExit}, errors.New("validation failed")
@@ -639,16 +748,21 @@ func validRequest(t *testing.T) *agentpb.ComposeHelperRequest {
 			ArtifactId:  helperArtifactID,
 			OwnerKind:   agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
 			ProjectName: "groundplane-infra", CanonicalYaml: yaml, YamlSha256: yamlHash[:],
-			Services: []*agentpb.ComposeService{{
-				ServiceId: helperServiceID, ComposeName: "api", ExpectedReplicas: 1, HasHealthcheck: true,
-				ExpectedLabels: []*agentpb.LabelPair{
-					{Key: "com.groundplane.kind", Value: "service"},
-					{Key: "com.groundplane.managed", Value: "true"},
-					{Key: "com.groundplane.plan-id", Value: helperPlanID},
-					{Key: "com.groundplane.render-generation", Value: "1"},
-					{Key: "com.groundplane.service-id", Value: helperServiceID},
+			Services: []*agentpb.ComposeService{
+				{
+					ServiceId:        helperServiceID,
+					ComposeName:      "api",
+					ExpectedReplicas: 1,
+					HasHealthcheck:   true,
+					ExpectedLabels: []*agentpb.LabelPair{
+						{Key: "com.groundplane.kind", Value: "service"},
+						{Key: "com.groundplane.managed", Value: "true"},
+						{Key: "com.groundplane.plan-id", Value: helperPlanID},
+						{Key: "com.groundplane.render-generation", Value: "1"},
+						{Key: "com.groundplane.service-id", Value: helperServiceID},
+					},
 				},
-			}},
+			},
 		}},
 		Steps: []*agentpb.ExecutionStep{{
 			StepId: helperStepID, TimeoutSeconds: 30,

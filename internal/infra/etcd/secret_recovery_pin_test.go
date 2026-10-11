@@ -90,7 +90,7 @@ func TestSecretRecoveryPinBlocksDeletionRetry(t *testing.T) {
 		!found {
 		t.Fatalf("claim initial Secret deletion = %t/%v", found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, at.Add(2*time.Second)); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, nil, at.Add(2*time.Second)); err != nil {
 		t.Fatalf("fail initial Secret deletion = %v", err)
 	}
 	seedSecretRecoveryPin(t, store, tasksecretpinrecord.Record{

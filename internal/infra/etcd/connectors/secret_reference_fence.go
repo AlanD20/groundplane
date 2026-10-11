@@ -32,6 +32,21 @@ func (repository *Reader) LoadSecretReferenceFence(
 	projectID string,
 	record Record,
 ) (connectorSecretReferenceFence, error) {
+	return repository.LoadSecretReferenceFenceAtRevision(ctx, projectID, record, 0)
+}
+
+// LoadSecretReferenceFenceAtRevision captures selection, including absent or
+// deleting Project candidates that caused Platform fallback. Callers resolving
+// values use that same revision and join these conditions to publication.
+func (repository *Reader) LoadSecretReferenceFenceAtRevision(
+	ctx context.Context, projectID string, record Record, revision int64,
+) (connectorSecretReferenceFence, error) {
+	if revision < 0 {
+		return connectorSecretReferenceFence{}, errs.New(
+			errs.KindValidationFailed,
+			"Connector Secret selection revision is invalid",
+		)
+	}
 	references := connectorSecretReferences(record)
 	if len(references) == 0 {
 		return connectorSecretReferenceFence{}, nil
@@ -43,11 +58,12 @@ func (repository *Reader) LoadSecretReferenceFence(
 			secretrecord.SecretKeyIndexKey(core.SecretScopePlatform, "", reference),
 		)
 	}
-	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: indexKeys})
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: indexKeys, Revision: revision})
 	if err != nil {
 		return connectorSecretReferenceFence{}, err
 	}
-	if indexes == nil || indexes.ReadRevision <= 0 || len(indexes.Values) != len(indexKeys) {
+	if indexes == nil || indexes.ReadRevision <= 0 || len(indexes.Values) != len(indexKeys) ||
+		revision > 0 && indexes.ReadRevision != revision {
 		return connectorSecretReferenceFence{}, errs.New(
 			errs.KindInternal,
 			"Connector credential Secret index evidence is incomplete",

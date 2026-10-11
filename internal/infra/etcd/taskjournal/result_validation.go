@@ -3,16 +3,27 @@ package taskjournal
 import (
 	"crypto/sha512"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
+	if result.Kind == TaskResultController {
+		return validateControllerResult(result, status)
+	}
+	if err := result.Failure.Validate(); err != nil {
+		return err
+	}
+	if result.Failure != nil && (status == TaskStatusCompleted || result.Failure.ExitCode != result.ExitCode) {
+		return errs.New(errs.KindValidationFailed, "Task failure diagnostic contradicts its result")
+	}
 	if err := validateBackingObservations(result); err != nil {
 		return err
 	}
@@ -23,11 +34,44 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 	switch result.Diagnostic {
 	case TaskResultDiagnosticNone, TaskResultDiagnosticConfigRejected, TaskResultDiagnosticComposeFailed,
 		TaskResultDiagnosticTimeoutBeforeEffect,
+		TaskResultDiagnosticDNSWithdrawalFailed, TaskResultDiagnosticDNSWithdrawalTimedOut,
+		TaskResultDiagnosticReleaseNetworkFailed, TaskResultDiagnosticDNSActivationFailed, TaskResultDiagnosticDNSActivationTimedOut,
 		TaskResultDiagnosticHealthcheckPgrepMissing, TaskResultDiagnosticHealthcheckCurlMissing,
 		TaskResultDiagnosticHealthcheckNCMissing, TaskResultDiagnosticHealthcheckCommandMissing,
 		TaskResultDiagnosticHealthcheckCommandNotExecutable:
 	default:
 		return errs.New(errs.KindValidationFailed, "task result diagnostic is invalid")
+	}
+	if result.Diagnostic == TaskResultDiagnosticDNSWithdrawalFailed {
+		if result.Kind != TaskResultCompose || status != TaskStatusFailed ||
+			ids.Validate(ids.KindTask, result.DNSWithdrawalTaskID) != nil {
+			return errs.New(errs.KindValidationFailed, "DNS withdrawal failure has no failed resolver Task")
+		}
+	} else if result.DNSWithdrawalTaskID != "" {
+		return errs.New(errs.KindValidationFailed, "unrelated result carries a DNS withdrawal Task")
+	}
+	if result.Diagnostic == TaskResultDiagnosticDNSWithdrawalTimedOut &&
+		(result.Kind != TaskResultCompose || status != TaskStatusTimedOut) {
+		return errs.New(errs.KindValidationFailed, "DNS withdrawal timeout result is inconsistent")
+	}
+	if result.Diagnostic == TaskResultDiagnosticReleaseNetworkFailed ||
+		result.Diagnostic == TaskResultDiagnosticDNSActivationFailed ||
+		result.Diagnostic == TaskResultDiagnosticDNSActivationTimedOut {
+		expected := TaskStatusFailed
+		if result.Diagnostic == TaskResultDiagnosticDNSActivationTimedOut {
+			expected = TaskStatusTimedOut
+		}
+		if result.Kind != TaskResultCompose || status != expected || result.ReconciliationRequired ||
+			result.FailedStepID != "" ||
+			len(result.Projects) != 0 ||
+			len(result.ProxyEvidence) != 0 ||
+			len(result.RecreateEvidence) != 0 ||
+			len(result.RollingEvidence) != 0 {
+			return errs.New(
+				errs.KindValidationFailed,
+				"unassigned release prerequisite result carries invalid execution evidence",
+			)
+		}
 	}
 	if result.FailedStepID != "" {
 		if err := recordcodec.ValidateID(ids.KindStep, result.FailedStepID); err != nil {
@@ -82,6 +126,9 @@ func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			project.VolumeCount > 4096 || project.CollisionCount > 4096 {
 			return errs.New(errs.KindValidationFailed, "task result project count exceeds its limit")
 		}
+	}
+	if err := validateRollingResultEvidence(result); err != nil {
+		return err
 	}
 	if len(result.ProxyEvidence) > 32 {
 		return errs.New(errs.KindValidationFailed, "task result has too much proxy evidence")
@@ -184,10 +231,12 @@ func CloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 		return nil
 	}
 	cloned := *result
+	cloned.Failure = taskprogress.CloneFailure(result.Failure)
 	cloned.BackingObservations = backingruntimefact.CloneObservations(result.BackingObservations)
 	cloned.Projects = append([]TaskObservedProjectSummary(nil), result.Projects...)
 	cloned.ProxyEvidence = append([]TaskProxyEvidence(nil), result.ProxyEvidence...)
 	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
+	cloned.RollingEvidence = append([]rollingrelease.Completion(nil), result.RollingEvidence...)
 	cloned.CandidateAbsenceEvidence = CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence)
 	cloned.ComponentRestorationEvidence = CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence)
 	cloned.ServiceAbsenceEvidence = CloneTaskServiceAbsenceEvidence(result.ServiceAbsenceEvidence)

@@ -131,6 +131,15 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		},
 	)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
+		runtime, runtimeErr := prepareRouteRuntimeAcknowledgement(task, intent.Provider,
+			intent.CandidateProjection, intent.Plan, true)
+		if runtimeErr != nil {
+			clearRouteTaskChange(change)
+			return routeTaskChange{}, runtimeErr
+		}
+		change.conditions = append(change.conditions, runtime.conditions...)
+		change.mutations = append(change.mutations, runtime.mutations...)
+		change.values = append(change.values, runtime.values...)
 		change.mutations[0] = etcdstore.Mutation{
 			Type: etcdstore.MutationDelete,
 			Key:  environmentchanges.RouteRemovalIntentKey(task.ID),
@@ -303,6 +312,17 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 			},
 		},
 		values: [][]byte{routeValue, intentValue},
+	}
+	if terminalStatus == taskjournal.TaskStatusCompleted {
+		runtime, runtimeErr := prepareRouteRuntimeAcknowledgement(task, intent.Provider,
+			intent.CandidateProjection, intent.Plan, false)
+		if runtimeErr != nil {
+			clearRouteTaskChange(change)
+			return routeTaskChange{}, runtimeErr
+		}
+		change.conditions = append(change.conditions, runtime.conditions...)
+		change.mutations = append(change.mutations, runtime.mutations...)
+		change.values = append(change.values, runtime.values...)
 	}
 	return change, nil
 }

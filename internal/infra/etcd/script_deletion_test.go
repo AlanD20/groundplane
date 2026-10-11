@@ -91,8 +91,8 @@ func TestScriptRepositoryRemovalFinalizesOnlyAfterSuccessfulTask(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask() = %#v/%v/%v", claim, found, err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
-	); err != nil {
+		ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+		task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(): %v", err)
 	}
 	for _, key := range []string{testscripts.ScriptSetScriptKey(current.Record.EnvironmentID, current.Record.ScriptSetGeneration, current.Record.Desired.ID), testscripts.ScriptSetOwnerKey(current.Record.EnvironmentID, current.Record.ScriptSetGeneration, current.Record.Desired.ID), testscripts.ScriptSetSlugKey(current.Record.EnvironmentID, current.Record.ScriptSetGeneration, current.Record.Desired.Slug), testdeletions.TombstoneKey(string(testdeletions.DeletionTargetScript), current.Record.Desired.ID)} {

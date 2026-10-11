@@ -1,12 +1,40 @@
 import { CompactReference } from "@/components/common/compact-reference";
 import { cn } from "@/lib/utils";
 import { softwareIdentityPresentation } from "./image-presentation";
+import type { components } from "@/lib/api.generated";
+
+export function ContainerSoftwareIdentity({
+  software,
+  className,
+  showReferences = true,
+  unavailable,
+}: {
+  software?: components["schemas"]["ContainerIdentity"] | null;
+  className?: string;
+  showReferences?: boolean;
+  unavailable?: string;
+}) {
+  return (
+    <SoftwareIdentity
+      artifactReference={software?.image}
+      digest={software?.config_digest}
+      version={software?.version}
+      selectedTag={software?.selected_tag}
+      sourceBuild={software?.source?.kind === "source_ref"}
+      sourceCommit={software?.source?.commit}
+      className={className}
+      showReferences={showReferences}
+      unavailable={unavailable}
+    />
+  );
+}
 
 export function SoftwareIdentity({
   artifactReference,
   artifactLabel,
   className,
   digest,
+  selectedTag,
   showReferences = true,
   sourceBuild = false,
   sourceCommit,
@@ -17,6 +45,7 @@ export function SoftwareIdentity({
   artifactLabel?: string;
   className?: string;
   digest?: string | null;
+  selectedTag?: string | null;
   showReferences?: boolean;
   sourceBuild?: boolean;
   sourceCommit?: string | null;
@@ -27,6 +56,7 @@ export function SoftwareIdentity({
     artifactReference,
     artifactLabel,
     digest,
+    selectedTag,
     sourceBuild,
     sourceCommit,
     unavailable,

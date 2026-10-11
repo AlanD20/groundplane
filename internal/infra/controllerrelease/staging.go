@@ -27,19 +27,14 @@ func (store *Store) Stage(
 	if err != nil {
 		return upgrade.Release{}, err
 	}
-	build, err := jcs.Decode[struct {
-		Schema            int            `json:"schema"`
-		ControllerSHA256  upgrade.Digest `json:"controller_sha256"`
-		ControllerVersion string         `json:"controller_version"`
-		StorageEpoch      int            `json:"storage_epoch"`
-		ChannelSchema     int            `json:"channel_schema"`
-	}](canonical)
+	build, err := jcs.Decode[upgrade.BuildMetadata](canonical)
 	if err != nil {
 		return upgrade.Release{}, err
 	}
 	manifest := upgrade.Manifest{Schema: build.Schema, ControllerSHA256: build.ControllerSHA256,
 		ControllerVersion: build.ControllerVersion, StorageEpoch: build.StorageEpoch,
-		ChannelSchema: build.ChannelSchema, AgentImage: agentImage}
+		ControllerSource: build.ControllerSource,
+		ChannelSchema:    build.ChannelSchema, AgentImage: agentImage}
 	if err := manifest.Validate(); err != nil {
 		return upgrade.Release{}, err
 	}

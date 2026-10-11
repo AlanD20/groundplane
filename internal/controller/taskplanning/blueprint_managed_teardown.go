@@ -66,7 +66,10 @@ func (resolver *TaskPlanResolver) BlueprintManagedComponentTeardown(
 			var present bool
 			sourceProjection, present = pinnedSources[source.ComponentID]
 			if !present {
-				return BlueprintManagedComponentTeardown{}, errs.New(errs.KindStateConflict, "Blueprint Component child has no exact predecessor artifact")
+				return BlueprintManagedComponentTeardown{}, errs.New(
+					errs.KindStateConflict,
+					"Blueprint Component child has no exact predecessor artifact",
+				)
 			}
 		} else if source.RevisionID != projection.RevisionID {
 			loaded, found, loadErr := resolver.blueprints.GetEnvironmentComposeProjectionRevision(

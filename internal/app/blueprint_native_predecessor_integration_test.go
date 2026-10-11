@@ -10,10 +10,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -68,10 +66,7 @@ func proveNativeCandidatePreparation(
 		}
 		native.PriorServingReleaseID, native.RetainedPrior = prior.Record.ReleaseID, &prior.Record
 	}
-	fragments, err := resolver.RenderRetainedServiceRuntime(ctx, native)
-	if err != nil {
-		t.Fatal(err)
-	}
+	fragments := renderNativeRuntimeFixture(t, native)
 	fixture.SeedEntryAcknowledgedRuntime(t, current, fragments)
 	scope, err := fixture.Ledger.LoadPlanningScope(ctx, current.EnvironmentID)
 	if err != nil {
@@ -102,26 +97,17 @@ func proveNativeCandidatePreparation(
 		sources,
 		blueprintImageLookupAgent(t, fixture),
 		imageResolver,
+		unexpectedBlueprintRollingObserver{t},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	desired := planning[0].Service.Record
 	desired.Desired.Replicas = int(current.CandidateWorkload.ReplicaCount)
-	changes := []testblueprints.EnvironmentBlueprintServiceChange{{Current: &planning[0].Service, Record: desired}}
 	project := &composetypes.Project{Name: "test", Services: composetypes.Services{current.ServiceName: {
 		Name: current.ServiceName, Image: current.CandidateWorkload.RequestedReference, Scale: &desired.Desired.Replicas,
 		NetworkMode: "none", Expose: []string{"8080"}, HealthCheck: &composetypes.HealthCheckConfig{Test: []string{"CMD", "true"}},
 	}}}
-	memberships, err := blueprintrelease.BuildNormalizedServiceMemberships(project, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	before := fixture.ReadRevision()
-	workloads, err := producer.Preflight(ctx, current.EnvironmentID, changes, memberships, nil)
-	if err != nil || fixture.ReadRevision() != before {
-		t.Fatalf("read-only native preflight: %v", err)
-	}
 	priorIdentities, found, err := fixture.Hierarchy.GetEnvironmentOwnedIdentities(ctx, current.EnvironmentID)
 	if err != nil || !found {
 		t.Fatalf("native predecessor desired identities: found=%t err=%v", found, err)
@@ -132,8 +118,6 @@ func proveNativeCandidatePreparation(
 	task.UpdatedAt = task.CreatedAt
 	task.RenderGeneration = int32(candidateGeneration)
 	artifactID := ids.New(ids.KindConfig)
-	task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
-	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(taskcontract.BlueprintComposeProcedureNone)
 	artifact, err := testcomposerender.RenderCompose(
 		testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
 			ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: current.TenantID, ProjectID: current.ProjectID,
@@ -159,33 +143,8 @@ func proveNativeCandidatePreparation(
 	if err != nil {
 		t.Fatal(err)
 	}
-	tenant, err := fixture.Hierarchy.GetTenant(ctx, current.TenantID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prepared, err := producer.Prepare(
-		ctx,
-		blueprintrelease.PrepareInput{
-			DesiredRevisionID: projection.RevisionID,
-			Workloads:         workloads,
-			VolumeRoot:        "/var/lib/groundplane/vol",
-			Task:              task,
-			Projection:        projection,
-			Tenant:            tenant,
-			Project:           fixture.Project,
-			Environment:       fixture.Environment,
-			Memberships:       memberships,
-			ServiceChanges:    changes,
-			Artifact:          artifact,
-			CreatedAt:         task.CreatedAt,
-			AllocateNamed: func(kind ids.Kind, purpose string) string {
-				return ids.DeriveAt(kind, task.CreatedAt, task.ID, purpose)
-			},
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	revision := fixture.PublishNativeBlueprintRevision(t, task, projection, nil)
+	prepared := fixture.PrepareNativeServiceUnit(t, producer, revision, current.ServiceID, nil, nil)
 	members := prepared.Plan.GetCandidateReleaseProcedure().GetMembers()
 	if len(members) != 1 || members[0].GetServiceId() != current.ServiceID ||
 		members[0].GetCandidateReleaseId() == current.ReleaseID ||
@@ -193,10 +152,10 @@ func proveNativeCandidatePreparation(
 		t.Fatal("desired3/bundle2 did not publish one new candidate bound to C")
 	}
 	if fault != "" && fault != "bg-snapshot" {
-		fixture.AssertNativeCandidateSourceRace(t, prepared.Task, projection, prepared.Publication, current, fault)
+		fixture.AssertNativeCandidateSourceRace(t, revision, current.ServiceID, prepared, current, fault)
 		return
 	}
-	fixture.Publish(t, prepared.Task, projection, prepared.Publication)
+	fixture.PublishNativeServiceUnit(t, revision, current.ServiceID, prepared)
 	frozen, err := fixture.Ledger.GetBlueprintTaskRenderInput(ctx, prepared.Task)
 	if err != nil || len(frozen.NativePredecessors) != 1 || len(frozen.Members) != 1 ||
 		frozen.Members[0].Intent.PriorServingReleaseID != current.ReleaseID ||
@@ -209,7 +168,7 @@ func proveNativeCandidatePreparation(
 		t.Fatalf("immutable native replay: %v", err)
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second))
 	if err != nil || !found {
 		t.Fatalf("native claim: %v", err)
 	}
@@ -274,7 +233,8 @@ func TestBlueprintNativePredecessorBlueGreenSnapshot(t *testing.T) {
 }
 
 // SVC-15/BP-04: Rationale: replacement with identical bytes and pruning both invalidate the
-// source revision; no candidate Task, marker, or desired head may publish.
+// source revision; no private child or Release may publish, and the already
+// visible authored head must remain byte-for-byte current.
 func TestBlueprintNativePredecessorSourceCAS(t *testing.T) {
 	for _, fault := range []string{"intent-replace", "intent-prune", "render-replace", "render-prune", "projection-replace", "applied-replace"} {
 		t.Run(fault, func(t *testing.T) {

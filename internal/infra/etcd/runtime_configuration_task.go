@@ -33,7 +33,8 @@ func (repository *HierarchyRepository) requireSettledEnvironmentConfiguration(
 		DecodeTaskRecord, func(task TaskRecord) string { return task.ID },
 		func(task TaskRecord) bool { return task.Owner.EnvironmentID == environmentID },
 		func(task TaskRecord) bool {
-			return task.Configuration != nil && !taskjournal.IsTerminalTaskStatus(task.Status)
+			return task.Configuration != nil && !connectorCheckTask(task) &&
+				!taskjournal.IsTerminalTaskStatus(task.Status)
 		},
 	)
 	if err != nil || len(page.Items) == 0 {
@@ -192,7 +193,8 @@ func taskRuntimeConfiguration(task TaskRecord) (*runtimeconfiguration.Reference,
 	reference := task.Configuration.Current
 	if reference == (runtimeconfiguration.Reference{}) {
 		if task.Configuration.Prior != nil || task.Configuration.PriorRevision != 0 ||
-			task.Configuration.BackingHookInputs == nil {
+			task.Configuration.BackingHookInputs == nil && !(connectorCheckTask(task) &&
+				task.Configuration.SecretPins != nil && len(task.Materializations) == 0) {
 			return nil, errs.New(errs.KindStateConflict, "Task configuration authority is inconsistent")
 		}
 		return nil, nil

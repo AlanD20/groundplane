@@ -56,7 +56,7 @@ func TestComponentEnableResolvesAndCreatesOrderedZones(t *testing.T) {
 				`{"items":[{"id":"`+frontendZoneID+`","environment_id":"`+environmentTestID+`","name":"frontend","subnet":"10.40.10.0/24","internal":false,"owner_kind":"environment","owner_id":"`+environmentTestID+`"},{"id":"`+identityZoneID+`","environment_id":"`+environmentTestID+`","name":"identity-private","subnet":"10.40.20.0/24","internal":true,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}],"next_cursor":""}`,
 			)
 		case 3:
-			want := `{"environment_id":"` + environmentTestID + `","internal":false,"name":"edge","subnet":"10.40.30.0/24"}`
+			want := `{"allow_gp_dns":false,"environment_id":"` + environmentTestID + `","internal":false,"name":"edge","subnet":"10.40.30.0/24"}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/zones", want)
 			writer.WriteHeader(http.StatusCreated)
 			_, _ = io.WriteString(
@@ -64,7 +64,7 @@ func TestComponentEnableResolvesAndCreatesOrderedZones(t *testing.T) {
 				`{"id":"`+createdEdgeZoneID+`","environment_id":"`+environmentTestID+`","name":"edge","subnet":"10.40.30.0/24","internal":false,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}`,
 			)
 		case 4:
-			want := `{"environment_id":"` + environmentTestID + `","internal":true,"name":"private","subnet":"10.40.40.0/24"}`
+			want := `{"allow_gp_dns":false,"environment_id":"` + environmentTestID + `","internal":true,"name":"private","subnet":"10.40.40.0/24"}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/zones", want)
 			writer.WriteHeader(http.StatusCreated)
 			_, _ = io.WriteString(
@@ -72,7 +72,7 @@ func TestComponentEnableResolvesAndCreatesOrderedZones(t *testing.T) {
 				`{"id":"`+createdInnerZoneID+`","environment_id":"`+environmentTestID+`","name":"private","subnet":"10.40.40.0/24","internal":true,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}`,
 			)
 		case 5:
-			want := `{"config":{"zone_ids":["` + frontendZoneID + `","` + identityZoneID + `","` + createdEdgeZoneID + `","` + createdInnerZoneID + `"],"caddyfile_template":"{\n\t{gp.routes}\n}\n"}}`
+			want := `{"config":{"implementation":"caddy","zone_ids":["` + frontendZoneID + `","` + identityZoneID + `","` + createdEdgeZoneID + `","` + createdInnerZoneID + `"],"caddyfile_template":"{\n\t{gp.routes}\n}\n"}}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/components/"+componentTestID+"/enable", want)
 			writer.WriteHeader(http.StatusAccepted)
 			_, _ = io.WriteString(writer, `{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`)
@@ -113,7 +113,7 @@ func TestComponentEnableReportsCreatedZoneRetainedAfterFailure(t *testing.T) {
 				`{"id":"`+componentTestID+`","owner":"environment","owner_id":"`+environmentTestID+`","environment_id":"`+environmentTestID+`","kind":"caddy","enabled":false,"config":null,"healthy":false,"status":"disabled"}`,
 			)
 		case 2:
-			want := `{"environment_id":"` + environmentTestID + `","internal":false,"name":"edge","subnet":"10.40.30.0/24"}`
+			want := `{"allow_gp_dns":false,"environment_id":"` + environmentTestID + `","internal":false,"name":"edge","subnet":"10.40.30.0/24"}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/zones", want)
 			writer.WriteHeader(http.StatusCreated)
 			_, _ = io.WriteString(
@@ -121,7 +121,7 @@ func TestComponentEnableReportsCreatedZoneRetainedAfterFailure(t *testing.T) {
 				`{"id":"`+createdEdgeZoneID+`","environment_id":"`+environmentTestID+`","name":"edge","subnet":"10.40.30.0/24","internal":false,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}`,
 			)
 		case 3:
-			want := `{"config":{"zone_ids":["` + createdEdgeZoneID + `"]}}`
+			want := `{"config":{"implementation":"caddy","zone_ids":["` + createdEdgeZoneID + `"]}}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/components/"+componentTestID+"/enable", want)
 			writer.Header().Set("Content-Type", "application/problem+json")
 			writer.WriteHeader(http.StatusUnprocessableEntity)
@@ -157,7 +157,7 @@ func TestComponentTunnelFirstEnableCombinesCredentialFileWithCreatedZone(t *test
 	path := t.TempDir() + "/tunnel.json"
 	if err := os.WriteFile(
 		path,
-		[]byte(`{"credential":{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"private-token"}}`),
+		[]byte(`{"implementation":"cloudflare-tunnel","credential":{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"private-token"}}`),
 		0o600,
 	); err != nil {
 		t.Fatal(err)
@@ -175,7 +175,7 @@ func TestComponentTunnelFirstEnableCombinesCredentialFileWithCreatedZone(t *test
 				`{"id":"`+componentTestID+`","owner":"environment","owner_id":"`+environmentTestID+`","environment_id":"`+environmentTestID+`","kind":"cloudflare-tunnel","enabled":false,"config":null,"healthy":false,"status":"disabled"}`,
 			)
 		case 2:
-			want := `{"environment_id":"` + environmentTestID + `","internal":false,"name":"frontend","subnet":"10.40.10.0/24"}`
+			want := `{"allow_gp_dns":false,"environment_id":"` + environmentTestID + `","internal":false,"name":"frontend","subnet":"10.40.10.0/24"}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/zones", want)
 			writer.WriteHeader(http.StatusCreated)
 			_, _ = io.WriteString(
@@ -183,7 +183,7 @@ func TestComponentTunnelFirstEnableCombinesCredentialFileWithCreatedZone(t *test
 				`{"id":"`+frontendZoneID+`","environment_id":"`+environmentTestID+`","name":"frontend","subnet":"10.40.10.0/24","internal":false,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}`,
 			)
 		case 3:
-			want := `{"config":{"zone_ids":["` + frontendZoneID + `"],"credential":{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"private-token"}}}`
+			want := `{"config":{"implementation":"cloudflare-tunnel","zone_ids":["` + frontendZoneID + `"],"credential":{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"private-token"}}}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/components/"+componentTestID+"/enable", want)
 			writer.WriteHeader(http.StatusAccepted)
 			_, _ = io.WriteString(writer, `{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`)
@@ -213,7 +213,7 @@ func TestComponentTunnelFirstEnableCombinesCredentialFileWithExistingZone(t *tes
 	path := t.TempDir() + "/tunnel.json"
 	if err := os.WriteFile(
 		path,
-		[]byte(`{"credential":{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"private-token"}}`),
+		[]byte(`{"implementation":"cloudflare-tunnel","credential":{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"private-token"}}`),
 		0o600,
 	); err != nil {
 		t.Fatal(err)
@@ -234,7 +234,7 @@ func TestComponentTunnelFirstEnableCombinesCredentialFileWithExistingZone(t *tes
 				`{"items":[{"id":"`+frontendZoneID+`","environment_id":"`+environmentTestID+`","name":"frontend","subnet":"10.40.10.0/24","internal":false,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}],"next_cursor":""}`,
 			)
 		case 3:
-			want := `{"config":{"zone_ids":["` + frontendZoneID + `"],"credential":{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"private-token"}}}`
+			want := `{"config":{"implementation":"cloudflare-tunnel","zone_ids":["` + frontendZoneID + `"],"credential":{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"private-token"}}}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/components/"+componentTestID+"/enable", want)
 			writer.WriteHeader(http.StatusAccepted)
 			_, _ = io.WriteString(writer, `{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`)
@@ -262,7 +262,7 @@ func TestComponentTunnelInvalidCredentialStopsBeforeZoneCreation(t *testing.T) {
 	path := t.TempDir() + "/tunnel.json"
 	if err := os.WriteFile(
 		path,
-		[]byte(`{"credential":{"mode":"new","secret_name":"TUNNEL_TOKEN"}}`),
+		[]byte(`{"implementation":"cloudflare-tunnel","credential":{"mode":"new","secret_name":"TUNNEL_TOKEN"}}`),
 		0o600,
 	); err != nil {
 		t.Fatal(err)
@@ -352,14 +352,14 @@ func TestComponentTunnelConfigResolvesZonesAndPreservesExistingCredential(t *tes
 		case 3:
 			_, _ = io.WriteString(
 				writer,
-				`{"config":{"zone_ids":["`+createdEdgeZoneID+`"],"secret_id":"`+secretID+`"},"managed_files":[]}`,
+				`{"config":{"implementation":"cloudflare-tunnel","zone_ids":["`+createdEdgeZoneID+`"],"secret_id":"`+secretID+`"},"managed_files":[]}`,
 			)
 		case 4:
-			want := `{"config":{"zone_ids":["` + frontendZoneID + `","` + identityZoneID + `"],"credential":{"mode":"existing","secret_id":"` + secretID + `"}}}`
+			want := `{"config":{"implementation":"cloudflare-tunnel","zone_ids":["` + frontendZoneID + `","` + identityZoneID + `"],"credential":{"mode":"existing","secret_id":"` + secretID + `"}}}`
 			assertComponentRequest(t, request, http.MethodPut, "/api/v1/components/"+componentTestID+"/config", want)
 			_, _ = io.WriteString(
 				writer,
-				`{"resource":{"zone_ids":["`+frontendZoneID+`","`+identityZoneID+`"],"secret_id":"`+secretID+`"},"reconcile_task_id":null}`,
+				`{"resource":{"implementation":"cloudflare-tunnel","zone_ids":["`+frontendZoneID+`","`+identityZoneID+`"],"secret_id":"`+secretID+`"},"reconcile_task_id":null}`,
 			)
 		default:
 			t.Fatalf("unexpected request %d", requestNumber)

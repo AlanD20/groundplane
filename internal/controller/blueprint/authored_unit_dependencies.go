@@ -201,6 +201,22 @@ func (planner *authoredUnitPlanner) componentDependencies(
 		dependencies = append(dependencies, authoredResourceKey(ids.KindSecret, spec.Settings.SecretID))
 	}
 	if core.ComponentCapability(capability) == core.ComponentCapabilityHTTPRouter {
+		// Settle configuration and Attach effects before capturing the Service
+		// runtimes a later release must retain across this router update.
+		for _, kind := range []ids.Kind{ids.KindEnvEntry, ids.KindAttach} {
+			for _, identity := range planner.identities[kind] {
+				key := authoredResourceKey(kind, identity.ID)
+				if planner.blocked[key] {
+					return nil, nil, false, nil
+				}
+				dependencies = append(dependencies, key)
+			}
+		}
+		for _, omission := range planner.input.identities.PendingOmissions {
+			if omission.Kind == ids.KindEnvEntry || omission.Kind == ids.KindAttach {
+				dependencies = append(dependencies, authoredResourceKey(omission.Kind, omission.ID))
+			}
+		}
 		for _, identity := range planner.identities[ids.KindRoute] {
 			key := authoredResourceKey(ids.KindRoute, identity.ID)
 			if planner.blocked[key] {

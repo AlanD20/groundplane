@@ -2,17 +2,25 @@ ARG RUNNER_VERSION=2.337.0
 
 FROM golang:1.26.7-bookworm AS cli
 ARG VERSION=dev
+ARG SOURCE_KIND
+ARG SOURCE_COMMIT
 WORKDIR /src
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOAMD64=v1 GOARM64=v8.0 GOMAXPROCS=2 go build -p=2 -trimpath -buildvcs=false \
-    -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=${VERSION}" \
+RUN if [ -n "$SOURCE_KIND$SOURCE_COMMIT" ]; then \
+        printf '%s\n' "$SOURCE_KIND" | grep -Eq '^(source_ref|release)$' \
+        && printf '%s\n' "$SOURCE_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; fi \
+    && CGO_ENABLED=0 GOOS=linux GOAMD64=v1 GOARM64=v8.0 GOMAXPROCS=2 go build -p=2 -trimpath -buildvcs=false \
+    -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=${VERSION} -X github.com/AlanD20/groundplane/internal/common/version.SourceKind=${SOURCE_KIND} -X github.com/AlanD20/groundplane/internal/common/version.SourceCommit=${SOURCE_COMMIT}" \
     -o /out/groundplane ./cmd/groundplane
 
 FROM docker/compose-bin:v2.40.3@sha256:e39da8206cc48c6e2c99ce371935eef9d7eff7db600a993fd357de8b75621edf AS compose
 FROM docker:29.1.3-cli@sha256:4fa0ee1f3a7e4354c4ea34558b6d4ee32859baf4973d4c8ccc8e7fe3dd730c04 AS dockercli
 
 FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+ARG VERSION=dev
 ARG RUNNER_VERSION
+ARG SOURCE_KIND
+ARG SOURCE_COMMIT
 ARG RUNNER_SHA256_AMD64=70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613
 ARG RUNNER_SHA256_ARM64=9b1dc70626422526e3c94767cf024896beb15da5342a3f4819bf2feac13e0393
 ENV DEBIAN_FRONTEND=noninteractive
@@ -45,7 +53,10 @@ RUN chmod 0755 /usr/local/bin/groundplane-runner
 ENV HOME=/runner
 LABEL org.opencontainers.image.source="https://github.com/AlanD20/groundplane" \
       org.opencontainers.image.title="Groundplane Runner" \
-      org.opencontainers.image.version="${RUNNER_VERSION}"
+      org.opencontainers.image.version="${RUNNER_VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_COMMIT}" \
+      com.groundplane.version="${VERSION}" \
+      com.groundplane.source-kind="${SOURCE_KIND}"
 USER 1000:1000
 WORKDIR /runner
 ENTRYPOINT ["/usr/local/bin/groundplane-runner"]

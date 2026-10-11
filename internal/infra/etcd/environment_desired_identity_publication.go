@@ -28,6 +28,12 @@ func prepareEnvironmentDesiredIdentityPublication(
 	if err != nil {
 		return environmentDesiredIdentityPublication{}, err
 	}
+	nameConditions, nameMutations, err := dnsrecords.NewReader(store).
+		PrepareRouteNamePublication(ctx, projection, readRevision)
+	if err != nil {
+		return environmentDesiredIdentityPublication{}, err
+	}
+	defer etcdstore.ClearMutationValues(nameMutations)
 	if expectedHeadRevision < 0 {
 		return environmentDesiredIdentityPublication{}, errs.New(
 			errs.KindValidationFailed,
@@ -57,6 +63,7 @@ func prepareEnvironmentDesiredIdentityPublication(
 		if sourceKind == blueprints.EnvironmentBlueprintSourceMutation {
 			ownedIdentities.Attaches = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Attaches...)
 			ownedIdentities.Scripts = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Scripts...)
+			ownedIdentities.DNSRecords = append([]projectionrecord.OwnedIdentity(nil), previous.Record.DNSRecords...)
 		}
 		ownedIdentities, err = projectionrecord.RetainOwnedIdentityBirths(ownedIdentities, previous.Record)
 		if err != nil {
@@ -99,6 +106,12 @@ func prepareEnvironmentDesiredIdentityPublication(
 	}
 	publication.conditions = append(publication.conditions, initialAbsence.Conditions()...)
 	publication.conditions = append(publication.conditions, dnsConditions...)
+	publication.conditions = append(publication.conditions, nameConditions...)
+	for _, mutation := range nameMutations {
+		publication.mutations = append(publication.mutations, etcdstore.Mutation{
+			Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...),
+		})
+	}
 	publication.mutations = append(publication.mutations, initialAbsence.Mutations()...)
 	return publication, nil
 }

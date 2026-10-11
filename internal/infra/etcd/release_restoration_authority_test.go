@@ -285,7 +285,7 @@ func blueprintFinalRecoveryAcknowledgement(t *testing.T, componentDeclared, comp
 					Ordinal:         1,
 				},
 				State:   testtaskjournal.TaskEventStateRunning,
-				Payload: json.RawMessage(`{"message":"Component activation started"}`),
+				Payload: json.RawMessage(`{}`),
 			}, task.CreatedAt.Add(150*time.Second),
 		)
 		if err != nil {
@@ -319,7 +319,7 @@ func blueprintFinalRecoveryAcknowledgement(t *testing.T, componentDeclared, comp
 					AssignmentID: recovery.Assignment.Record.AssignmentID, AgentID: agentID, AgentGeneration: 1,
 					TaskID: task.ID, StepID: stepID, Attempt: 2, Ordinal: ordinal,
 				},
-				State: state, Payload: json.RawMessage(`{"message":"recovery"}`),
+				State: state, Payload: json.RawMessage(`{}`),
 			}, task.CreatedAt.Add(time.Duration(3+ordinal)*time.Minute))
 			if err != nil {
 				t.Fatalf("append recovery event %s/%s = %v", stepID, state, err)

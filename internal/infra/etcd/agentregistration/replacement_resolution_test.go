@@ -3,6 +3,7 @@ package agentregistration
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/version"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,7 @@ func TestLocalAgentReplacementResolutionFencesLateCommit(t *testing.T) {
 				record.Generation,
 				created.Revision,
 				record.CreatedAt.Add(time.Second),
+				version.BuildIdentity{Version: "test"},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -47,6 +49,7 @@ func TestLocalAgentReplacementResolutionFencesLateCommit(t *testing.T) {
 				image,
 				replacement.EncryptedToken,
 				replacement.TokenDigest,
+				nil,
 				record.CreatedAt.Add(2*time.Second),
 			)
 			if !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {

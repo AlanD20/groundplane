@@ -32,7 +32,7 @@ func PublicProjection(
 		age := time.Since(observation.ObservedAt)
 		online = observation.Online && age >= 0 && age <= ObservationLifetime
 	}
-	return apiTypes.Runner{
+	result := apiTypes.Runner{
 		ID: record.Desired.ID, Slug: record.Desired.Slug,
 		TenantID: record.Desired.TenantID, ProjectID: record.Desired.ProjectID(),
 		EnvironmentID: record.Desired.EnvironmentID(),
@@ -41,5 +41,10 @@ func PublicProjection(
 		CreateTaskID: record.CreateTaskID, RemoveTaskID: removeTaskID,
 		Online: online, ObservedAt: observedAt,
 		CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
-	}, nil
+	}
+	if record.Software.Image != "" {
+		software := record.Software
+		result.Software = &software
+	}
+	return result, nil
 }

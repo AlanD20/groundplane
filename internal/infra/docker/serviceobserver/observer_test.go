@@ -126,6 +126,7 @@ func proxiedReadRequest(config []byte) *agentpb.ObserveServices {
 	request := readRequest()
 	digest := sha256.Sum256(config)
 	target := request.Targets[0]
+	target.ProxyImplementation = agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY
 	target.ProxyComposeName = "api"
 	target.ProxyPlanId = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	target.ProxyRenderGeneration = 2
@@ -292,8 +293,10 @@ func readRequest() *agentpb.ObserveServices {
 		RequestId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Targets: []*agentpb.ServiceObservationTarget{{
 			EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			RenderGeneration: 3, ComposeName: "api-blue", RuntimeRole: "slot", Slot: "blue",
+			ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", RuntimeRole: "slot", Slot: "blue",
+			Workloads: []*agentpb.ServiceWorkloadObservation{{
+				PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 3, ComposeName: "api-blue",
+			}},
 		}},
 	}
 }
@@ -302,10 +305,10 @@ func readLabels(target *agentpb.ServiceObservationTarget, replica int) map[strin
 	return map[string]string{
 		"com.groundplane.managed": "true", "com.groundplane.kind": "service",
 		"com.groundplane.environment-id": target.EnvironmentId, "com.groundplane.service-id": target.ServiceId,
-		"com.groundplane.release-id": target.ReleaseId, "com.groundplane.plan-id": target.PlanId,
-		"com.groundplane.render-generation": strconv.FormatUint(target.RenderGeneration, 10),
+		"com.groundplane.release-id": target.ReleaseId, "com.groundplane.plan-id": target.Workloads[0].PlanId,
+		"com.groundplane.render-generation": strconv.FormatUint(target.Workloads[0].RenderGeneration, 10),
 		"com.groundplane.runtime-role":      target.RuntimeRole, "com.groundplane.slot": target.Slot,
-		"com.docker.compose.service": target.ComposeName, "com.docker.compose.container-number": strconv.Itoa(replica),
+		"com.docker.compose.service": target.Workloads[0].ComposeName, "com.docker.compose.container-number": strconv.Itoa(replica),
 		"com.docker.compose.oneoff": "False",
 	}
 }

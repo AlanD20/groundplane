@@ -328,7 +328,9 @@ export function TaskRunnerDialog({
               <TaskLink taskId={taskId} onClick={() => onOpenChange(false)} />
             )}
             {failure && (
-              <p className="mt-1 text-xs text-destructive">{failure}</p>
+              <p className="mt-1 whitespace-pre-line break-words text-xs text-destructive">
+                {failure}
+              </p>
             )}
             {abortRequested && taskInFlight && (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -368,7 +370,10 @@ export function TaskRunnerDialog({
                     state === "pending" && "text-muted-foreground/60",
                   )}
                 >
-                  {step.script_slug ?? step.name}
+                  {step.action ||
+                    step.description ||
+                    step.script_slug ||
+                    "Operation not recorded"}
                 </span>
                 <span
                   className={cn(

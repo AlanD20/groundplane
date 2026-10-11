@@ -66,7 +66,7 @@ func TestManualScriptClosingResumesOriginalReport(t *testing.T) {
 					AssignmentID: assignment.Assignment.Record.AssignmentID, AgentID: assignment.Assignment.Record.AgentID,
 					AgentGeneration: 1, TaskID: assignment.Task.Record.ID, StepID: assignment.Task.Record.Steps[0].ID,
 					Attempt: assignment.Assignment.Record.ExecutionEpoch, Ordinal: 1,
-				}, State: testtaskjournal.TaskEventStateRunning, Payload: []byte(`{"message":"late event"}`)},
+				}, State: testtaskjournal.TaskEventStateRunning, Payload: []byte(`{}`)},
 				terminalAt.Add(time.Second),
 			)
 			if !isKind(err, errs.KindStateConflict) || store.revision != revision {

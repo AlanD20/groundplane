@@ -91,6 +91,7 @@ func ProjectServiceProjection(
 		if extension.Release != nil {
 			service.Strategy = extension.Release.DefaultStrategy
 			service.OnFailure = extension.Release.OnFailure
+			service.RollingReplicaTimeoutSeconds = extension.Release.RollingReplicaTimeoutSeconds
 		}
 		if err := service.Healthcheck.Validate(); err != nil {
 			return nil, errs.Newf(errs.KindValidationFailed, "Service %q: %s", name, err.Error())

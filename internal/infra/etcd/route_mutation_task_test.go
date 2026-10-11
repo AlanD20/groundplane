@@ -2,14 +2,18 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -20,6 +24,8 @@ import (
 	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: a durable provider pin must retain the provider-neutral origin
@@ -125,7 +131,8 @@ func TestRouteRepositoryRejectsPublicationOmittingDesiredService(t *testing.T) {
 	candidate.DesiredServices = nil
 	candidate = withTestEnvironmentComposeArtifact(candidate)
 	intent.CandidateProjection = &candidate
-	intent.Provider = routeRepositoryTestProviderPin(target.Record.Desired.ID)
+	intent.Provider = routeRepositoryTestProviderPin(environment.Record.ID, target.Record.Desired.ID)
+	sealRouteRepositoryTestExecutionPlan(t, &task, &intent.Plan, intent.Provider, false)
 
 	body, err := json.Marshal(struct {
 		Route struct {
@@ -295,7 +302,7 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	terminalAt := createdAt.Add(2 * time.Second)
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 	}
 	observationRead, err := store.Get(ctx, testroutes.ObservationKey(record.Desired.ID))
@@ -306,7 +313,7 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	if err != nil || observation.Observation.Status != testroutes.ObservedUnserved {
 		t.Fatalf("desired-only observation = %#v/%v", observation, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
 
@@ -376,11 +383,17 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 		t.Fatalf("ClaimNextControllerTask(edit) found/error = %v/%v", found, err)
 	}
 	editTerminalAt := editCreatedAt.Add(2 * time.Second)
-	failed, err := tasks.AcknowledgeControllerTask(ctx, editTask.ID, testtaskjournal.TaskStatusFailed, editTerminalAt)
+	failed, err := tasks.AcknowledgeControllerTask(
+		ctx,
+		editTask.ID,
+		testtaskjournal.TaskStatusFailed,
+		nil,
+		editTerminalAt,
+	)
 	if err != nil || failed.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeControllerTask(edit failed) = %#v/%v", failed, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, editTask.ID, testtaskjournal.TaskStatusFailed, editTerminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, editTask.ID, testtaskjournal.TaskStatusFailed, nil, editTerminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(edit failed replay) error = %v", err)
 	}
 	retryID := ids.NewAt(ids.KindTask, editTerminalAt.Add(time.Second), 1214)
@@ -399,15 +412,15 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 		t.Fatalf("ClaimNextControllerTask(edit retry) found/error = %v/%v", found, err)
 	}
 	retryTerminalAt := editTerminalAt.Add(3 * time.Second)
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, retryTerminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, nil, retryTerminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(edit retry) error = %v", err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, retryTerminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, nil, retryTerminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(edit retry replay) error = %v", err)
 	}
 }
 
-func routeRepositoryTestProviderPin(serviceID string) *testenvironmentchanges.RouteProviderPin {
+func routeRepositoryTestProviderPin(environmentID, serviceID string) *testenvironmentchanges.RouteProviderPin {
 	componentID := ids.New(ids.KindComponent)
 	return &testenvironmentchanges.RouteProviderPin{
 		ComponentID: componentID, DefinitionDigest: strings.Repeat("a", 64),
@@ -425,5 +438,172 @@ func routeRepositoryTestProviderPin(serviceID string) *testenvironmentchanges.Ro
 				Exposure: componentsdk.HTTPRouteExposurePublic,
 			}},
 		},
+		Runtime: &testenvironmentchanges.RouteProviderRuntime{EnvironmentID: environmentID},
+	}
+}
+
+func sealRouteRepositoryTestExecutionPlan(
+	t *testing.T,
+	task *TaskRecord,
+	encoded *[]byte,
+	provider *testenvironmentchanges.RouteProviderPin,
+	removal bool,
+) {
+	t.Helper()
+	if task == nil || provider == nil {
+		t.Fatal("Route execution authority fixture is incomplete")
+	}
+	artifactID := task.Params[testtaskjournal.TaskComposeArtifactParam]
+	if artifactID == "" {
+		artifactID = ids.New(ids.KindConfig)
+	}
+	materializationID := ids.New(ids.KindConfig)
+	destination := provider.Destination
+	content := []byte("exact generated route file\n")
+	contentDigest := sha256.Sum256(content)
+	contentLength := uint64(len(content))
+	if len(task.Materializations) != 0 {
+		materializationID = task.Materializations[0].MaterializationID
+		destination = task.Materializations[0].Destination
+		contentLength = task.Materializations[0].Length
+		decoded, err := hex.DecodeString(task.Materializations[0].SHA256)
+		if err != nil || len(decoded) != sha256.Size {
+			t.Fatalf("decode Route materialization digest: %v", err)
+		}
+		copy(contentDigest[:], decoded)
+	}
+	materializeStepID := ids.New(ids.KindStep)
+	if len(task.Steps) != 0 {
+		materializeStepID = task.Steps[0].ID
+	}
+	applyStepID := ids.New(ids.KindStep)
+	activateStepID := ids.New(ids.KindStep)
+	fileProbeStepID := ids.New(ids.KindStep)
+	fileCompensateStepID := ids.New(ids.KindStep)
+	runtimeProbeStepID := ids.New(ids.KindStep)
+	runtimeCompensateStepID := ids.New(ids.KindStep)
+	definitionDigest, _ := hex.DecodeString(provider.DefinitionDigest)
+	catalogDigest, _ := hex.DecodeString(provider.CatalogDigest)
+	imageIndexDigest, _ := hex.DecodeString(strings.Repeat("11", sha256.Size))
+	imageChildDigest, _ := hex.DecodeString(strings.Repeat("22", sha256.Size))
+	imageConfigDigest, _ := hex.DecodeString(strings.Repeat("33", sha256.Size))
+	yaml := []byte("services:\n  edge-router:\n    image: example/router@sha256:" +
+		hex.EncodeToString(imageChildDigest) + "\n")
+	yamlDigest := sha256.Sum256(yaml)
+	generation := uint64(task.RenderGeneration)
+	service := &agentpb.ComposeService{
+		ServiceId: provider.ServiceID, ComposeName: "edge-router", ExpectedReplicas: 1,
+		OwnerComponentId: provider.ComponentID,
+		ImageRepository:  "example/router",
+		ImageReference:   "example/router@sha256:" + hex.EncodeToString(imageChildDigest),
+		ImageIndexDigest: imageIndexDigest, ImageChildDigest: imageChildDigest,
+		ImageConfigDigest: imageConfigDigest, ImageOs: "linux", ImageArchitecture: "amd64",
+		ExpectedLabels: []*agentpb.LabelPair{
+			{Key: "com.groundplane.component-id", Value: provider.ComponentID},
+			{Key: "com.groundplane.environment-id", Value: task.Owner.EnvironmentID},
+			{Key: "com.groundplane.image-child-digest", Value: "sha256:" + hex.EncodeToString(imageChildDigest)},
+			{Key: "com.groundplane.image-config-digest", Value: "sha256:" + hex.EncodeToString(imageConfigDigest)},
+			{Key: "com.groundplane.image-index-digest", Value: "sha256:" + hex.EncodeToString(imageIndexDigest)},
+			{Key: "com.groundplane.image-platform", Value: "linux/amd64"},
+			{Key: "com.groundplane.kind", Value: "service"},
+			{Key: "com.groundplane.managed", Value: "true"},
+			{Key: "com.groundplane.plan-id", Value: task.PlanID},
+			{Key: "com.groundplane.render-generation", Value: strconv.FormatUint(generation, 10)},
+			{Key: "com.groundplane.service-id", Value: provider.ServiceID},
+		},
+	}
+	artifact := &agentpb.ComposeArtifact{
+		ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId: task.Owner.EnvironmentID, ProjectName: "gp-" + strings.ToLower(task.Owner.EnvironmentID),
+		AuthorizedVolumeDir: "/var/lib/groundplane/volumes/" + task.Owner.EnvironmentID,
+		CanonicalYaml:       yaml, YamlSha256: yamlDigest[:], Services: []*agentpb.ComposeService{service},
+	}
+	forwardFile := &agentpb.MaterializeFile{
+		ArtifactId: artifactID, MaterializationId: materializationID,
+		EnvironmentId: task.Owner.EnvironmentID, Destination: destination,
+		OutputKind: agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE,
+		Mode:       0o444, Length: contentLength, Sha256: contentDigest[:],
+	}
+	emptyDigest := sha256.Sum256(nil)
+	recoveryFile := &agentpb.MaterializeFile{
+		ArtifactId: artifactID, MaterializationId: ids.New(ids.KindConfig),
+		EnvironmentId: task.Owner.EnvironmentID, Destination: destination,
+		OutputKind: agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_PLAIN_FILE,
+		Mode:       0o444, Sha256: emptyDigest[:],
+	}
+	steps := []*agentpb.ExecutionStep{
+		{StepId: materializeStepID, TimeoutSeconds: 120,
+			Policy:  agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+			Payload: &agentpb.ExecutionStep_MaterializeFile{MaterializeFile: forwardFile}},
+		{StepId: applyStepID, TimeoutSeconds: 120, PrerequisiteStepId: materializeStepID,
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+				ArtifactId: artifactID, ServiceIds: []string{provider.ServiceID}, NoDependencies: true,
+			}}},
+		{StepId: activateStepID, TimeoutSeconds: 120, PrerequisiteStepId: applyStepID,
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+			Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: &agentpb.ComponentApply{
+				ComponentId: provider.ComponentID, DefinitionDigest: definitionDigest,
+				CatalogDigest: catalogDigest, ActionId: provider.ActionID,
+				ArtifactId: materializationID, ArtifactDigest: contentDigest[:], Generation: generation,
+			}}},
+		{StepId: fileProbeStepID, TimeoutSeconds: 120,
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+			Payload: &agentpb.ExecutionStep_MaterializeFile{
+				MaterializeFile: proto.Clone(recoveryFile).(*agentpb.MaterializeFile),
+			}},
+		{StepId: fileCompensateStepID, TimeoutSeconds: 120, PrerequisiteStepId: materializeStepID,
+			Policy:  agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+			Payload: &agentpb.ExecutionStep_MaterializeFile{MaterializeFile: recoveryFile}},
+		{StepId: runtimeProbeStepID, TimeoutSeconds: 120,
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+			Payload: &agentpb.ExecutionStep_ComponentRestorationProbe{
+				ComponentRestorationProbe: &agentpb.ComponentRestorationProbe{
+					ComponentId: provider.ComponentID, CandidateArtifactId: artifactID,
+				},
+			}},
+		{StepId: runtimeCompensateStepID, TimeoutSeconds: 120,
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+			Payload: &agentpb.ExecutionStep_ComponentRestorationCompensate{
+				ComponentRestorationCompensate: &agentpb.ComponentRestorationCompensate{
+					ComponentId: provider.ComponentID, CandidateArtifactId: artifactID,
+				},
+			}},
+	}
+	steps[3].GetMaterializeFile().MaterializationId = ids.New(ids.KindConfig)
+	operation := agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	if removal {
+		operation = agentpb.PlanOperation_PLAN_OPERATION_REMOVE
+	}
+	sealed, err := executionplan.Seal(&agentpb.ExecutionPlan{
+		Schema: executionplan.SchemaVersion, PlanId: task.PlanID, RenderGeneration: generation,
+		Operation: operation, TargetId: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
+		ComponentRecoveryProcedure: &agentpb.ComponentRecoveryProcedure{
+			ComponentId: provider.ComponentID, CandidateArtifactId: artifactID,
+			ForwardStepIds: []string{materializeStepID, applyStepID, activateStepID},
+			ConfigurationRestoration: &agentpb.ConfigurationRestoration{Files: []*agentpb.ConfigurationFileRestoration{{
+				ForwardStepId: materializeStepID, ProbeStepId: fileProbeStepID,
+				CompensateStepId: fileCompensateStepID,
+			}}},
+			RuntimeTarget: &agentpb.ComponentRecoveryProcedure_CandidateAbsence{
+				CandidateAbsence: &agentpb.ComponentCandidateAbsenceRestoration{
+					ComposeProjectName: artifact.ProjectName, ServiceId: provider.ServiceID,
+					ProbeStepId: runtimeProbeStepID, CompensateStepId: runtimeCompensateStepID,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("seal Route execution authority: %v", err)
+	}
+	value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(sealed)
+	if err != nil {
+		t.Fatalf("marshal Route execution authority: %v", err)
+	}
+	*encoded = value
+	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
+	task.Steps = make([]testtaskjournal.TaskStepRecord, len(sealed.Steps))
+	for index, step := range sealed.Steps {
+		task.Steps[index] = testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: step.StepId}
 	}
 }

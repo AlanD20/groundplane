@@ -21,7 +21,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -219,6 +218,7 @@ func validateNativeRestorationDescriptor(
 }
 
 type BlueprintReleasePublicationEvidence struct {
+	ServiceRollout             *etcdstore.Versioned[releaserender.BlueprintServiceRolloutCapture]
 	ProxyAddresses             networkreservations.ProxyAddresses
 	NativePredecessors         []BlueprintNativePredecessorCapture
 	Manifest                   releases.VersionedReleaseManifest
@@ -293,6 +293,16 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 				return nil, err
 			}
 			source.Intent = &serving
+			runtimes, err := ledger.LoadAcknowledgedServiceRuntimesAtRevision(
+				ctx, evidence.EnvironmentID, []string{captured.ServiceID}, captured.FixedReadRevision,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if len(runtimes) != 1 || runtimes[0].Revision != captured.RuntimeRevision {
+				return nil, errs.New(errs.KindStateConflict, "Blueprint native predecessor runtime changed")
+			}
+			source.Runtime = &runtimes[0]
 		}
 		guards, err := ledger.blueprintRuntimeSourceConditions(
 			ctx,
@@ -322,12 +332,6 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 				ModRevision: applied.Revision,
 			},
 		)
-		if captured.Serving != nil {
-			conditions = append(conditions, etcdstore.Condition{
-				Key:         serviceruntimerecord.Key(captured.ServiceID),
-				ModRevision: captured.RuntimeRevision,
-			})
-		}
 		for _, value := range [][]byte{captured.CurrentArtifact, captured.RetainedPriorArtifact} {
 			if len(value) == 0 {
 				continue

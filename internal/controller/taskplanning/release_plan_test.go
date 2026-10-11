@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
+
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
@@ -52,6 +55,7 @@ func testPrepareReleaseTaskFirstDeploy(t *testing.T, blueGreen bool) {
 		api := project.Services["api"]
 		api.Expose = []string{"8080"}
 		project.Services["api"] = api
+		captureTestServiceProxySelection(t, &reader.projection, serviceproxy.Caddy)
 	}
 	normalized, err := project.MarshalYAML()
 	if err != nil {
@@ -74,24 +78,54 @@ func testPrepareReleaseTaskFirstDeploy(t *testing.T, blueGreen bool) {
 		{Kind: testtaskjournal.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
 	}
 	member := testreleaserender.ReleaseTaskRenderMember{
-		Intent: domain.Intent{ID: releaseID, EnvironmentID: reader.environment.ID, ServiceID: serviceID,
-			OperationID: task.OperationID, OperationKind: domain.OperationDeploy, CandidateWorkload: releaseTestWorkload("example/api:first"),
-			Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack},
-		Render: testreleaserender.ReleaseRenderInput{ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
-			ServiceID: serviceID, ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:first"), Strategy: domain.StrategyRecreate,
-			CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
-			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
-			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-			AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection},
+		Intent: domain.Intent{
+			ID:                releaseID,
+			EnvironmentID:     reader.environment.ID,
+			ServiceID:         serviceID,
+			OperationID:       task.OperationID,
+			OperationKind:     domain.OperationDeploy,
+			CandidateWorkload: releaseTestWorkload("example/api:first"),
+			Strategy:          domain.StrategyRecreate,
+			OnFailure:         domain.OnFailureSwitchBack,
+		},
+		Render: testreleaserender.ReleaseRenderInput{
+			ReleaseID:           releaseID,
+			PlanID:              task.PlanID,
+			ArtifactID:          artifactID,
+			ServiceID:           serviceID,
+			ServiceName:         "api",
+			CandidateWorkload:   releaseTestWorkload("example/api:first"),
+			Strategy:            domain.StrategyRecreate,
+			CandidateTarget:     domain.WorkloadSingleton,
+			PriorTarget:         domain.WorkloadSingleton,
+			TenantID:            reader.tenant.ID,
+			TenantSlug:          reader.tenant.Slug,
+			ProjectID:           reader.project.ID,
+			ProjectSlug:         reader.project.Slug,
+			EnvironmentID:       reader.environment.ID,
+			EnvironmentName:     reader.environment.Name,
+			AuthorizedVolumeDir: reader.environment.VolumeDir,
+			Projection:          reader.projection,
+		},
 	}
 	if blueGreen {
 		member.Intent.Strategy, member.Intent.Slot = domain.StrategyBlueGreen, domain.SlotBlue
 		member.Render.Strategy, member.Render.Slot = domain.StrategyBlueGreen, domain.SlotBlue
 		member.Render.PriorStrategy = domain.StrategyRecreate
 		member.Render.CandidateTarget = domain.WorkloadBlue
-		member.Render.ProxyPorts, member.Render.ProxyGeneration = []uint16{8080}, 2
+		member.Render.ProxyImplementation = serviceproxy.Caddy
+		member.Render.ProxyPorts, member.Render.ProxyGeneration = []domain.ProxyPort{
+			{Port: 8080, Protocol: serviceports.TCP},
+		}, 2
 		member.Render.ProxyImage = testServiceProxyImage()
-		config, err := domain.RenderProxyConfig("api", releaseID, domain.WorkloadBlue, 2, []uint16{8080})
+		config, err := domain.RenderProxyConfig(
+			serviceproxy.Caddy,
+			"api",
+			releaseID,
+			domain.WorkloadBlue,
+			2,
+			[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}

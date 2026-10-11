@@ -51,7 +51,9 @@ func ValidateIdempotencyMarker(marker IdempotencyMarker) error {
 	switch marker.Kind {
 	case IdempotencyMarkerDirect:
 		if marker.State != IdempotencyMarkerCompleted || marker.TaskID != "" ||
-			!validTerminalTimes(marker) || !validDirectResponse(marker.Locator.Method, marker.Response) {
+			!validTerminalTimes(
+				marker,
+			) || (!validDirectResponse(marker.Locator.Method, marker.Response) && !validCapturedTaskRetryResponse(marker)) {
 			return CorruptIdempotencyMarker()
 		}
 	case IdempotencyMarkerTask:
@@ -113,6 +115,22 @@ func validTerminalTimes(marker IdempotencyMarker) bool {
 	return recordcodec.IsCanonicalUTC(marker.TerminalAt) && recordcodec.IsCanonicalUTC(marker.RetainUntil) &&
 		!marker.TerminalAt.Before(marker.CreatedAt) && marker.UpdatedAt.Equal(marker.TerminalAt) &&
 		marker.RetainUntil.Equal(marker.TerminalAt.Add(MarkerRetention))
+}
+
+// Authorizing one captured hook is synchronous, while its original Task remains
+// running. Acceptance refers to that existing Task, not a new pending marker.
+func validCapturedTaskRetryResponse(marker IdempotencyMarker) bool {
+	if marker.Locator.Method != http.MethodPost || marker.Locator.Route != "/tasks/{id}/retry" ||
+		marker.Response.Status != http.StatusAccepted || marker.ReplayTarget != nil {
+		return false
+	}
+	var body struct {
+		TaskID string `json:"task_id"`
+	}
+	if json.Unmarshal(marker.Response.Body, &body) != nil || ids.Validate(ids.KindTask, body.TaskID) != nil {
+		return false
+	}
+	return ValidTaskResponse(marker.Response, body.TaskID)
 }
 
 func validDirectResponse(method string, response IdempotencyResponse) bool {

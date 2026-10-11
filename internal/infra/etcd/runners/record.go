@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -57,6 +58,7 @@ type RunnerRecord struct {
 }
 
 type RunnerLifecycleRecord struct {
+	Software          buildversion.ContainerIdentity              `json:"software,omitempty,omitzero"`
 	RunnerID          string                                      `json:"runner_id"`
 	ProvisioningState RunnerProvisioningState                     `json:"provisioning_state"`
 	CreateTaskID      string                                      `json:"create_task_id"`
@@ -107,7 +109,12 @@ func NewProvisioningRunner(
 	return CloneRunnerRecord(record), nil
 }
 
-func CompleteRunnerProvisioning(record RunnerRecord, taskID string, succeeded bool) (RunnerRecord, error) {
+func CompleteRunnerProvisioning(
+	record RunnerRecord,
+	taskID string,
+	succeeded bool,
+	software buildversion.ContainerIdentity,
+) (RunnerRecord, error) {
 	if err := ValidateRunnerRecord(record); err != nil {
 		return RunnerRecord{}, err
 	}
@@ -115,7 +122,14 @@ func CompleteRunnerProvisioning(record RunnerRecord, taskID string, succeeded bo
 		return RunnerRecord{}, errs.New(errs.KindStateConflict, "runner provisioning task does not own the record")
 	}
 	if succeeded {
+		if software.Validate() != nil || software.Image != record.Desired.ImageRef {
+			return RunnerRecord{}, errs.New(
+				errs.KindStateConflict,
+				"Runner installed image differs from its captured selection",
+			)
+		}
 		record.ProvisioningState = RunnerProvisioningReady
+		record.Software = software
 	} else {
 		record.ProvisioningState = RunnerProvisioningFailed
 	}
@@ -160,6 +174,7 @@ func RetryRunnerProvisioning(record RunnerRecord, sourceTaskID string, retryTask
 	record.ProvisioningState = RunnerProvisioningProvisioning
 	record.CreateTaskID = retryTaskID
 	record.ContainerID = ""
+	record.Software = buildversion.ContainerIdentity{}
 	if record.RuntimeEpoch == ^uint64(0) {
 		return RunnerRecord{}, errs.New(errs.KindResourceInUse, "runner runtime epoch is exhausted")
 	}
@@ -185,6 +200,9 @@ func ValidateRunnerRecord(record RunnerRecord) error {
 	if record.RunnerID != record.Desired.ID {
 		return errs.New(errs.KindValidationFailed, "runner desired and lifecycle identities do not match")
 	}
+	if record.Software.Image != "" && record.Software.Image != record.Desired.ImageRef {
+		return errs.New(errs.KindValidationFailed, "Runner accepted image differs from its immutable desired image")
+	}
 	return ValidateRunnerLifecycle(record.RunnerLifecycleRecord)
 }
 
@@ -202,6 +220,11 @@ func ValidateRunnerLifecycle(record RunnerLifecycleRecord) error {
 	}
 	if record.ContainerID != "" && !ValidLowerHex(record.ContainerID, RunnerContainerIDEncodedLength) {
 		return errs.New(errs.KindValidationFailed, "runner container id is invalid")
+	}
+	if record.ProvisioningState == RunnerProvisioningReady || record.Software != (buildversion.ContainerIdentity{}) {
+		if record.ContainerID == "" || record.Software.Validate() != nil {
+			return errs.New(errs.KindValidationFailed, "Runner accepted software identity is invalid")
+		}
 	}
 	if err := record.Allocation.Validate(); err != nil {
 		return err

@@ -24,7 +24,8 @@ func ValidateManagedComponentTeardownSources(sources []ManagedComponentRuntimeSo
 	previousKind := core.ComponentKind("")
 	for _, source := range sources {
 		switch source.ComponentKind {
-		case core.ComponentKindIngressCaddy, core.ComponentKindEdgeCloudflare, core.ComponentKindCoreDNS:
+		case core.ComponentKindIngressCaddy, core.ComponentKindIngressEnvoy,
+			core.ComponentKindEdgeCloudflare, core.ComponentKindCoreDNS:
 		default:
 			return errs.New(errs.KindValidationFailed, "managed Component teardown source kind is invalid")
 		}

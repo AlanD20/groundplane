@@ -118,6 +118,13 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		{Key: deletions.TombstoneKey("service", target.Record.Desired.ID)},
 		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)},
 	}
+	if intent.Provider != nil {
+		condition, err := routeProviderRuntimeCondition(intent.Provider, intent.EnvironmentID)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		conditions = append(conditions, condition)
+	}
 	var mutations []etcdstore.Mutation
 
 	task = cloneTaskRecord(task)

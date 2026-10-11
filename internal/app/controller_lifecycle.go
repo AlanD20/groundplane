@@ -27,6 +27,13 @@ func (c *Controller) Run(ctx context.Context) error {
 		c.controllerTasks.Run(runCtx)
 	}()
 	localAgentDone := make(chan struct{})
+	blueprintsDone := make(chan struct{})
+	go func() {
+		defer close(blueprintsDone)
+		if c.blueprints != nil {
+			c.blueprints.Run(runCtx)
+		}
+	}()
 	softwareDone := make(chan struct{})
 	go func() {
 		defer close(softwareDone)
@@ -48,8 +55,8 @@ func (c *Controller) Run(ctx context.Context) error {
 	resolverDone := make(chan struct{})
 	go func() {
 		defer close(resolverDone)
-		if c.resolverListener != nil {
-			c.resolverListener.Run(runCtx)
+		if c.resolverConfiguration != nil {
+			c.resolverConfiguration.Run(runCtx)
 		}
 	}()
 
@@ -90,6 +97,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 	<-schedulerDone
 	<-controllerTasksDone
+	<-blueprintsDone
 	<-softwareDone
 	<-localAgentDone
 	<-runnersDone

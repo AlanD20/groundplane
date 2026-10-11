@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 	"unicode/utf8"
@@ -56,14 +57,16 @@ func (s *Session) invalidateReady() bool {
 	current.readyReported = false
 	current.lastReady = time.Time{}
 	current.capacity = 0
-	current.version = ""
 	return true
 }
 
 // RecordReady records the most recent reported free capacity and binary
 // version for this session.
-func (s *Session) RecordReady(at time.Time, capacity int32, version string) error {
+func (s *Session) RecordReady(at time.Time, capacity int32, version string, source buildversion.BuildProvenance) error {
 	if err := validateReady(capacity, version); err != nil {
+		return err
+	}
+	if err := source.Validate(); err != nil {
 		return err
 	}
 
@@ -74,10 +77,14 @@ func (s *Session) RecordReady(at time.Time, capacity int32, version string) erro
 	if current != s.state || current.fence != s.state.fence || !current.online || current.revoked {
 		return errs.New(errs.KindStateConflict, "agent session is fenced")
 	}
+	if current.version != "" && (current.version != version || current.source != source) {
+		return errs.New(errs.KindStateConflict, "agent build identity changed within one session")
+	}
 	current.lastReady = at
 	current.readyReported = true
 	current.capacity = capacity
 	current.version = version
+	current.source = source
 	s.registry.notifyReadyLocked(readyKey{agentID: s.agentID, generation: current.generation})
 	return nil
 }

@@ -66,7 +66,13 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintRoute(
 		storedParent.PlanID != parent.PlanID || storedParent.PlanHash != parent.PlanHash {
 		return errs.New(errs.KindStateConflict, "Blueprint Route parent claim changed")
 	}
-	desired, found, err := blueprints.ReadDesiredInputRevision(ctx, repository.store, parent.Owner.EnvironmentID, parent.ID, snapshot.ReadRevision)
+	desired, found, err := blueprints.ReadDesiredInputRevision(
+		ctx,
+		repository.store,
+		parent.Owner.EnvironmentID,
+		parent.ID,
+		snapshot.ReadRevision,
+	)
 	if err != nil {
 		return err
 	}

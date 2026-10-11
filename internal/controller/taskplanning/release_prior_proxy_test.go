@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
+
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -48,9 +51,10 @@ func TestReleasePlanUsesExactNativeProxyConfiguration(t *testing.T) {
 	if expected == nil {
 		t.Fatal("fixture has no native proxy")
 	}
-	member.Render.ProxyPorts = []uint16{9090}
-	candidate, err := domain.RenderProxyConfig(member.Render.ServiceName, member.Intent.ID,
+	member.Render.ProxyPorts = []domain.ProxyPort{{Port: 9090, Protocol: serviceports.TCP}}
+	candidate, err := domain.RenderProxyConfig(serviceproxy.Caddy, member.Render.ServiceName, member.Intent.ID,
 		member.Render.CandidateTarget, member.Render.ProxyGeneration, member.Render.ProxyPorts)
+
 	if err != nil {
 		t.Fatal(err)
 	}

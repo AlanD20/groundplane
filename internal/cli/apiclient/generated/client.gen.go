@@ -37,6 +37,57 @@ func (e AttachCredentialMode) Valid() bool {
 	}
 }
 
+// Defines values for BackingCheckResultOutcome.
+const (
+	BackingCheckResultOutcomeFailed      BackingCheckResultOutcome = "failed"
+	BackingCheckResultOutcomeInterrupted BackingCheckResultOutcome = "interrupted"
+	BackingCheckResultOutcomePassed      BackingCheckResultOutcome = "passed"
+)
+
+// Valid indicates whether the value is a known member of the BackingCheckResultOutcome enum.
+func (e BackingCheckResultOutcome) Valid() bool {
+	switch e {
+	case BackingCheckResultOutcomeFailed:
+		return true
+	case BackingCheckResultOutcomeInterrupted:
+		return true
+	case BackingCheckResultOutcomePassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackingCheckResultPhase.
+const (
+	BackingCheckResultPhaseChecking        BackingCheckResultPhase = "checking"
+	BackingCheckResultPhaseCleaning        BackingCheckResultPhase = "cleaning"
+	BackingCheckResultPhaseCleanupRequired BackingCheckResultPhase = "cleanup_required"
+	BackingCheckResultPhaseFinished        BackingCheckResultPhase = "finished"
+	BackingCheckResultPhaseReady           BackingCheckResultPhase = "ready"
+	BackingCheckResultPhaseTransferred     BackingCheckResultPhase = "transferred"
+)
+
+// Valid indicates whether the value is a known member of the BackingCheckResultPhase enum.
+func (e BackingCheckResultPhase) Valid() bool {
+	switch e {
+	case BackingCheckResultPhaseChecking:
+		return true
+	case BackingCheckResultPhaseCleaning:
+		return true
+	case BackingCheckResultPhaseCleanupRequired:
+		return true
+	case BackingCheckResultPhaseFinished:
+		return true
+	case BackingCheckResultPhaseReady:
+		return true
+	case BackingCheckResultPhaseTransferred:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BackingHookInputGenerate.
 const (
 	BackingHookInputGeneratePassword BackingHookInputGenerate = "password"
@@ -220,6 +271,24 @@ func (e BackupSourceInputKind) Valid() bool {
 	}
 }
 
+// Defines values for BuildProvenanceKind.
+const (
+	BuildProvenanceKindRelease   BuildProvenanceKind = "release"
+	BuildProvenanceKindSourceRef BuildProvenanceKind = "source_ref"
+)
+
+// Valid indicates whether the value is a known member of the BuildProvenanceKind enum.
+func (e BuildProvenanceKind) Valid() bool {
+	switch e {
+	case BuildProvenanceKindRelease:
+		return true
+	case BuildProvenanceKindSourceRef:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ComponentOwner.
 const (
 	ComponentOwnerEnvironment ComponentOwner = "environment"
@@ -265,60 +334,519 @@ func (e ComponentStatus) Valid() bool {
 	}
 }
 
-// Defines values for ComponentConfigMutationRequestConfig1Credential0Mode.
+// Defines values for ComponentConfig0Implementation.
 const (
-	ComponentConfigMutationRequestConfig1Credential0ModeExisting ComponentConfigMutationRequestConfig1Credential0Mode = "existing"
+	ComponentConfig0ImplementationCaddy ComponentConfig0Implementation = "caddy"
 )
 
-// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig1Credential0Mode enum.
-func (e ComponentConfigMutationRequestConfig1Credential0Mode) Valid() bool {
+// Valid indicates whether the value is a known member of the ComponentConfig0Implementation enum.
+func (e ComponentConfig0Implementation) Valid() bool {
 	switch e {
-	case ComponentConfigMutationRequestConfig1Credential0ModeExisting:
+	case ComponentConfig0ImplementationCaddy:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ComponentConfigMutationRequestConfig1Credential1Mode.
+// Defines values for ComponentConfig1Implementation.
 const (
-	ComponentConfigMutationRequestConfig1Credential1ModeNew ComponentConfigMutationRequestConfig1Credential1Mode = "new"
+	ComponentConfig1ImplementationEnvoy ComponentConfig1Implementation = "envoy"
 )
 
-// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig1Credential1Mode enum.
-func (e ComponentConfigMutationRequestConfig1Credential1Mode) Valid() bool {
+// Valid indicates whether the value is a known member of the ComponentConfig1Implementation enum.
+func (e ComponentConfig1Implementation) Valid() bool {
 	switch e {
-	case ComponentConfigMutationRequestConfig1Credential1ModeNew:
+	case ComponentConfig1ImplementationEnvoy:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ComponentEnableRequestConfig1Credential0Mode.
+// Defines values for ComponentConfig2Implementation.
 const (
-	ComponentEnableRequestConfig1Credential0ModeExisting ComponentEnableRequestConfig1Credential0Mode = "existing"
+	ComponentConfig2ImplementationCloudflareTunnel ComponentConfig2Implementation = "cloudflare-tunnel"
 )
 
-// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig1Credential0Mode enum.
-func (e ComponentEnableRequestConfig1Credential0Mode) Valid() bool {
+// Valid indicates whether the value is a known member of the ComponentConfig2Implementation enum.
+func (e ComponentConfig2Implementation) Valid() bool {
 	switch e {
-	case ComponentEnableRequestConfig1Credential0ModeExisting:
+	case ComponentConfig2ImplementationCloudflareTunnel:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ComponentEnableRequestConfig1Credential1Mode.
+// Defines values for ComponentConfig3Implementation.
 const (
-	ComponentEnableRequestConfig1Credential1ModeNew ComponentEnableRequestConfig1Credential1Mode = "new"
+	ComponentConfig3ImplementationCoredns ComponentConfig3Implementation = "coredns"
 )
 
-// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig1Credential1Mode enum.
-func (e ComponentEnableRequestConfig1Credential1Mode) Valid() bool {
+// Valid indicates whether the value is a known member of the ComponentConfig3Implementation enum.
+func (e ComponentConfig3Implementation) Valid() bool {
 	switch e {
-	case ComponentEnableRequestConfig1Credential1ModeNew:
+	case ComponentConfig3ImplementationCoredns:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentConfigMutationRequestConfig0Implementation.
+const (
+	ComponentConfigMutationRequestConfig0ImplementationCaddy ComponentConfigMutationRequestConfig0Implementation = "caddy"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig0Implementation enum.
+func (e ComponentConfigMutationRequestConfig0Implementation) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig0ImplementationCaddy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentConfigMutationRequestConfig1Implementation.
+const (
+	ComponentConfigMutationRequestConfig1ImplementationEnvoy ComponentConfigMutationRequestConfig1Implementation = "envoy"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig1Implementation enum.
+func (e ComponentConfigMutationRequestConfig1Implementation) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig1ImplementationEnvoy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentConfigMutationRequestConfig2Credential0Mode.
+const (
+	ComponentConfigMutationRequestConfig2Credential0ModeExisting ComponentConfigMutationRequestConfig2Credential0Mode = "existing"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig2Credential0Mode enum.
+func (e ComponentConfigMutationRequestConfig2Credential0Mode) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig2Credential0ModeExisting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentConfigMutationRequestConfig2Credential1Mode.
+const (
+	ComponentConfigMutationRequestConfig2Credential1ModeNew ComponentConfigMutationRequestConfig2Credential1Mode = "new"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig2Credential1Mode enum.
+func (e ComponentConfigMutationRequestConfig2Credential1Mode) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig2Credential1ModeNew:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentConfigMutationRequestConfig2Implementation.
+const (
+	ComponentConfigMutationRequestConfig2ImplementationCloudflareTunnel ComponentConfigMutationRequestConfig2Implementation = "cloudflare-tunnel"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig2Implementation enum.
+func (e ComponentConfigMutationRequestConfig2Implementation) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig2ImplementationCloudflareTunnel:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentConfigMutationRequestConfig3Implementation.
+const (
+	ComponentConfigMutationRequestConfig3ImplementationCoredns ComponentConfigMutationRequestConfig3Implementation = "coredns"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig3Implementation enum.
+func (e ComponentConfigMutationRequestConfig3Implementation) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig3ImplementationCoredns:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentEnableRequestConfig0Implementation.
+const (
+	ComponentEnableRequestConfig0ImplementationCaddy ComponentEnableRequestConfig0Implementation = "caddy"
+)
+
+// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig0Implementation enum.
+func (e ComponentEnableRequestConfig0Implementation) Valid() bool {
+	switch e {
+	case ComponentEnableRequestConfig0ImplementationCaddy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentEnableRequestConfig1Implementation.
+const (
+	ComponentEnableRequestConfig1ImplementationEnvoy ComponentEnableRequestConfig1Implementation = "envoy"
+)
+
+// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig1Implementation enum.
+func (e ComponentEnableRequestConfig1Implementation) Valid() bool {
+	switch e {
+	case ComponentEnableRequestConfig1ImplementationEnvoy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentEnableRequestConfig2Credential0Mode.
+const (
+	ComponentEnableRequestConfig2Credential0ModeExisting ComponentEnableRequestConfig2Credential0Mode = "existing"
+)
+
+// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig2Credential0Mode enum.
+func (e ComponentEnableRequestConfig2Credential0Mode) Valid() bool {
+	switch e {
+	case ComponentEnableRequestConfig2Credential0ModeExisting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentEnableRequestConfig2Credential1Mode.
+const (
+	ComponentEnableRequestConfig2Credential1ModeNew ComponentEnableRequestConfig2Credential1Mode = "new"
+)
+
+// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig2Credential1Mode enum.
+func (e ComponentEnableRequestConfig2Credential1Mode) Valid() bool {
+	switch e {
+	case ComponentEnableRequestConfig2Credential1ModeNew:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentEnableRequestConfig2Implementation.
+const (
+	ComponentEnableRequestConfig2ImplementationCloudflareTunnel ComponentEnableRequestConfig2Implementation = "cloudflare-tunnel"
+)
+
+// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig2Implementation enum.
+func (e ComponentEnableRequestConfig2Implementation) Valid() bool {
+	switch e {
+	case ComponentEnableRequestConfig2ImplementationCloudflareTunnel:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConfiguredHealthcheckHttpProtocol.
+const (
+	ConfiguredHealthcheckHttpProtocolHttp  ConfiguredHealthcheckHttpProtocol = "http"
+	ConfiguredHealthcheckHttpProtocolHttps ConfiguredHealthcheckHttpProtocol = "https"
+)
+
+// Valid indicates whether the value is a known member of the ConfiguredHealthcheckHttpProtocol enum.
+func (e ConfiguredHealthcheckHttpProtocol) Valid() bool {
+	switch e {
+	case ConfiguredHealthcheckHttpProtocolHttp:
+		return true
+	case ConfiguredHealthcheckHttpProtocolHttps:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConfiguredHealthcheckKind.
+const (
+	ConfiguredHealthcheckKindCustomExec   ConfiguredHealthcheckKind = "custom_exec"
+	ConfiguredHealthcheckKindCustomShell  ConfiguredHealthcheckKind = "custom_shell"
+	ConfiguredHealthcheckKindDisabled     ConfiguredHealthcheckKind = "disabled"
+	ConfiguredHealthcheckKindHttp         ConfiguredHealthcheckKind = "http"
+	ConfiguredHealthcheckKindImageDefault ConfiguredHealthcheckKind = "image_default"
+	ConfiguredHealthcheckKindProcess      ConfiguredHealthcheckKind = "process"
+	ConfiguredHealthcheckKindTcp          ConfiguredHealthcheckKind = "tcp"
+	ConfiguredHealthcheckKindUnavailable  ConfiguredHealthcheckKind = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the ConfiguredHealthcheckKind enum.
+func (e ConfiguredHealthcheckKind) Valid() bool {
+	switch e {
+	case ConfiguredHealthcheckKindCustomExec:
+		return true
+	case ConfiguredHealthcheckKindCustomShell:
+		return true
+	case ConfiguredHealthcheckKindDisabled:
+		return true
+	case ConfiguredHealthcheckKindHttp:
+		return true
+	case ConfiguredHealthcheckKindImageDefault:
+		return true
+	case ConfiguredHealthcheckKindProcess:
+		return true
+	case ConfiguredHealthcheckKindTcp:
+		return true
+	case ConfiguredHealthcheckKindUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectorCheckResultOutcome.
+const (
+	ConnectorCheckResultOutcomeFailed      ConnectorCheckResultOutcome = "failed"
+	ConnectorCheckResultOutcomeInterrupted ConnectorCheckResultOutcome = "interrupted"
+	ConnectorCheckResultOutcomePassed      ConnectorCheckResultOutcome = "passed"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorCheckResultOutcome enum.
+func (e ConnectorCheckResultOutcome) Valid() bool {
+	switch e {
+	case ConnectorCheckResultOutcomeFailed:
+		return true
+	case ConnectorCheckResultOutcomeInterrupted:
+		return true
+	case ConnectorCheckResultOutcomePassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectorCheckResultPhase.
+const (
+	ConnectorCheckResultPhaseChecking        ConnectorCheckResultPhase = "checking"
+	ConnectorCheckResultPhaseCleaning        ConnectorCheckResultPhase = "cleaning"
+	ConnectorCheckResultPhaseCleanupRequired ConnectorCheckResultPhase = "cleanup_required"
+	ConnectorCheckResultPhaseFinished        ConnectorCheckResultPhase = "finished"
+	ConnectorCheckResultPhaseReady           ConnectorCheckResultPhase = "ready"
+	ConnectorCheckResultPhaseTransferred     ConnectorCheckResultPhase = "transferred"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorCheckResultPhase enum.
+func (e ConnectorCheckResultPhase) Valid() bool {
+	switch e {
+	case ConnectorCheckResultPhaseChecking:
+		return true
+	case ConnectorCheckResultPhaseCleaning:
+		return true
+	case ConnectorCheckResultPhaseCleanupRequired:
+		return true
+	case ConnectorCheckResultPhaseFinished:
+		return true
+	case ConnectorCheckResultPhaseReady:
+		return true
+	case ConnectorCheckResultPhaseTransferred:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DNSCheckAnswerOutcome.
+const (
+	DNSCheckAnswerOutcomeCanceled     DNSCheckAnswerOutcome = "canceled"
+	DNSCheckAnswerOutcomeNameNotFound DNSCheckAnswerOutcome = "name_not_found"
+	DNSCheckAnswerOutcomeNoAnswer     DNSCheckAnswerOutcome = "no_answer"
+	DNSCheckAnswerOutcomeQueryFailed  DNSCheckAnswerOutcome = "query_failed"
+	DNSCheckAnswerOutcomeRefused      DNSCheckAnswerOutcome = "refused"
+	DNSCheckAnswerOutcomeResolved     DNSCheckAnswerOutcome = "resolved"
+	DNSCheckAnswerOutcomeServerError  DNSCheckAnswerOutcome = "server_error"
+	DNSCheckAnswerOutcomeTimeout      DNSCheckAnswerOutcome = "timeout"
+)
+
+// Valid indicates whether the value is a known member of the DNSCheckAnswerOutcome enum.
+func (e DNSCheckAnswerOutcome) Valid() bool {
+	switch e {
+	case DNSCheckAnswerOutcomeCanceled:
+		return true
+	case DNSCheckAnswerOutcomeNameNotFound:
+		return true
+	case DNSCheckAnswerOutcomeNoAnswer:
+		return true
+	case DNSCheckAnswerOutcomeQueryFailed:
+		return true
+	case DNSCheckAnswerOutcomeRefused:
+		return true
+	case DNSCheckAnswerOutcomeResolved:
+		return true
+	case DNSCheckAnswerOutcomeServerError:
+		return true
+	case DNSCheckAnswerOutcomeTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DNSCheckAnswerType.
+const (
+	DNSCheckAnswerTypeA  DNSCheckAnswerType = "A"
+	DNSCheckAnswerTypeNS DNSCheckAnswerType = "NS"
+)
+
+// Valid indicates whether the value is a known member of the DNSCheckAnswerType enum.
+func (e DNSCheckAnswerType) Valid() bool {
+	switch e {
+	case DNSCheckAnswerTypeA:
+		return true
+	case DNSCheckAnswerTypeNS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DNSCheckAnswerSampleType.
+const (
+	DNSCheckAnswerSampleTypeA  DNSCheckAnswerSampleType = "A"
+	DNSCheckAnswerSampleTypeNS DNSCheckAnswerSampleType = "NS"
+)
+
+// Valid indicates whether the value is a known member of the DNSCheckAnswerSampleType enum.
+func (e DNSCheckAnswerSampleType) Valid() bool {
+	switch e {
+	case DNSCheckAnswerSampleTypeA:
+		return true
+	case DNSCheckAnswerSampleTypeNS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DNSCheckQueryType.
+const (
+	DNSCheckQueryTypeA  DNSCheckQueryType = "A"
+	DNSCheckQueryTypeNS DNSCheckQueryType = "NS"
+)
+
+// Valid indicates whether the value is a known member of the DNSCheckQueryType enum.
+func (e DNSCheckQueryType) Valid() bool {
+	switch e {
+	case DNSCheckQueryTypeA:
+		return true
+	case DNSCheckQueryTypeNS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DNSCheckResultOutcome.
+const (
+	DNSCheckResultOutcomeFailed      DNSCheckResultOutcome = "failed"
+	DNSCheckResultOutcomeInterrupted DNSCheckResultOutcome = "interrupted"
+	DNSCheckResultOutcomePassed      DNSCheckResultOutcome = "passed"
+)
+
+// Valid indicates whether the value is a known member of the DNSCheckResultOutcome enum.
+func (e DNSCheckResultOutcome) Valid() bool {
+	switch e {
+	case DNSCheckResultOutcomeFailed:
+		return true
+	case DNSCheckResultOutcomeInterrupted:
+		return true
+	case DNSCheckResultOutcomePassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DNSCheckResultPhase.
+const (
+	DNSCheckResultPhaseChecking DNSCheckResultPhase = "checking"
+	DNSCheckResultPhaseFinished DNSCheckResultPhase = "finished"
+	DNSCheckResultPhaseReady    DNSCheckResultPhase = "ready"
+)
+
+// Valid indicates whether the value is a known member of the DNSCheckResultPhase enum.
+func (e DNSCheckResultPhase) Valid() bool {
+	switch e {
+	case DNSCheckResultPhaseChecking:
+		return true
+	case DNSCheckResultPhaseFinished:
+		return true
+	case DNSCheckResultPhaseReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EdgeCheckResultOutcome.
+const (
+	EdgeCheckResultOutcomeFailed      EdgeCheckResultOutcome = "failed"
+	EdgeCheckResultOutcomeInterrupted EdgeCheckResultOutcome = "interrupted"
+	EdgeCheckResultOutcomePassed      EdgeCheckResultOutcome = "passed"
+	EdgeCheckResultOutcomeProtected   EdgeCheckResultOutcome = "protected"
+)
+
+// Valid indicates whether the value is a known member of the EdgeCheckResultOutcome enum.
+func (e EdgeCheckResultOutcome) Valid() bool {
+	switch e {
+	case EdgeCheckResultOutcomeFailed:
+		return true
+	case EdgeCheckResultOutcomeInterrupted:
+		return true
+	case EdgeCheckResultOutcomePassed:
+		return true
+	case EdgeCheckResultOutcomeProtected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EdgeCheckResultPhase.
+const (
+	EdgeCheckResultPhaseCleaning        EdgeCheckResultPhase = "cleaning"
+	EdgeCheckResultPhaseCleanupRequired EdgeCheckResultPhase = "cleanup_required"
+	EdgeCheckResultPhaseFinished        EdgeCheckResultPhase = "finished"
+	EdgeCheckResultPhasePrivateChecking EdgeCheckResultPhase = "private_checking"
+	EdgeCheckResultPhasePublicChecking  EdgeCheckResultPhase = "public_checking"
+	EdgeCheckResultPhaseReady           EdgeCheckResultPhase = "ready"
+	EdgeCheckResultPhaseTransferred     EdgeCheckResultPhase = "transferred"
+)
+
+// Valid indicates whether the value is a known member of the EdgeCheckResultPhase enum.
+func (e EdgeCheckResultPhase) Valid() bool {
+	switch e {
+	case EdgeCheckResultPhaseCleaning:
+		return true
+	case EdgeCheckResultPhaseCleanupRequired:
+		return true
+	case EdgeCheckResultPhaseFinished:
+		return true
+	case EdgeCheckResultPhasePrivateChecking:
+		return true
+	case EdgeCheckResultPhasePublicChecking:
+		return true
+	case EdgeCheckResultPhaseReady:
+		return true
+	case EdgeCheckResultPhaseTransferred:
 		return true
 	default:
 		return false
@@ -351,16 +879,130 @@ func (e EnvironmentBlueprintChangeAction) Valid() bool {
 
 // Defines values for EnvironmentBlueprintChangeReleaseStrategy.
 const (
-	BlueGreen EnvironmentBlueprintChangeReleaseStrategy = "blue-green"
-	Recreate  EnvironmentBlueprintChangeReleaseStrategy = "recreate"
+	EnvironmentBlueprintChangeReleaseStrategyBlueGreen EnvironmentBlueprintChangeReleaseStrategy = "blue-green"
+	EnvironmentBlueprintChangeReleaseStrategyRecreate  EnvironmentBlueprintChangeReleaseStrategy = "recreate"
+	EnvironmentBlueprintChangeReleaseStrategyRolling   EnvironmentBlueprintChangeReleaseStrategy = "rolling"
 )
 
 // Valid indicates whether the value is a known member of the EnvironmentBlueprintChangeReleaseStrategy enum.
 func (e EnvironmentBlueprintChangeReleaseStrategy) Valid() bool {
 	switch e {
-	case BlueGreen:
+	case EnvironmentBlueprintChangeReleaseStrategyBlueGreen:
 		return true
-	case Recreate:
+	case EnvironmentBlueprintChangeReleaseStrategyRecreate:
+		return true
+	case EnvironmentBlueprintChangeReleaseStrategyRolling:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnvironmentDNSState.
+const (
+	EnvironmentDNSStateApplied          EnvironmentDNSState = "applied"
+	EnvironmentDNSStateFailed           EnvironmentDNSState = "failed"
+	EnvironmentDNSStatePending          EnvironmentDNSState = "pending"
+	EnvironmentDNSStateResolverDisabled EnvironmentDNSState = "resolver_disabled"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentDNSState enum.
+func (e EnvironmentDNSState) Valid() bool {
+	switch e {
+	case EnvironmentDNSStateApplied:
+		return true
+	case EnvironmentDNSStateFailed:
+		return true
+	case EnvironmentDNSStatePending:
+		return true
+	case EnvironmentDNSStateResolverDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnvironmentDNSRecordScope.
+const (
+	EnvironmentDNSRecordScopeEnvironment EnvironmentDNSRecordScope = "environment"
+	EnvironmentDNSRecordScopeProject     EnvironmentDNSRecordScope = "project"
+	EnvironmentDNSRecordScopeTenant      EnvironmentDNSRecordScope = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentDNSRecordScope enum.
+func (e EnvironmentDNSRecordScope) Valid() bool {
+	switch e {
+	case EnvironmentDNSRecordScopeEnvironment:
+		return true
+	case EnvironmentDNSRecordScopeProject:
+		return true
+	case EnvironmentDNSRecordScopeTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnvironmentDNSRecordState.
+const (
+	EnvironmentDNSRecordStateApplied           EnvironmentDNSRecordState = "applied"
+	EnvironmentDNSRecordStateFailed            EnvironmentDNSRecordState = "failed"
+	EnvironmentDNSRecordStatePending           EnvironmentDNSRecordState = "pending"
+	EnvironmentDNSRecordStateResolverDisabled  EnvironmentDNSRecordState = "resolver_disabled"
+	EnvironmentDNSRecordStateWaitingForService EnvironmentDNSRecordState = "waiting_for_service"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentDNSRecordState enum.
+func (e EnvironmentDNSRecordState) Valid() bool {
+	switch e {
+	case EnvironmentDNSRecordStateApplied:
+		return true
+	case EnvironmentDNSRecordStateFailed:
+		return true
+	case EnvironmentDNSRecordStatePending:
+		return true
+	case EnvironmentDNSRecordStateResolverDisabled:
+		return true
+	case EnvironmentDNSRecordStateWaitingForService:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnvironmentDNSWriteScope.
+const (
+	EnvironmentDNSWriteScopeEnvironment EnvironmentDNSWriteScope = "environment"
+	EnvironmentDNSWriteScopeProject     EnvironmentDNSWriteScope = "project"
+	EnvironmentDNSWriteScopeTenant      EnvironmentDNSWriteScope = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentDNSWriteScope enum.
+func (e EnvironmentDNSWriteScope) Valid() bool {
+	switch e {
+	case EnvironmentDNSWriteScopeEnvironment:
+		return true
+	case EnvironmentDNSWriteScopeProject:
+		return true
+	case EnvironmentDNSWriteScopeTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HostTerminalSessionState.
+const (
+	Active     HostTerminalSessionState = "active"
+	Terminated HostTerminalSessionState = "terminated"
+)
+
+// Valid indicates whether the value is a known member of the HostTerminalSessionState enum.
+func (e HostTerminalSessionState) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Terminated:
 		return true
 	default:
 		return false
@@ -399,19 +1041,22 @@ func (e ImageFetchRecordStatus) Valid() bool {
 
 // Defines values for LogEventSlot.
 const (
-	Blue      LogEventSlot = "blue"
-	Green     LogEventSlot = "green"
-	Singleton LogEventSlot = "singleton"
+	LogEventSlotBlue      LogEventSlot = "blue"
+	LogEventSlotGreen     LogEventSlot = "green"
+	LogEventSlotRolling   LogEventSlot = "rolling"
+	LogEventSlotSingleton LogEventSlot = "singleton"
 )
 
 // Valid indicates whether the value is a known member of the LogEventSlot enum.
 func (e LogEventSlot) Valid() bool {
 	switch e {
-	case Blue:
+	case LogEventSlotBlue:
 		return true
-	case Green:
+	case LogEventSlotGreen:
 		return true
-	case Singleton:
+	case LogEventSlotRolling:
+		return true
+	case LogEventSlotSingleton:
 		return true
 	default:
 		return false
@@ -448,6 +1093,36 @@ func (e PreparedSoftwareArtifactComponent) Valid() bool {
 	case PreparedSoftwareArtifactComponentAgent:
 		return true
 	case PreparedSoftwareArtifactComponentController:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReadinessDiagnostic.
+const (
+	ReadinessDiagnosticCommandMissing       ReadinessDiagnostic = "command_missing"
+	ReadinessDiagnosticCommandNotExecutable ReadinessDiagnostic = "command_not_executable"
+	ReadinessDiagnosticCurlMissing          ReadinessDiagnostic = "curl_missing"
+	ReadinessDiagnosticNcMissing            ReadinessDiagnostic = "nc_missing"
+	ReadinessDiagnosticNone                 ReadinessDiagnostic = "none"
+	ReadinessDiagnosticPgrepMissing         ReadinessDiagnostic = "pgrep_missing"
+)
+
+// Valid indicates whether the value is a known member of the ReadinessDiagnostic enum.
+func (e ReadinessDiagnostic) Valid() bool {
+	switch e {
+	case ReadinessDiagnosticCommandMissing:
+		return true
+	case ReadinessDiagnosticCommandNotExecutable:
+		return true
+	case ReadinessDiagnosticCurlMissing:
+		return true
+	case ReadinessDiagnosticNcMissing:
+		return true
+	case ReadinessDiagnosticNone:
+		return true
+	case ReadinessDiagnosticPgrepMissing:
 		return true
 	default:
 		return false
@@ -640,6 +1315,132 @@ func (e RunnerLifecycle) Valid() bool {
 	case RunnerLifecycleProvisioning:
 		return true
 	case RunnerLifecycleReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerCheckResultOutcome.
+const (
+	RunnerCheckResultOutcomeFailed      RunnerCheckResultOutcome = "failed"
+	RunnerCheckResultOutcomeInterrupted RunnerCheckResultOutcome = "interrupted"
+	RunnerCheckResultOutcomePassed      RunnerCheckResultOutcome = "passed"
+)
+
+// Valid indicates whether the value is a known member of the RunnerCheckResultOutcome enum.
+func (e RunnerCheckResultOutcome) Valid() bool {
+	switch e {
+	case RunnerCheckResultOutcomeFailed:
+		return true
+	case RunnerCheckResultOutcomeInterrupted:
+		return true
+	case RunnerCheckResultOutcomePassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerCheckResultPhase.
+const (
+	RunnerCheckResultPhaseChecking RunnerCheckResultPhase = "checking"
+	RunnerCheckResultPhaseFinished RunnerCheckResultPhase = "finished"
+	RunnerCheckResultPhaseReady    RunnerCheckResultPhase = "ready"
+)
+
+// Valid indicates whether the value is a known member of the RunnerCheckResultPhase enum.
+func (e RunnerCheckResultPhase) Valid() bool {
+	switch e {
+	case RunnerCheckResultPhaseChecking:
+		return true
+	case RunnerCheckResultPhaseFinished:
+		return true
+	case RunnerCheckResultPhaseReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerCheckStageFailure.
+const (
+	RunnerCheckStageFailureAuthentication         RunnerCheckStageFailure = "authentication"
+	RunnerCheckStageFailureCanceled               RunnerCheckStageFailure = "canceled"
+	RunnerCheckStageFailureConnection             RunnerCheckStageFailure = "connection"
+	RunnerCheckStageFailureCredentialsUnavailable RunnerCheckStageFailure = "credentials_unavailable"
+	RunnerCheckStageFailureHttpResponse           RunnerCheckStageFailure = "http_response"
+	RunnerCheckStageFailureNotRootless            RunnerCheckStageFailure = "not_rootless"
+	RunnerCheckStageFailurePermission             RunnerCheckStageFailure = "permission"
+	RunnerCheckStageFailureProtocol               RunnerCheckStageFailure = "protocol"
+	RunnerCheckStageFailureTimeout                RunnerCheckStageFailure = "timeout"
+	RunnerCheckStageFailureTls                    RunnerCheckStageFailure = "tls"
+)
+
+// Valid indicates whether the value is a known member of the RunnerCheckStageFailure enum.
+func (e RunnerCheckStageFailure) Valid() bool {
+	switch e {
+	case RunnerCheckStageFailureAuthentication:
+		return true
+	case RunnerCheckStageFailureCanceled:
+		return true
+	case RunnerCheckStageFailureConnection:
+		return true
+	case RunnerCheckStageFailureCredentialsUnavailable:
+		return true
+	case RunnerCheckStageFailureHttpResponse:
+		return true
+	case RunnerCheckStageFailureNotRootless:
+		return true
+	case RunnerCheckStageFailurePermission:
+		return true
+	case RunnerCheckStageFailureProtocol:
+		return true
+	case RunnerCheckStageFailureTimeout:
+		return true
+	case RunnerCheckStageFailureTls:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerCheckStageName.
+const (
+	Github         RunnerCheckStageName = "github"
+	GpApi          RunnerCheckStageName = "gp_api"
+	Registry       RunnerCheckStageName = "registry"
+	RootlessDocker RunnerCheckStageName = "rootless_docker"
+)
+
+// Valid indicates whether the value is a known member of the RunnerCheckStageName enum.
+func (e RunnerCheckStageName) Valid() bool {
+	switch e {
+	case Github:
+		return true
+	case GpApi:
+		return true
+	case Registry:
+		return true
+	case RootlessDocker:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerCheckStageOutcome.
+const (
+	RunnerCheckStageOutcomeFailed RunnerCheckStageOutcome = "failed"
+	RunnerCheckStageOutcomePassed RunnerCheckStageOutcome = "passed"
+)
+
+// Valid indicates whether the value is a known member of the RunnerCheckStageOutcome enum.
+func (e RunnerCheckStageOutcome) Valid() bool {
+	switch e {
+	case RunnerCheckStageOutcomeFailed:
+		return true
+	case RunnerCheckStageOutcomePassed:
 		return true
 	default:
 		return false
@@ -1066,6 +1867,7 @@ const (
 	TaskTypeAttach      TaskType = "attach"
 	TaskTypeBackup      TaskType = "backup"
 	TaskTypeBackupPrune TaskType = "backup_prune"
+	TaskTypeCheck       TaskType = "check"
 	TaskTypeCreate      TaskType = "create"
 	TaskTypeDeploy      TaskType = "deploy"
 	TaskTypeDestroy     TaskType = "destroy"
@@ -1094,6 +1896,8 @@ func (e TaskType) Valid() bool {
 	case TaskTypeBackup:
 		return true
 	case TaskTypeBackupPrune:
+		return true
+	case TaskTypeCheck:
 		return true
 	case TaskTypeCreate:
 		return true
@@ -1174,6 +1978,90 @@ func (e TaskEventState) Valid() bool {
 	case TaskEventStateRunning:
 		return true
 	case TaskEventStateTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskFailureStatus.
+const (
+	TaskFailureStatusAborted  TaskFailureStatus = "aborted"
+	TaskFailureStatusFailed   TaskFailureStatus = "failed"
+	TaskFailureStatusTimedOut TaskFailureStatus = "timed_out"
+)
+
+// Valid indicates whether the value is a known member of the TaskFailureStatus enum.
+func (e TaskFailureStatus) Valid() bool {
+	switch e {
+	case TaskFailureStatusAborted:
+		return true
+	case TaskFailureStatusFailed:
+		return true
+	case TaskFailureStatusTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskPreparationState.
+const (
+	TaskPreparationStateDnsFailed            TaskPreparationState = "dns_failed"
+	TaskPreparationStateDnsWaiting           TaskPreparationState = "dns_waiting"
+	TaskPreparationStateNetworkFailed        TaskPreparationState = "network_failed"
+	TaskPreparationStateNetworkPreparing     TaskPreparationState = "network_preparing"
+	TaskPreparationStateNetworkProofRequired TaskPreparationState = "network_proof_required"
+	TaskPreparationStateNetworkQueued        TaskPreparationState = "network_queued"
+	TaskPreparationStateNetworkReconciling   TaskPreparationState = "network_reconciling"
+	TaskPreparationStateReady                TaskPreparationState = "ready"
+)
+
+// Valid indicates whether the value is a known member of the TaskPreparationState enum.
+func (e TaskPreparationState) Valid() bool {
+	switch e {
+	case TaskPreparationStateDnsFailed:
+		return true
+	case TaskPreparationStateDnsWaiting:
+		return true
+	case TaskPreparationStateNetworkFailed:
+		return true
+	case TaskPreparationStateNetworkPreparing:
+		return true
+	case TaskPreparationStateNetworkProofRequired:
+		return true
+	case TaskPreparationStateNetworkQueued:
+		return true
+	case TaskPreparationStateNetworkReconciling:
+		return true
+	case TaskPreparationStateReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskRecoveryState.
+const (
+	TaskRecoveryStateAwaitingConfirmation TaskRecoveryState = "awaiting_confirmation"
+	TaskRecoveryStateCompleted            TaskRecoveryState = "completed"
+	TaskRecoveryStatePending              TaskRecoveryState = "pending"
+	TaskRecoveryStateProofRequired        TaskRecoveryState = "proof_required"
+	TaskRecoveryStateRunning              TaskRecoveryState = "running"
+)
+
+// Valid indicates whether the value is a known member of the TaskRecoveryState enum.
+func (e TaskRecoveryState) Valid() bool {
+	switch e {
+	case TaskRecoveryStateAwaitingConfirmation:
+		return true
+	case TaskRecoveryStateCompleted:
+		return true
+	case TaskRecoveryStatePending:
+		return true
+	case TaskRecoveryStateProofRequired:
+		return true
+	case TaskRecoveryStateRunning:
 		return true
 	default:
 		return false
@@ -1325,9 +2213,11 @@ type Agent struct {
 	Host             string            `json:"host"`
 	Id               string            `json:"id"`
 	InFlight         int64             `json:"in_flight"`
+	InstalledImage   *string           `json:"installed_image"`
 	Labels           map[string]string `json:"labels"`
 	LastReportAt     *time.Time        `json:"last_report_at"`
 	ReadyAt          *time.Time        `json:"ready_at"`
+	Source           *BuildProvenance  `json:"source,omitempty"`
 	Status           string            `json:"status"`
 	Version          *string           `json:"version"`
 }
@@ -1378,6 +2268,7 @@ type Attach struct {
 	GrantAttachIds       *[]string        `json:"grant_attach_ids,omitempty"`
 	Id                   string           `json:"id"`
 	Name                 string           `json:"name"`
+	Revision             *int64           `json:"revision,omitempty"`
 	ServiceId            string           `json:"service_id"`
 	Status               string           `json:"status"`
 }
@@ -1457,6 +2348,76 @@ type BackingAdapterVersion struct {
 	// ImagePattern Accepted upstream image references for this server version.
 	ImagePattern string `json:"image_pattern"`
 	Version      string `json:"version"`
+}
+
+// BackingCheckConfiguration defines model for BackingCheckConfiguration.
+type BackingCheckConfiguration struct {
+	AgentId            string  `json:"agent_id"`
+	AttachId           string  `json:"attach_id"`
+	AttachRevision     int64   `json:"attach_revision"`
+	Authentication     string  `json:"authentication"`
+	BackingServiceId   string  `json:"backing_service_id"`
+	ContainerId        string  `json:"container_id"`
+	CredentialAttachId string  `json:"credential_attach_id"`
+	CredentialRevision int64   `json:"credential_revision"`
+	Database           *string `json:"database,omitempty"`
+	FactsRevision      int64   `json:"facts_revision"`
+	Family             string  `json:"family"`
+	GrantId            *string `json:"grant_id,omitempty"`
+	GrantRevision      *int64  `json:"grant_revision,omitempty"`
+	Host               string  `json:"host"`
+	Port               int32   `json:"port"`
+	RuntimeRevision    int64   `json:"runtime_revision"`
+	ServiceId          string  `json:"service_id"`
+	Username           *string `json:"username,omitempty"`
+}
+
+// BackingCheckRequest defines model for BackingCheckRequest.
+type BackingCheckRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/BackingCheckRequest.json
+	Schema   *string `json:"$schema,omitempty"`
+	AttachId string  `json:"attach_id"`
+	GrantId  *string `json:"grant_id,omitempty"`
+	Revision int64   `json:"revision"`
+}
+
+// BackingCheckResult defines model for BackingCheckResult.
+type BackingCheckResult struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/BackingCheckResult.json
+	Schema            *string                    `json:"$schema,omitempty"`
+	CleanupRequired   bool                       `json:"cleanup_required"`
+	CleanupTaskId     *string                    `json:"cleanup_task_id,omitempty"`
+	Configuration     BackingCheckConfiguration  `json:"configuration"`
+	CreatedAt         string                     `json:"created_at"`
+	EnvironmentId     string                     `json:"environment_id"`
+	ExecutionLocation string                     `json:"execution_location"`
+	Failure           *string                    `json:"failure,omitempty"`
+	FinishedAt        *string                    `json:"finished_at,omitempty"`
+	HelperName        *string                    `json:"helper_name,omitempty"`
+	Outcome           *BackingCheckResultOutcome `json:"outcome,omitempty"`
+	Phase             BackingCheckResultPhase    `json:"phase"`
+	Stages            *[]BackingCheckStage       `json:"stages"`
+	Stale             bool                       `json:"stale"`
+	StartedAt         *string                    `json:"started_at,omitempty"`
+	TaskId            string                     `json:"task_id"`
+}
+
+// BackingCheckResultOutcome defines model for BackingCheckResult.Outcome.
+type BackingCheckResultOutcome string
+
+// BackingCheckResultPhase defines model for BackingCheckResult.Phase.
+type BackingCheckResultPhase string
+
+// BackingCheckStage defines model for BackingCheckStage.
+type BackingCheckStage struct {
+	ElapsedMs int64   `json:"elapsed_ms"`
+	Failure   *string `json:"failure,omitempty"`
+	Name      string  `json:"name"`
+	Outcome   string  `json:"outcome"`
 }
 
 // BackingHookConfiguration defines model for BackingHookConfiguration.
@@ -1649,23 +2610,34 @@ type BackupSourceInput struct {
 // BackupSourceInputKind defines model for BackupSourceInput.Kind.
 type BackupSourceInputKind string
 
+// BuildProvenance defines model for BuildProvenance.
+type BuildProvenance struct {
+	Commit string              `json:"commit"`
+	Kind   BuildProvenanceKind `json:"kind"`
+}
+
+// BuildProvenanceKind defines model for BuildProvenance.Kind.
+type BuildProvenanceKind string
+
 // Component defines model for Component.
 type Component struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Component.json
-	Schema            *string          `json:"$schema,omitempty"`
-	Config            *ComponentConfig `json:"config"`
-	Enabled           bool             `json:"enabled"`
-	EnvironmentId     string           `json:"environment_id"`
-	GeneratedServices *[]string        `json:"generated_services,omitempty"`
-	Healthy           bool             `json:"healthy"`
-	Id                string           `json:"id"`
-	Kind              string           `json:"kind"`
-	Owner             ComponentOwner   `json:"owner"`
-	OwnerId           *string          `json:"owner_id,omitempty"`
-	PinnedIpv4        *string          `json:"pinned_ipv4,omitempty"`
-	Status            ComponentStatus  `json:"status"`
+	Schema            *string            `json:"$schema,omitempty"`
+	Config            *ComponentConfig   `json:"config"`
+	Enabled           bool               `json:"enabled"`
+	EnvironmentId     string             `json:"environment_id"`
+	GeneratedServices *[]string          `json:"generated_services,omitempty"`
+	Healthy           bool               `json:"healthy"`
+	Id                string             `json:"id"`
+	Kind              string             `json:"kind"`
+	Owner             ComponentOwner     `json:"owner"`
+	OwnerId           *string            `json:"owner_id,omitempty"`
+	PinnedIpv4        *string            `json:"pinned_ipv4,omitempty"`
+	Revision          int64              `json:"revision"`
+	Software          *ContainerIdentity `json:"software,omitempty"`
+	Status            ComponentStatus    `json:"status"`
 }
 
 // ComponentOwner defines model for Component.Owner.
@@ -1681,49 +2653,73 @@ type ComponentConfig struct {
 
 // ComponentConfig0 defines model for ComponentConfig.0.
 type ComponentConfig0 struct {
-	Alias             *string `json:"alias,omitempty"`
-	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
+	Alias             *string                        `json:"alias,omitempty"`
+	CaddyfileTemplate *string                        `json:"caddyfile_template,omitempty"`
+	Implementation    ComponentConfig0Implementation `json:"implementation"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
 	ZoneIds []string `json:"zone_ids"`
 }
+
+// ComponentConfig0Implementation defines model for ComponentConfig.0.Implementation.
+type ComponentConfig0Implementation string
 
 // ComponentConfig1 defines model for ComponentConfig.1.
 type ComponentConfig1 struct {
-	SecretId string `json:"secret_id"`
+	Alias          *string                        `json:"alias,omitempty"`
+	Implementation ComponentConfig1Implementation `json:"implementation"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
 	ZoneIds []string `json:"zone_ids"`
 }
 
+// ComponentConfig1Implementation defines model for ComponentConfig.1.Implementation.
+type ComponentConfig1Implementation string
+
 // ComponentConfig2 defines model for ComponentConfig.2.
 type ComponentConfig2 struct {
+	Implementation ComponentConfig2Implementation `json:"implementation"`
+	SecretId       string                         `json:"secret_id"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
+}
+
+// ComponentConfig2Implementation defines model for ComponentConfig.2.Implementation.
+type ComponentConfig2Implementation string
+
+// ComponentConfig3 defines model for ComponentConfig.3.
+type ComponentConfig3 struct {
 	CorefileTemplate string `json:"corefile_template"`
 	Forwarders       []struct {
 		Domain    string   `json:"domain"`
 		Resolvers []string `json:"resolvers"`
 	} `json:"forwarders"`
-	Records           *[]ComponentConfig_2_Records_Item `json:"records,omitempty"`
+	Implementation    ComponentConfig3Implementation    `json:"implementation"`
+	Records           *[]ComponentConfig_3_Records_Item `json:"records,omitempty"`
 	TailnetDelegation bool                              `json:"tailnet_delegation"`
 	UpstreamAuto      bool                              `json:"upstream_auto"`
 	UpstreamResolvers []string                          `json:"upstream_resolvers"`
 }
 
-// ComponentConfig2Records0 defines model for ComponentConfig.2.Records.0.
-type ComponentConfig2Records0 struct {
+// ComponentConfig3Implementation defines model for ComponentConfig.3.Implementation.
+type ComponentConfig3Implementation string
+
+// ComponentConfig3Records0 defines model for ComponentConfig.3.Records.0.
+type ComponentConfig3Records0 struct {
 	Address  string `json:"address"`
 	Hostname string `json:"hostname"`
 }
 
-// ComponentConfig2Records1 defines model for ComponentConfig.2.Records.1.
-type ComponentConfig2Records1 struct {
+// ComponentConfig3Records1 defines model for ComponentConfig.3.Records.1.
+type ComponentConfig3Records1 struct {
 	Hostname  string `json:"hostname"`
 	ServiceId string `json:"service_id"`
 	ZoneId    string `json:"zone_id"`
 }
 
-// ComponentConfig_2_Records_Item defines model for ComponentConfig.2.Records.Item.
-type ComponentConfig_2_Records_Item struct {
+// ComponentConfig_3_Records_Item defines model for ComponentConfig.3.Records.Item.
+type ComponentConfig_3_Records_Item struct {
 	union json.RawMessage
 }
 
@@ -1738,73 +2734,97 @@ type ComponentConfigMutationRequest struct {
 
 // ComponentConfigMutationRequestConfig0 defines model for ComponentConfigMutationRequest.Config.0.
 type ComponentConfigMutationRequestConfig0 struct {
-	Alias             *string `json:"alias,omitempty"`
-	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
+	Alias             *string                                             `json:"alias,omitempty"`
+	CaddyfileTemplate *string                                             `json:"caddyfile_template,omitempty"`
+	Implementation    ComponentConfigMutationRequestConfig0Implementation `json:"implementation"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
 	ZoneIds []string `json:"zone_ids"`
 }
+
+// ComponentConfigMutationRequestConfig0Implementation defines model for ComponentConfigMutationRequest.Config.0.Implementation.
+type ComponentConfigMutationRequestConfig0Implementation string
 
 // ComponentConfigMutationRequestConfig1 defines model for ComponentConfigMutationRequest.Config.1.
 type ComponentConfigMutationRequestConfig1 struct {
-	Credential ComponentConfigMutationRequest_Config_1_Credential `json:"credential"`
+	Alias          *string                                             `json:"alias,omitempty"`
+	Implementation ComponentConfigMutationRequestConfig1Implementation `json:"implementation"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
 	ZoneIds []string `json:"zone_ids"`
 }
 
-// ComponentConfigMutationRequestConfig1Credential0 defines model for ComponentConfigMutationRequest.Config.1.Credential.0.
-type ComponentConfigMutationRequestConfig1Credential0 struct {
-	Mode     ComponentConfigMutationRequestConfig1Credential0Mode `json:"mode"`
+// ComponentConfigMutationRequestConfig1Implementation defines model for ComponentConfigMutationRequest.Config.1.Implementation.
+type ComponentConfigMutationRequestConfig1Implementation string
+
+// ComponentConfigMutationRequestConfig2 defines model for ComponentConfigMutationRequest.Config.2.
+type ComponentConfigMutationRequestConfig2 struct {
+	Credential     ComponentConfigMutationRequest_Config_2_Credential  `json:"credential"`
+	Implementation ComponentConfigMutationRequestConfig2Implementation `json:"implementation"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
+}
+
+// ComponentConfigMutationRequestConfig2Credential0 defines model for ComponentConfigMutationRequest.Config.2.Credential.0.
+type ComponentConfigMutationRequestConfig2Credential0 struct {
+	Mode     ComponentConfigMutationRequestConfig2Credential0Mode `json:"mode"`
 	SecretId string                                               `json:"secret_id"`
 }
 
-// ComponentConfigMutationRequestConfig1Credential0Mode defines model for ComponentConfigMutationRequest.Config.1.Credential.0.Mode.
-type ComponentConfigMutationRequestConfig1Credential0Mode string
+// ComponentConfigMutationRequestConfig2Credential0Mode defines model for ComponentConfigMutationRequest.Config.2.Credential.0.Mode.
+type ComponentConfigMutationRequestConfig2Credential0Mode string
 
-// ComponentConfigMutationRequestConfig1Credential1 defines model for ComponentConfigMutationRequest.Config.1.Credential.1.
-type ComponentConfigMutationRequestConfig1Credential1 struct {
-	Mode       ComponentConfigMutationRequestConfig1Credential1Mode `json:"mode"`
+// ComponentConfigMutationRequestConfig2Credential1 defines model for ComponentConfigMutationRequest.Config.2.Credential.1.
+type ComponentConfigMutationRequestConfig2Credential1 struct {
+	Mode       ComponentConfigMutationRequestConfig2Credential1Mode `json:"mode"`
 	SecretName string                                               `json:"secret_name"`
 	Token      *string                                              `json:"token,omitempty"`
 }
 
-// ComponentConfigMutationRequestConfig1Credential1Mode defines model for ComponentConfigMutationRequest.Config.1.Credential.1.Mode.
-type ComponentConfigMutationRequestConfig1Credential1Mode string
+// ComponentConfigMutationRequestConfig2Credential1Mode defines model for ComponentConfigMutationRequest.Config.2.Credential.1.Mode.
+type ComponentConfigMutationRequestConfig2Credential1Mode string
 
-// ComponentConfigMutationRequest_Config_1_Credential defines model for ComponentConfigMutationRequest.Config.1.Credential.
-type ComponentConfigMutationRequest_Config_1_Credential struct {
+// ComponentConfigMutationRequest_Config_2_Credential defines model for ComponentConfigMutationRequest.Config.2.Credential.
+type ComponentConfigMutationRequest_Config_2_Credential struct {
 	union json.RawMessage
 }
 
-// ComponentConfigMutationRequestConfig2 defines model for ComponentConfigMutationRequest.Config.2.
-type ComponentConfigMutationRequestConfig2 struct {
+// ComponentConfigMutationRequestConfig2Implementation defines model for ComponentConfigMutationRequest.Config.2.Implementation.
+type ComponentConfigMutationRequestConfig2Implementation string
+
+// ComponentConfigMutationRequestConfig3 defines model for ComponentConfigMutationRequest.Config.3.
+type ComponentConfigMutationRequestConfig3 struct {
 	CorefileTemplate string `json:"corefile_template"`
 	Forwarders       []struct {
 		Domain    string   `json:"domain"`
 		Resolvers []string `json:"resolvers"`
 	} `json:"forwarders"`
-	Records           *[]ComponentConfigMutationRequest_Config_2_Records_Item `json:"records,omitempty"`
+	Implementation    ComponentConfigMutationRequestConfig3Implementation     `json:"implementation"`
+	Records           *[]ComponentConfigMutationRequest_Config_3_Records_Item `json:"records,omitempty"`
 	TailnetDelegation bool                                                    `json:"tailnet_delegation"`
 	UpstreamAuto      bool                                                    `json:"upstream_auto"`
 	UpstreamResolvers []string                                                `json:"upstream_resolvers"`
 }
 
-// ComponentConfigMutationRequestConfig2Records0 defines model for ComponentConfigMutationRequest.Config.2.Records.0.
-type ComponentConfigMutationRequestConfig2Records0 struct {
+// ComponentConfigMutationRequestConfig3Implementation defines model for ComponentConfigMutationRequest.Config.3.Implementation.
+type ComponentConfigMutationRequestConfig3Implementation string
+
+// ComponentConfigMutationRequestConfig3Records0 defines model for ComponentConfigMutationRequest.Config.3.Records.0.
+type ComponentConfigMutationRequestConfig3Records0 struct {
 	Address  string `json:"address"`
 	Hostname string `json:"hostname"`
 }
 
-// ComponentConfigMutationRequestConfig2Records1 defines model for ComponentConfigMutationRequest.Config.2.Records.1.
-type ComponentConfigMutationRequestConfig2Records1 struct {
+// ComponentConfigMutationRequestConfig3Records1 defines model for ComponentConfigMutationRequest.Config.3.Records.1.
+type ComponentConfigMutationRequestConfig3Records1 struct {
 	Hostname  string `json:"hostname"`
 	ServiceId string `json:"service_id"`
 	ZoneId    string `json:"zone_id"`
 }
 
-// ComponentConfigMutationRequest_Config_2_Records_Item defines model for ComponentConfigMutationRequest.config.2.records.Item.
-type ComponentConfigMutationRequest_Config_2_Records_Item struct {
+// ComponentConfigMutationRequest_Config_3_Records_Item defines model for ComponentConfigMutationRequest.Config.3.records.Item.
+type ComponentConfigMutationRequest_Config_3_Records_Item struct {
 	union json.RawMessage
 }
 
@@ -1845,44 +2865,64 @@ type ComponentEnableRequest struct {
 
 // ComponentEnableRequestConfig0 defines model for ComponentEnableRequest.Config.0.
 type ComponentEnableRequestConfig0 struct {
-	Alias             *string `json:"alias,omitempty"`
-	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
+	Alias             *string                                     `json:"alias,omitempty"`
+	CaddyfileTemplate *string                                     `json:"caddyfile_template,omitempty"`
+	Implementation    ComponentEnableRequestConfig0Implementation `json:"implementation"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
 	ZoneIds []string `json:"zone_ids"`
 }
+
+// ComponentEnableRequestConfig0Implementation defines model for ComponentEnableRequest.Config.0.Implementation.
+type ComponentEnableRequestConfig0Implementation string
 
 // ComponentEnableRequestConfig1 defines model for ComponentEnableRequest.Config.1.
 type ComponentEnableRequestConfig1 struct {
-	Credential ComponentEnableRequest_Config_1_Credential `json:"credential"`
+	Alias          *string                                     `json:"alias,omitempty"`
+	Implementation ComponentEnableRequestConfig1Implementation `json:"implementation"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
 	ZoneIds []string `json:"zone_ids"`
 }
 
-// ComponentEnableRequestConfig1Credential0 defines model for ComponentEnableRequest.Config.1.Credential.0.
-type ComponentEnableRequestConfig1Credential0 struct {
-	Mode     ComponentEnableRequestConfig1Credential0Mode `json:"mode"`
+// ComponentEnableRequestConfig1Implementation defines model for ComponentEnableRequest.Config.1.Implementation.
+type ComponentEnableRequestConfig1Implementation string
+
+// ComponentEnableRequestConfig2 defines model for ComponentEnableRequest.Config.2.
+type ComponentEnableRequestConfig2 struct {
+	Credential     ComponentEnableRequest_Config_2_Credential  `json:"credential"`
+	Implementation ComponentEnableRequestConfig2Implementation `json:"implementation"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
+}
+
+// ComponentEnableRequestConfig2Credential0 defines model for ComponentEnableRequest.Config.2.Credential.0.
+type ComponentEnableRequestConfig2Credential0 struct {
+	Mode     ComponentEnableRequestConfig2Credential0Mode `json:"mode"`
 	SecretId string                                       `json:"secret_id"`
 }
 
-// ComponentEnableRequestConfig1Credential0Mode defines model for ComponentEnableRequest.Config.1.Credential.0.Mode.
-type ComponentEnableRequestConfig1Credential0Mode string
+// ComponentEnableRequestConfig2Credential0Mode defines model for ComponentEnableRequest.Config.2.Credential.0.Mode.
+type ComponentEnableRequestConfig2Credential0Mode string
 
-// ComponentEnableRequestConfig1Credential1 defines model for ComponentEnableRequest.Config.1.Credential.1.
-type ComponentEnableRequestConfig1Credential1 struct {
-	Mode       ComponentEnableRequestConfig1Credential1Mode `json:"mode"`
+// ComponentEnableRequestConfig2Credential1 defines model for ComponentEnableRequest.Config.2.Credential.1.
+type ComponentEnableRequestConfig2Credential1 struct {
+	Mode       ComponentEnableRequestConfig2Credential1Mode `json:"mode"`
 	SecretName string                                       `json:"secret_name"`
 	Token      *string                                      `json:"token,omitempty"`
 }
 
-// ComponentEnableRequestConfig1Credential1Mode defines model for ComponentEnableRequest.Config.1.Credential.1.Mode.
-type ComponentEnableRequestConfig1Credential1Mode string
+// ComponentEnableRequestConfig2Credential1Mode defines model for ComponentEnableRequest.Config.2.Credential.1.Mode.
+type ComponentEnableRequestConfig2Credential1Mode string
 
-// ComponentEnableRequest_Config_1_Credential defines model for ComponentEnableRequest.Config.1.Credential.
-type ComponentEnableRequest_Config_1_Credential struct {
+// ComponentEnableRequest_Config_2_Credential defines model for ComponentEnableRequest.Config.2.Credential.
+type ComponentEnableRequest_Config_2_Credential struct {
 	union json.RawMessage
 }
+
+// ComponentEnableRequestConfig2Implementation defines model for ComponentEnableRequest.Config.2.Implementation.
+type ComponentEnableRequestConfig2Implementation string
 
 // ComponentEnableRequest_Config defines model for ComponentEnableRequest.Config.
 type ComponentEnableRequest_Config struct {
@@ -1891,10 +2931,33 @@ type ComponentEnableRequest_Config struct {
 
 // ComponentProjection defines model for ComponentProjection.
 type ComponentProjection struct {
-	ComponentId string  `json:"component_id"`
-	Enabled     bool    `json:"enabled"`
-	PinnedIpv4  *string `json:"pinned_ipv4,omitempty"`
+	ComponentId    string  `json:"component_id"`
+	Enabled        bool    `json:"enabled"`
+	Implementation string  `json:"implementation"`
+	PinnedIpv4     *string `json:"pinned_ipv4,omitempty"`
 }
+
+// ConfiguredHealthcheck defines model for ConfiguredHealthcheck.
+type ConfiguredHealthcheck struct {
+	ExpectedReplicas int32                              `json:"expected_replicas"`
+	HttpProtocol     *ConfiguredHealthcheckHttpProtocol `json:"http_protocol,omitempty"`
+	Interval         *string                            `json:"interval,omitempty"`
+	Kind             ConfiguredHealthcheckKind          `json:"kind"`
+	LoopbackPort     *int32                             `json:"loopback_port,omitempty"`
+	RequiresHealthy  bool                               `json:"requires_healthy"`
+	Retries          *int32                             `json:"retries,omitempty"`
+	ServiceId        string                             `json:"service_id"`
+	StartInterval    *string                            `json:"start_interval,omitempty"`
+	StartPeriod      *string                            `json:"start_period,omitempty"`
+	Timeout          *string                            `json:"timeout,omitempty"`
+	Workload         string                             `json:"workload"`
+}
+
+// ConfiguredHealthcheckHttpProtocol defines model for ConfiguredHealthcheck.HttpProtocol.
+type ConfiguredHealthcheckHttpProtocol string
+
+// ConfiguredHealthcheckKind defines model for ConfiguredHealthcheck.Kind.
+type ConfiguredHealthcheckKind string
 
 // Connector defines model for Connector.
 type Connector struct {
@@ -1912,6 +2975,67 @@ type Connector struct {
 	PathStyle     bool                           `json:"path_style"`
 	Prefix        *string                        `json:"prefix,omitempty"`
 	Region        string                         `json:"region"`
+}
+
+// ConnectorCheckRequest defines model for ConnectorCheckRequest.
+type ConnectorCheckRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ConnectorCheckRequest.json
+	Schema      *string                 `json:"$schema,omitempty"`
+	Changes     *ConnectorEditRequest   `json:"changes,omitempty"`
+	ConnectorId *string                 `json:"connector_id,omitempty"`
+	Draft       *ConnectorCreateRequest `json:"draft,omitempty"`
+	Revision    *int64                  `json:"revision,omitempty"`
+}
+
+// ConnectorCheckResult defines model for ConnectorCheckResult.
+type ConnectorCheckResult struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ConnectorCheckResult.json
+	Schema            *string                       `json:"$schema,omitempty"`
+	CleanupRequired   bool                          `json:"cleanup_required"`
+	CleanupTaskId     *string                       `json:"cleanup_task_id,omitempty"`
+	Configuration     Connector                     `json:"configuration"`
+	ConnectorRevision int64                         `json:"connector_revision"`
+	CreatedAt         string                        `json:"created_at"`
+	Draft             bool                          `json:"draft"`
+	EnvironmentId     string                        `json:"environment_id"`
+	ExecutionLocation string                        `json:"execution_location"`
+	Failure           *string                       `json:"failure,omitempty"`
+	FinishedAt        *string                       `json:"finished_at,omitempty"`
+	MultipartKey      *string                       `json:"multipart_key,omitempty"`
+	ObjectKey         *string                       `json:"object_key,omitempty"`
+	Outcome           *ConnectorCheckResultOutcome  `json:"outcome,omitempty"`
+	Phase             ConnectorCheckResultPhase     `json:"phase"`
+	SecretSources     *[]ConnectorCheckSecretSource `json:"secret_sources"`
+	Stages            *[]ConnectorCheckStage        `json:"stages"`
+	Stale             bool                          `json:"stale"`
+	StartedAt         *string                       `json:"started_at,omitempty"`
+	TaskId            string                        `json:"task_id"`
+	UploadIds         *[]string                     `json:"upload_ids"`
+}
+
+// ConnectorCheckResultOutcome defines model for ConnectorCheckResult.Outcome.
+type ConnectorCheckResultOutcome string
+
+// ConnectorCheckResultPhase defines model for ConnectorCheckResult.Phase.
+type ConnectorCheckResultPhase string
+
+// ConnectorCheckSecretSource defines model for ConnectorCheckSecretSource.
+type ConnectorCheckSecretSource struct {
+	Credential string `json:"credential"`
+	Revision   int64  `json:"revision"`
+	SecretId   string `json:"secret_id"`
+}
+
+// ConnectorCheckStage defines model for ConnectorCheckStage.
+type ConnectorCheckStage struct {
+	ElapsedMs int64   `json:"elapsed_ms"`
+	Failure   *string `json:"failure,omitempty"`
+	Name      string  `json:"name"`
+	Succeeded bool    `json:"succeeded"`
 }
 
 // ConnectorCreateRequest defines model for ConnectorCreateRequest.
@@ -1974,6 +3098,15 @@ type ConnectorEditRequest struct {
 	Region    *string `json:"region,omitempty"`
 }
 
+// ContainerIdentity defines model for ContainerIdentity.
+type ContainerIdentity struct {
+	ConfigDigest string           `json:"config_digest"`
+	Image        string           `json:"image"`
+	SelectedTag  *string          `json:"selected_tag,omitempty"`
+	Source       *BuildProvenance `json:"source,omitempty"`
+	Version      *string          `json:"version,omitempty"`
+}
+
 // ControllerConfigDocument defines model for ControllerConfigDocument.
 type ControllerConfigDocument struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1998,12 +3131,13 @@ type ControllerConfigReplacement struct {
 
 // ControllerRelease defines model for ControllerRelease.
 type ControllerRelease struct {
-	AgentImage        string `json:"agent_image"`
-	ChannelSchema     int64  `json:"channel_schema"`
-	ControllerSha256  string `json:"controller_sha256"`
-	ControllerVersion string `json:"controller_version"`
-	Release           string `json:"release"`
-	StorageEpoch      int64  `json:"storage_epoch"`
+	AgentImage        string           `json:"agent_image"`
+	ChannelSchema     int64            `json:"channel_schema"`
+	ControllerSha256  string           `json:"controller_sha256"`
+	ControllerSource  *BuildProvenance `json:"controller_source,omitempty"`
+	ControllerVersion string           `json:"controller_version"`
+	Release           string           `json:"release"`
+	StorageEpoch      int64            `json:"storage_epoch"`
 }
 
 // ControllerUpdateRequest defines model for ControllerUpdateRequest.
@@ -2033,6 +3167,99 @@ type ControllerUpdateSummary struct {
 	TaskId    string    `json:"task_id"`
 }
 
+// DNSCheckAnswer defines model for DNSCheckAnswer.
+type DNSCheckAnswer struct {
+	Answers         *[]DNSCheckAnswerSample `json:"answers"`
+	Domain          string                  `json:"domain"`
+	ElapsedMs       int32                   `json:"elapsed_ms"`
+	Name            string                  `json:"name"`
+	Outcome         DNSCheckAnswerOutcome   `json:"outcome"`
+	Rcode           *int32                  `json:"rcode,omitempty"`
+	Server          string                  `json:"server"`
+	ThroughResolver bool                    `json:"through_resolver"`
+	TotalAnswers    int32                   `json:"total_answers"`
+	Type            DNSCheckAnswerType      `json:"type"`
+	UsedTcp         bool                    `json:"used_tcp"`
+}
+
+// DNSCheckAnswerOutcome defines model for DNSCheckAnswer.Outcome.
+type DNSCheckAnswerOutcome string
+
+// DNSCheckAnswerType defines model for DNSCheckAnswer.Type.
+type DNSCheckAnswerType string
+
+// DNSCheckAnswerSample defines model for DNSCheckAnswerSample.
+type DNSCheckAnswerSample struct {
+	Name  string                   `json:"name"`
+	Type  DNSCheckAnswerSampleType `json:"type"`
+	Value string                   `json:"value"`
+}
+
+// DNSCheckAnswerSampleType defines model for DNSCheckAnswerSample.Type.
+type DNSCheckAnswerSampleType string
+
+// DNSCheckConfiguration defines model for DNSCheckConfiguration.
+type DNSCheckConfiguration struct {
+	AgentGeneration     int64            `json:"agent_generation"`
+	AgentId             string           `json:"agent_id"`
+	AppliedTaskId       string           `json:"applied_task_id"`
+	ArtifactId          string           `json:"artifact_id"`
+	ArtifactSha256      string           `json:"artifact_sha256"`
+	ComponentId         string           `json:"component_id"`
+	ComponentRevision   int64            `json:"component_revision"`
+	ImageReference      string           `json:"image_reference"`
+	ObservationRevision int64            `json:"observation_revision"`
+	Queries             *[]DNSCheckQuery `json:"queries"`
+	RenderGeneration    int64            `json:"render_generation"`
+	ServiceId           string           `json:"service_id"`
+}
+
+// DNSCheckQuery defines model for DNSCheckQuery.
+type DNSCheckQuery struct {
+	Domain string            `json:"domain"`
+	Name   string            `json:"name"`
+	Type   DNSCheckQueryType `json:"type"`
+}
+
+// DNSCheckQueryType defines model for DNSCheckQuery.Type.
+type DNSCheckQueryType string
+
+// DNSCheckRequest defines model for DNSCheckRequest.
+type DNSCheckRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/DNSCheckRequest.json
+	Schema   *string          `json:"$schema,omitempty"`
+	Queries  *[]DNSCheckQuery `json:"queries,omitempty"`
+	Revision int64            `json:"revision"`
+}
+
+// DNSCheckResult defines model for DNSCheckResult.
+type DNSCheckResult struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/DNSCheckResult.json
+	Schema            *string                `json:"$schema,omitempty"`
+	Answers           *[]DNSCheckAnswer      `json:"answers"`
+	Configuration     DNSCheckConfiguration  `json:"configuration"`
+	CreatedAt         string                 `json:"created_at"`
+	ExecutionLocation string                 `json:"execution_location"`
+	Failure           *string                `json:"failure,omitempty"`
+	FinishedAt        *string                `json:"finished_at,omitempty"`
+	ObservedAt        *string                `json:"observed_at,omitempty"`
+	Outcome           *DNSCheckResultOutcome `json:"outcome,omitempty"`
+	Phase             DNSCheckResultPhase    `json:"phase"`
+	Stale             bool                   `json:"stale"`
+	StartedAt         *string                `json:"started_at,omitempty"`
+	TaskId            string                 `json:"task_id"`
+}
+
+// DNSCheckResultOutcome defines model for DNSCheckResult.Outcome.
+type DNSCheckResultOutcome string
+
+// DNSCheckResultPhase defines model for DNSCheckResult.Phase.
+type DNSCheckResultPhase string
+
 // DeployRequest defines model for DeployRequest.
 type DeployRequest struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -2045,6 +3272,93 @@ type DeployRequest struct {
 	OnFailure *string `json:"on_failure,omitempty"`
 	Strategy  *string `json:"strategy,omitempty"`
 	Tag       *string `json:"tag,omitempty"`
+}
+
+// EdgeCheckConfiguration defines model for EdgeCheckConfiguration.
+type EdgeCheckConfiguration struct {
+	AgentGeneration          int64        `json:"agent_generation"`
+	AgentId                  string       `json:"agent_id"`
+	BlueprintRevision        int64        `json:"blueprint_revision"`
+	ConnectorAppliedRevision int64        `json:"connector_applied_revision"`
+	ConnectorContainerId     string       `json:"connector_container_id"`
+	ConnectorId              string       `json:"connector_id"`
+	ConnectorRevision        int64        `json:"connector_revision"`
+	ConnectorServiceId       string       `json:"connector_service_id"`
+	OriginAddress            string       `json:"origin_address"`
+	OriginRuntimeRevision    *int64       `json:"origin_runtime_revision,omitempty"`
+	OriginRuntimeSha256      *string      `json:"origin_runtime_sha256,omitempty"`
+	OriginServiceId          *string      `json:"origin_service_id,omitempty"`
+	RouteId                  string       `json:"route_id"`
+	RouteObservationRevision int64        `json:"route_observation_revision"`
+	RouteRevision            int64        `json:"route_revision"`
+	RouterAppliedRevision    *int64       `json:"router_applied_revision,omitempty"`
+	RouterId                 *string      `json:"router_id,omitempty"`
+	RouterRevision           *int64       `json:"router_revision,omitempty"`
+	RuntimeSha256            string       `json:"runtime_sha256"`
+	Target                   PublicTarget `json:"target"`
+	TokenSecretId            string       `json:"token_secret_id"`
+	TokenSecretRevision      int64        `json:"token_secret_revision"`
+
+	// TokenValueRevision Token reference revision at capture; readiness does not verify remote provider ingress.
+	TokenValueRevision int64 `json:"token_value_revision"`
+}
+
+// EdgeCheckRequest defines model for EdgeCheckRequest.
+type EdgeCheckRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EdgeCheckRequest.json
+	Schema      *string `json:"$schema,omitempty"`
+	ConnectorId string  `json:"connector_id"`
+
+	// Path Concrete request path matching this Route; required for wildcard paths.
+	Path     *string `json:"path,omitempty"`
+	Revision int64   `json:"revision"`
+	RouteId  string  `json:"route_id"`
+}
+
+// EdgeCheckResult defines model for EdgeCheckResult.
+type EdgeCheckResult struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EdgeCheckResult.json
+	Schema               *string                 `json:"$schema,omitempty"`
+	Addresses            *[]string               `json:"addresses"`
+	CertificateExpiresAt *string                 `json:"certificate_expires_at,omitempty"`
+	CleanupRequired      bool                    `json:"cleanup_required"`
+	CleanupTaskId        *string                 `json:"cleanup_task_id,omitempty"`
+	Configuration        EdgeCheckConfiguration  `json:"configuration"`
+	CreatedAt            string                  `json:"created_at"`
+	EnvironmentId        string                  `json:"environment_id"`
+	Failure              *string                 `json:"failure,omitempty"`
+	FinishedAt           *string                 `json:"finished_at,omitempty"`
+	HelperName           *string                 `json:"helper_name,omitempty"`
+	Outcome              *EdgeCheckResultOutcome `json:"outcome,omitempty"`
+	Phase                EdgeCheckResultPhase    `json:"phase"`
+	PrivateFailure       *string                 `json:"private_failure,omitempty"`
+	PublicFailure        *string                 `json:"public_failure,omitempty"`
+	SelectedAddress      *string                 `json:"selected_address,omitempty"`
+	Stages               *[]EdgeCheckStage       `json:"stages"`
+	Stale                bool                    `json:"stale"`
+	StartedAt            *string                 `json:"started_at,omitempty"`
+	TaskId               string                  `json:"task_id"`
+	TlsVersion           *int32                  `json:"tls_version,omitempty"`
+}
+
+// EdgeCheckResultOutcome defines model for EdgeCheckResult.Outcome.
+type EdgeCheckResultOutcome string
+
+// EdgeCheckResultPhase defines model for EdgeCheckResult.Phase.
+type EdgeCheckResultPhase string
+
+// EdgeCheckStage defines model for EdgeCheckStage.
+type EdgeCheckStage struct {
+	ElapsedMs         int64   `json:"elapsed_ms"`
+	ExecutionLocation string  `json:"execution_location"`
+	Failure           *string `json:"failure,omitempty"`
+	HttpStatus        *int64  `json:"http_status,omitempty"`
+	Name              string  `json:"name"`
+	Outcome           string  `json:"outcome"`
 }
 
 // Entry defines model for Entry.
@@ -2205,6 +3519,77 @@ type EnvironmentCreate struct {
 	ProjectId   string  `json:"project_id"`
 }
 
+// EnvironmentDNS defines model for EnvironmentDNS.
+type EnvironmentDNS struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentDNS.json
+	Schema          *string                     `json:"$schema,omitempty"`
+	EnvironmentId   string                      `json:"environment_id"`
+	Records         *[]EnvironmentDNSRecord     `json:"records"`
+	ResolverEnabled bool                        `json:"resolver_enabled"`
+	Revision        string                      `json:"revision"`
+	State           EnvironmentDNSState         `json:"state"`
+	TaskId          *string                     `json:"task_id,omitempty"`
+	Withdrawals     *[]EnvironmentDNSWithdrawal `json:"withdrawals"`
+}
+
+// EnvironmentDNSState defines model for EnvironmentDNS.State.
+type EnvironmentDNSState string
+
+// EnvironmentDNSRecord defines model for EnvironmentDNSRecord.
+type EnvironmentDNSRecord struct {
+	Address         *string                   `json:"address,omitempty"`
+	BoundServiceId  *string                   `json:"bound_service_id,omitempty"`
+	Hostname        string                    `json:"hostname"`
+	Id              string                    `json:"id"`
+	Label           string                    `json:"label"`
+	ResolvedAddress *string                   `json:"resolved_address,omitempty"`
+	Scope           EnvironmentDNSRecordScope `json:"scope"`
+	Service         *string                   `json:"service,omitempty"`
+	State           EnvironmentDNSRecordState `json:"state"`
+	TaskId          *string                   `json:"task_id,omitempty"`
+	Zone            *string                   `json:"zone,omitempty"`
+}
+
+// EnvironmentDNSRecordScope defines model for EnvironmentDNSRecord.Scope.
+type EnvironmentDNSRecordScope string
+
+// EnvironmentDNSRecordState defines model for EnvironmentDNSRecord.State.
+type EnvironmentDNSRecordState string
+
+// EnvironmentDNSSaved defines model for EnvironmentDNSSaved.
+type EnvironmentDNSSaved struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentDNSSaved.json
+	Schema        *string `json:"$schema,omitempty"`
+	EnvironmentId string  `json:"environment_id"`
+	RecordId      string  `json:"record_id"`
+}
+
+// EnvironmentDNSWithdrawal defines model for EnvironmentDNSWithdrawal.
+type EnvironmentDNSWithdrawal struct {
+	Hostname string `json:"hostname"`
+	RecordId string `json:"record_id"`
+}
+
+// EnvironmentDNSWrite defines model for EnvironmentDNSWrite.
+type EnvironmentDNSWrite struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentDNSWrite.json
+	Schema  *string                   `json:"$schema,omitempty"`
+	Address *string                   `json:"address,omitempty"`
+	Label   string                    `json:"label"`
+	Scope   *EnvironmentDNSWriteScope `json:"scope,omitempty"`
+	Service *string                   `json:"service,omitempty"`
+	Zone    *string                   `json:"zone,omitempty"`
+}
+
+// EnvironmentDNSWriteScope defines model for EnvironmentDNSWrite.Scope.
+type EnvironmentDNSWriteScope string
+
 // EnvironmentEdit defines model for EnvironmentEdit.
 type EnvironmentEdit struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -2328,6 +3713,7 @@ type HostCPU struct {
 // HostController defines model for HostController.
 type HostController struct {
 	Service string                `json:"service"`
+	Source  *BuildProvenance      `json:"source,omitempty"`
 	Status  string                `json:"status"`
 	Update  ControllerUpdateState `json:"update"`
 	Version string                `json:"version"`
@@ -2335,9 +3721,11 @@ type HostController struct {
 
 // HostEtcd defines model for HostEtcd.
 type HostEtcd struct {
-	DbSize string `json:"db_size"`
-	Node   string `json:"node"`
-	Status string `json:"status"`
+	DbSize   string             `json:"db_size"`
+	Node     string             `json:"node"`
+	Software *ContainerIdentity `json:"software,omitempty"`
+	Status   string             `json:"status"`
+	Version  *string            `json:"version,omitempty"`
 }
 
 // HostImage defines model for HostImage.
@@ -2366,6 +3754,36 @@ type HostResource struct {
 	Used    string `json:"used"`
 	UsedPct int64  `json:"used_pct"`
 }
+
+// HostTerminalOpen defines model for HostTerminalOpen.
+type HostTerminalOpen struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/HostTerminalOpen.json
+	Schema  *string `json:"$schema,omitempty"`
+	Columns int64   `json:"columns"`
+	Rows    int64   `json:"rows"`
+}
+
+// HostTerminalSession defines model for HostTerminalSession.
+type HostTerminalSession struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/HostTerminalSession.json
+	Schema                 *string                  `json:"$schema,omitempty"`
+	ExpiresAt              time.Time                `json:"expires_at"`
+	Host                   string                   `json:"host"`
+	Id                     string                   `json:"id"`
+	InputInactivitySeconds int64                    `json:"input_inactivity_seconds"`
+	Reason                 *string                  `json:"reason,omitempty"`
+	Resumed                bool                     `json:"resumed"`
+	State                  HostTerminalSessionState `json:"state"`
+	StreamPath             string                   `json:"stream_path"`
+	User                   string                   `json:"user"`
+}
+
+// HostTerminalSessionState defines model for HostTerminalSession.State.
+type HostTerminalSessionState string
 
 // ImageContainer defines model for ImageContainer.
 type ImageContainer struct {
@@ -2726,6 +4144,29 @@ type ProjectRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// PublicTarget defines model for PublicTarget.
+type PublicTarget struct {
+	Hostname string `json:"hostname"`
+	Path     string `json:"path"`
+}
+
+// Readiness defines model for Readiness.
+type Readiness struct {
+	Diagnostic          ReadinessDiagnostic `json:"diagnostic"`
+	ElapsedMilliseconds int64               `json:"elapsed_milliseconds"`
+	Exited              int32               `json:"exited"`
+	Expected            int32               `json:"expected"`
+	Observed            int32               `json:"observed"`
+	Ready               int32               `json:"ready"`
+	Running             int32               `json:"running"`
+	Starting            int32               `json:"starting"`
+	TimeoutMilliseconds int64               `json:"timeout_milliseconds"`
+	Unhealthy           int32               `json:"unhealthy"`
+}
+
+// ReadinessDiagnostic defines model for Readiness.Diagnostic.
+type ReadinessDiagnostic string
+
 // RecoveryPoint defines model for RecoveryPoint.
 type RecoveryPoint struct {
 	Capture           *RecoveryPointCapture   `json:"capture,omitempty"`
@@ -3018,15 +4459,18 @@ type Route struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Route.json
-	Schema          *string       `json:"$schema,omitempty"`
-	EnvironmentId   string        `json:"environment_id"`
-	Exposure        RouteExposure `json:"exposure"`
-	Host            *string       `json:"host,omitempty"`
-	Id              string        `json:"id"`
-	Path            string        `json:"path"`
-	Status          RouteStatus   `json:"status"`
-	TargetPort      int32         `json:"target_port"`
-	TargetServiceId string        `json:"target_service_id"`
+	Schema        *string       `json:"$schema,omitempty"`
+	EnvironmentId string        `json:"environment_id"`
+	Exposure      RouteExposure `json:"exposure"`
+	Host          *string       `json:"host,omitempty"`
+	Id            string        `json:"id"`
+	Path          string        `json:"path"`
+
+	// Revision Desired configuration revision on reads; zero in a mutation reply. Read the Route before submitting a check.
+	Revision        int64       `json:"revision"`
+	Status          RouteStatus `json:"status"`
+	TargetPort      int32       `json:"target_port"`
+	TargetServiceId string      `json:"target_service_id"`
 }
 
 // RouteExposure defines model for Route.Exposure.
@@ -3080,7 +4524,7 @@ type Router struct {
 	//
 	// Examples: /api/v1/Router.json
 	Schema *string              `json:"$schema,omitempty"`
-	Caddy  *ComponentProjection `json:"caddy,omitempty"`
+	Proxy  *ComponentProjection `json:"proxy,omitempty"`
 	Tunnel *ComponentProjection `json:"tunnel,omitempty"`
 }
 
@@ -3089,25 +4533,90 @@ type Runner struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Runner.json
-	Schema        *string         `json:"$schema,omitempty"`
-	CreateTaskId  string          `json:"create_task_id"`
-	CreatedAt     string          `json:"created_at"`
-	EnvironmentId *string         `json:"environment_id,omitempty"`
-	GithubUrl     string          `json:"github_url"`
-	Id            string          `json:"id"`
-	Labels        *[]string       `json:"labels,omitempty"`
-	Lifecycle     RunnerLifecycle `json:"lifecycle"`
-	Name          string          `json:"name"`
-	ObservedAt    *string         `json:"observed_at"`
-	Online        bool            `json:"online"`
-	ProjectId     *string         `json:"project_id,omitempty"`
-	RemoveTaskId  *string         `json:"remove_task_id"`
-	Slug          string          `json:"slug"`
-	TenantId      string          `json:"tenant_id"`
+	Schema        *string            `json:"$schema,omitempty"`
+	CreateTaskId  string             `json:"create_task_id"`
+	CreatedAt     string             `json:"created_at"`
+	EnvironmentId *string            `json:"environment_id,omitempty"`
+	GithubUrl     string             `json:"github_url"`
+	Id            string             `json:"id"`
+	Labels        *[]string          `json:"labels,omitempty"`
+	Lifecycle     RunnerLifecycle    `json:"lifecycle"`
+	Name          string             `json:"name"`
+	ObservedAt    *string            `json:"observed_at"`
+	Online        bool               `json:"online"`
+	ProjectId     *string            `json:"project_id,omitempty"`
+	RemoveTaskId  *string            `json:"remove_task_id"`
+	Revision      *int64             `json:"revision,omitempty"`
+	Slug          string             `json:"slug"`
+	Software      *ContainerIdentity `json:"software,omitempty"`
+	TenantId      string             `json:"tenant_id"`
 }
 
 // RunnerLifecycle defines model for Runner.Lifecycle.
 type RunnerLifecycle string
+
+// RunnerCheckConfiguration defines model for RunnerCheckConfiguration.
+type RunnerCheckConfiguration struct {
+	ControllerEndpoint string `json:"controller_endpoint"`
+	GithubUrl          string `json:"github_url"`
+	ImageReference     string `json:"image_reference"`
+	RunnerId           string `json:"runner_id"`
+	RunnerRevision     int64  `json:"runner_revision"`
+	RuntimeEpoch       int64  `json:"runtime_epoch"`
+}
+
+// RunnerCheckRequest defines model for RunnerCheckRequest.
+type RunnerCheckRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerCheckRequest.json
+	Schema   *string `json:"$schema,omitempty"`
+	Revision int64   `json:"revision"`
+}
+
+// RunnerCheckResult defines model for RunnerCheckResult.
+type RunnerCheckResult struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerCheckResult.json
+	Schema            *string                   `json:"$schema,omitempty"`
+	Configuration     RunnerCheckConfiguration  `json:"configuration"`
+	CreatedAt         string                    `json:"created_at"`
+	ExecutionLocation string                    `json:"execution_location"`
+	Failure           *string                   `json:"failure,omitempty"`
+	FinishedAt        *string                   `json:"finished_at,omitempty"`
+	ObservedAt        *string                   `json:"observed_at,omitempty"`
+	Outcome           *RunnerCheckResultOutcome `json:"outcome,omitempty"`
+	Phase             RunnerCheckResultPhase    `json:"phase"`
+	Stages            []RunnerCheckStage        `json:"stages"`
+	Stale             bool                      `json:"stale"`
+	StartedAt         *string                   `json:"started_at,omitempty"`
+	TaskId            string                    `json:"task_id"`
+}
+
+// RunnerCheckResultOutcome defines model for RunnerCheckResult.Outcome.
+type RunnerCheckResultOutcome string
+
+// RunnerCheckResultPhase defines model for RunnerCheckResult.Phase.
+type RunnerCheckResultPhase string
+
+// RunnerCheckStage defines model for RunnerCheckStage.
+type RunnerCheckStage struct {
+	ElapsedMs  int64                    `json:"elapsed_ms"`
+	Failure    *RunnerCheckStageFailure `json:"failure,omitempty"`
+	HttpStatus *int64                   `json:"http_status,omitempty"`
+	Name       RunnerCheckStageName     `json:"name"`
+	Outcome    RunnerCheckStageOutcome  `json:"outcome"`
+}
+
+// RunnerCheckStageFailure defines model for RunnerCheckStage.Failure.
+type RunnerCheckStageFailure string
+
+// RunnerCheckStageName defines model for RunnerCheckStage.Name.
+type RunnerCheckStageName string
+
+// RunnerCheckStageOutcome defines model for RunnerCheckStage.Outcome.
+type RunnerCheckStageOutcome string
 
 // RunnerCreateRequest defines model for RunnerCreateRequest.
 type RunnerCreateRequest struct {
@@ -3301,12 +4810,15 @@ type Service struct {
 	Replicas                   *int64                        `json:"replicas,omitempty"`
 	Resources                  *ServiceResources             `json:"resources,omitempty"`
 	Restart                    *string                       `json:"restart,omitempty"`
-	RuntimeIntent              string                        `json:"runtime_intent"`
-	ServingReleaseId           *string                       `json:"serving_release_id,omitempty"`
-	Strategy                   *string                       `json:"strategy,omitempty"`
-	User                       *string                       `json:"user,omitempty"`
-	WorkingDir                 *string                       `json:"working_dir,omitempty"`
-	Zones                      *[]string                     `json:"zones,omitempty"`
+
+	// RollingReplicaTimeoutSeconds Per-replica rolling change/readiness budget in seconds; zero uses 300. The overall Task deadline still applies.
+	RollingReplicaTimeoutSeconds *int32    `json:"rolling_replica_timeout_seconds,omitempty"`
+	RuntimeIntent                string    `json:"runtime_intent"`
+	ServingReleaseId             *string   `json:"serving_release_id,omitempty"`
+	Strategy                     *string   `json:"strategy,omitempty"`
+	User                         *string   `json:"user,omitempty"`
+	WorkingDir                   *string   `json:"working_dir,omitempty"`
+	Zones                        *[]string `json:"zones,omitempty"`
 }
 
 // ServiceContainerObservation defines model for ServiceContainerObservation.
@@ -3340,8 +4852,11 @@ type ServiceCreate struct {
 	Replicas      int64              `json:"replicas"`
 	Resources     ServiceResources   `json:"resources"`
 	Restart       string             `json:"restart"`
-	Strategy      string             `json:"strategy"`
-	Zones         *[]string          `json:"zones"`
+
+	// RollingReplicaTimeoutSeconds Per-replica rolling change/readiness budget; zero uses 300 seconds.
+	RollingReplicaTimeoutSeconds *int32    `json:"rolling_replica_timeout_seconds,omitempty"`
+	Strategy                     string    `json:"strategy"`
+	Zones                        *[]string `json:"zones"`
 }
 
 // ServiceDependency defines model for ServiceDependency.
@@ -3388,12 +4903,15 @@ type ServiceDetail struct {
 	Replicas                   *int64                        `json:"replicas,omitempty"`
 	Resources                  *ServiceResources             `json:"resources,omitempty"`
 	Restart                    *string                       `json:"restart,omitempty"`
-	RuntimeIntent              string                        `json:"runtime_intent"`
-	ServingReleaseId           *string                       `json:"serving_release_id,omitempty"`
-	Strategy                   *string                       `json:"strategy,omitempty"`
-	User                       *string                       `json:"user,omitempty"`
-	WorkingDir                 *string                       `json:"working_dir,omitempty"`
-	Zones                      *[]string                     `json:"zones,omitempty"`
+
+	// RollingReplicaTimeoutSeconds Per-replica rolling change/readiness budget in seconds; zero uses 300. The overall Task deadline still applies.
+	RollingReplicaTimeoutSeconds *int32    `json:"rolling_replica_timeout_seconds,omitempty"`
+	RuntimeIntent                string    `json:"runtime_intent"`
+	ServingReleaseId             *string   `json:"serving_release_id,omitempty"`
+	Strategy                     *string   `json:"strategy,omitempty"`
+	User                         *string   `json:"user,omitempty"`
+	WorkingDir                   *string   `json:"working_dir,omitempty"`
+	Zones                        *[]string `json:"zones,omitempty"`
 }
 
 // ServiceEdit defines model for ServiceEdit.
@@ -3425,7 +4943,10 @@ type ServiceEdit struct {
 	Replicas  int64            `json:"replicas"`
 	Resources ServiceResources `json:"resources"`
 	Restart   string           `json:"restart"`
-	Strategy  string           `json:"strategy"`
+
+	// RollingReplicaTimeoutSeconds Replacement per-replica rolling budget; omission preserves, zero restores 300 seconds.
+	RollingReplicaTimeoutSeconds *int32 `json:"rolling_replica_timeout_seconds,omitempty"`
+	Strategy                     string `json:"strategy"`
 
 	// User Replacement container user; omission preserves, an empty string restores the image default.
 	User *string `json:"user,omitempty"`
@@ -3619,32 +5140,36 @@ type Task struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Task.json
-	Schema                 *string           `json:"$schema,omitempty"`
-	Actor                  TaskActor         `json:"actor"`
-	CreatedAt              time.Time         `json:"created_at"`
-	EnvironmentId          *string           `json:"environment_id,omitempty"`
-	Executor               TaskExecutor      `json:"executor"`
-	FailureSummary         *string           `json:"failure_summary,omitempty"`
-	FinishedAt             *time.Time        `json:"finished_at"`
-	Id                     string            `json:"id"`
-	ImageFetch             *TaskImageFetch   `json:"image_fetch,omitempty"`
-	OperationId            string            `json:"operation_id"`
-	PlanHash               *string           `json:"plan_hash,omitempty"`
-	ProjectId              *string           `json:"project_id,omitempty"`
-	ReconciliationRequired bool              `json:"reconciliation_required"`
-	ResourceKind           *string           `json:"resource_kind,omitempty"`
-	ResultSummary          *string           `json:"result_summary,omitempty"`
-	RetryOf                *string           `json:"retry_of,omitempty"`
-	StartedAt              *time.Time        `json:"started_at"`
-	Status                 string            `json:"status"`
-	Steps                  *[]TaskStep       `json:"steps,omitempty"`
-	Target                 string            `json:"target"`
-	TargetName             *string           `json:"target_name,omitempty"`
-	TenantId               *string           `json:"tenant_id,omitempty"`
-	TimeoutSeconds         int64             `json:"timeout_seconds"`
-	Type                   TaskType          `json:"type"`
-	UpdatedAt              time.Time         `json:"updated_at"`
-	WorkspaceType          TaskWorkspaceType `json:"workspace_type"`
+	Schema                 *string             `json:"$schema,omitempty"`
+	Actor                  TaskActor           `json:"actor"`
+	AttemptHistory         *TaskAttemptHistory `json:"attempt_history,omitempty"`
+	CreatedAt              time.Time           `json:"created_at"`
+	EnvironmentId          *string             `json:"environment_id,omitempty"`
+	Executor               TaskExecutor        `json:"executor"`
+	Failure                *TaskFailure        `json:"failure,omitempty"`
+	FinishedAt             *time.Time          `json:"finished_at"`
+	Id                     string              `json:"id"`
+	ImageFetch             *TaskImageFetch     `json:"image_fetch,omitempty"`
+	InterruptedDetachRetry *TaskDetachRetry    `json:"interrupted_detach_retry,omitempty"`
+	OperationId            string              `json:"operation_id"`
+	PlanHash               *string             `json:"plan_hash,omitempty"`
+	Preparation            *TaskPreparation    `json:"preparation,omitempty"`
+	ProjectId              *string             `json:"project_id,omitempty"`
+	ReconciliationRequired bool                `json:"reconciliation_required"`
+	Recovery               *TaskRecovery       `json:"recovery,omitempty"`
+	ResourceKind           *string             `json:"resource_kind,omitempty"`
+	ResultSummary          *string             `json:"result_summary,omitempty"`
+	RetryOf                *string             `json:"retry_of,omitempty"`
+	StartedAt              *time.Time          `json:"started_at"`
+	Status                 string              `json:"status"`
+	Steps                  *[]TaskStep         `json:"steps,omitempty"`
+	Target                 string              `json:"target"`
+	TargetName             *string             `json:"target_name,omitempty"`
+	TenantId               *string             `json:"tenant_id,omitempty"`
+	TimeoutSeconds         int64               `json:"timeout_seconds"`
+	Type                   TaskType            `json:"type"`
+	UpdatedAt              time.Time           `json:"updated_at"`
+	WorkspaceType          TaskWorkspaceType   `json:"workspace_type"`
 }
 
 // TaskActor defines model for Task.Actor.
@@ -3668,18 +5193,69 @@ type TaskAccepted struct {
 	TaskId string  `json:"task_id"`
 }
 
+// TaskAttemptHistory defines model for TaskAttemptHistory.
+type TaskAttemptHistory struct {
+	DroppedSummaries int64                 `json:"dropped_summaries"`
+	Summaries        *[]TaskAttemptSummary `json:"summaries"`
+	ThroughSequence  int64                 `json:"through_sequence"`
+}
+
+// TaskAttemptSummary defines model for TaskAttemptSummary.
+type TaskAttemptSummary struct {
+	Action              string                   `json:"action"`
+	Attempt             int32                    `json:"attempt"`
+	ControllerOperation *TaskControllerOperation `json:"controller_operation,omitempty"`
+	Failure             *TaskFailure             `json:"failure,omitempty"`
+	FinishedReceivedAt  *time.Time               `json:"finished_received_at,omitempty"`
+	FirstSequence       int64                    `json:"first_sequence"`
+	LastReceivedAt      time.Time                `json:"last_received_at"`
+	LastSequence        int64                    `json:"last_sequence"`
+	Ordinal             int64                    `json:"ordinal"`
+	StartedReceivedAt   *time.Time               `json:"started_received_at,omitempty"`
+	State               string                   `json:"state"`
+	StepId              *string                  `json:"step_id,omitempty"`
+	Target              *string                  `json:"target,omitempty"`
+}
+
+// TaskControllerOperation defines model for TaskControllerOperation.
+type TaskControllerOperation struct {
+	Name  string `json:"name"`
+	Stage string `json:"stage"`
+}
+
+// TaskDetachRetry defines model for TaskDetachRetry.
+type TaskDetachRetry struct {
+	AttachId string `json:"attach_id"`
+	StepId   string `json:"step_id"`
+}
+
 // TaskEvent defines model for TaskEvent.
 type TaskEvent struct {
-	Attempt    int32          `json:"attempt"`
-	Ordinal    int64          `json:"ordinal"`
-	ReceivedAt time.Time      `json:"received_at"`
-	Sequence   int64          `json:"sequence"`
-	State      TaskEventState `json:"state"`
-	StepId     string         `json:"step_id"`
+	Attempt             int32                    `json:"attempt"`
+	ControllerOperation *TaskControllerOperation `json:"controller_operation,omitempty"`
+	Failure             *TaskFailure             `json:"failure,omitempty"`
+	HealthWait          *Readiness               `json:"health_wait,omitempty"`
+	Ordinal             int64                    `json:"ordinal"`
+	ReceivedAt          time.Time                `json:"received_at"`
+	Sequence            int64                    `json:"sequence"`
+	State               TaskEventState           `json:"state"`
+	StepId              string                   `json:"step_id"`
 }
 
 // TaskEventState defines model for TaskEvent.State.
 type TaskEventState string
+
+// TaskFailure defines model for TaskFailure.
+type TaskFailure struct {
+	Code     *string           `json:"code,omitempty"`
+	ExitCode *int32            `json:"exit_code,omitempty"`
+	Status   TaskFailureStatus `json:"status"`
+	StepId   *string           `json:"step_id,omitempty"`
+	Summary  string            `json:"summary"`
+}
+
+// TaskFailureStatus defines model for TaskFailure.Status.
+type TaskFailureStatus string
 
 // TaskImageFetch defines model for TaskImageFetch.
 type TaskImageFetch struct {
@@ -3689,18 +5265,48 @@ type TaskImageFetch struct {
 	Requested string   `json:"requested"`
 }
 
+// TaskPreparation defines model for TaskPreparation.
+type TaskPreparation struct {
+	Deadline     time.Time            `json:"deadline"`
+	Failure      *TaskFailure         `json:"failure,omitempty"`
+	NetworkCount int64                `json:"network_count"`
+	State        TaskPreparationState `json:"state"`
+	Summary      string               `json:"summary"`
+}
+
+// TaskPreparationState defines model for TaskPreparation.State.
+type TaskPreparationState string
+
+// TaskRecovery defines model for TaskRecovery.
+type TaskRecovery struct {
+	CompletedSteps *int32            `json:"completed_steps,omitempty"`
+	Deadline       *time.Time        `json:"deadline,omitempty"`
+	LastFailure    *TaskFailure      `json:"last_failure,omitempty"`
+	State          TaskRecoveryState `json:"state"`
+	StepIds        *[]string         `json:"step_ids,omitempty"`
+	Summary        string            `json:"summary"`
+	TotalSteps     *int32            `json:"total_steps,omitempty"`
+}
+
+// TaskRecoveryState defines model for TaskRecovery.State.
+type TaskRecoveryState string
+
 // TaskStep defines model for TaskStep.
 type TaskStep struct {
-	Action         string       `json:"action"`
-	Description    *string      `json:"description,omitempty"`
-	Kind           TaskStepKind `json:"kind"`
-	Name           string       `json:"name"`
-	ScriptId       *string      `json:"script_id,omitempty"`
-	ScriptSlug     *string      `json:"script_slug,omitempty"`
-	Status         string       `json:"status"`
-	Target         *string      `json:"target,omitempty"`
-	TimeoutSeconds *int32       `json:"timeout_seconds,omitempty"`
-	union          json.RawMessage
+	Action               string                   `json:"action"`
+	Description          *string                  `json:"description,omitempty"`
+	Failure              *TaskFailure             `json:"failure,omitempty"`
+	HealthWait           *Readiness               `json:"health_wait,omitempty"`
+	HealthWaitReceivedAt *time.Time               `json:"health_wait_received_at,omitempty"`
+	Healthchecks         *[]ConfiguredHealthcheck `json:"healthchecks,omitempty"`
+	Kind                 TaskStepKind             `json:"kind"`
+	Name                 string                   `json:"name"`
+	ScriptId             *string                  `json:"script_id,omitempty"`
+	ScriptSlug           *string                  `json:"script_slug,omitempty"`
+	Status               string                   `json:"status"`
+	Target               *string                  `json:"target,omitempty"`
+	TimeoutSeconds       *int32                   `json:"timeout_seconds,omitempty"`
+	union                json.RawMessage
 }
 
 // TaskStepKind defines model for TaskStep.Kind.
@@ -3767,6 +5373,27 @@ type TenantRename struct {
 	// Examples: /api/v1/TenantRename.json
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
+}
+
+// TunnelCheckRequest defines model for TunnelCheckRequest.
+type TunnelCheckRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TunnelCheckRequest.json
+	Schema *string `json:"$schema,omitempty"`
+
+	// Hostname Concrete public hostname configured by the operator at the Tunnel provider; GP does not read or change provider ingress.
+	Hostname string `json:"hostname"`
+
+	// OriginPort An HTTP port exposed as TCP by the serving Service.
+	OriginPort      int32  `json:"origin_port"`
+	OriginServiceId string `json:"origin_service_id"`
+
+	// Path Concrete HTTP request path without query or fragment.
+	Path string `json:"path"`
+
+	// Revision Current Tunnel Component revision.
+	Revision int64 `json:"revision"`
 }
 
 // Volume defines model for Volume.
@@ -3847,7 +5474,10 @@ type Zone struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Zone.json
-	Schema        *string       `json:"$schema,omitempty"`
+	Schema *string `json:"$schema,omitempty"`
+
+	// AllowGpDns Use shared CoreDNS from this internal Zone; existing workloads change on their next deployment.
+	AllowGpDns    bool          `json:"allow_gp_dns"`
 	EnvironmentId string        `json:"environment_id"`
 	Id            string        `json:"id"`
 	Internal      bool          `json:"internal"`
@@ -3865,11 +5495,14 @@ type ZoneCreate struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ZoneCreate.json
-	Schema        *string `json:"$schema,omitempty"`
-	EnvironmentId string  `json:"environment_id"`
-	Internal      bool    `json:"internal"`
-	Name          string  `json:"name"`
-	Subnet        string  `json:"subnet"`
+	Schema *string `json:"$schema,omitempty"`
+
+	// AllowGpDns Opt into shared CoreDNS without enabling outbound connectivity; requires internal=true.
+	AllowGpDns    bool   `json:"allow_gp_dns"`
+	EnvironmentId string `json:"environment_id"`
+	Internal      bool   `json:"internal"`
+	Name          string `json:"name"`
+	Subnet        string `json:"subnet"`
 }
 
 // ZoneRemovalImpact defines model for ZoneRemovalImpact.
@@ -3966,6 +5599,20 @@ type AttachCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// AttachCheckShowParams defines parameters for AttachCheckShow.
+type AttachCheckShowParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Task        *string `form:"task,omitempty" json:"task,omitempty"`
+	Attach      *string `form:"attach,omitempty" json:"attach,omitempty"`
+	Grant       *string `form:"grant,omitempty" json:"grant,omitempty"`
+}
+
+// AttachCheckParams defines parameters for AttachCheck.
+type AttachCheckParams struct {
+	Environment    string `form:"environment" json:"environment"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // AttachDetachParams defines parameters for AttachDetach.
 type AttachDetachParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -4026,8 +5673,30 @@ type ComponentDisableParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ComponentDnsCheckShowParams defines parameters for ComponentDnsCheckShow.
+type ComponentDnsCheckShowParams struct {
+	Task *string `form:"task,omitempty" json:"task,omitempty"`
+}
+
+// ComponentDnsCheckParams defines parameters for ComponentDnsCheck.
+type ComponentDnsCheckParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ComponentEnableParams defines parameters for ComponentEnable.
 type ComponentEnableParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ComponentTunnelCheckShowParams defines parameters for ComponentTunnelCheckShow.
+type ComponentTunnelCheckShowParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Task        *string `form:"task,omitempty" json:"task,omitempty"`
+}
+
+// ComponentTunnelCheckParams defines parameters for ComponentTunnelCheck.
+type ComponentTunnelCheckParams struct {
+	Environment    string `form:"environment" json:"environment"`
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -4045,6 +5714,19 @@ type ConnectorListParams struct {
 
 // ConnectorCreateParams defines parameters for ConnectorCreate.
 type ConnectorCreateParams struct {
+	Environment    string `form:"environment" json:"environment"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ConnectorCheckShowParams defines parameters for ConnectorCheckShow.
+type ConnectorCheckShowParams struct {
+	Task        *string `form:"task,omitempty" json:"task,omitempty"`
+	Connector   *string `form:"connector,omitempty" json:"connector,omitempty"`
+	Environment string  `form:"environment" json:"environment"`
+}
+
+// ConnectorCheckParams defines parameters for ConnectorCheck.
+type ConnectorCheckParams struct {
 	Environment    string `form:"environment" json:"environment"`
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
@@ -4146,6 +5828,24 @@ type BlueprintValidateParams struct {
 	IfMatch string `json:"If-Match"`
 }
 
+// EnvironmentDnsCreateParams defines parameters for EnvironmentDnsCreate.
+type EnvironmentDnsCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+	IfMatch        string `json:"If-Match"`
+}
+
+// EnvironmentDnsRemoveParams defines parameters for EnvironmentDnsRemove.
+type EnvironmentDnsRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+	IfMatch        string `json:"If-Match"`
+}
+
+// EnvironmentDnsEditParams defines parameters for EnvironmentDnsEdit.
+type EnvironmentDnsEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+	IfMatch        string `json:"If-Match"`
+}
+
 // EnvironmentLogsParams defines parameters for EnvironmentLogs.
 type EnvironmentLogsParams struct {
 	Tail   *int32 `form:"tail,omitempty" json:"tail,omitempty"`
@@ -4184,6 +5884,11 @@ type EtcdConfigSetParams struct {
 
 // EtcdConfigApplyParams defines parameters for EtcdConfigApply.
 type EtcdConfigApplyParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// HostTerminalParams defines parameters for HostTerminal.
+type HostTerminalParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -4282,6 +5987,19 @@ type RouteCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// RouteCheckShowParams defines parameters for RouteCheckShow.
+type RouteCheckShowParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Task        *string `form:"task,omitempty" json:"task,omitempty"`
+	Route       *string `form:"route,omitempty" json:"route,omitempty"`
+}
+
+// RouteCheckParams defines parameters for RouteCheck.
+type RouteCheckParams struct {
+	Environment    string `form:"environment" json:"environment"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // RouteRemoveParams defines parameters for RouteRemove.
 type RouteRemoveParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -4313,6 +6031,16 @@ type RunnerRemoveParams struct {
 
 // RunnerEditParams defines parameters for RunnerEdit.
 type RunnerEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RunnerCheckShowParams defines parameters for RunnerCheckShow.
+type RunnerCheckShowParams struct {
+	Task *string `form:"task,omitempty" json:"task,omitempty"`
+}
+
+// RunnerCheckParams defines parameters for RunnerCheck.
+type RunnerCheckParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -4557,6 +6285,9 @@ type AgentUpdateJSONRequestBody = AgentUpdate
 // AttachCreateJSONRequestBody defines body for AttachCreate for application/json ContentType.
 type AttachCreateJSONRequestBody = AttachRequest
 
+// AttachCheckJSONRequestBody defines body for AttachCheck for application/json ContentType.
+type AttachCheckJSONRequestBody = BackingCheckRequest
+
 // AttachRenameJSONRequestBody defines body for AttachRename for application/json ContentType.
 type AttachRenameJSONRequestBody = AttachRenameRequest
 
@@ -4566,11 +6297,20 @@ type BackingServiceCreateJSONRequestBody = BackingServiceCreate
 // ComponentConfigSetJSONRequestBody defines body for ComponentConfigSet for application/json ContentType.
 type ComponentConfigSetJSONRequestBody = ComponentConfigMutationRequest
 
+// ComponentDnsCheckJSONRequestBody defines body for ComponentDnsCheck for application/json ContentType.
+type ComponentDnsCheckJSONRequestBody = DNSCheckRequest
+
 // ComponentEnableJSONRequestBody defines body for ComponentEnable for application/json ContentType.
 type ComponentEnableJSONRequestBody = ComponentEnableRequest
 
+// ComponentTunnelCheckJSONRequestBody defines body for ComponentTunnelCheck for application/json ContentType.
+type ComponentTunnelCheckJSONRequestBody = TunnelCheckRequest
+
 // ConnectorCreateJSONRequestBody defines body for ConnectorCreate for application/json ContentType.
 type ConnectorCreateJSONRequestBody = ConnectorCreateRequest
+
+// ConnectorCheckJSONRequestBody defines body for ConnectorCheck for application/json ContentType.
+type ConnectorCheckJSONRequestBody = ConnectorCheckRequest
 
 // ConnectorEditJSONRequestBody defines body for ConnectorEdit for application/json ContentType.
 type ConnectorEditJSONRequestBody = ConnectorEditRequest
@@ -4605,6 +6345,12 @@ type BlueprintApplyMultipartRequestBody = BlueprintApplyMultipartBody
 // BlueprintValidateMultipartRequestBody defines body for BlueprintValidate for multipart/form-data ContentType.
 type BlueprintValidateMultipartRequestBody = BlueprintValidateMultipartBody
 
+// EnvironmentDnsCreateJSONRequestBody defines body for EnvironmentDnsCreate for application/json ContentType.
+type EnvironmentDnsCreateJSONRequestBody = EnvironmentDNSWrite
+
+// EnvironmentDnsEditJSONRequestBody defines body for EnvironmentDnsEdit for application/json ContentType.
+type EnvironmentDnsEditJSONRequestBody = EnvironmentDNSWrite
+
 // EnvironmentRenameJSONRequestBody defines body for EnvironmentRename for application/json ContentType.
 type EnvironmentRenameJSONRequestBody = EnvironmentRename
 
@@ -4619,6 +6365,9 @@ type EtcdConfigSetJSONRequestBody = EtcdConfigReplacement
 
 // EtcdConfigApplyJSONRequestBody defines body for EtcdConfigApply for application/json ContentType.
 type EtcdConfigApplyJSONRequestBody = EtcdConfigApplyRequest
+
+// HostTerminalJSONRequestBody defines body for HostTerminal for application/json ContentType.
+type HostTerminalJSONRequestBody = HostTerminalOpen
 
 // ImageFetchJSONRequestBody defines body for ImageFetch for application/json ContentType.
 type ImageFetchJSONRequestBody = ImageFetchRequest
@@ -4647,6 +6396,9 @@ type ReleaseGroupRollbackJSONRequestBody = ReleaseGroupRollbackRequest
 // RouteCreateJSONRequestBody defines body for RouteCreate for application/json ContentType.
 type RouteCreateJSONRequestBody = RouteCreate
 
+// RouteCheckJSONRequestBody defines body for RouteCheck for application/json ContentType.
+type RouteCheckJSONRequestBody = EdgeCheckRequest
+
 // RouteEditJSONRequestBody defines body for RouteEdit for application/json ContentType.
 type RouteEditJSONRequestBody = RouteEdit
 
@@ -4655,6 +6407,9 @@ type RunnerCreateJSONRequestBody = RunnerCreateRequest
 
 // RunnerEditJSONRequestBody defines body for RunnerEdit for application/json ContentType.
 type RunnerEditJSONRequestBody = RunnerEditRequest
+
+// RunnerCheckJSONRequestBody defines body for RunnerCheck for application/json ContentType.
+type RunnerCheckJSONRequestBody = RunnerCheckRequest
 
 // RunnerRetryJSONRequestBody defines body for RunnerRetry for application/json ContentType.
 type RunnerRetryJSONRequestBody = RunnerRetryRequest
@@ -5032,6 +6787,32 @@ func (t *ComponentConfig) MergeComponentConfig2(v ComponentConfig2) error {
 	return err
 }
 
+// AsComponentConfig3 returns the union data inside the ComponentConfig as a ComponentConfig3
+func (t ComponentConfig) AsComponentConfig3() (ComponentConfig3, error) {
+	var body ComponentConfig3
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfig3 overwrites any union data inside the ComponentConfig as the provided ComponentConfig3
+func (t *ComponentConfig) FromComponentConfig3(v ComponentConfig3) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfig3 performs a merge with any union data inside the ComponentConfig, using the provided ComponentConfig3
+func (t *ComponentConfig) MergeComponentConfig3(v ComponentConfig3) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t ComponentConfig) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
@@ -5042,22 +6823,22 @@ func (t *ComponentConfig) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-// AsComponentConfig2Records0 returns the union data inside the ComponentConfig_2_Records_Item as a ComponentConfig2Records0
-func (t ComponentConfig_2_Records_Item) AsComponentConfig2Records0() (ComponentConfig2Records0, error) {
-	var body ComponentConfig2Records0
+// AsComponentConfig3Records0 returns the union data inside the ComponentConfig_3_Records_Item as a ComponentConfig3Records0
+func (t ComponentConfig_3_Records_Item) AsComponentConfig3Records0() (ComponentConfig3Records0, error) {
+	var body ComponentConfig3Records0
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromComponentConfig2Records0 overwrites any union data inside the ComponentConfig_2_Records_Item as the provided ComponentConfig2Records0
-func (t *ComponentConfig_2_Records_Item) FromComponentConfig2Records0(v ComponentConfig2Records0) error {
+// FromComponentConfig3Records0 overwrites any union data inside the ComponentConfig_3_Records_Item as the provided ComponentConfig3Records0
+func (t *ComponentConfig_3_Records_Item) FromComponentConfig3Records0(v ComponentConfig3Records0) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeComponentConfig2Records0 performs a merge with any union data inside the ComponentConfig_2_Records_Item, using the provided ComponentConfig2Records0
-func (t *ComponentConfig_2_Records_Item) MergeComponentConfig2Records0(v ComponentConfig2Records0) error {
+// MergeComponentConfig3Records0 performs a merge with any union data inside the ComponentConfig_3_Records_Item, using the provided ComponentConfig3Records0
+func (t *ComponentConfig_3_Records_Item) MergeComponentConfig3Records0(v ComponentConfig3Records0) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5068,22 +6849,22 @@ func (t *ComponentConfig_2_Records_Item) MergeComponentConfig2Records0(v Compone
 	return err
 }
 
-// AsComponentConfig2Records1 returns the union data inside the ComponentConfig_2_Records_Item as a ComponentConfig2Records1
-func (t ComponentConfig_2_Records_Item) AsComponentConfig2Records1() (ComponentConfig2Records1, error) {
-	var body ComponentConfig2Records1
+// AsComponentConfig3Records1 returns the union data inside the ComponentConfig_3_Records_Item as a ComponentConfig3Records1
+func (t ComponentConfig_3_Records_Item) AsComponentConfig3Records1() (ComponentConfig3Records1, error) {
+	var body ComponentConfig3Records1
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromComponentConfig2Records1 overwrites any union data inside the ComponentConfig_2_Records_Item as the provided ComponentConfig2Records1
-func (t *ComponentConfig_2_Records_Item) FromComponentConfig2Records1(v ComponentConfig2Records1) error {
+// FromComponentConfig3Records1 overwrites any union data inside the ComponentConfig_3_Records_Item as the provided ComponentConfig3Records1
+func (t *ComponentConfig_3_Records_Item) FromComponentConfig3Records1(v ComponentConfig3Records1) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeComponentConfig2Records1 performs a merge with any union data inside the ComponentConfig_2_Records_Item, using the provided ComponentConfig2Records1
-func (t *ComponentConfig_2_Records_Item) MergeComponentConfig2Records1(v ComponentConfig2Records1) error {
+// MergeComponentConfig3Records1 performs a merge with any union data inside the ComponentConfig_3_Records_Item, using the provided ComponentConfig3Records1
+func (t *ComponentConfig_3_Records_Item) MergeComponentConfig3Records1(v ComponentConfig3Records1) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5094,32 +6875,32 @@ func (t *ComponentConfig_2_Records_Item) MergeComponentConfig2Records1(v Compone
 	return err
 }
 
-func (t ComponentConfig_2_Records_Item) MarshalJSON() ([]byte, error) {
+func (t ComponentConfig_3_Records_Item) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *ComponentConfig_2_Records_Item) UnmarshalJSON(b []byte) error {
+func (t *ComponentConfig_3_Records_Item) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsComponentConfigMutationRequestConfig1Credential0 returns the union data inside the ComponentConfigMutationRequest_Config_1_Credential as a ComponentConfigMutationRequestConfig1Credential0
-func (t ComponentConfigMutationRequest_Config_1_Credential) AsComponentConfigMutationRequestConfig1Credential0() (ComponentConfigMutationRequestConfig1Credential0, error) {
-	var body ComponentConfigMutationRequestConfig1Credential0
+// AsComponentConfigMutationRequestConfig2Credential0 returns the union data inside the ComponentConfigMutationRequest_Config_2_Credential as a ComponentConfigMutationRequestConfig2Credential0
+func (t ComponentConfigMutationRequest_Config_2_Credential) AsComponentConfigMutationRequestConfig2Credential0() (ComponentConfigMutationRequestConfig2Credential0, error) {
+	var body ComponentConfigMutationRequestConfig2Credential0
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromComponentConfigMutationRequestConfig1Credential0 overwrites any union data inside the ComponentConfigMutationRequest_Config_1_Credential as the provided ComponentConfigMutationRequestConfig1Credential0
-func (t *ComponentConfigMutationRequest_Config_1_Credential) FromComponentConfigMutationRequestConfig1Credential0(v ComponentConfigMutationRequestConfig1Credential0) error {
+// FromComponentConfigMutationRequestConfig2Credential0 overwrites any union data inside the ComponentConfigMutationRequest_Config_2_Credential as the provided ComponentConfigMutationRequestConfig2Credential0
+func (t *ComponentConfigMutationRequest_Config_2_Credential) FromComponentConfigMutationRequestConfig2Credential0(v ComponentConfigMutationRequestConfig2Credential0) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeComponentConfigMutationRequestConfig1Credential0 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_1_Credential, using the provided ComponentConfigMutationRequestConfig1Credential0
-func (t *ComponentConfigMutationRequest_Config_1_Credential) MergeComponentConfigMutationRequestConfig1Credential0(v ComponentConfigMutationRequestConfig1Credential0) error {
+// MergeComponentConfigMutationRequestConfig2Credential0 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_2_Credential, using the provided ComponentConfigMutationRequestConfig2Credential0
+func (t *ComponentConfigMutationRequest_Config_2_Credential) MergeComponentConfigMutationRequestConfig2Credential0(v ComponentConfigMutationRequestConfig2Credential0) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5130,22 +6911,22 @@ func (t *ComponentConfigMutationRequest_Config_1_Credential) MergeComponentConfi
 	return err
 }
 
-// AsComponentConfigMutationRequestConfig1Credential1 returns the union data inside the ComponentConfigMutationRequest_Config_1_Credential as a ComponentConfigMutationRequestConfig1Credential1
-func (t ComponentConfigMutationRequest_Config_1_Credential) AsComponentConfigMutationRequestConfig1Credential1() (ComponentConfigMutationRequestConfig1Credential1, error) {
-	var body ComponentConfigMutationRequestConfig1Credential1
+// AsComponentConfigMutationRequestConfig2Credential1 returns the union data inside the ComponentConfigMutationRequest_Config_2_Credential as a ComponentConfigMutationRequestConfig2Credential1
+func (t ComponentConfigMutationRequest_Config_2_Credential) AsComponentConfigMutationRequestConfig2Credential1() (ComponentConfigMutationRequestConfig2Credential1, error) {
+	var body ComponentConfigMutationRequestConfig2Credential1
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromComponentConfigMutationRequestConfig1Credential1 overwrites any union data inside the ComponentConfigMutationRequest_Config_1_Credential as the provided ComponentConfigMutationRequestConfig1Credential1
-func (t *ComponentConfigMutationRequest_Config_1_Credential) FromComponentConfigMutationRequestConfig1Credential1(v ComponentConfigMutationRequestConfig1Credential1) error {
+// FromComponentConfigMutationRequestConfig2Credential1 overwrites any union data inside the ComponentConfigMutationRequest_Config_2_Credential as the provided ComponentConfigMutationRequestConfig2Credential1
+func (t *ComponentConfigMutationRequest_Config_2_Credential) FromComponentConfigMutationRequestConfig2Credential1(v ComponentConfigMutationRequestConfig2Credential1) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeComponentConfigMutationRequestConfig1Credential1 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_1_Credential, using the provided ComponentConfigMutationRequestConfig1Credential1
-func (t *ComponentConfigMutationRequest_Config_1_Credential) MergeComponentConfigMutationRequestConfig1Credential1(v ComponentConfigMutationRequestConfig1Credential1) error {
+// MergeComponentConfigMutationRequestConfig2Credential1 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_2_Credential, using the provided ComponentConfigMutationRequestConfig2Credential1
+func (t *ComponentConfigMutationRequest_Config_2_Credential) MergeComponentConfigMutationRequestConfig2Credential1(v ComponentConfigMutationRequestConfig2Credential1) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5156,32 +6937,32 @@ func (t *ComponentConfigMutationRequest_Config_1_Credential) MergeComponentConfi
 	return err
 }
 
-func (t ComponentConfigMutationRequest_Config_1_Credential) MarshalJSON() ([]byte, error) {
+func (t ComponentConfigMutationRequest_Config_2_Credential) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *ComponentConfigMutationRequest_Config_1_Credential) UnmarshalJSON(b []byte) error {
+func (t *ComponentConfigMutationRequest_Config_2_Credential) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsComponentConfigMutationRequestConfig2Records0 returns the union data inside the ComponentConfigMutationRequest_Config_2_Records_Item as a ComponentConfigMutationRequestConfig2Records0
-func (t ComponentConfigMutationRequest_Config_2_Records_Item) AsComponentConfigMutationRequestConfig2Records0() (ComponentConfigMutationRequestConfig2Records0, error) {
-	var body ComponentConfigMutationRequestConfig2Records0
+// AsComponentConfigMutationRequestConfig3Records0 returns the union data inside the ComponentConfigMutationRequest_Config_3_Records_Item as a ComponentConfigMutationRequestConfig3Records0
+func (t ComponentConfigMutationRequest_Config_3_Records_Item) AsComponentConfigMutationRequestConfig3Records0() (ComponentConfigMutationRequestConfig3Records0, error) {
+	var body ComponentConfigMutationRequestConfig3Records0
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromComponentConfigMutationRequestConfig2Records0 overwrites any union data inside the ComponentConfigMutationRequest_Config_2_Records_Item as the provided ComponentConfigMutationRequestConfig2Records0
-func (t *ComponentConfigMutationRequest_Config_2_Records_Item) FromComponentConfigMutationRequestConfig2Records0(v ComponentConfigMutationRequestConfig2Records0) error {
+// FromComponentConfigMutationRequestConfig3Records0 overwrites any union data inside the ComponentConfigMutationRequest_Config_3_Records_Item as the provided ComponentConfigMutationRequestConfig3Records0
+func (t *ComponentConfigMutationRequest_Config_3_Records_Item) FromComponentConfigMutationRequestConfig3Records0(v ComponentConfigMutationRequestConfig3Records0) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeComponentConfigMutationRequestConfig2Records0 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_2_Records_Item, using the provided ComponentConfigMutationRequestConfig2Records0
-func (t *ComponentConfigMutationRequest_Config_2_Records_Item) MergeComponentConfigMutationRequestConfig2Records0(v ComponentConfigMutationRequestConfig2Records0) error {
+// MergeComponentConfigMutationRequestConfig3Records0 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_3_Records_Item, using the provided ComponentConfigMutationRequestConfig3Records0
+func (t *ComponentConfigMutationRequest_Config_3_Records_Item) MergeComponentConfigMutationRequestConfig3Records0(v ComponentConfigMutationRequestConfig3Records0) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5192,22 +6973,22 @@ func (t *ComponentConfigMutationRequest_Config_2_Records_Item) MergeComponentCon
 	return err
 }
 
-// AsComponentConfigMutationRequestConfig2Records1 returns the union data inside the ComponentConfigMutationRequest_Config_2_Records_Item as a ComponentConfigMutationRequestConfig2Records1
-func (t ComponentConfigMutationRequest_Config_2_Records_Item) AsComponentConfigMutationRequestConfig2Records1() (ComponentConfigMutationRequestConfig2Records1, error) {
-	var body ComponentConfigMutationRequestConfig2Records1
+// AsComponentConfigMutationRequestConfig3Records1 returns the union data inside the ComponentConfigMutationRequest_Config_3_Records_Item as a ComponentConfigMutationRequestConfig3Records1
+func (t ComponentConfigMutationRequest_Config_3_Records_Item) AsComponentConfigMutationRequestConfig3Records1() (ComponentConfigMutationRequestConfig3Records1, error) {
+	var body ComponentConfigMutationRequestConfig3Records1
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromComponentConfigMutationRequestConfig2Records1 overwrites any union data inside the ComponentConfigMutationRequest_Config_2_Records_Item as the provided ComponentConfigMutationRequestConfig2Records1
-func (t *ComponentConfigMutationRequest_Config_2_Records_Item) FromComponentConfigMutationRequestConfig2Records1(v ComponentConfigMutationRequestConfig2Records1) error {
+// FromComponentConfigMutationRequestConfig3Records1 overwrites any union data inside the ComponentConfigMutationRequest_Config_3_Records_Item as the provided ComponentConfigMutationRequestConfig3Records1
+func (t *ComponentConfigMutationRequest_Config_3_Records_Item) FromComponentConfigMutationRequestConfig3Records1(v ComponentConfigMutationRequestConfig3Records1) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeComponentConfigMutationRequestConfig2Records1 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_2_Records_Item, using the provided ComponentConfigMutationRequestConfig2Records1
-func (t *ComponentConfigMutationRequest_Config_2_Records_Item) MergeComponentConfigMutationRequestConfig2Records1(v ComponentConfigMutationRequestConfig2Records1) error {
+// MergeComponentConfigMutationRequestConfig3Records1 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_3_Records_Item, using the provided ComponentConfigMutationRequestConfig3Records1
+func (t *ComponentConfigMutationRequest_Config_3_Records_Item) MergeComponentConfigMutationRequestConfig3Records1(v ComponentConfigMutationRequestConfig3Records1) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5218,12 +6999,12 @@ func (t *ComponentConfigMutationRequest_Config_2_Records_Item) MergeComponentCon
 	return err
 }
 
-func (t ComponentConfigMutationRequest_Config_2_Records_Item) MarshalJSON() ([]byte, error) {
+func (t ComponentConfigMutationRequest_Config_3_Records_Item) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *ComponentConfigMutationRequest_Config_2_Records_Item) UnmarshalJSON(b []byte) error {
+func (t *ComponentConfigMutationRequest_Config_3_Records_Item) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -5306,6 +7087,32 @@ func (t *ComponentConfigMutationRequest_Config) MergeComponentConfigMutationRequ
 	return err
 }
 
+// AsComponentConfigMutationRequestConfig3 returns the union data inside the ComponentConfigMutationRequest_Config as a ComponentConfigMutationRequestConfig3
+func (t ComponentConfigMutationRequest_Config) AsComponentConfigMutationRequestConfig3() (ComponentConfigMutationRequestConfig3, error) {
+	var body ComponentConfigMutationRequestConfig3
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig3 overwrites any union data inside the ComponentConfigMutationRequest_Config as the provided ComponentConfigMutationRequestConfig3
+func (t *ComponentConfigMutationRequest_Config) FromComponentConfigMutationRequestConfig3(v ComponentConfigMutationRequestConfig3) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig3 performs a merge with any union data inside the ComponentConfigMutationRequest_Config, using the provided ComponentConfigMutationRequestConfig3
+func (t *ComponentConfigMutationRequest_Config) MergeComponentConfigMutationRequestConfig3(v ComponentConfigMutationRequestConfig3) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t ComponentConfigMutationRequest_Config) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
@@ -5316,22 +7123,22 @@ func (t *ComponentConfigMutationRequest_Config) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-// AsComponentEnableRequestConfig1Credential0 returns the union data inside the ComponentEnableRequest_Config_1_Credential as a ComponentEnableRequestConfig1Credential0
-func (t ComponentEnableRequest_Config_1_Credential) AsComponentEnableRequestConfig1Credential0() (ComponentEnableRequestConfig1Credential0, error) {
-	var body ComponentEnableRequestConfig1Credential0
+// AsComponentEnableRequestConfig2Credential0 returns the union data inside the ComponentEnableRequest_Config_2_Credential as a ComponentEnableRequestConfig2Credential0
+func (t ComponentEnableRequest_Config_2_Credential) AsComponentEnableRequestConfig2Credential0() (ComponentEnableRequestConfig2Credential0, error) {
+	var body ComponentEnableRequestConfig2Credential0
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromComponentEnableRequestConfig1Credential0 overwrites any union data inside the ComponentEnableRequest_Config_1_Credential as the provided ComponentEnableRequestConfig1Credential0
-func (t *ComponentEnableRequest_Config_1_Credential) FromComponentEnableRequestConfig1Credential0(v ComponentEnableRequestConfig1Credential0) error {
+// FromComponentEnableRequestConfig2Credential0 overwrites any union data inside the ComponentEnableRequest_Config_2_Credential as the provided ComponentEnableRequestConfig2Credential0
+func (t *ComponentEnableRequest_Config_2_Credential) FromComponentEnableRequestConfig2Credential0(v ComponentEnableRequestConfig2Credential0) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeComponentEnableRequestConfig1Credential0 performs a merge with any union data inside the ComponentEnableRequest_Config_1_Credential, using the provided ComponentEnableRequestConfig1Credential0
-func (t *ComponentEnableRequest_Config_1_Credential) MergeComponentEnableRequestConfig1Credential0(v ComponentEnableRequestConfig1Credential0) error {
+// MergeComponentEnableRequestConfig2Credential0 performs a merge with any union data inside the ComponentEnableRequest_Config_2_Credential, using the provided ComponentEnableRequestConfig2Credential0
+func (t *ComponentEnableRequest_Config_2_Credential) MergeComponentEnableRequestConfig2Credential0(v ComponentEnableRequestConfig2Credential0) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5342,22 +7149,22 @@ func (t *ComponentEnableRequest_Config_1_Credential) MergeComponentEnableRequest
 	return err
 }
 
-// AsComponentEnableRequestConfig1Credential1 returns the union data inside the ComponentEnableRequest_Config_1_Credential as a ComponentEnableRequestConfig1Credential1
-func (t ComponentEnableRequest_Config_1_Credential) AsComponentEnableRequestConfig1Credential1() (ComponentEnableRequestConfig1Credential1, error) {
-	var body ComponentEnableRequestConfig1Credential1
+// AsComponentEnableRequestConfig2Credential1 returns the union data inside the ComponentEnableRequest_Config_2_Credential as a ComponentEnableRequestConfig2Credential1
+func (t ComponentEnableRequest_Config_2_Credential) AsComponentEnableRequestConfig2Credential1() (ComponentEnableRequestConfig2Credential1, error) {
+	var body ComponentEnableRequestConfig2Credential1
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromComponentEnableRequestConfig1Credential1 overwrites any union data inside the ComponentEnableRequest_Config_1_Credential as the provided ComponentEnableRequestConfig1Credential1
-func (t *ComponentEnableRequest_Config_1_Credential) FromComponentEnableRequestConfig1Credential1(v ComponentEnableRequestConfig1Credential1) error {
+// FromComponentEnableRequestConfig2Credential1 overwrites any union data inside the ComponentEnableRequest_Config_2_Credential as the provided ComponentEnableRequestConfig2Credential1
+func (t *ComponentEnableRequest_Config_2_Credential) FromComponentEnableRequestConfig2Credential1(v ComponentEnableRequestConfig2Credential1) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeComponentEnableRequestConfig1Credential1 performs a merge with any union data inside the ComponentEnableRequest_Config_1_Credential, using the provided ComponentEnableRequestConfig1Credential1
-func (t *ComponentEnableRequest_Config_1_Credential) MergeComponentEnableRequestConfig1Credential1(v ComponentEnableRequestConfig1Credential1) error {
+// MergeComponentEnableRequestConfig2Credential1 performs a merge with any union data inside the ComponentEnableRequest_Config_2_Credential, using the provided ComponentEnableRequestConfig2Credential1
+func (t *ComponentEnableRequest_Config_2_Credential) MergeComponentEnableRequestConfig2Credential1(v ComponentEnableRequestConfig2Credential1) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5368,12 +7175,12 @@ func (t *ComponentEnableRequest_Config_1_Credential) MergeComponentEnableRequest
 	return err
 }
 
-func (t ComponentEnableRequest_Config_1_Credential) MarshalJSON() ([]byte, error) {
+func (t ComponentEnableRequest_Config_2_Credential) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *ComponentEnableRequest_Config_1_Credential) UnmarshalJSON(b []byte) error {
+func (t *ComponentEnableRequest_Config_2_Credential) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -5420,6 +7227,32 @@ func (t *ComponentEnableRequest_Config) FromComponentEnableRequestConfig1(v Comp
 
 // MergeComponentEnableRequestConfig1 performs a merge with any union data inside the ComponentEnableRequest_Config, using the provided ComponentEnableRequestConfig1
 func (t *ComponentEnableRequest_Config) MergeComponentEnableRequestConfig1(v ComponentEnableRequestConfig1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentEnableRequestConfig2 returns the union data inside the ComponentEnableRequest_Config as a ComponentEnableRequestConfig2
+func (t ComponentEnableRequest_Config) AsComponentEnableRequestConfig2() (ComponentEnableRequestConfig2, error) {
+	var body ComponentEnableRequestConfig2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentEnableRequestConfig2 overwrites any union data inside the ComponentEnableRequest_Config as the provided ComponentEnableRequestConfig2
+func (t *ComponentEnableRequest_Config) FromComponentEnableRequestConfig2(v ComponentEnableRequestConfig2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentEnableRequestConfig2 performs a merge with any union data inside the ComponentEnableRequest_Config, using the provided ComponentEnableRequestConfig2
+func (t *ComponentEnableRequest_Config) MergeComponentEnableRequestConfig2(v ComponentEnableRequestConfig2) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5777,6 +7610,34 @@ func (t TaskStep) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if t.Failure != nil {
+		object["failure"], err = json.Marshal(t.Failure)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'failure': %w", err)
+		}
+	}
+
+	if t.HealthWait != nil {
+		object["health_wait"], err = json.Marshal(t.HealthWait)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'health_wait': %w", err)
+		}
+	}
+
+	if t.HealthWaitReceivedAt != nil {
+		object["health_wait_received_at"], err = json.Marshal(t.HealthWaitReceivedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'health_wait_received_at': %w", err)
+		}
+	}
+
+	if t.Healthchecks != nil {
+		object["healthchecks"], err = json.Marshal(t.Healthchecks)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'healthchecks': %w", err)
+		}
+	}
+
 	object["kind"], err = json.Marshal(t.Kind)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
@@ -5845,6 +7706,34 @@ func (t *TaskStep) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Description)
 		if err != nil {
 			return fmt.Errorf("error reading 'description': %w", err)
+		}
+	}
+
+	if raw, found := object["failure"]; found {
+		err = json.Unmarshal(raw, &t.Failure)
+		if err != nil {
+			return fmt.Errorf("error reading 'failure': %w", err)
+		}
+	}
+
+	if raw, found := object["health_wait"]; found {
+		err = json.Unmarshal(raw, &t.HealthWait)
+		if err != nil {
+			return fmt.Errorf("error reading 'health_wait': %w", err)
+		}
+	}
+
+	if raw, found := object["health_wait_received_at"]; found {
+		err = json.Unmarshal(raw, &t.HealthWaitReceivedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'health_wait_received_at': %w", err)
+		}
+	}
+
+	if raw, found := object["healthchecks"]; found {
+		err = json.Unmarshal(raw, &t.Healthchecks)
+		if err != nil {
+			return fmt.Errorf("error reading 'healthchecks': %w", err)
 		}
 	}
 
@@ -6051,6 +7940,25 @@ type ClientInterface interface {
 	// Corresponds with POST /attaches (the `AttachCreate` operationId).
 	AttachCreate(ctx context.Context, params *AttachCreateParams, body AttachCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AttachCheckShow Show an access check Task or an Attach's latest retained check
+	//
+	// Corresponds with GET /attaches/checks (the `AttachCheckShow` operationId).
+	AttachCheckShow(ctx context.Context, params *AttachCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AttachCheckWithBody Check Backing access from the consumer workload network
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
+	AttachCheckWithBody(ctx context.Context, params *AttachCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AttachCheck Check Backing access from the consumer workload network
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
+	AttachCheck(ctx context.Context, params *AttachCheckParams, body AttachCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AttachDetach Detach a backing service
 	//
 	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
@@ -6153,6 +8061,25 @@ type ClientInterface interface {
 	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
 	ComponentDisable(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ComponentDnsCheckShow Show a DNS check Task or the latest retained result
+	//
+	// Corresponds with GET /components/{id}/dns-checks (the `ComponentDnsCheckShow` operationId).
+	ComponentDnsCheckShow(ctx context.Context, id string, params *ComponentDnsCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentDnsCheckWithBody Query CoreDNS and its configured upstreams
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /components/{id}/dns-checks (the `ComponentDnsCheck` operationId).
+	ComponentDnsCheckWithBody(ctx context.Context, id string, params *ComponentDnsCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentDnsCheck Query CoreDNS and its configured upstreams
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /components/{id}/dns-checks (the `ComponentDnsCheck` operationId).
+	ComponentDnsCheck(ctx context.Context, id string, params *ComponentDnsCheckParams, body ComponentDnsCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ComponentEnableWithBody Enable a Component with optional configuration
 	//
 	// Takes any type of body and a specified content type.
@@ -6166,6 +8093,25 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
 	ComponentEnable(ctx context.Context, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentTunnelCheckShow Show a standalone Tunnel check Task or the latest retained result
+	//
+	// Corresponds with GET /components/{id}/tunnel-checks (the `ComponentTunnelCheckShow` operationId).
+	ComponentTunnelCheckShow(ctx context.Context, id string, params *ComponentTunnelCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentTunnelCheckWithBody Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
+	ComponentTunnelCheckWithBody(ctx context.Context, id string, params *ComponentTunnelCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentTunnelCheck Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
+	ComponentTunnelCheck(ctx context.Context, id string, params *ComponentTunnelCheckParams, body ComponentTunnelCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ComponentUpdate component.update
 	//
@@ -6190,6 +8136,25 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /connectors (the `ConnectorCreate` operationId).
 	ConnectorCreate(ctx context.Context, params *ConnectorCreateParams, body ConnectorCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConnectorCheckShow Show a Task's Connector check or the latest saved Connector check
+	//
+	// Corresponds with GET /connectors/checks (the `ConnectorCheckShow` operationId).
+	ConnectorCheckShow(ctx context.Context, params *ConnectorCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConnectorCheckWithBody Test saved or unsaved Connector permissions without saving
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
+	ConnectorCheckWithBody(ctx context.Context, params *ConnectorCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConnectorCheck Test saved or unsaved Connector permissions without saving
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
+	ConnectorCheck(ctx context.Context, params *ConnectorCheckParams, body ConnectorCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ConnectorRemove Remove an Environment connector
 	//
@@ -6396,6 +8361,44 @@ type ClientInterface interface {
 	// Corresponds with POST /environments/{id}/blueprint/validate (the `BlueprintValidate` operationId).
 	BlueprintValidateWithBody(ctx context.Context, id string, params *BlueprintValidateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// EnvironmentDnsList Read Environment DNS intentions and resolver status
+	//
+	// Corresponds with GET /environments/{id}/dns-records (the `EnvironmentDnsList` operationId).
+	EnvironmentDnsList(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentDnsCreateWithBody Create an Environment DNS record
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /environments/{id}/dns-records (the `EnvironmentDnsCreate` operationId).
+	EnvironmentDnsCreateWithBody(ctx context.Context, id string, params *EnvironmentDnsCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentDnsCreate Create an Environment DNS record
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /environments/{id}/dns-records (the `EnvironmentDnsCreate` operationId).
+	EnvironmentDnsCreate(ctx context.Context, id string, params *EnvironmentDnsCreateParams, body EnvironmentDnsCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentDnsRemove Withdraw an Environment DNS record
+	//
+	// Corresponds with DELETE /environments/{id}/dns-records/{record} (the `EnvironmentDnsRemove` operationId).
+	EnvironmentDnsRemove(ctx context.Context, id string, record string, params *EnvironmentDnsRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentDnsEditWithBody Replace an Environment DNS target or name
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /environments/{id}/dns-records/{record} (the `EnvironmentDnsEdit` operationId).
+	EnvironmentDnsEditWithBody(ctx context.Context, id string, record string, params *EnvironmentDnsEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentDnsEdit Replace an Environment DNS target or name
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /environments/{id}/dns-records/{record} (the `EnvironmentDnsEdit` operationId).
+	EnvironmentDnsEdit(ctx context.Context, id string, record string, params *EnvironmentDnsEditParams, body EnvironmentDnsEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// BackupKeyExport Export the current backup age identity without storing it
 	//
 	// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
@@ -6505,6 +8508,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HostTerminalWithBody Open or resume the owning browser session's interactive root host terminal
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
+	HostTerminalWithBody(ctx context.Context, params *HostTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HostTerminal Open or resume the owning browser session's interactive root host terminal
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
+	HostTerminal(ctx context.Context, params *HostTerminalParams, body HostTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ImageList List images in the local Agent host Docker daemon
 	//
@@ -6692,6 +8709,25 @@ type ClientInterface interface {
 	// Corresponds with POST /routes (the `RouteCreate` operationId).
 	RouteCreate(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RouteCheckShow Show a check Task or a Route's latest retained check
+	//
+	// Corresponds with GET /routes/checks (the `RouteCheckShow` operationId).
+	RouteCheckShow(ctx context.Context, params *RouteCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteCheckWithBody Check Tunnel readiness, Route origin and public DNS/TLS/HTTP
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
+	RouteCheckWithBody(ctx context.Context, params *RouteCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteCheck Check Tunnel readiness, Route origin and public DNS/TLS/HTTP
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
+	RouteCheck(ctx context.Context, params *RouteCheckParams, body RouteCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// RouteRemove Remove a route
 	//
 	// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
@@ -6758,6 +8794,25 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
 	RunnerEdit(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerCheckShow Show a Runner check Task or latest retained result
+	//
+	// Corresponds with GET /runners/{id}/checks (the `RunnerCheckShow` operationId).
+	RunnerCheckShow(ctx context.Context, id string, params *RunnerCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerCheckWithBody Check connections from the registered Runner
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
+	RunnerCheckWithBody(ctx context.Context, id string, params *RunnerCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerCheck Check connections from the registered Runner
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
+	RunnerCheck(ctx context.Context, id string, params *RunnerCheckParams, body RunnerCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RunnerRetryWithBody Retry failed Runner creation
 	//
@@ -7007,7 +9062,7 @@ type ClientInterface interface {
 	// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
 	TaskEvents(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// TaskRetry Retry a failed task
+	// TaskRetry Retry a failed Task or authorize a captured Blueprint Detach hook
 	//
 	// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
 	TaskRetry(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -7359,6 +9414,55 @@ func (c *Client) AttachCreate(ctx context.Context, params *AttachCreateParams, b
 	return c.Client.Do(req)
 }
 
+// AttachCheckShow Show an access check Task or an Attach's latest retained check
+//
+// Corresponds with GET /attaches/checks (the `AttachCheckShow` operationId).
+func (c *Client) AttachCheckShow(ctx context.Context, params *AttachCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachCheckShowRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AttachCheckWithBody Check Backing access from the consumer workload network
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
+func (c *Client) AttachCheckWithBody(ctx context.Context, params *AttachCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachCheckRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AttachCheck Check Backing access from the consumer workload network
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
+func (c *Client) AttachCheck(ctx context.Context, params *AttachCheckParams, body AttachCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachCheckRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // AttachDetach Detach a backing service
 //
 // Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
@@ -7641,6 +9745,55 @@ func (c *Client) ComponentDisable(ctx context.Context, id string, params *Compon
 	return c.Client.Do(req)
 }
 
+// ComponentDnsCheckShow Show a DNS check Task or the latest retained result
+//
+// Corresponds with GET /components/{id}/dns-checks (the `ComponentDnsCheckShow` operationId).
+func (c *Client) ComponentDnsCheckShow(ctx context.Context, id string, params *ComponentDnsCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentDnsCheckShowRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentDnsCheckWithBody Query CoreDNS and its configured upstreams
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /components/{id}/dns-checks (the `ComponentDnsCheck` operationId).
+func (c *Client) ComponentDnsCheckWithBody(ctx context.Context, id string, params *ComponentDnsCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentDnsCheckRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentDnsCheck Query CoreDNS and its configured upstreams
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /components/{id}/dns-checks (the `ComponentDnsCheck` operationId).
+func (c *Client) ComponentDnsCheck(ctx context.Context, id string, params *ComponentDnsCheckParams, body ComponentDnsCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentDnsCheckRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ComponentEnableWithBody Enable a Component with optional configuration
 //
 // Takes any type of body and a specified content type.
@@ -7665,6 +9818,55 @@ func (c *Client) ComponentEnableWithBody(ctx context.Context, id string, params 
 // Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
 func (c *Client) ComponentEnable(ctx context.Context, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewComponentEnableRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentTunnelCheckShow Show a standalone Tunnel check Task or the latest retained result
+//
+// Corresponds with GET /components/{id}/tunnel-checks (the `ComponentTunnelCheckShow` operationId).
+func (c *Client) ComponentTunnelCheckShow(ctx context.Context, id string, params *ComponentTunnelCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentTunnelCheckShowRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentTunnelCheckWithBody Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
+func (c *Client) ComponentTunnelCheckWithBody(ctx context.Context, id string, params *ComponentTunnelCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentTunnelCheckRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentTunnelCheck Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
+func (c *Client) ComponentTunnelCheck(ctx context.Context, id string, params *ComponentTunnelCheckParams, body ComponentTunnelCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentTunnelCheckRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -7729,6 +9931,55 @@ func (c *Client) ConnectorCreateWithBody(ctx context.Context, params *ConnectorC
 // Corresponds with POST /connectors (the `ConnectorCreate` operationId).
 func (c *Client) ConnectorCreate(ctx context.Context, params *ConnectorCreateParams, body ConnectorCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewConnectorCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ConnectorCheckShow Show a Task's Connector check or the latest saved Connector check
+//
+// Corresponds with GET /connectors/checks (the `ConnectorCheckShow` operationId).
+func (c *Client) ConnectorCheckShow(ctx context.Context, params *ConnectorCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectorCheckShowRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ConnectorCheckWithBody Test saved or unsaved Connector permissions without saving
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
+func (c *Client) ConnectorCheckWithBody(ctx context.Context, params *ConnectorCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectorCheckRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ConnectorCheck Test saved or unsaved Connector permissions without saving
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
+func (c *Client) ConnectorCheck(ctx context.Context, params *ConnectorCheckParams, body ConnectorCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectorCheckRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8274,6 +10525,104 @@ func (c *Client) BlueprintValidateWithBody(ctx context.Context, id string, param
 	return c.Client.Do(req)
 }
 
+// EnvironmentDnsList Read Environment DNS intentions and resolver status
+//
+// Corresponds with GET /environments/{id}/dns-records (the `EnvironmentDnsList` operationId).
+func (c *Client) EnvironmentDnsList(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDnsListRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentDnsCreateWithBody Create an Environment DNS record
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /environments/{id}/dns-records (the `EnvironmentDnsCreate` operationId).
+func (c *Client) EnvironmentDnsCreateWithBody(ctx context.Context, id string, params *EnvironmentDnsCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDnsCreateRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentDnsCreate Create an Environment DNS record
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /environments/{id}/dns-records (the `EnvironmentDnsCreate` operationId).
+func (c *Client) EnvironmentDnsCreate(ctx context.Context, id string, params *EnvironmentDnsCreateParams, body EnvironmentDnsCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDnsCreateRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentDnsRemove Withdraw an Environment DNS record
+//
+// Corresponds with DELETE /environments/{id}/dns-records/{record} (the `EnvironmentDnsRemove` operationId).
+func (c *Client) EnvironmentDnsRemove(ctx context.Context, id string, record string, params *EnvironmentDnsRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDnsRemoveRequest(c.Server, id, record, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentDnsEditWithBody Replace an Environment DNS target or name
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /environments/{id}/dns-records/{record} (the `EnvironmentDnsEdit` operationId).
+func (c *Client) EnvironmentDnsEditWithBody(ctx context.Context, id string, record string, params *EnvironmentDnsEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDnsEditRequestWithBody(c.Server, id, record, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentDnsEdit Replace an Environment DNS target or name
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /environments/{id}/dns-records/{record} (the `EnvironmentDnsEdit` operationId).
+func (c *Client) EnvironmentDnsEdit(ctx context.Context, id string, record string, params *EnvironmentDnsEditParams, body EnvironmentDnsEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDnsEditRequest(c.Server, id, record, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // BackupKeyExport Export the current backup age identity without storing it
 //
 // Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
@@ -8554,6 +10903,40 @@ func (c *Client) EtcdConfigApply(ctx context.Context, params *EtcdConfigApplyPar
 // Corresponds with GET /host (the `HostShow` operationId).
 func (c *Client) HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewHostShowRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// HostTerminalWithBody Open or resume the owning browser session's interactive root host terminal
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
+func (c *Client) HostTerminalWithBody(ctx context.Context, params *HostTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHostTerminalRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// HostTerminal Open or resume the owning browser session's interactive root host terminal
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
+func (c *Client) HostTerminal(ctx context.Context, params *HostTerminalParams, body HostTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHostTerminalRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9050,6 +11433,55 @@ func (c *Client) RouteCreate(ctx context.Context, params *RouteCreateParams, bod
 	return c.Client.Do(req)
 }
 
+// RouteCheckShow Show a check Task or a Route's latest retained check
+//
+// Corresponds with GET /routes/checks (the `RouteCheckShow` operationId).
+func (c *Client) RouteCheckShow(ctx context.Context, params *RouteCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteCheckShowRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteCheckWithBody Check Tunnel readiness, Route origin and public DNS/TLS/HTTP
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
+func (c *Client) RouteCheckWithBody(ctx context.Context, params *RouteCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteCheckRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteCheck Check Tunnel readiness, Route origin and public DNS/TLS/HTTP
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
+func (c *Client) RouteCheck(ctx context.Context, params *RouteCheckParams, body RouteCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteCheckRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // RouteRemove Remove a route
 //
 // Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
@@ -9217,6 +11649,55 @@ func (c *Client) RunnerEditWithBody(ctx context.Context, id string, params *Runn
 // Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
 func (c *Client) RunnerEdit(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRunnerEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerCheckShow Show a Runner check Task or latest retained result
+//
+// Corresponds with GET /runners/{id}/checks (the `RunnerCheckShow` operationId).
+func (c *Client) RunnerCheckShow(ctx context.Context, id string, params *RunnerCheckShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCheckShowRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerCheckWithBody Check connections from the registered Runner
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
+func (c *Client) RunnerCheckWithBody(ctx context.Context, id string, params *RunnerCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCheckRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerCheck Check connections from the registered Runner
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
+func (c *Client) RunnerCheck(ctx context.Context, id string, params *RunnerCheckParams, body RunnerCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCheckRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9895,7 +12376,7 @@ func (c *Client) TaskEvents(ctx context.Context, id string, params *TaskEventsPa
 	return c.Client.Do(req)
 }
 
-// TaskRetry Retry a failed task
+// TaskRetry Retry a failed Task or authorize a captured Blueprint Detach hook
 //
 // Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
 func (c *Client) TaskRetry(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -10885,6 +13366,168 @@ func NewAttachCreateRequestWithBody(server string, params *AttachCreateParams, c
 	return req, nil
 }
 
+// NewAttachCheckShowRequest constructs an http.Request for the AttachCheckShow method
+func NewAttachCheckShowRequest(server string, params *AttachCheckShowParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/attaches/checks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Task != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "task", *params.Task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Attach != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "attach", *params.Attach, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Grant != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "grant", *params.Grant, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAttachCheckRequest calls the generic AttachCheck builder with application/json body
+func NewAttachCheckRequest(server string, params *AttachCheckParams, body AttachCheckJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAttachCheckRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewAttachCheckRequestWithBody constructs an http.Request for the AttachCheck method, with any body, and a specified content type
+func NewAttachCheckRequestWithBody(server string, params *AttachCheckParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/attaches/checks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewAttachDetachRequest constructs an http.Request for the AttachDetach method
 func NewAttachDetachRequest(server string, id string, params *AttachDetachParams) (*http.Request, error) {
 	var err error
@@ -11658,6 +14301,127 @@ func NewComponentDisableRequest(server string, id string, params *ComponentDisab
 	return req, nil
 }
 
+// NewComponentDnsCheckShowRequest constructs an http.Request for the ComponentDnsCheckShow method
+func NewComponentDnsCheckShowRequest(server string, id string, params *ComponentDnsCheckShowParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/dns-checks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Task != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "task", *params.Task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewComponentDnsCheckRequest calls the generic ComponentDnsCheck builder with application/json body
+func NewComponentDnsCheckRequest(server string, id string, params *ComponentDnsCheckParams, body ComponentDnsCheckJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewComponentDnsCheckRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewComponentDnsCheckRequestWithBody constructs an http.Request for the ComponentDnsCheck method, with any body, and a specified content type
+func NewComponentDnsCheckRequestWithBody(server string, id string, params *ComponentDnsCheckParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/dns-checks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewComponentEnableRequest calls the generic ComponentEnable builder with application/json body
 func NewComponentEnableRequest(server string, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -11693,6 +14457,158 @@ func NewComponentEnableRequestWithBody(server string, id string, params *Compone
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewComponentTunnelCheckShowRequest constructs an http.Request for the ComponentTunnelCheckShow method
+func NewComponentTunnelCheckShowRequest(server string, id string, params *ComponentTunnelCheckShowParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/tunnel-checks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Task != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "task", *params.Task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewComponentTunnelCheckRequest calls the generic ComponentTunnelCheck builder with application/json body
+func NewComponentTunnelCheckRequest(server string, id string, params *ComponentTunnelCheckParams, body ComponentTunnelCheckJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewComponentTunnelCheckRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewComponentTunnelCheckRequestWithBody constructs an http.Request for the ComponentTunnelCheck method, with any body, and a specified content type
+func NewComponentTunnelCheckRequestWithBody(server string, id string, params *ComponentTunnelCheckParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/tunnel-checks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
@@ -11860,6 +14776,156 @@ func NewConnectorCreateRequestWithBody(server string, params *ConnectorCreatePar
 	}
 
 	operationPath := fmt.Sprintf("/connectors")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewConnectorCheckShowRequest constructs an http.Request for the ConnectorCheckShow method
+func NewConnectorCheckShowRequest(server string, params *ConnectorCheckShowParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/connectors/checks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Task != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "task", *params.Task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Connector != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "connector", *params.Connector, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewConnectorCheckRequest calls the generic ConnectorCheck builder with application/json body
+func NewConnectorCheckRequest(server string, params *ConnectorCheckParams, body ConnectorCheckJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewConnectorCheckRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewConnectorCheckRequestWithBody constructs an http.Request for the ConnectorCheck method, with any body, and a specified content type
+func NewConnectorCheckRequestWithBody(server string, params *ConnectorCheckParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/connectors/checks")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -13103,6 +16169,248 @@ func NewBlueprintValidateRequestWithBody(server string, id string, params *Bluep
 	return req, nil
 }
 
+// NewEnvironmentDnsListRequest constructs an http.Request for the EnvironmentDnsList method
+func NewEnvironmentDnsListRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/dns-records", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentDnsCreateRequest calls the generic EnvironmentDnsCreate builder with application/json body
+func NewEnvironmentDnsCreateRequest(server string, id string, params *EnvironmentDnsCreateParams, body EnvironmentDnsCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEnvironmentDnsCreateRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewEnvironmentDnsCreateRequestWithBody constructs an http.Request for the EnvironmentDnsCreate method, with any body, and a specified content type
+func NewEnvironmentDnsCreateRequestWithBody(server string, id string, params *EnvironmentDnsCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/dns-records", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentDnsRemoveRequest constructs an http.Request for the EnvironmentDnsRemove method
+func NewEnvironmentDnsRemoveRequest(server string, id string, record string, params *EnvironmentDnsRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "record", record, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/dns-records/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentDnsEditRequest calls the generic EnvironmentDnsEdit builder with application/json body
+func NewEnvironmentDnsEditRequest(server string, id string, record string, params *EnvironmentDnsEditParams, body EnvironmentDnsEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEnvironmentDnsEditRequestWithBody(server, id, record, params, "application/json", bodyReader)
+}
+
+// NewEnvironmentDnsEditRequestWithBody constructs an http.Request for the EnvironmentDnsEdit method, with any body, and a specified content type
+func NewEnvironmentDnsEditRequestWithBody(server string, id string, record string, params *EnvironmentDnsEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "record", record, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/dns-records/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
+	}
+
+	return req, nil
+}
+
 // NewBackupKeyExportRequest constructs an http.Request for the BackupKeyExport method
 func NewBackupKeyExportRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -13728,6 +17036,59 @@ func NewHostShowRequest(server string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHostTerminalRequest calls the generic HostTerminal builder with application/json body
+func NewHostTerminalRequest(server string, params *HostTerminalParams, body HostTerminalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewHostTerminalRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewHostTerminalRequestWithBody constructs an http.Request for the HostTerminal method, with any body, and a specified content type
+func NewHostTerminalRequestWithBody(server string, params *HostTerminalParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/host/terminal")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -14900,6 +18261,156 @@ func NewRouteCreateRequestWithBody(server string, params *RouteCreateParams, con
 	return req, nil
 }
 
+// NewRouteCheckShowRequest constructs an http.Request for the RouteCheckShow method
+func NewRouteCheckShowRequest(server string, params *RouteCheckShowParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/routes/checks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Task != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "task", *params.Task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Route != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "route", *params.Route, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRouteCheckRequest calls the generic RouteCheck builder with application/json body
+func NewRouteCheckRequest(server string, params *RouteCheckParams, body RouteCheckJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRouteCheckRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewRouteCheckRequestWithBody constructs an http.Request for the RouteCheck method, with any body, and a specified content type
+func NewRouteCheckRequestWithBody(server string, params *RouteCheckParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/routes/checks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewRouteRemoveRequest constructs an http.Request for the RouteRemove method
 func NewRouteRemoveRequest(server string, id string, params *RouteRemoveParams) (*http.Request, error) {
 	var err error
@@ -15315,6 +18826,127 @@ func NewRunnerEditRequestWithBody(server string, id string, params *RunnerEditPa
 	}
 
 	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewRunnerCheckShowRequest constructs an http.Request for the RunnerCheckShow method
+func NewRunnerCheckShowRequest(server string, id string, params *RunnerCheckShowParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/checks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Task != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "task", *params.Task, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRunnerCheckRequest calls the generic RunnerCheck builder with application/json body
+func NewRunnerCheckRequest(server string, id string, params *RunnerCheckParams, body RunnerCheckJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRunnerCheckRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRunnerCheckRequestWithBody constructs an http.Request for the RunnerCheck method, with any body, and a specified content type
+func NewRunnerCheckRequestWithBody(server string, id string, params *RunnerCheckParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/checks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -18267,6 +21899,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /attaches (the `AttachCreate` operationId).
 	AttachCreateWithResponse(ctx context.Context, params *AttachCreateParams, body AttachCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachCreateResponse, error)
 
+	// AttachCheckShowWithResponse Show an access check Task or an Attach's latest retained check
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /attaches/checks (the `AttachCheckShow` operationId).
+	AttachCheckShowWithResponse(ctx context.Context, params *AttachCheckShowParams, reqEditors ...RequestEditorFn) (*AttachCheckShowResponse, error)
+
+	// AttachCheckWithBodyWithResponse Check Backing access from the consumer workload network
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
+	AttachCheckWithBodyWithResponse(ctx context.Context, params *AttachCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AttachCheckResponse, error)
+
+	// AttachCheckWithResponse Check Backing access from the consumer workload network
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
+	AttachCheckWithResponse(ctx context.Context, params *AttachCheckParams, body AttachCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachCheckResponse, error)
+
 	// AttachDetachWithResponse Detach a backing service
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -18393,6 +22046,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
 	ComponentDisableWithResponse(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error)
 
+	// ComponentDnsCheckShowWithResponse Show a DNS check Task or the latest retained result
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /components/{id}/dns-checks (the `ComponentDnsCheckShow` operationId).
+	ComponentDnsCheckShowWithResponse(ctx context.Context, id string, params *ComponentDnsCheckShowParams, reqEditors ...RequestEditorFn) (*ComponentDnsCheckShowResponse, error)
+
+	// ComponentDnsCheckWithBodyWithResponse Query CoreDNS and its configured upstreams
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/dns-checks (the `ComponentDnsCheck` operationId).
+	ComponentDnsCheckWithBodyWithResponse(ctx context.Context, id string, params *ComponentDnsCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentDnsCheckResponse, error)
+
+	// ComponentDnsCheckWithResponse Query CoreDNS and its configured upstreams
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/dns-checks (the `ComponentDnsCheck` operationId).
+	ComponentDnsCheckWithResponse(ctx context.Context, id string, params *ComponentDnsCheckParams, body ComponentDnsCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentDnsCheckResponse, error)
+
 	// ComponentEnableWithBodyWithResponse Enable a Component with optional configuration
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -18406,6 +22080,27 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
 	ComponentEnableWithResponse(ctx context.Context, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error)
+
+	// ComponentTunnelCheckShowWithResponse Show a standalone Tunnel check Task or the latest retained result
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /components/{id}/tunnel-checks (the `ComponentTunnelCheckShow` operationId).
+	ComponentTunnelCheckShowWithResponse(ctx context.Context, id string, params *ComponentTunnelCheckShowParams, reqEditors ...RequestEditorFn) (*ComponentTunnelCheckShowResponse, error)
+
+	// ComponentTunnelCheckWithBodyWithResponse Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
+	ComponentTunnelCheckWithBodyWithResponse(ctx context.Context, id string, params *ComponentTunnelCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentTunnelCheckResponse, error)
+
+	// ComponentTunnelCheckWithResponse Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
+	ComponentTunnelCheckWithResponse(ctx context.Context, id string, params *ComponentTunnelCheckParams, body ComponentTunnelCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentTunnelCheckResponse, error)
 
 	// ComponentUpdateWithResponse component.update
 	//
@@ -18434,6 +22129,27 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /connectors (the `ConnectorCreate` operationId).
 	ConnectorCreateWithResponse(ctx context.Context, params *ConnectorCreateParams, body ConnectorCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorCreateResponse, error)
+
+	// ConnectorCheckShowWithResponse Show a Task's Connector check or the latest saved Connector check
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /connectors/checks (the `ConnectorCheckShow` operationId).
+	ConnectorCheckShowWithResponse(ctx context.Context, params *ConnectorCheckShowParams, reqEditors ...RequestEditorFn) (*ConnectorCheckShowResponse, error)
+
+	// ConnectorCheckWithBodyWithResponse Test saved or unsaved Connector permissions without saving
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
+	ConnectorCheckWithBodyWithResponse(ctx context.Context, params *ConnectorCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectorCheckResponse, error)
+
+	// ConnectorCheckWithResponse Test saved or unsaved Connector permissions without saving
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
+	ConnectorCheckWithResponse(ctx context.Context, params *ConnectorCheckParams, body ConnectorCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorCheckResponse, error)
 
 	// ConnectorRemoveWithResponse Remove an Environment connector
 	//
@@ -18666,6 +22382,48 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /environments/{id}/blueprint/validate (the `BlueprintValidate` operationId).
 	BlueprintValidateWithBodyWithResponse(ctx context.Context, id string, params *BlueprintValidateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BlueprintValidateResponse, error)
 
+	// EnvironmentDnsListWithResponse Read Environment DNS intentions and resolver status
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /environments/{id}/dns-records (the `EnvironmentDnsList` operationId).
+	EnvironmentDnsListWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EnvironmentDnsListResponse, error)
+
+	// EnvironmentDnsCreateWithBodyWithResponse Create an Environment DNS record
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/dns-records (the `EnvironmentDnsCreate` operationId).
+	EnvironmentDnsCreateWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentDnsCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentDnsCreateResponse, error)
+
+	// EnvironmentDnsCreateWithResponse Create an Environment DNS record
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/dns-records (the `EnvironmentDnsCreate` operationId).
+	EnvironmentDnsCreateWithResponse(ctx context.Context, id string, params *EnvironmentDnsCreateParams, body EnvironmentDnsCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentDnsCreateResponse, error)
+
+	// EnvironmentDnsRemoveWithResponse Withdraw an Environment DNS record
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /environments/{id}/dns-records/{record} (the `EnvironmentDnsRemove` operationId).
+	EnvironmentDnsRemoveWithResponse(ctx context.Context, id string, record string, params *EnvironmentDnsRemoveParams, reqEditors ...RequestEditorFn) (*EnvironmentDnsRemoveResponse, error)
+
+	// EnvironmentDnsEditWithBodyWithResponse Replace an Environment DNS target or name
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /environments/{id}/dns-records/{record} (the `EnvironmentDnsEdit` operationId).
+	EnvironmentDnsEditWithBodyWithResponse(ctx context.Context, id string, record string, params *EnvironmentDnsEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentDnsEditResponse, error)
+
+	// EnvironmentDnsEditWithResponse Replace an Environment DNS target or name
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /environments/{id}/dns-records/{record} (the `EnvironmentDnsEdit` operationId).
+	EnvironmentDnsEditWithResponse(ctx context.Context, id string, record string, params *EnvironmentDnsEditParams, body EnvironmentDnsEditJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentDnsEditResponse, error)
+
 	// BackupKeyExportWithResponse Export the current backup age identity without storing it
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -18791,6 +22549,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HostShowResponse, error)
+
+	// HostTerminalWithBodyWithResponse Open or resume the owning browser session's interactive root host terminal
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
+	HostTerminalWithBodyWithResponse(ctx context.Context, params *HostTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*HostTerminalResponse, error)
+
+	// HostTerminalWithResponse Open or resume the owning browser session's interactive root host terminal
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
+	HostTerminalWithResponse(ctx context.Context, params *HostTerminalParams, body HostTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*HostTerminalResponse, error)
 
 	// ImageListWithResponse List images in the local Agent host Docker daemon
 	//
@@ -19002,6 +22774,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /routes (the `RouteCreate` operationId).
 	RouteCreateWithResponse(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteCreateResponse, error)
 
+	// RouteCheckShowWithResponse Show a check Task or a Route's latest retained check
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /routes/checks (the `RouteCheckShow` operationId).
+	RouteCheckShowWithResponse(ctx context.Context, params *RouteCheckShowParams, reqEditors ...RequestEditorFn) (*RouteCheckShowResponse, error)
+
+	// RouteCheckWithBodyWithResponse Check Tunnel readiness, Route origin and public DNS/TLS/HTTP
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
+	RouteCheckWithBodyWithResponse(ctx context.Context, params *RouteCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RouteCheckResponse, error)
+
+	// RouteCheckWithResponse Check Tunnel readiness, Route origin and public DNS/TLS/HTTP
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
+	RouteCheckWithResponse(ctx context.Context, params *RouteCheckParams, body RouteCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteCheckResponse, error)
+
 	// RouteRemoveWithResponse Remove a route
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -19078,6 +22871,27 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
 	RunnerEditWithResponse(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerEditResponse, error)
+
+	// RunnerCheckShowWithResponse Show a Runner check Task or latest retained result
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /runners/{id}/checks (the `RunnerCheckShow` operationId).
+	RunnerCheckShowWithResponse(ctx context.Context, id string, params *RunnerCheckShowParams, reqEditors ...RequestEditorFn) (*RunnerCheckShowResponse, error)
+
+	// RunnerCheckWithBodyWithResponse Check connections from the registered Runner
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
+	RunnerCheckWithBodyWithResponse(ctx context.Context, id string, params *RunnerCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerCheckResponse, error)
+
+	// RunnerCheckWithResponse Check connections from the registered Runner
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
+	RunnerCheckWithResponse(ctx context.Context, id string, params *RunnerCheckParams, body RunnerCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerCheckResponse, error)
 
 	// RunnerRetryWithBodyWithResponse Retry failed Runner creation
 	//
@@ -19375,7 +23189,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
 	TaskEventsWithResponse(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*TaskEventsResponse, error)
 
-	// TaskRetryWithResponse Retry a failed task
+	// TaskRetryWithResponse Retry a failed Task or authorize a captured Blueprint Detach hook
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -20053,6 +23867,109 @@ func (r AttachCreateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AttachCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AttachCheckShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BackingCheckResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AttachCheckShowResponse) GetJSON200() *BackingCheckResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AttachCheckShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AttachCheckShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AttachCheckShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AttachCheckShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AttachCheckShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AttachCheckResponse202Headers the declared response headers of an HTTP 202 response for AttachCheck
+type AttachCheckResponse202Headers struct {
+	ContentType *string
+}
+
+type AttachCheckResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *AttachCheckResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r AttachCheckResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AttachCheckResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AttachCheckResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AttachCheckResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AttachCheckResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AttachCheckResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -20835,6 +24752,109 @@ func (r ComponentDisableResponse) ContentType() string {
 	return ""
 }
 
+type ComponentDnsCheckShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DNSCheckResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ComponentDnsCheckShowResponse) GetJSON200() *DNSCheckResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentDnsCheckShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentDnsCheckShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentDnsCheckShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentDnsCheckShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentDnsCheckShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ComponentDnsCheckResponse202Headers the declared response headers of an HTTP 202 response for ComponentDnsCheck
+type ComponentDnsCheckResponse202Headers struct {
+	ContentType *string
+}
+
+type ComponentDnsCheckResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ComponentDnsCheckResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ComponentDnsCheckResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentDnsCheckResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentDnsCheckResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentDnsCheckResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentDnsCheckResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentDnsCheckResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // ComponentEnableResponse202Headers the declared response headers of an HTTP 202 response for ComponentEnable
 type ComponentEnableResponse202Headers struct {
 	ContentType *string
@@ -20884,6 +24904,109 @@ func (r ComponentEnableResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ComponentEnableResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ComponentTunnelCheckShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EdgeCheckResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ComponentTunnelCheckShowResponse) GetJSON200() *EdgeCheckResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentTunnelCheckShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentTunnelCheckShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentTunnelCheckShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentTunnelCheckShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentTunnelCheckShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ComponentTunnelCheckResponse202Headers the declared response headers of an HTTP 202 response for ComponentTunnelCheck
+type ComponentTunnelCheckResponse202Headers struct {
+	ContentType *string
+}
+
+type ComponentTunnelCheckResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ComponentTunnelCheckResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ComponentTunnelCheckResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentTunnelCheckResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentTunnelCheckResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentTunnelCheckResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentTunnelCheckResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentTunnelCheckResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -21042,6 +25165,109 @@ func (r ConnectorCreateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ConnectorCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ConnectorCheckShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ConnectorCheckResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ConnectorCheckShowResponse) GetJSON200() *ConnectorCheckResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ConnectorCheckShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ConnectorCheckShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ConnectorCheckShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConnectorCheckShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ConnectorCheckShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ConnectorCheckResponse202Headers the declared response headers of an HTTP 202 response for ConnectorCheck
+type ConnectorCheckResponse202Headers struct {
+	ContentType *string
+}
+
+type ConnectorCheckResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ConnectorCheckResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ConnectorCheckResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ConnectorCheckResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ConnectorCheckResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ConnectorCheckResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConnectorCheckResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ConnectorCheckResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -22291,6 +26517,247 @@ func (r BlueprintValidateResponse) ContentType() string {
 	return ""
 }
 
+// EnvironmentDnsListResponse200Headers the declared response headers of an HTTP 200 response for EnvironmentDnsList
+type EnvironmentDnsListResponse200Headers struct {
+	ETag *string
+}
+
+type EnvironmentDnsListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentDNS
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EnvironmentDnsListResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnvironmentDnsListResponse) GetJSON200() *EnvironmentDNS {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentDnsListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentDnsListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentDnsListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentDnsListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentDnsListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EnvironmentDnsCreateResponse200Headers the declared response headers of an HTTP 200 response for EnvironmentDnsCreate
+type EnvironmentDnsCreateResponse200Headers struct {
+	ContentType *string
+}
+
+// EnvironmentDnsCreateResponse201Headers the declared response headers of an HTTP 201 response for EnvironmentDnsCreate
+type EnvironmentDnsCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type EnvironmentDnsCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentDNSSaved
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *EnvironmentDNSSaved
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EnvironmentDnsCreateResponse200Headers
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *EnvironmentDnsCreateResponse201Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnvironmentDnsCreateResponse) GetJSON200() *EnvironmentDNSSaved {
+	return r.JSON200
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r EnvironmentDnsCreateResponse) GetJSON201() *EnvironmentDNSSaved {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentDnsCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentDnsCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentDnsCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentDnsCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EnvironmentDnsRemoveResponse200Headers the declared response headers of an HTTP 200 response for EnvironmentDnsRemove
+type EnvironmentDnsRemoveResponse200Headers struct {
+	ContentType *string
+}
+
+// EnvironmentDnsRemoveResponse201Headers the declared response headers of an HTTP 201 response for EnvironmentDnsRemove
+type EnvironmentDnsRemoveResponse201Headers struct {
+	ContentType *string
+}
+
+type EnvironmentDnsRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentDNSSaved
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *EnvironmentDNSSaved
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EnvironmentDnsRemoveResponse200Headers
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *EnvironmentDnsRemoveResponse201Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnvironmentDnsRemoveResponse) GetJSON200() *EnvironmentDNSSaved {
+	return r.JSON200
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r EnvironmentDnsRemoveResponse) GetJSON201() *EnvironmentDNSSaved {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentDnsRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentDnsRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentDnsRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentDnsRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EnvironmentDnsEditResponse200Headers the declared response headers of an HTTP 200 response for EnvironmentDnsEdit
+type EnvironmentDnsEditResponse200Headers struct {
+	ContentType *string
+}
+
+// EnvironmentDnsEditResponse201Headers the declared response headers of an HTTP 201 response for EnvironmentDnsEdit
+type EnvironmentDnsEditResponse201Headers struct {
+	ContentType *string
+}
+
+type EnvironmentDnsEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentDNSSaved
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *EnvironmentDNSSaved
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EnvironmentDnsEditResponse200Headers
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *EnvironmentDnsEditResponse201Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnvironmentDnsEditResponse) GetJSON200() *EnvironmentDNSSaved {
+	return r.JSON200
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r EnvironmentDnsEditResponse) GetJSON201() *EnvironmentDNSSaved {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentDnsEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentDnsEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentDnsEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentDnsEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // BackupKeyExportResponse200Headers the declared response headers of an HTTP 200 response for BackupKeyExport
 type BackupKeyExportResponse200Headers struct {
 	CacheControl       *string
@@ -22939,6 +27406,62 @@ func (r HostShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r HostShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// HostTerminalResponse201Headers the declared response headers of an HTTP 201 response for HostTerminal
+type HostTerminalResponse201Headers struct {
+	CacheControl *string
+	SetCookie    *string
+}
+
+type HostTerminalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *HostTerminalSession
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *HostTerminalResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r HostTerminalResponse) GetJSON201() *HostTerminalSession {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r HostTerminalResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r HostTerminalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r HostTerminalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HostTerminalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r HostTerminalResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -24030,6 +28553,109 @@ func (r RouteCreateResponse) ContentType() string {
 	return ""
 }
 
+type RouteCheckShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EdgeCheckResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RouteCheckShowResponse) GetJSON200() *EdgeCheckResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RouteCheckShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RouteCheckShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RouteCheckShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RouteCheckShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RouteCheckShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RouteCheckResponse202Headers the declared response headers of an HTTP 202 response for RouteCheck
+type RouteCheckResponse202Headers struct {
+	ContentType *string
+}
+
+type RouteCheckResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RouteCheckResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RouteCheckResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RouteCheckResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RouteCheckResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RouteCheckResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RouteCheckResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RouteCheckResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // RouteRemoveResponse202Headers the declared response headers of an HTTP 202 response for RouteRemove
 type RouteRemoveResponse202Headers struct {
 	ContentType *string
@@ -24443,6 +29069,109 @@ func (r RunnerEditResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RunnerEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RunnerCheckShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RunnerCheckResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerCheckShowResponse) GetJSON200() *RunnerCheckResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerCheckShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerCheckShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerCheckShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerCheckShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerCheckShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RunnerCheckResponse202Headers the declared response headers of an HTTP 202 response for RunnerCheck
+type RunnerCheckResponse202Headers struct {
+	ContentType *string
+}
+
+type RunnerCheckResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RunnerCheckResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RunnerCheckResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerCheckResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerCheckResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerCheckResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerCheckResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerCheckResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -27243,6 +31972,45 @@ func (c *ClientWithResponses) AttachCreateWithResponse(ctx context.Context, para
 	return ParseAttachCreateResponse(rsp)
 }
 
+// AttachCheckShowWithResponse Show an access check Task or an Attach's latest retained check
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /attaches/checks (the `AttachCheckShow` operationId).
+func (c *ClientWithResponses) AttachCheckShowWithResponse(ctx context.Context, params *AttachCheckShowParams, reqEditors ...RequestEditorFn) (*AttachCheckShowResponse, error) {
+	rsp, err := c.AttachCheckShow(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachCheckShowResponse(rsp)
+}
+
+// AttachCheckWithBodyWithResponse Check Backing access from the consumer workload network
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
+func (c *ClientWithResponses) AttachCheckWithBodyWithResponse(ctx context.Context, params *AttachCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AttachCheckResponse, error) {
+	rsp, err := c.AttachCheckWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachCheckResponse(rsp)
+}
+
+// AttachCheckWithResponse Check Backing access from the consumer workload network
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
+func (c *ClientWithResponses) AttachCheckWithResponse(ctx context.Context, params *AttachCheckParams, body AttachCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachCheckResponse, error) {
+	rsp, err := c.AttachCheck(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachCheckResponse(rsp)
+}
+
 // AttachDetachWithResponse Detach a backing service
 //
 // Returns a wrapper object for the known response body format(s).
@@ -27477,6 +32245,45 @@ func (c *ClientWithResponses) ComponentDisableWithResponse(ctx context.Context, 
 	return ParseComponentDisableResponse(rsp)
 }
 
+// ComponentDnsCheckShowWithResponse Show a DNS check Task or the latest retained result
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /components/{id}/dns-checks (the `ComponentDnsCheckShow` operationId).
+func (c *ClientWithResponses) ComponentDnsCheckShowWithResponse(ctx context.Context, id string, params *ComponentDnsCheckShowParams, reqEditors ...RequestEditorFn) (*ComponentDnsCheckShowResponse, error) {
+	rsp, err := c.ComponentDnsCheckShow(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentDnsCheckShowResponse(rsp)
+}
+
+// ComponentDnsCheckWithBodyWithResponse Query CoreDNS and its configured upstreams
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/dns-checks (the `ComponentDnsCheck` operationId).
+func (c *ClientWithResponses) ComponentDnsCheckWithBodyWithResponse(ctx context.Context, id string, params *ComponentDnsCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentDnsCheckResponse, error) {
+	rsp, err := c.ComponentDnsCheckWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentDnsCheckResponse(rsp)
+}
+
+// ComponentDnsCheckWithResponse Query CoreDNS and its configured upstreams
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/dns-checks (the `ComponentDnsCheck` operationId).
+func (c *ClientWithResponses) ComponentDnsCheckWithResponse(ctx context.Context, id string, params *ComponentDnsCheckParams, body ComponentDnsCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentDnsCheckResponse, error) {
+	rsp, err := c.ComponentDnsCheck(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentDnsCheckResponse(rsp)
+}
+
 // ComponentEnableWithBodyWithResponse Enable a Component with optional configuration
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -27501,6 +32308,45 @@ func (c *ClientWithResponses) ComponentEnableWithResponse(ctx context.Context, i
 		return nil, err
 	}
 	return ParseComponentEnableResponse(rsp)
+}
+
+// ComponentTunnelCheckShowWithResponse Show a standalone Tunnel check Task or the latest retained result
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /components/{id}/tunnel-checks (the `ComponentTunnelCheckShow` operationId).
+func (c *ClientWithResponses) ComponentTunnelCheckShowWithResponse(ctx context.Context, id string, params *ComponentTunnelCheckShowParams, reqEditors ...RequestEditorFn) (*ComponentTunnelCheckShowResponse, error) {
+	rsp, err := c.ComponentTunnelCheckShow(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentTunnelCheckShowResponse(rsp)
+}
+
+// ComponentTunnelCheckWithBodyWithResponse Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
+func (c *ClientWithResponses) ComponentTunnelCheckWithBodyWithResponse(ctx context.Context, id string, params *ComponentTunnelCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentTunnelCheckResponse, error) {
+	rsp, err := c.ComponentTunnelCheckWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentTunnelCheckResponse(rsp)
+}
+
+// ComponentTunnelCheckWithResponse Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
+func (c *ClientWithResponses) ComponentTunnelCheckWithResponse(ctx context.Context, id string, params *ComponentTunnelCheckParams, body ComponentTunnelCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentTunnelCheckResponse, error) {
+	rsp, err := c.ComponentTunnelCheck(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentTunnelCheckResponse(rsp)
 }
 
 // ComponentUpdateWithResponse component.update
@@ -27553,6 +32399,45 @@ func (c *ClientWithResponses) ConnectorCreateWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseConnectorCreateResponse(rsp)
+}
+
+// ConnectorCheckShowWithResponse Show a Task's Connector check or the latest saved Connector check
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /connectors/checks (the `ConnectorCheckShow` operationId).
+func (c *ClientWithResponses) ConnectorCheckShowWithResponse(ctx context.Context, params *ConnectorCheckShowParams, reqEditors ...RequestEditorFn) (*ConnectorCheckShowResponse, error) {
+	rsp, err := c.ConnectorCheckShow(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectorCheckShowResponse(rsp)
+}
+
+// ConnectorCheckWithBodyWithResponse Test saved or unsaved Connector permissions without saving
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
+func (c *ClientWithResponses) ConnectorCheckWithBodyWithResponse(ctx context.Context, params *ConnectorCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectorCheckResponse, error) {
+	rsp, err := c.ConnectorCheckWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectorCheckResponse(rsp)
+}
+
+// ConnectorCheckWithResponse Test saved or unsaved Connector permissions without saving
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
+func (c *ClientWithResponses) ConnectorCheckWithResponse(ctx context.Context, params *ConnectorCheckParams, body ConnectorCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorCheckResponse, error) {
+	rsp, err := c.ConnectorCheck(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectorCheckResponse(rsp)
 }
 
 // ConnectorRemoveWithResponse Remove an Environment connector
@@ -27984,6 +32869,84 @@ func (c *ClientWithResponses) BlueprintValidateWithBodyWithResponse(ctx context.
 	return ParseBlueprintValidateResponse(rsp)
 }
 
+// EnvironmentDnsListWithResponse Read Environment DNS intentions and resolver status
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /environments/{id}/dns-records (the `EnvironmentDnsList` operationId).
+func (c *ClientWithResponses) EnvironmentDnsListWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EnvironmentDnsListResponse, error) {
+	rsp, err := c.EnvironmentDnsList(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentDnsListResponse(rsp)
+}
+
+// EnvironmentDnsCreateWithBodyWithResponse Create an Environment DNS record
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/dns-records (the `EnvironmentDnsCreate` operationId).
+func (c *ClientWithResponses) EnvironmentDnsCreateWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentDnsCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentDnsCreateResponse, error) {
+	rsp, err := c.EnvironmentDnsCreateWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentDnsCreateResponse(rsp)
+}
+
+// EnvironmentDnsCreateWithResponse Create an Environment DNS record
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/dns-records (the `EnvironmentDnsCreate` operationId).
+func (c *ClientWithResponses) EnvironmentDnsCreateWithResponse(ctx context.Context, id string, params *EnvironmentDnsCreateParams, body EnvironmentDnsCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentDnsCreateResponse, error) {
+	rsp, err := c.EnvironmentDnsCreate(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentDnsCreateResponse(rsp)
+}
+
+// EnvironmentDnsRemoveWithResponse Withdraw an Environment DNS record
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /environments/{id}/dns-records/{record} (the `EnvironmentDnsRemove` operationId).
+func (c *ClientWithResponses) EnvironmentDnsRemoveWithResponse(ctx context.Context, id string, record string, params *EnvironmentDnsRemoveParams, reqEditors ...RequestEditorFn) (*EnvironmentDnsRemoveResponse, error) {
+	rsp, err := c.EnvironmentDnsRemove(ctx, id, record, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentDnsRemoveResponse(rsp)
+}
+
+// EnvironmentDnsEditWithBodyWithResponse Replace an Environment DNS target or name
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /environments/{id}/dns-records/{record} (the `EnvironmentDnsEdit` operationId).
+func (c *ClientWithResponses) EnvironmentDnsEditWithBodyWithResponse(ctx context.Context, id string, record string, params *EnvironmentDnsEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentDnsEditResponse, error) {
+	rsp, err := c.EnvironmentDnsEditWithBody(ctx, id, record, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentDnsEditResponse(rsp)
+}
+
+// EnvironmentDnsEditWithResponse Replace an Environment DNS target or name
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /environments/{id}/dns-records/{record} (the `EnvironmentDnsEdit` operationId).
+func (c *ClientWithResponses) EnvironmentDnsEditWithResponse(ctx context.Context, id string, record string, params *EnvironmentDnsEditParams, body EnvironmentDnsEditJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentDnsEditResponse, error) {
+	rsp, err := c.EnvironmentDnsEdit(ctx, id, record, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentDnsEditResponse(rsp)
+}
+
 // BackupKeyExportWithResponse Export the current backup age identity without storing it
 //
 // Returns a wrapper object for the known response body format(s).
@@ -28216,6 +33179,32 @@ func (c *ClientWithResponses) HostShowWithResponse(ctx context.Context, reqEdito
 		return nil, err
 	}
 	return ParseHostShowResponse(rsp)
+}
+
+// HostTerminalWithBodyWithResponse Open or resume the owning browser session's interactive root host terminal
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
+func (c *ClientWithResponses) HostTerminalWithBodyWithResponse(ctx context.Context, params *HostTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*HostTerminalResponse, error) {
+	rsp, err := c.HostTerminalWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHostTerminalResponse(rsp)
+}
+
+// HostTerminalWithResponse Open or resume the owning browser session's interactive root host terminal
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
+func (c *ClientWithResponses) HostTerminalWithResponse(ctx context.Context, params *HostTerminalParams, body HostTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*HostTerminalResponse, error) {
+	rsp, err := c.HostTerminal(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHostTerminalResponse(rsp)
 }
 
 // ImageListWithResponse List images in the local Agent host Docker daemon
@@ -28608,6 +33597,45 @@ func (c *ClientWithResponses) RouteCreateWithResponse(ctx context.Context, param
 	return ParseRouteCreateResponse(rsp)
 }
 
+// RouteCheckShowWithResponse Show a check Task or a Route's latest retained check
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /routes/checks (the `RouteCheckShow` operationId).
+func (c *ClientWithResponses) RouteCheckShowWithResponse(ctx context.Context, params *RouteCheckShowParams, reqEditors ...RequestEditorFn) (*RouteCheckShowResponse, error) {
+	rsp, err := c.RouteCheckShow(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteCheckShowResponse(rsp)
+}
+
+// RouteCheckWithBodyWithResponse Check Tunnel readiness, Route origin and public DNS/TLS/HTTP
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
+func (c *ClientWithResponses) RouteCheckWithBodyWithResponse(ctx context.Context, params *RouteCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RouteCheckResponse, error) {
+	rsp, err := c.RouteCheckWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteCheckResponse(rsp)
+}
+
+// RouteCheckWithResponse Check Tunnel readiness, Route origin and public DNS/TLS/HTTP
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
+func (c *ClientWithResponses) RouteCheckWithResponse(ctx context.Context, params *RouteCheckParams, body RouteCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteCheckResponse, error) {
+	rsp, err := c.RouteCheck(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteCheckResponse(rsp)
+}
+
 // RouteRemoveWithResponse Remove a route
 //
 // Returns a wrapper object for the known response body format(s).
@@ -28749,6 +33777,45 @@ func (c *ClientWithResponses) RunnerEditWithResponse(ctx context.Context, id str
 		return nil, err
 	}
 	return ParseRunnerEditResponse(rsp)
+}
+
+// RunnerCheckShowWithResponse Show a Runner check Task or latest retained result
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /runners/{id}/checks (the `RunnerCheckShow` operationId).
+func (c *ClientWithResponses) RunnerCheckShowWithResponse(ctx context.Context, id string, params *RunnerCheckShowParams, reqEditors ...RequestEditorFn) (*RunnerCheckShowResponse, error) {
+	rsp, err := c.RunnerCheckShow(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCheckShowResponse(rsp)
+}
+
+// RunnerCheckWithBodyWithResponse Check connections from the registered Runner
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
+func (c *ClientWithResponses) RunnerCheckWithBodyWithResponse(ctx context.Context, id string, params *RunnerCheckParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerCheckResponse, error) {
+	rsp, err := c.RunnerCheckWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCheckResponse(rsp)
+}
+
+// RunnerCheckWithResponse Check connections from the registered Runner
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
+func (c *ClientWithResponses) RunnerCheckWithResponse(ctx context.Context, id string, params *RunnerCheckParams, body RunnerCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerCheckResponse, error) {
+	rsp, err := c.RunnerCheck(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCheckResponse(rsp)
 }
 
 // RunnerRetryWithBodyWithResponse Retry failed Runner creation
@@ -29299,7 +34366,7 @@ func (c *ClientWithResponses) TaskEventsWithResponse(ctx context.Context, id str
 	return ParseTaskEventsResponse(rsp)
 }
 
-// TaskRetryWithResponse Retry a failed task
+// TaskRetryWithResponse Retry a failed Task or authorize a captured Blueprint Detach hook
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -30006,6 +35073,85 @@ func ParseAttachCreateResponse(rsp *http.Response) (*AttachCreateResponse, error
 	return response, nil
 }
 
+// ParseAttachCheckShowResponse parses an HTTP response from a AttachCheckShowWithResponse call
+func ParseAttachCheckShowResponse(rsp *http.Response) (*AttachCheckShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AttachCheckShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BackingCheckResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAttachCheckResponse parses an HTTP response from a AttachCheckWithResponse call
+func ParseAttachCheckResponse(rsp *http.Response) (*AttachCheckResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AttachCheckResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers AttachCheckResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseAttachDetachResponse parses an HTTP response from a AttachDetachWithResponse call
 func ParseAttachDetachResponse(rsp *http.Response) (*AttachDetachResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -30605,6 +35751,85 @@ func ParseComponentDisableResponse(rsp *http.Response) (*ComponentDisableRespons
 	return response, nil
 }
 
+// ParseComponentDnsCheckShowResponse parses an HTTP response from a ComponentDnsCheckShowWithResponse call
+func ParseComponentDnsCheckShowResponse(rsp *http.Response) (*ComponentDnsCheckShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentDnsCheckShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DNSCheckResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseComponentDnsCheckResponse parses an HTTP response from a ComponentDnsCheckWithResponse call
+func ParseComponentDnsCheckResponse(rsp *http.Response) (*ComponentDnsCheckResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentDnsCheckResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ComponentDnsCheckResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseComponentEnableResponse parses an HTTP response from a ComponentEnableWithResponse call
 func ParseComponentEnableResponse(rsp *http.Response) (*ComponentEnableResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -30638,6 +35863,85 @@ func ParseComponentEnableResponse(rsp *http.Response) (*ComponentEnableResponse,
 	switch {
 	case rsp.StatusCode == 202:
 		var headers ComponentEnableResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseComponentTunnelCheckShowResponse parses an HTTP response from a ComponentTunnelCheckShowWithResponse call
+func ParseComponentTunnelCheckShowResponse(rsp *http.Response) (*ComponentTunnelCheckShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentTunnelCheckShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EdgeCheckResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseComponentTunnelCheckResponse parses an HTTP response from a ComponentTunnelCheckWithResponse call
+func ParseComponentTunnelCheckResponse(rsp *http.Response) (*ComponentTunnelCheckResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentTunnelCheckResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ComponentTunnelCheckResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -30771,6 +36075,85 @@ func ParseConnectorCreateResponse(rsp *http.Response) (*ConnectorCreateResponse,
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseConnectorCheckShowResponse parses an HTTP response from a ConnectorCheckShowWithResponse call
+func ParseConnectorCheckShowResponse(rsp *http.Response) (*ConnectorCheckShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConnectorCheckShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConnectorCheckResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseConnectorCheckResponse parses an HTTP response from a ConnectorCheckWithResponse call
+func ParseConnectorCheckResponse(rsp *http.Response) (*ConnectorCheckResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConnectorCheckResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ConnectorCheckResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil
@@ -31737,6 +37120,220 @@ func ParseBlueprintValidateResponse(rsp *http.Response) (*BlueprintValidateRespo
 	return response, nil
 }
 
+// ParseEnvironmentDnsListResponse parses an HTTP response from a EnvironmentDnsListWithResponse call
+func ParseEnvironmentDnsListResponse(rsp *http.Response) (*EnvironmentDnsListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentDnsListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentDNS
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EnvironmentDnsListResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentDnsCreateResponse parses an HTTP response from a EnvironmentDnsCreateWithResponse call
+func ParseEnvironmentDnsCreateResponse(rsp *http.Response) (*EnvironmentDnsCreateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentDnsCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentDNSSaved
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest EnvironmentDNSSaved
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EnvironmentDnsCreateResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 201:
+		var headers EnvironmentDnsCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentDnsRemoveResponse parses an HTTP response from a EnvironmentDnsRemoveWithResponse call
+func ParseEnvironmentDnsRemoveResponse(rsp *http.Response) (*EnvironmentDnsRemoveResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentDnsRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentDNSSaved
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest EnvironmentDNSSaved
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EnvironmentDnsRemoveResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 201:
+		var headers EnvironmentDnsRemoveResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentDnsEditResponse parses an HTTP response from a EnvironmentDnsEditWithResponse call
+func ParseEnvironmentDnsEditResponse(rsp *http.Response) (*EnvironmentDnsEditResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentDnsEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentDNSSaved
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest EnvironmentDNSSaved
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EnvironmentDnsEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 201:
+		var headers EnvironmentDnsEditResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseBackupKeyExportResponse parses an HTTP response from a BackupKeyExportWithResponse call
 func ParseBackupKeyExportResponse(rsp *http.Response) (*BackupKeyExportResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -32239,6 +37836,59 @@ func ParseHostShowResponse(rsp *http.Response) (*HostShowResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseHostTerminalResponse parses an HTTP response from a HostTerminalWithResponse call
+func ParseHostTerminalResponse(rsp *http.Response) (*HostTerminalResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HostTerminalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest HostTerminalSession
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers HostTerminalResponse201Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("Set-Cookie"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Set-Cookie", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.SetCookie = &value
+		}
+		response.Headers201 = &headers
 	}
 
 	return response, nil
@@ -33080,6 +38730,85 @@ func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) 
 	return response, nil
 }
 
+// ParseRouteCheckShowResponse parses an HTTP response from a RouteCheckShowWithResponse call
+func ParseRouteCheckShowResponse(rsp *http.Response) (*RouteCheckShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RouteCheckShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EdgeCheckResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRouteCheckResponse parses an HTTP response from a RouteCheckWithResponse call
+func ParseRouteCheckResponse(rsp *http.Response) (*RouteCheckResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RouteCheckResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RouteCheckResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseRouteRemoveResponse parses an HTTP response from a RouteRemoveWithResponse call
 func ParseRouteRemoveResponse(rsp *http.Response) (*RouteRemoveResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -33404,6 +39133,85 @@ func ParseRunnerEditResponse(rsp *http.Response) (*RunnerEditResponse, error) {
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRunnerCheckShowResponse parses an HTTP response from a RunnerCheckShowWithResponse call
+func ParseRunnerCheckShowResponse(rsp *http.Response) (*RunnerCheckShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerCheckShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunnerCheckResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRunnerCheckResponse parses an HTTP response from a RunnerCheckWithResponse call
+func ParseRunnerCheckResponse(rsp *http.Response) (*RunnerCheckResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerCheckResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RunnerCheckResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

@@ -56,7 +56,7 @@ func newTaskCmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "retry <id>",
-		Short: "Retry a failed task",
+		Short: "Retry a failed task or authorize a captured Blueprint Detach hook",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
@@ -105,9 +105,12 @@ func renderTaskPage(cmd *cobra.Command, page apiTypes.Page[apiTypes.Task]) error
 func taskFields(task apiTypes.Task) map[string]any {
 	return map[string]any{
 		"target_name": task.TargetName, "resource_kind": task.ResourceKind, "executor": task.Executor,
-		"timeout_seconds": task.TimeoutSeconds, "failure_summary": task.FailureSummary, "result_summary": task.ResultSummary,
-		"image_fetch": task.ImageFetch,
-		"id":          task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
+		"timeout_seconds": task.TimeoutSeconds, "failure": task.Failure, "recovery": task.Recovery, "result_summary": task.ResultSummary,
+		"image_fetch":              task.ImageFetch,
+		"interrupted_detach_retry": task.InterruptedDetachRetry,
+		"preparation":              task.Preparation,
+		"attempt_history":          task.AttemptHistory,
+		"id":                       task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
 		"plan_hash": task.PlanHash, "type": task.Type, "target": task.Target,
 		"status": task.Status, "workspace_type": task.WorkspaceType, "tenant_id": task.TenantID,
 		"project_id": task.ProjectID, "environment_id": task.EnvironmentID, "actor": task.Actor,

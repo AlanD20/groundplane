@@ -111,11 +111,17 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	}
 	if headOffset >= 0 {
 		if state.Values[headOffset] == nil {
-			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Component candidate Environment head changed",
+			)
 		}
 		headRevisionID, decodeErr := idempotencyrecord.DecodeTaskReference(state.Values[headOffset].Value)
 		if decodeErr != nil || headRevisionID != authority.revisionID {
-			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Component candidate Environment head changed",
+			)
 		}
 	} else {
 		seal, decodeErr := blueprints.DecodeEnvironmentBlueprintSeal(state.Values[rootOffset].Value)

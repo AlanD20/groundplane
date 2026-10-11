@@ -1,16 +1,19 @@
 package taskjournal
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"time"
 
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/backingruntimefact"
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type TaskResultData struct {
+	Failure                         *taskprogress.Failure               `json:"failure,omitempty"`
 	AssignmentGeneration            uint64                              `json:"assignment_generation,omitempty"`
 	ExecutionEpoch                  uint32                              `json:"execution_epoch,omitempty"`
 	ReleaseRecoveryRecordSHA256     string                              `json:"release_recovery_record_sha256,omitempty"`
@@ -23,6 +26,7 @@ type TaskResultData struct {
 	BackingObservations             []backingruntimefact.Observation    `json:"backing_observations,omitempty"`
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
+	RollingEvidence                 []rollingrelease.Completion         `json:"rolling_evidence,omitempty"`
 	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
 	ComponentRestorationEvidence    *TaskComponentRestorationEvidence   `json:"component_restoration_evidence,omitempty"`
 	ServiceAbsenceEvidence          *TaskServiceAbsenceEvidence         `json:"service_absence_evidence,omitempty"`
@@ -44,6 +48,7 @@ func TaskResultToData(result *TaskResultRecord) *TaskResultData {
 		return nil
 	}
 	data := &TaskResultData{
+		Failure:              taskprogress.CloneFailure(result.Failure),
 		AssignmentGeneration: result.AssignmentGeneration,
 		ExecutionEpoch:       result.ExecutionEpoch, ReleaseRecoveryRecordSHA256: result.ReleaseRecoveryRecordSHA256,
 		Kind: result.Kind, ExitCode: result.ExitCode, FailedStepID: result.FailedStepID,
@@ -52,6 +57,7 @@ func TaskResultToData(result *TaskResultRecord) *TaskResultData {
 		Projects:                     make([]taskObservedProjectSummaryData, len(result.Projects)),
 		ProxyEvidence:                append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
 		RecreateEvidence:             append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
+		RollingEvidence:              append([]rollingrelease.Completion(nil), result.RollingEvidence...),
 		CandidateAbsenceEvidence:     CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence),
 		ComponentRestorationEvidence: CloneTaskComponentRestorationEvidence(result.ComponentRestorationEvidence),
 		ServiceAbsenceEvidence:       CloneTaskServiceAbsenceEvidence(result.ServiceAbsenceEvidence),
@@ -75,6 +81,7 @@ func TaskResultFromData(data *TaskResultData) (*TaskResultRecord, error) {
 		return nil, nil
 	}
 	result := &TaskResultRecord{
+		Failure:              taskprogress.CloneFailure(data.Failure),
 		AssignmentGeneration: data.AssignmentGeneration,
 		ExecutionEpoch:       data.ExecutionEpoch, ReleaseRecoveryRecordSHA256: data.ReleaseRecoveryRecordSHA256,
 		Kind: data.Kind, ExitCode: data.ExitCode, FailedStepID: data.FailedStepID,
@@ -83,6 +90,7 @@ func TaskResultFromData(data *TaskResultData) (*TaskResultRecord, error) {
 		Projects:                     make([]TaskObservedProjectSummary, len(data.Projects)),
 		ProxyEvidence:                append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
 		RecreateEvidence:             append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
+		RollingEvidence:              append([]rollingrelease.Completion(nil), data.RollingEvidence...),
 		CandidateAbsenceEvidence:     CloneTaskCandidateAbsenceEvidence(data.CandidateAbsenceEvidence),
 		ComponentRestorationEvidence: CloneTaskComponentRestorationEvidence(data.ComponentRestorationEvidence),
 		ServiceAbsenceEvidence:       CloneTaskServiceAbsenceEvidence(data.ServiceAbsenceEvidence),

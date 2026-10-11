@@ -289,7 +289,7 @@ func retainedProxyHasRelease(artifact *agentpb.ComposeArtifact, proxy *agentpb.C
 			workload.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			continue
 		}
-		if _, err := ProxyConfigGeneration(proxy.ProxyConfigJson, expectedReleaseLabel(workload)); err == nil {
+		if _, err := ProxyConfigGeneration(proxy.GetProxyImplementation(), proxy.ProxyConfigJson, expectedReleaseLabel(workload)); err == nil {
 			return true
 		}
 	}

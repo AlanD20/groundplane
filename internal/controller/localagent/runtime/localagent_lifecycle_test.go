@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"reflect"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ func TestLocalAgentSessionsAdapterTranslatesSnapshotAndReady(t *testing.T) {
 	}
 	defer session.Close()
 	wantReady := time.Date(2026, time.August, 20, 15, 0, 0, 0, time.UTC)
-	if err := session.RecordReady(wantReady, 4, "v0.4.2"); err != nil {
+	if err := session.RecordReady(wantReady, 4, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("RecordReady() error = %v", err)
 	}
 

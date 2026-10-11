@@ -11,8 +11,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresruntime"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -166,7 +168,7 @@ func newSourceFixture(
 	seed int64,
 	strategy domain.Strategy,
 	slot domain.Slot,
-	proxyPorts []uint16,
+	proxyPorts []domain.ProxyPort,
 	expected uint32,
 ) sourceFixture {
 	t.Helper()
@@ -205,15 +207,24 @@ func newSourceFixture(
 			RenderGeneration: 7,
 		},
 	}
-	var runtime *testkeyvalue.Versioned[serviceruntimerecord.Record]
+	var proxyConfig domain.ProxyConfig
 	if len(proxyPorts) != 0 {
-		proxyConfig, proxyErr := domain.RenderProxyConfig(desired.Name, releaseID, target, 5, proxyPorts)
+		input.ProxyImplementation = serviceproxy.Caddy
+		var proxyErr error
+		proxyConfig, proxyErr = domain.RenderProxyConfig(
+			serviceproxy.Caddy,
+			desired.Name,
+			releaseID,
+			target,
+			5,
+			proxyPorts,
+		)
 		if proxyErr != nil {
 			t.Fatal(proxyErr)
 		}
 		input.ProxyGeneration, input.ProxyConfigDigest = 5, hex.EncodeToString(proxyConfig.SHA256[:])
-		runtime = sourceRuntimeFixture(t, stamp, seed, input, proxyConfig)
 	}
+	runtime := sourceRuntimeFixture(t, stamp, seed, input, proxyConfig)
 	digest, err := domain.Digest(input)
 	if err != nil {
 		t.Fatal(err)
@@ -252,6 +263,9 @@ func sourceRuntimeFixture(
 	proxyPlan := ids.NewAt(ids.KindPlan, stamp, seed+6)
 	proxyGeneration := uint64(17)
 	workloadName := input.ServiceName
+	if len(input.ProxyPorts) != 0 {
+		workloadName += "--" + string(input.CandidateTarget)
+	}
 	workloadRole := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON
 	runtimeRole, slot := "singleton", ""
 	if input.CandidateTarget != domain.WorkloadSingleton {
@@ -261,7 +275,8 @@ func sourceRuntimeFixture(
 	}
 	proxy := &agentpb.ComposeService{
 		ServiceId: input.ServiceID, ComposeName: input.ServiceName, ExpectedReplicas: 1,
-		Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+		Role:                agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+		ProxyImplementation: agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY,
 		ExpectedLabels: sourceRuntimeLabels(
 			input.EnvironmentID,
 			input.ServiceID,
@@ -296,6 +311,9 @@ func sourceRuntimeFixture(
 		OwnerId:    input.EnvironmentID, ProjectName: "gp-" + strings.ToLower(input.EnvironmentID),
 		CanonicalYaml: yaml, YamlSha256: yamlDigest[:], Services: []*agentpb.ComposeService{proxy, workload},
 	}
+	if len(input.ProxyPorts) == 0 {
+		artifact.Services = []*agentpb.ComposeService{workload}
+	}
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
 		t.Fatal(err)
@@ -307,6 +325,9 @@ func sourceRuntimeFixture(
 	record.Runtime.ServiceID, record.Runtime.ReleaseID = input.ServiceID, input.ReleaseID
 	record.Runtime.Target, record.Runtime.ProxyGeneration = string(input.CandidateTarget), input.ProxyGeneration
 	record.Runtime.ProxyConfigSHA256, record.Runtime.CurrentArtifact = append([]byte(nil), config.SHA256[:]...), encoded
+	if len(input.ProxyPorts) == 0 {
+		record.Runtime.ProxyConfigSHA256 = nil
+	}
 	record.Source = serviceruntimerecord.Acknowledgement{
 		TaskID: ids.NewAt(ids.KindTask, stamp, seed+8), PlanID: ids.NewAt(ids.KindPlan, stamp, seed+9),
 		PlanHash: strings.Repeat("a", 64), StepID: ids.NewAt(ids.KindStep, stamp, seed+10),
@@ -385,23 +406,27 @@ func TestCaptureSelectsServingSealedWorkloadAndComposeIdentity(t *testing.T) {
 		name       string
 		strategy   domain.Strategy
 		slot       domain.Slot
-		proxyPorts []uint16
+		proxyPorts []domain.ProxyPort
 		expected   uint32
 		compose    string
 		role       string
 	}{
 		{name: "portless recreate", strategy: domain.StrategyRecreate, expected: 3, compose: "api", role: "singleton"},
 		{
-			name: "proxied recreate", strategy: domain.StrategyRecreate, proxyPorts: []uint16{8080},
+			name: "proxied recreate", strategy: domain.StrategyRecreate, proxyPorts: []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
 			expected: 3, compose: "api--singleton", role: "singleton",
 		},
 		{
 			name: "blue slot", strategy: domain.StrategyBlueGreen, slot: domain.SlotBlue,
-			proxyPorts: []uint16{8080}, expected: 1, compose: "api--blue", role: "slot",
+			proxyPorts: []domain.ProxyPort{
+				{Port: 8080, Protocol: serviceports.TCP},
+			}, expected: 1, compose: "api--blue", role: "slot",
 		},
 		{
 			name: "green slot", strategy: domain.StrategyBlueGreen, slot: domain.SlotGreen,
-			proxyPorts: []uint16{8080}, expected: 1, compose: "api--green", role: "slot",
+			proxyPorts: []domain.ProxyPort{
+				{Port: 8080, Protocol: serviceports.TCP},
+			}, expected: 1, compose: "api--green", role: "slot",
 		},
 	}
 	for index, test := range tests {
@@ -419,12 +444,12 @@ func TestCaptureSelectsServingSealedWorkloadAndComposeIdentity(t *testing.T) {
 				captured.expected != test.expected || captured.expected == uint32(fixture.service.Record.Desired.Replicas) {
 				t.Fatalf("captured mutable or successful source: %#v", captured)
 			}
-			if captured.target.ComposeName != test.compose || captured.target.RuntimeRole != test.role ||
+			if captured.target.Workloads[0].ComposeName != test.compose || captured.target.RuntimeRole != test.role ||
 				captured.target.Slot != string(test.slot) {
 				t.Fatalf("target = %#v", captured.target)
 			}
 			if len(test.proxyPorts) == 0 {
-				if captured.target.ProxyComposeName != "" || len(releases.runtimeCalls) != 0 {
+				if captured.target.ProxyComposeName != "" || len(releases.runtimeCalls) != 1 {
 					t.Fatalf("portless Service gained proxy authority: %#v", captured.target)
 				}
 			} else if captured.target.ProxyComposeName != "api" || captured.target.ProxyPlanId == "" ||
@@ -460,7 +485,14 @@ func TestCaptureRejectsRenderInputDigestMismatch(t *testing.T) {
 // Rationale: OBS-05; a proxied serving Release without its self-contained
 // acknowledged runtime cannot authorize a live proxy comparison.
 func TestCaptureRejectsMissingAcknowledgedProxyRuntime(t *testing.T) {
-	fixture := newSourceFixture(t, 55, domain.StrategyRecreate, "", []uint16{8080}, 1)
+	fixture := newSourceFixture(
+		t,
+		55,
+		domain.StrategyRecreate,
+		"",
+		[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+		1,
+	)
 	fixture.runtime = nil
 	releases := &fakeReleases{fixtures: map[string]sourceFixture{
 		fixture.service.Record.Desired.ID: fixture,

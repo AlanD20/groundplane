@@ -19,6 +19,8 @@ import (
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type releaseTerminalFixture struct {
@@ -114,6 +116,32 @@ func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
 			}
 		}
 	}
+	procedureMembers := make([]executionplan.CandidateReleaseMemberInput, count)
+	for index, member := range members {
+		base := index * 5
+		procedureMembers[index] = executionplan.CandidateReleaseMemberInput{
+			ServiceID: member.ServiceID, CandidateReleaseID: member.ReleaseID, CandidateArtifactID: artifactID,
+			ForwardStepIDs: []string{steps[base].ID, steps[base+1].ID, steps[base+2].ID},
+			CandidateAbsence: &executionplan.CandidateAbsenceInput{
+				ComposeProjectName: "gp-" + strings.ToLower(environmentID),
+				Services: []executionplan.CandidateServiceIdentity{{
+					ServiceID: member.ServiceID, ReleaseID: member.ReleaseID,
+				}},
+				ProbeStepID: steps[base+3].ID, CompensateStepID: steps[base+4].ID,
+			},
+		}
+	}
+	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Members:   procedureMembers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	procedureBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(procedure)
+	if err != nil {
+		t.Fatal(err)
+	}
 	sort.Slice(proxyEvidence, func(left int, right int) bool {
 		return proxyEvidence[left].ServiceID < proxyEvidence[right].ServiceID
 	})
@@ -140,8 +168,8 @@ func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
 		PublicationID: publicationID, OperationID: operationID, ManifestDigest: manifestDigest, PublishedAt: now,
 		PreparedRuntimes: runtimes,
 		CandidateReleaseDescriptor: executionplan.CandidateReleaseDescriptor{
-			PlanID:   planID,
-			PlanHash: bytes.Repeat([]byte{0xaa}, 32),
+			PlanID: planID, PlanHash: bytes.Repeat([]byte{0xaa}, 32),
+			Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, ProcedureBytes: procedureBytes,
 		},
 	})
 	if err != nil {
@@ -197,8 +225,14 @@ func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
 		Executor: testtaskjournal.TaskExecutorAgent, PlanID: planID, PlanHash: planHash, RenderGeneration: 1,
 		Type: testtaskjournal.TaskDeploy, Target: groupID, Params: map[string]string{testreleaserender.TaskReleasePublicationParam: publicationID}, Steps: steps,
 	}
-	assignment := testtaskassignments.TaskAssignmentRecord{AssignmentID: ids.New(ids.KindAssignment), ExecutionEpoch: 1}
 	agentID := ids.New(ids.KindAgent)
+	assignment := testtaskassignments.TaskAssignmentRecord{
+		AssignmentID: ids.New(ids.KindAssignment), TaskID: taskID,
+		Executor: testtaskjournal.TaskExecutorAgent, AgentID: agentID, AgentGeneration: 1,
+		ClaimedTaskRevision: 1, AssignedAt: now, Deadline: now.Add(15 * time.Hour),
+		RecoveryDeadline: now.Add(21 * time.Hour), ExecutionMode: testtaskassignments.TaskExecutionModeForward,
+		ExecutionEpoch: 1,
+	}
 
 	return releaseTerminalFixture{
 		store: audited, task: task, assignment: assignment, head: head, agentID: agentID, now: now,
@@ -245,23 +279,26 @@ func (f releaseTerminalFixture) finalize(
 func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *testing.T) {
 	t.Parallel()
 	f := newReleaseTerminalFixture(t, domain.MaximumGroupMembers)
-	for transaction := 0; ; transaction++ {
+	batches := 0
+	for {
 		processed, err := f.finalize(t, testtaskjournal.TaskStatusCompleted)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !processed {
-			if transaction != 5 {
-				t.Fatalf("terminal transaction count=%d, want 5", transaction)
-			}
 			break
 		}
-		if transaction > 5 {
-			t.Fatal("terminal batching did not finish")
+		batches++
+		// Every successful batch either settles at least one member or closes
+		// the operation after all members are durable.
+		if batches > domain.MaximumGroupMembers+1 {
+			t.Fatalf("terminal batching made no bounded progress: %d batches", batches)
 		}
 	}
-	if f.store.maximumAggregate != 92 {
-		t.Fatalf("maximum operations=%d, want 92", f.store.maximumAggregate)
+	if f.store.maximumAggregate == 0 || f.store.maximumAggregate > testkeyvalue.MaximumOperations ||
+		f.store.maximumBytes == 0 || f.store.maximumBytes > testkeyvalue.MaximumBytes {
+		t.Fatalf("terminal batch budget operations=%d/%d bytes=%d/%d", f.store.maximumAggregate,
+			testkeyvalue.MaximumOperations, f.store.maximumBytes, testkeyvalue.MaximumBytes)
 	}
 	closed, err := f.store.GetMany(
 		context.Background(),

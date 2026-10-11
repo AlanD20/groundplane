@@ -21,11 +21,15 @@ func durableEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) tas
 		Kind: taskjournal.TaskResultEnvironmentDirectory, ExitCode: acknowledgement.GetExitCode(),
 		FailedStepID: acknowledgement.GetEnvironmentDirectoryResult().GetFailedStepId(),
 		Diagnostic:   taskjournal.TaskResultDiagnosticNone,
+		Failure:      durableTaskFailure(acknowledgement.GetEnvironmentDirectoryResult().GetFailure()),
 	}
 }
 
 func validateEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) error {
 	result := acknowledgement.GetEnvironmentDirectoryResult()
+	if err := validateTaskFailure(acknowledgement, result.GetFailure()); err != nil {
+		return err
+	}
 	if result == nil {
 		return errs.New(
 			errs.KindValidationFailed,
@@ -71,6 +75,10 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) taskjournal.Task
 		Projects:               make([]taskjournal.TaskObservedProjectSummary, len(result.GetProjects())),
 		ProxyEvidence:          make([]taskjournal.TaskProxyEvidence, len(result.GetProxyEvidence())),
 		RecreateEvidence:       make([]taskjournal.TaskRecreateEvidence, len(result.GetRecreateEvidence())),
+	}
+	durable.Failure = durableTaskFailure(result.GetFailure())
+	for _, evidence := range result.GetRollingEvidence() {
+		durable.RollingEvidence = append(durable.RollingEvidence, durableRollingEvidence(evidence))
 	}
 	if evidence := result.GetCandidateAbsenceEvidence(); evidence != nil {
 		durable.CandidateAbsenceEvidence = &taskjournal.TaskCandidateAbsenceEvidence{
@@ -151,9 +159,15 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) taskjournal.Task
 
 func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 	result := acknowledgement.GetComposeResult()
+	if err := validateAgentRollingEvidence(result); err != nil {
+		return err
+	}
 	if result == nil || len(result.GetProjects()) > 64 || len(result.GetProxyEvidence()) > 32 ||
 		len(result.GetRecreateEvidence()) > 32 {
 		return errs.New(errs.KindValidationFailed, "Agent Compose Task result is invalid")
+	}
+	if err := validateTaskFailure(acknowledgement, result.GetFailure()); err != nil {
+		return err
 	}
 	if evidence := result.GetCandidateAbsenceEvidence(); evidence != nil {
 		if evidence.GetAssignmentId() != acknowledgement.GetAssignmentId() ||

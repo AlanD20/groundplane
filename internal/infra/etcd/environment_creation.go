@@ -171,7 +171,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		conditions = append(conditions,
 			etcdstore.Condition{Key: componentrecord.RecordKey(component.Desired.ID)},
 			etcdstore.Condition{Key: componentrecord.EnvironmentOwnerKey(record.ID, component.Desired.ID)},
-			etcdstore.Condition{Key: componentrecord.EnvironmentKindKey(record.ID, component.Desired.Kind)},
+			etcdstore.Condition{Key: componentrecord.EnvironmentSingletonKey(component.Desired)},
 		)
 	}
 	mutations := []etcdstore.Mutation{
@@ -214,7 +214,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   componentrecord.EnvironmentKindKey(record.ID, component.Desired.Kind),
+				Key:   componentrecord.EnvironmentSingletonKey(component.Desired),
 				Value: []byte(component.Desired.ID),
 			},
 		)

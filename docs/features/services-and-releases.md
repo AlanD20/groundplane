@@ -71,7 +71,20 @@ explicit positive count.
 | --- | --- |
 | `blue-green` | One replica, an addressable internal TCP port and an enabled explicit healthcheck are required before a Task can be published. GP starts the inactive slot, waits for candidate health and switches the stable proxy. The old healthy slot is retained. Live and restart proxy configuration must agree. |
 | `recreate` | Stops the previous set before starting the requested replica count. Downtime is expected. Every selected container must be running; configured healthchecks must also pass. Without a healthcheck, GP reports running, not healthy. |
-| `rolling` | Not implemented; rejected. |
+| `rolling` | Requires 1–16 replicas and an enabled explicit healthcheck. GP starts one extra candidate, waits for health, moves traffic to the ready set, drains the replaced replica for up to 30 seconds, then removes it before starting the next candidate. The stable proxy and its reserved addresses remain. Portless workers use the same readiness and replacement sequence without a proxy. |
+
+Set the rolling per-replica timeout in the Service runtime form, CLI
+`--rolling-replica-timeout`, API or Blueprint `x-gp-release`. An omitted edit
+preserves it; 0 restores the 300-second default. Values above 86400 are rejected.
+This budget covers startup, health, switching, drain and removal for one change;
+it never extends the overall Task deadline. It does not affect recreate or
+blue-green timing. Backing Services do not support rolling.
+
+Old and new versions overlap during rolling. Their commands, configuration and
+shared data must support that overlap; GP does not reverse database migrations.
+Task steps identify the replica and action. An interrupted rollout retains its
+original recovery authority rather than replaying completed forward steps.
+The current rolling implementation still requires behavioral and live qualification.
 
 After a blue-green switch, both slots remain running. The next Deploy replaces
 only the inactive slot, then switches traffic after candidate health passes.
@@ -95,10 +108,11 @@ a different tag from the currently serving Release. A same-tag redeploy does not
 advance that rollback point. An explicit tag selects an eligible historical
 Release, not today's image bytes under that tag.
 
-Rollback creates a new Release using the selected historical image, replica count
-and strategy. It does not rewrite history or reverse database migrations. Missing
-or expired historical authority is an error, not permission to reconstruct it from
-current configuration.
+Rollback creates a new Release using only the selected historical image. It uses
+the current Service configuration, replica count, release strategy and failure
+policy, including the current healthcheck. It does not restore old configuration,
+rewrite history or reverse database migrations. Missing or expired historical
+image authority is an error; GP never resolves today's bytes under the old tag.
 
 ## Release Groups
 

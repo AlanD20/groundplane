@@ -3,7 +3,9 @@ package taskplanning
 import (
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -20,20 +22,19 @@ func TestBlueprintReleaseProcedureStepIDsAcceptMaximumHooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("blueprintReleaseProcedureStepIDs() error = %v", err)
 	}
-	apply, health, probe, compensate, post := input.ApplyStepIDs, input.HealthStepIDs, input.RecoveryProbeStepIDs, input.RecoveryCompensateStepIDs, input.PostStepIDs
-	if len(apply) != 1 || apply[0] != "apply" || len(health) != 1 || health[0] != "health" ||
-		len(
-			probe,
-		) != 1 || probe[0] != "recovery-probe" || len(compensate) != 1 || compensate[0] != "recovery-compensate" ||
-		len(input.SwitchStepIDs) != 1 || input.SwitchStepIDs[0] != "switch" ||
+	if len(input.MemberSteps) != 1 {
+		t.Fatalf("member steps = %v", input.MemberSteps)
+	}
+	layout, post := input.MemberSteps[0], input.PostStepIDs
+	if len(layout.Forward) != 3 || layout.Forward[0] != task.Steps[0].ID || layout.Forward[1] != task.Steps[1].ID ||
+		layout.Probe != task.Steps[len(task.Steps)-2].ID || layout.Compensate != task.Steps[len(task.Steps)-1].ID ||
+		layout.Forward[2] != task.Steps[2+taskcontract.MaximumBlueprintPostDeployHooks].ID ||
 		len(post) != 1 || len(post[0]) != taskcontract.MaximumBlueprintPostDeployHooks ||
-		post[0][0] != "hook-00" || post[0][len(post[0])-1] != "hook-15" || next != len(task.Steps) {
+		post[0][0] != task.Steps[2].ID || post[0][len(post[0])-1] != task.Steps[1+taskcontract.MaximumBlueprintPostDeployHooks].ID ||
+		next != len(task.Steps) {
 		t.Fatalf(
-			"procedure ids = apply=%v health=%v probe=%v compensate=%v post=%v next=%d",
-			apply,
-			health,
-			probe,
-			compensate,
+			"procedure ids = layout=%v post=%v next=%d",
+			layout,
 			post,
 			next,
 		)
@@ -45,21 +46,35 @@ func TestBlueprintReleaseProcedureStepIDsAcceptMaximumHooks(t *testing.T) {
 func TestBlueprintReleaseProcedureStepIDsRejectInvalidAuthority(t *testing.T) {
 	t.Run("overflow", func(t *testing.T) {
 		task, members := blueprintReleaseStepIDFixture(taskcontract.MaximumBlueprintPostDeployHooks + 1)
-		if _, _, err := blueprintReleaseProcedureStepIDs(task, etcd.ReleaseTaskRenderInput{Members: members}, 0); err == nil {
+		if _, _, err := blueprintReleaseProcedureStepIDs(
+			task,
+			etcd.ReleaseTaskRenderInput{Members: members},
+			0,
+		); err == nil {
 			t.Fatal("blueprintReleaseProcedureStepIDs() accepted an oversized hook selection")
 		}
 	})
 	t.Run("missing execution binding", func(t *testing.T) {
 		task, members := blueprintReleaseStepIDFixture(1)
-		delete(task.Params, testreleaserender.ReleaseHookStepExecutionParam("hook-00"))
-		if _, _, err := blueprintReleaseProcedureStepIDs(task, etcd.ReleaseTaskRenderInput{Members: members}, 0); err == nil {
+		hookStepID := task.Steps[2].ID
+		delete(task.Params, testreleaserender.ReleaseHookStepExecutionParam(hookStepID))
+		if _, _, err := blueprintReleaseProcedureStepIDs(
+			task,
+			etcd.ReleaseTaskRenderInput{Members: members},
+			0,
+		); err == nil {
 			t.Fatal("blueprintReleaseProcedureStepIDs() accepted a missing execution binding")
 		}
 	})
 	t.Run("wrong member binding", func(t *testing.T) {
 		task, members := blueprintReleaseStepIDFixture(1)
-		task.Params[testreleaserender.ReleaseHookStepMemberParam("hook-00")] = "2"
-		if _, _, err := blueprintReleaseProcedureStepIDs(task, etcd.ReleaseTaskRenderInput{Members: members}, 0); err == nil {
+		hookStepID := task.Steps[2].ID
+		task.Params[testreleaserender.ReleaseHookStepMemberParam(hookStepID)] = "2"
+		if _, _, err := blueprintReleaseProcedureStepIDs(
+			task,
+			etcd.ReleaseTaskRenderInput{Members: members},
+			0,
+		); err == nil {
 			t.Fatal("blueprintReleaseProcedureStepIDs() accepted a forged member binding")
 		}
 	})
@@ -67,14 +82,21 @@ func TestBlueprintReleaseProcedureStepIDsRejectInvalidAuthority(t *testing.T) {
 
 func blueprintReleaseStepIDFixture(hookCount int) (etcd.TaskRecord, []testreleaserender.ReleaseTaskRenderMember) {
 	task := etcd.TaskRecord{Params: make(map[string]string)}
+	at := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	offset := int64(1)
+	nextStepID := func() string {
+		value := ids.NewAt(ids.KindStep, at, offset)
+		offset++
+		return value
+	}
 	task.Steps = append(
 		task.Steps,
-		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "apply"},
-		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "health"},
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: nextStepID()},
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: nextStepID()},
 	)
 	hooks := make([]testreleaserender.ReleaseHookRenderInput, hookCount)
 	for index := range hooks {
-		stepID := fmt.Sprintf("hook-%02d", index)
+		stepID := nextStepID()
 		executionID := fmt.Sprintf("execution-%02d", index)
 		task.Steps = append(
 			task.Steps,
@@ -88,12 +110,12 @@ func blueprintReleaseStepIDFixture(hookCount int) (etcd.TaskRecord, []testreleas
 	}
 	task.Steps = append(
 		task.Steps,
-		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "switch"},
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: nextStepID()},
 	)
 	task.Steps = append(
 		task.Steps,
-		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "recovery-probe"},
-		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: "recovery-compensate"},
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: nextStepID()},
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: nextStepID()},
 	)
 	return task, []testreleaserender.ReleaseTaskRenderMember{
 		{Render: testreleaserender.ReleaseRenderInput{Hooks: hooks, Strategy: domain.StrategyRecreate}},

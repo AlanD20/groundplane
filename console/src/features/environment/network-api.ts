@@ -48,6 +48,7 @@ export function zoneFromAPI(zone: ZoneCreateResponse | ZoneShowResponse): Zone {
     name: zone.name,
     subnet: zone.subnet,
     internal: zone.internal,
+    allowGPDNS: zone.allow_gp_dns,
     ownerKind: zone.owner_kind,
     ownerId: zone.owner_id,
   };

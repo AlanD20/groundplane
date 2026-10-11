@@ -30,6 +30,8 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	componentPublication componentplanning.Publication,
 	entryRemovalPublication BlueprintEntryRemovalPublication,
 	serviceRemovalPublication BlueprintServiceRemovalPublication,
+	zoneRemovalPublication BlueprintZoneRemovalPublication,
+	attachRemovalPublication *BlueprintAttachRemovalPublication,
 ) (published keyvalue.Versioned[TaskRecord], resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
@@ -69,8 +71,20 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		authoredBlueprintServiceRemovalTask(child) && releasePublication.IsZero() &&
 		componentPublication.IsZero() && entryRemovalPublication.IsZero() && !serviceRemovalPublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
-	if !releaseChild && !networkChild && !volumeChild && !attachChild && !componentChild && !entryChild &&
-		!serviceRemovalChild {
+	zoneRemovalChild := unit.Target.Kind == ids.KindNetwork && unit.Removal &&
+		authoredBlueprintZoneRemovalTask(child) && child.Target == unit.Target.ID &&
+		releasePublication.IsZero() && componentPublication.IsZero() && entryRemovalPublication.IsZero() &&
+		serviceRemovalPublication.IsZero() && !zoneRemovalPublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] == ""
+	attachRemovalChild := unit.Target.Kind == ids.KindAttach && unit.Removal &&
+		blueprintAttachChildTaskMatches(child, unit) && attachRemovalPublication != nil &&
+		!attachRemovalPublication.IsZero() && releasePublication.IsZero() && componentPublication.IsZero() &&
+		entryRemovalPublication.IsZero() && serviceRemovalPublication.IsZero() && zoneRemovalPublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] == ""
+	if attachRemovalPublication != nil && !attachRemovalChild ||
+		!zoneRemovalPublication.IsZero() && !zoneRemovalChild ||
+		!releaseChild && !networkChild && !volumeChild && !attachChild && !componentChild && !entryChild &&
+			!serviceRemovalChild && !zoneRemovalChild && !attachRemovalChild {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict, "Blueprint child has no supported effect publication",
 		)
@@ -196,6 +210,30 @@ func (repository *TaskRepository) PublishBlueprintChild(
 			return keyvalue.Versioned[TaskRecord]{}, err
 		}
 	}
+	zoneRemovalConditions, zoneRemovalMutations := []keyvalue.Condition(nil), []keyvalue.Mutation(nil)
+	if zoneRemovalChild {
+		zoneRemovalConditions, zoneRemovalMutations, err = zoneRemovalPublication.prepare(
+			ctx, repository, child, unit, snapshot.ReadRevision,
+		)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+	}
+	attachRemovalConditions, attachRemovalMutations := []keyvalue.Condition(nil), []keyvalue.Mutation(nil)
+	if attachRemovalChild {
+		defer func() {
+			if resultErr != nil {
+				resultErr = attachRemovalPublication.finish(ctx, repository, resultErr)
+			}
+		}()
+		child, attachRemovalConditions, attachRemovalMutations, err = attachRemovalPublication.prepare(
+			ctx, repository, child, unit, snapshot.ReadRevision,
+		)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+		defer keyvalue.ClearMutationValues(attachRemovalMutations)
+	}
 	parentKey := taskjournal.TaskStorageKey(parentID)
 	claimKey := taskjournal.BlueprintParentClaimKey(parentID)
 	parentRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
@@ -219,6 +257,11 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		parent.Owner != child.Owner ||
 		parent.Params[blueprints.EnvironmentDesiredRevisionParam] != child.Params[blueprints.EnvironmentDesiredRevisionParam] {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent claim changed")
+	}
+	if componentChild {
+		if err := componentPublication.ValidateProxySourceHoldParent(parent.ID, parent.OperationID); err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
 	}
 	parentMarkerKey, err := idempotency.IdempotencyMarkerKey(*parent.idempotencyMarker)
 	if err != nil {
@@ -317,7 +360,12 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
 	defer clear(markerValue)
-	conditions := append(claim.Conditions(),
+	conditions := append(
+		claim.Conditions(),
+		keyvalue.Condition{
+			Key:         blueprintunits.DesiredPlanKey(child.Owner.EnvironmentID),
+			ModRevision: snapshot.Desired.Revision,
+		},
 		keyvalue.Condition{Key: parentKey, ModRevision: parentRead.Values[0].ModRevision},
 		keyvalue.Condition{Key: claimKey, ModRevision: parentRead.Values[1].ModRevision},
 		keyvalue.Condition{Key: parentMarkerKey, ModRevision: parentMarkerRead.Values[0].ModRevision},
@@ -391,8 +439,24 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		conditions = append(conditions, serviceRemovalConditions...)
 		mutations = append(mutations, serviceRemovalMutations...)
 	}
+	if zoneRemovalChild {
+		conditions = append(conditions, zoneRemovalConditions...)
+		mutations = append(mutations, zoneRemovalMutations...)
+	}
+	if attachRemovalChild {
+		conditions = append(conditions, attachRemovalConditions...)
+		mutations = append(mutations, attachRemovalMutations...)
+	}
 	defer keyvalue.ClearMutationValues(mutations)
-	transaction, err := repository.store.Transact(ctx, conditions, mutations)
+	if repository.blueprintChildStore == nil {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindInternal,
+			"Blueprint child transaction store is not configured",
+		)
+	}
+	envelope := BlueprintChildTransaction{parentID: parentID, childID: child.ID, planID: child.PlanID,
+		environmentID: child.Owner.EnvironmentID, conditions: conditions, mutations: mutations}
+	transaction, err := repository.blueprintChildStore.TransactBlueprintChild(ctx, envelope)
 	keyvalue.ClearValues(transaction.FailureReads)
 	if err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err

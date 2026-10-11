@@ -20,6 +20,11 @@ import (
 const taskRetryRoute = "/tasks/{id}/retry"
 
 type taskRetryRepository interface {
+	RetryInterruptedDetach(
+		context.Context,
+		string,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	GetTaskRetryScope(context.Context, string) (etcd.TaskRetryScope, error)
 	RetryTask(
@@ -205,7 +210,7 @@ func (service *taskRetryService) retryTask(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if taskjournal.IsBlueprintChild(source.Record.Params) {
+	if taskjournal.IsInternalChild(source.Record.Params) {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
 			errs.KindTaskNotFound,
 			"task not found: %s",
@@ -215,6 +220,11 @@ func (service *taskRetryService) retryTask(
 	if source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindTaskNotRetryable, "Controller update requires a fresh explicit release selection after recovery",
+		)
+	}
+	if source.Record.Executor == taskjournal.TaskExecutorBlueprint && initiation != nil {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindTaskNotRetryable, "Blueprint Apply requires a new Apply after its children have settled",
 		)
 	}
 	if source.Record.Type == taskjournal.TaskBackupPrune {
@@ -257,6 +267,10 @@ func (service *taskRetryService) retryTask(
 	}
 	now := service.now().UTC()
 	retryTaskID := ids.New(ids.KindTask)
+	resumeDetach := source.Record.Executor == taskjournal.TaskExecutorBlueprint
+	if resumeDetach {
+		retryTaskID = sourceTaskID
+	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: retryTaskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -271,8 +285,17 @@ func (service *taskRetryService) retryTask(
 		TaskID: retryTaskID, CreatedAt: now, UpdatedAt: now,
 	}
 	var result etcd.IdempotencyTransactionResult
+	if resumeDetach {
+		marker.Kind = idempotencyrecord.IdempotencyMarkerDirect
+		marker.State = idempotencyrecord.IdempotencyMarkerCompleted
+		marker.TaskID = ""
+		marker.TerminalAt = now
+		marker.RetainUntil = now.Add(idempotencyrecord.MarkerRetention)
+	}
 	var retryErr error
-	if source.Record.Type == taskjournal.TaskBackup || source.Record.Type == taskjournal.TaskRestore {
+	if resumeDetach {
+		result, retryErr = service.repository.RetryInterruptedDetach(ctx, sourceTaskID, marker)
+	} else if source.Record.Type == taskjournal.TaskBackup || source.Record.Type == taskjournal.TaskRestore {
 		if initiation != nil {
 			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindTaskNotRetryable,

@@ -81,6 +81,9 @@ export function HostAgentsTable() {
                   </TableCell>
                   <TableCell>
                     <SoftwareIdentity
+                      artifactReference={a.installedImage}
+                      sourceBuild={a.source?.kind === "source_ref"}
+                      sourceCommit={a.source?.commit}
                       version={a.version}
                       showReferences={false}
                       unavailable="Version not reported"

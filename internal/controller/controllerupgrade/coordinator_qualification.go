@@ -2,10 +2,12 @@ package controllerupgrade
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,6 +16,7 @@ import (
 func (coordinator *Coordinator) qualify(
 	ctx context.Context,
 	operation *nativeOperation,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	expected := operation.expected
 	if coordinator.process != expected.Manifest.ControllerSHA256 {
@@ -21,25 +24,29 @@ func (coordinator *Coordinator) qualify(
 			ctx,
 			operation,
 			errs.New(errs.KindStateConflict, "native candidate process differs"),
+			progress,
 		)
 	}
 	qualification, cancel := context.WithTimeout(ctx, expected.CandidateDeadline().Sub(coordinator.now()))
 	defer cancel()
-	err := coordinator.readiness.Ready(qualification)
+	err := progress.Run(qualification, "controller_candidate_check", coordinator.readiness.Ready)
 	if err == nil {
-		err = coordinator.recoverAgent(qualification, operation, localagent.UpdateFinish)
+		err = coordinator.recoverAgent(qualification, operation, localagent.UpdateFinish, progress)
 	}
 	if err == nil {
-		err = coordinator.readiness.Ready(qualification)
+		err = progress.Run(qualification, "controller_final_check", coordinator.readiness.Ready)
+	}
+	if recordErr := progress.Err(); recordErr != nil {
+		return "", recordErr
 	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return coordinator.requestRollback(ctx, operation, err)
+		return coordinator.requestRollback(ctx, operation, err, progress)
 	}
 	if err := qualification.Err(); err != nil {
-		return coordinator.requestRollback(ctx, operation, err)
+		return coordinator.requestRollback(ctx, operation, err, progress)
 	}
 	if _, err := coordinator.journal.Advance(
 		qualification, expected.TaskID, upgrade.PhaseStarting, upgrade.PhaseHealthy,
@@ -51,16 +58,17 @@ func (coordinator *Coordinator) qualify(
 
 func (coordinator *Coordinator) confirmHealthy(
 	ctx context.Context, operation *nativeOperation,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	if coordinator.process != operation.expected.Manifest.ControllerSHA256 {
 		return "", errs.New(errs.KindStateConflict, "qualified controller process identity differs")
 	}
 	ctx, cancel := context.WithTimeout(ctx, upgrade.RecoveryReserveSeconds*time.Second)
 	defer cancel()
-	if err := coordinator.readiness.Ready(ctx); err != nil {
+	if err := progress.Run(ctx, "controller_candidate_check", coordinator.readiness.Ready); err != nil {
 		return "", err
 	}
-	if err := coordinator.recoverAgent(ctx, operation, localagent.UpdateFinish); err != nil {
+	if err := coordinator.recoverAgent(ctx, operation, localagent.UpdateFinish, progress); err != nil {
 		return "", err
 	}
 	return coordinator.settle(operation, taskjournal.TaskStatusCompleted), nil
@@ -68,16 +76,17 @@ func (coordinator *Coordinator) confirmHealthy(
 
 func (coordinator *Coordinator) recoverPredecessor(
 	ctx context.Context, operation *nativeOperation, phase upgrade.Phase,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	if coordinator.process != operation.expected.PreviousController {
 		return "", errs.New(errs.KindStateConflict, "recovered controller process identity differs")
 	}
 	ctx, cancel := context.WithTimeout(ctx, upgrade.RecoveryReserveSeconds*time.Second)
 	defer cancel()
-	if err := coordinator.readiness.Ready(ctx); err != nil {
+	if err := progress.Run(ctx, "controller_restore_check", coordinator.readiness.Ready); err != nil {
 		return "", err
 	}
-	if err := coordinator.recoverAgent(ctx, operation, localagent.UpdateRestore); err != nil {
+	if err := coordinator.recoverAgent(ctx, operation, localagent.UpdateRestore, progress); err != nil {
 		return "", err
 	}
 	if phase == upgrade.PhaseRolledBack {
@@ -91,6 +100,24 @@ func (coordinator *Coordinator) recoverPredecessor(
 }
 
 func (coordinator *Coordinator) recoverAgent(
+	ctx context.Context, operation *nativeOperation, goal localagent.UpdateGoal,
+	progress *controllertask.Progress,
+) error {
+	stage := "agent_update"
+	if goal == localagent.UpdateRestore {
+		stage = "agent_restore"
+	} else if operation.expected.Agent != nil && operation.expected.Agent.Image == operation.expected.Manifest.AgentImage {
+		stage = "agent_ready_check"
+	}
+	if operation.expected.Agent == nil {
+		return coordinator.reconcileAgent(ctx, operation, goal)
+	}
+	return progress.Run(ctx, stage, func(ctx context.Context) error {
+		return coordinator.reconcileAgent(ctx, operation, goal)
+	})
+}
+
+func (coordinator *Coordinator) reconcileAgent(
 	ctx context.Context, operation *nativeOperation, goal localagent.UpdateGoal,
 ) error {
 	expected := operation.expected
@@ -109,7 +136,7 @@ func (coordinator *Coordinator) recoverAgent(
 	if agent.Image != desired {
 		result, err := coordinator.agents.RecoverUpdate(ctx, localagent.UpdateRequest{
 			AgentID: agent.ID, PreviousImage: agent.Image, DesiredImage: desired, StartingGeneration: agent.Generation,
-		}, goal)
+		}, goal, nil)
 		if err != nil {
 			return err
 		}
@@ -152,6 +179,7 @@ func (coordinator *Coordinator) recoverAgent(
 
 func (coordinator *Coordinator) requestRollback(
 	ctx context.Context, operation *nativeOperation, cause error,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	coordinator.logger.Error("native controller candidate requires recovery", "task_id", operation.expected.TaskID,
 		"error", cause)
@@ -164,9 +192,10 @@ func (coordinator *Coordinator) requestRollback(
 	}
 	if journal.Phase != upgrade.PhaseRollingBack && journal.Phase != upgrade.PhaseStopping &&
 		journal.Phase != upgrade.PhaseRolledBack {
-		if _, err := coordinator.journal.Advance(ctx, journal.TaskID, journal.Phase, upgrade.PhaseRollingBack); err != nil {
+		if _, err := coordinator.journal.BeginRollback(ctx, journal.TaskID, journal.Phase,
+			taskprogress.CaptureControllerFailure(cause)); err != nil {
 			return "", err
 		}
 	}
-	return coordinator.handoff(ctx, operation)
+	return coordinator.handoff(ctx, operation, progress)
 }

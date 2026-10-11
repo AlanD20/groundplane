@@ -25,6 +25,11 @@ type Runtime struct {
 
 type dnsResolverObserver interface {
 	Observe(context.Context, dnsresolverobserver.Request) (*agentpb.DNSResolverObservationEvidence, error)
+	CheckConnections(
+		context.Context,
+		dnsresolverobserver.Request,
+		[]dnsresolverobserver.ConnectionQuery,
+	) (dnsresolverobserver.ConnectionCheckResult, error)
 }
 
 type composeExecutor interface {

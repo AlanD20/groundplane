@@ -60,6 +60,7 @@ func (engine imageIdentityEngine) ContainerInspect(
 ) (client.ContainerInspectResult, error) {
 	return client.ContainerInspectResult{Container: containertypes.InspectResponse{
 		ID: "container", Image: engine.containerImageID,
+		HostConfig:              &containertypes.HostConfig{NetworkMode: "host"},
 		State:                   &containertypes.State{Running: true, StartedAt: "2026-10-01T00:00:00Z"},
 		ImageManifestDescriptor: engine.containerDescriptor,
 		Config: &containertypes.Config{

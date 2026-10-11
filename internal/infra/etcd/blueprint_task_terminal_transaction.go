@@ -48,6 +48,7 @@ func (envelope BlueprintTaskTerminalTransaction) Operations() ([]etcdstore.Condi
 // from ordinary Store transactions. Desired publication is not consumed here.
 type TaskRepositoryStore interface {
 	etcdstore.Store
+	TransactBlueprintChild(context.Context, BlueprintChildTransaction) (etcdstore.TransactionResult, error)
 	ValidateBlueprintTaskTerminal(context.Context, BlueprintTaskTerminalTransaction) error
 	TransactBlueprintTaskTerminal(
 		context.Context,
@@ -74,6 +75,7 @@ func NewTaskRepository(store TaskRepositoryStore) (*TaskRepository, error) {
 		return nil, err
 	}
 	repository.blueprintTerminalStore = store
+	repository.blueprintChildStore = store
 	return repository, nil
 }
 

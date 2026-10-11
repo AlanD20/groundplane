@@ -20,18 +20,20 @@ export function SoftwareUpdates() {
         <SummaryItem label="Installed Controller">
           <SoftwareIdentity
             version={host?.controller.version}
+            sourceBuild={host?.controller.source?.kind === "source_ref"}
+            sourceCommit={host?.controller.source?.commit}
             digest={host?.controller.update.running_sha256}
             showReferences={false}
             unavailable="Unavailable"
           />
         </SummaryItem>
         {platform.agents.map((agent) => (
-          <SummaryItem
-            key={agent.id}
-            label={`Installed Agent · ${agent.host}`}
-          >
+          <SummaryItem key={agent.id} label={`Installed Agent · ${agent.host}`}>
             <SoftwareIdentity
+              artifactReference={agent.installedImage}
               version={agent.version}
+              sourceBuild={agent.source?.kind === "source_ref"}
+              sourceCommit={agent.source?.commit}
               showReferences={false}
               unavailable="Version not reported"
             />

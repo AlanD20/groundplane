@@ -218,8 +218,13 @@ func attachFromGenerated(attach generated.Attach) apiTypes.Attach {
 			factSets[setIndex] = apiTypes.AttachFactSet{GrantAttachID: grantAttachID, Facts: facts}
 		}
 	}
+	revision := int64(0)
+	if attach.Revision != nil {
+		revision = *attach.Revision
+	}
 	return apiTypes.Attach{
-		ID: attach.Id, Name: attach.Name, ServiceID: attach.ServiceId,
+		Revision: revision,
+		ID:       attach.Id, Name: attach.Name, ServiceID: attach.ServiceId,
 		Credential: apiTypes.AttachCredential{
 			Mode: apiTypes.AttachCredentialMode(attach.Credential.Mode), AttachID: credentialAttachID,
 		},

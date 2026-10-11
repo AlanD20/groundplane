@@ -95,7 +95,7 @@ func TestManagedComponentTeardownPostconditionRejectsRemainingContainer(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 	if !errors.Is(err, errs.New(errs.KindRequestFailed, "")) || !result.ReconciliationRequired ||
 		helper.request == nil || observer.calls != 1 {
 		t.Fatalf("teardown result = %#v, error = %v, observations = %d", result, err, observer.calls)

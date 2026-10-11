@@ -1,10 +1,13 @@
 package localagent
 
+import "github.com/AlanD20/groundplane/internal/common/taskprogress"
+
 func projectAgent(record Record) Agent {
 	return Agent{
 		ID:               record.ID,
 		EnrollmentTaskID: record.EnrollmentTaskID,
 		Image:            record.Image,
+		Build:            record.Build,
 		Generation:       record.Generation,
 		Phase:            record.Phase,
 		Config:           cloneConfig(record.Config),
@@ -14,6 +17,7 @@ func projectAgent(record Record) Agent {
 }
 
 func cloneRecord(record Record) Record {
+	record.ReplacementFailure = taskprogress.CloneFailure(record.ReplacementFailure)
 	record.Config = cloneConfig(record.Config)
 	record.Credential = cloneCredential(record.Credential)
 	return record

@@ -18,6 +18,7 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -144,6 +145,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	replacement.Runtime.UnconfirmedLifecycleTaskID = task.ID
 	serviceValue, err := servicerecord.EncodeServiceRuntimeRecord(servicerecord.NewServiceRuntimeRecord(replacement))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -364,7 +366,8 @@ func validateServiceLifecycleReplacement(
 		replacement.BackingNetworkID != current.BackingNetworkID ||
 		!environmentchanges.SameServiceRemovalDesired(replacement.Desired, current.Desired) ||
 		replacement.Runtime.ServiceID != current.Runtime.ServiceID || task.Target != current.Desired.ID ||
-		task.Status != taskjournal.TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) < 1 || len(task.Steps) > 3 {
+		task.Status != taskjournal.TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) < 1 ||
+		len(task.Steps) > executionplan.MaximumServiceRuntimeMembers {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle replacement is invalid")
 	}
 	want := core.ServiceRuntimeIntent("")

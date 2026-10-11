@@ -10,6 +10,7 @@ import (
 // "x-gp-routes".
 func newRouteCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "route", Short: "Routes — a domain or path sending traffic to a service"}
+	cmd.AddCommand(newRouteCheckCmd(), newRouteCheckResultCmd())
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",

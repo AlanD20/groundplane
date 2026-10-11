@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -31,27 +32,39 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 	task, assignment := claim.Task.Record, claim.Assignment.Record
 	authority := assignment.RestorationAuthority
 	procedure := plan.GetCandidateReleaseProcedure()
-	if authority == nil || len(authority.Candidates) != 2 || len(procedure.GetMembers()) != 2 ||
-		len(authority.NativePredecessors) != 2 || authority.AppliedPredecessor == nil {
-		t.Fatal("real mixed producer did not publish two members, native predecessors, and an applied witness")
+	if authority == nil || len(authority.Candidates) != 1 || len(procedure.GetMembers()) != 1 ||
+		len(authority.NativePredecessors) != 1 || authority.AppliedPredecessor == nil {
+		t.Fatal("native sibling Task did not publish one member, predecessor record, and applied witness")
 	}
-	for _, member := range authority.Candidates {
-		want := testtaskassignments.ReleaseRestorationCandidateAbsence
-		if member.ServiceID == servingServiceID {
-			want = testtaskassignments.ReleaseRestorationServingPredecessor
-		}
-		if member.Target != want {
-			t.Fatalf("member %s target %s, want %s", member.ServiceID, member.Target, want)
-		}
+	want := testtaskassignments.ReleaseRestorationCandidateAbsence
+	if priorReleaseID != "" {
+		want = testtaskassignments.ReleaseRestorationServingPredecessor
+	}
+	member, native := authority.Candidates[0], authority.NativePredecessors[0]
+	if member.ServiceID != servingServiceID || native.ServiceID != servingServiceID || member.Target != want ||
+		procedure.GetMembers()[0].GetServiceId() != servingServiceID ||
+		(priorReleaseID == "") != (len(native.CurrentArtifact) == 0) {
+		t.Fatalf(
+			"Service-unit recovery target diverged: service=%s target=%s want=%s",
+			member.ServiceID,
+			member.Target,
+			want,
+		)
 	}
 	if _, err := testtaskassignments.OpenRestorationWitness(task.Target, authority.AppliedPredecessor.ComposeArtifact); err != nil {
 		t.Fatal(err)
 	}
-	witness := mixedNativeRestorationWitness(t, authority, servingServiceID)
+	var witness *agentpb.ComposeArtifact
+	if priorReleaseID != "" {
+		witness = mixedNativeRestorationWitness(t, authority, servingServiceID)
+	}
 	appliedKey := testenvironmentprojection.EnvironmentComposeProjectionStorageKey(task.Target)
-	servingKey := testreleases.ReleaseProjectionKey(servingServiceID)
-	retained, err := fixture.store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{appliedKey, servingKey}})
-	if err != nil || retained.Values[0] == nil || retained.Values[1] == nil {
+	keys := []string{appliedKey}
+	if priorReleaseID != "" {
+		keys = append(keys, testreleases.ReleaseProjectionKey(servingServiceID))
+	}
+	retained, err := fixture.store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
+	if err != nil || retained.Values[0] == nil || len(keys) == 2 && retained.Values[1] == nil {
 		t.Fatalf("missing applied/serving witness: %v", err)
 	}
 	if retained.Values[0].ModRevision != authority.AppliedPredecessor.KeyRevision {
@@ -65,7 +78,7 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 				testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 					AssignmentID: assignment.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID,
 					StepID: member.GetForwardStepIds()[0], Attempt: 1, Ordinal: forwardOrdinal,
-				}, State: state, Payload: json.RawMessage(`{"message":"candidate forward"}`)},
+				}, State: state, Payload: json.RawMessage(`{}`)},
 				task.CreatedAt.Add(time.Duration(1000+100*forwardOrdinal)*time.Millisecond),
 			)
 			if err != nil {
@@ -74,20 +87,15 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 			forwardOrdinal++
 		}
 	}
-	failedHealthStep := ""
-	for _, step := range plan.GetSteps() {
-		if step.GetWaitHealthy() != nil {
-			failedHealthStep = step.GetStepId()
-		}
-	}
-	if failedHealthStep == "" {
-		t.Fatal("real mixed candidate plan has no health gate")
+	forward := procedure.GetMembers()[0].GetForwardStepIds()
+	if len(forward) < 2 {
+		t.Fatal("native Service-unit plan has no post-effect failure step")
 	}
 	primary := testtaskjournal.TaskResultRecord{
 		Kind:                   testtaskjournal.TaskResultCompose,
 		Diagnostic:             testtaskjournal.TaskResultDiagnosticComposeFailed,
 		ExitCode:               17,
-		FailedStepID:           failedHealthStep,
+		FailedStepID:           forward[1],
 		ReconciliationRequired: true,
 		ExecutionEpoch:         1,
 	}
@@ -162,8 +170,8 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 	if len(seenRecoverySteps) == 0 {
 		t.Fatal("mixed recovery omitted all sealed recovery steps")
 	}
-	if len(recovery.ReleaseRecovery.ApplicableCompensationStepIDs) != 2 {
-		t.Fatal("mixed recovery lost a touched member's compensation obligation")
+	if len(recovery.ReleaseRecovery.ApplicableCompensationStepIDs) != 1 {
+		t.Fatal("Service-unit recovery lost its compensation obligation")
 	}
 	final := mixedRecoveryResult(t, recovery, procedure, witness, servingServiceID, priorReleaseID)
 	if len(runRecovery) != 0 {
@@ -175,7 +183,7 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 				_, err := reopened.AppendTaskEvent(ctx, testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 					AssignmentID: assignment.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID,
 					StepID: stepID, Attempt: 2, Ordinal: ordinal,
-				}, State: state, Payload: json.RawMessage(`{"message":"mixed recovery"}`)}, task.CreatedAt.Add(time.Duration(4+ordinal)*time.Second))
+				}, State: state, Payload: json.RawMessage(`{}`)}, task.CreatedAt.Add(time.Duration(4+ordinal)*time.Second))
 				if err != nil {
 					t.Fatalf("mixed recovery event %s/%s: %v", stepID, state, err)
 				}
@@ -183,22 +191,29 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 			}
 		}
 	}
-	for _, mutate := range []func(*testtaskjournal.TaskResultRecord){
-		func(r *testtaskjournal.TaskResultRecord) { r.CandidateAbsenceEvidence = nil },
+	mutations := []func(*testtaskjournal.TaskResultRecord){
 		func(r *testtaskjournal.TaskResultRecord) {
-			r.CandidateAbsenceEvidence.Candidates = append(r.CandidateAbsenceEvidence.Candidates, testtaskjournal.TaskCandidateAbsenceCandidate{ServiceID: servingServiceID, ReleaseID: priorReleaseID})
-		},
-		func(r *testtaskjournal.TaskResultRecord) { r.ProxyEvidence, r.RecreateEvidence = nil, nil },
-		func(r *testtaskjournal.TaskResultRecord) {
-			changedDigest := []byte(r.CandidateAbsenceEvidence.AuthoritySHA256)
-			if changedDigest[0] == '0' {
-				changedDigest[0] = '1'
+			if priorReleaseID == "" {
+				r.CandidateAbsenceEvidence = nil
 			} else {
-				changedDigest[0] = '0'
+				r.ProxyEvidence, r.RecreateEvidence = nil, nil
 			}
-			r.CandidateAbsenceEvidence.AuthoritySHA256 = string(changedDigest)
 		},
-	} {
+	}
+	if priorReleaseID == "" {
+		mutations = append(mutations, func(r *testtaskjournal.TaskResultRecord) {
+			r.CandidateAbsenceEvidence.Candidates[0].ReleaseID = priorReleaseID
+		})
+	} else {
+		mutations = append(mutations, func(r *testtaskjournal.TaskResultRecord) {
+			if len(r.ProxyEvidence) != 0 {
+				r.ProxyEvidence[0].ReleaseID = member.ReleaseID
+			} else {
+				r.RecreateEvidence[0].ReleaseID = member.ReleaseID
+			}
+		})
+	}
+	for _, mutate := range mutations {
 		changed := testtaskjournal.CloneTaskResult(&final)
 		mutate(changed)
 		beforeAttempt := fixture.ReadRevision()
@@ -230,7 +245,7 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 		terminal.Record.Result.Diagnostic != primary.Diagnostic || terminal.Record.Result.ReconciliationRequired {
 		t.Fatalf("mixed final primary failure not retained: status=%s err=%v", terminal.Record.Status, err)
 	}
-	after, err := fixture.store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{appliedKey, servingKey}})
+	after, err := fixture.store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +290,13 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 		t.Fatalf("mixed terminal replay: %v", err)
 	}
 	changed := testtaskjournal.CloneTaskResult(&final)
-	changed.CandidateAbsenceEvidence.Candidates[0].ReleaseID = priorReleaseID
+	if priorReleaseID == "" {
+		changed.CandidateAbsenceEvidence.Candidates[0].ReleaseID = ids.New(ids.KindDeployment)
+	} else if len(changed.ProxyEvidence) != 0 {
+		changed.ProxyEvidence[0].ReleaseID = member.ReleaseID
+	} else {
+		changed.RecreateEvidence[0].ReleaseID = member.ReleaseID
+	}
 	if _, err := reopened.AcknowledgeTask(ctx, agentID, 1, task.ID, assignment.AssignmentID, testtaskjournal.TaskStatusCompleted, *changed, task.CreatedAt.Add(33*time.Second)); !errors.Is(
 		err,
 		errs.New(errs.KindStateConflict, ""),
@@ -304,9 +325,6 @@ func mixedNativeRestorationWitness(
 	if !found || len(encoded) == 0 {
 		t.Fatal("mixed authority omitted the serving native predecessor")
 	}
-	if authority.AppliedPredecessor != nil && bytes.Equal(encoded, authority.AppliedPredecessor.ComposeArtifact) {
-		t.Fatal("mixed fixture did not distinguish native and applied predecessor artifacts")
-	}
 	witness, err := testtaskassignments.OpenRestorationWitness(authority.EnvironmentID, encoded)
 	if err != nil {
 		t.Fatal(err)
@@ -321,18 +339,18 @@ func mixedRecoveryResult(t *testing.T, recovery etcd.TaskAssignment, procedure *
 	assignment := recovery.Assignment.Record
 	authority := assignment.RestorationAuthority
 	result := testtaskjournal.TaskResultRecord{
-		Kind:                        testtaskjournal.TaskResultCompose,
-		Diagnostic:                  testtaskjournal.TaskResultDiagnosticNone,
-		ExecutionEpoch:              2,
-		ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,
-		CandidateAbsenceEvidence: &testtaskjournal.TaskCandidateAbsenceEvidence{
-			AssignmentID: assignment.AssignmentID, PlanHash: authority.PlanHash,
-			AuthoritySHA256: assignment.RestorationAuthoritySHA256, CandidateArtifactID: authority.CandidateArtifactID,
-			AbsenceProven: true,
-		},
+		Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+		ExecutionEpoch: 2, ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,
 	}
 	for index, member := range authority.Candidates {
 		if member.Target == testtaskassignments.ReleaseRestorationCandidateAbsence {
+			if result.CandidateAbsenceEvidence == nil {
+				result.CandidateAbsenceEvidence = &testtaskjournal.TaskCandidateAbsenceEvidence{
+					AssignmentID: assignment.AssignmentID, PlanHash: authority.PlanHash,
+					AuthoritySHA256:     assignment.RestorationAuthoritySHA256,
+					CandidateArtifactID: authority.CandidateArtifactID, AbsenceProven: true,
+				}
+			}
 			result.CandidateAbsenceEvidence.ComposeProjectName = procedure.GetMembers()[index].GetCandidateAbsence().
 				GetComposeProjectName()
 			result.CandidateAbsenceEvidence.Candidates = append(
@@ -340,6 +358,15 @@ func mixedRecoveryResult(t *testing.T, recovery etcd.TaskAssignment, procedure *
 				testtaskjournal.TaskCandidateAbsenceCandidate{ServiceID: member.ServiceID, ReleaseID: member.ReleaseID},
 			)
 		}
+	}
+	if priorReleaseID == "" {
+		if result.CandidateAbsenceEvidence == nil {
+			t.Fatal("first-deploy recovery omitted candidate-absence authority")
+		}
+		return result
+	}
+	if witness == nil {
+		t.Fatal("serving recovery omitted its native predecessor witness")
 	}
 	var proxy *agentpb.ComposeService
 	for _, service := range witness.Services {
@@ -349,7 +376,11 @@ func mixedRecoveryResult(t *testing.T, recovery etcd.TaskAssignment, procedure *
 		}
 	}
 	if proxy != nil {
-		generation, err := executionplan.ProxyConfigGeneration(proxy.ProxyConfigJson, priorReleaseID)
+		generation, err := executionplan.ProxyConfigGeneration(
+			proxy.ProxyImplementation,
+			proxy.ProxyConfigJson,
+			priorReleaseID,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}

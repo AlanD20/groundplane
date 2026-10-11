@@ -128,7 +128,7 @@ func ValidateComponentTaskIntent(intent ComponentTaskIntent) error {
 	if len(intent.Candidates) == 0 || len(intent.Candidates) > 2 {
 		return errs.New(errs.KindValidationFailed, "Component candidate count is invalid")
 	}
-	seenKinds := make(map[core.ComponentKind]struct{}, len(intent.Candidates))
+	seenCapabilities := make(map[core.ComponentCapability]struct{}, len(intent.Candidates))
 	previousID := ""
 	for _, candidate := range intent.Candidates {
 		if candidate.CurrentRevision <= 0 || componentrecord.ValidateRecord(candidate.Current) != nil ||
@@ -138,21 +138,22 @@ func ValidateComponentTaskIntent(intent ComponentTaskIntent) error {
 		current := candidate.Current.Desired
 		next := candidate.Candidate.Desired
 		if current.ID != next.ID || current.Owner != next.Owner || current.OwnerID != next.OwnerID ||
-			current.Kind != next.Kind || current.Owner != core.ComponentOwnerEnvironment ||
+			!current.Kind.SharesEnvironmentCapability(next.Kind) || current.Owner != core.ComponentOwnerEnvironment ||
 			current.OwnerID != intent.EnvironmentID {
 			return errs.New(errs.KindValidationFailed, "Component candidate changed stable ownership")
 		}
-		if current.Kind != core.ComponentKindIngressCaddy && current.Kind != core.ComponentKindEdgeCloudflare {
+		capability, supported := current.Kind.EnvironmentCapability()
+		if !supported {
 			return errs.New(errs.KindValidationFailed, "Component candidate kind is not Environment-owned")
 		}
 		if previousID != "" && current.ID <= previousID {
 			return errs.New(errs.KindValidationFailed, "Component candidates are not uniquely sorted")
 		}
 		previousID = current.ID
-		if _, duplicate := seenKinds[current.Kind]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Component candidate kind is duplicated")
+		if _, duplicate := seenCapabilities[capability]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Component candidate capability is duplicated")
 		}
-		seenKinds[current.Kind] = struct{}{}
+		seenCapabilities[capability] = struct{}{}
 		if componentrecord.EqualRecord(candidate.Current, candidate.Candidate) &&
 			(!candidate.Current.Desired.Enabled || candidate.Current.Runtime.Healthy) {
 			return errs.New(errs.KindValidationFailed, "Component candidate does not change active state")
@@ -180,11 +181,11 @@ func (binding componentTaskAddressBinding) ZoneID() string { return binding.zone
 func (binding componentTaskAddressBinding) Address() string { return binding.address }
 
 func ComponentTaskAddress(record componentrecord.Record) (componentTaskAddressBinding, bool, error) {
-	if record.Desired.Kind != core.ComponentKindIngressCaddy {
+	if !record.Desired.Kind.IsEnvironmentProxy() {
 		if record.Runtime.PinnedIPv4 != "" {
 			return componentTaskAddressBinding{}, false, errs.New(
 				errs.KindValidationFailed,
-				"non-Caddy Component candidate has a pinned address",
+				"non-router Component candidate has a pinned address",
 			)
 		}
 		return componentTaskAddressBinding{}, false, nil
@@ -193,35 +194,31 @@ func ComponentTaskAddress(record componentrecord.Record) (componentTaskAddressBi
 		if record.Runtime.PinnedIPv4 != "" {
 			return componentTaskAddressBinding{}, false, errs.New(
 				errs.KindValidationFailed,
-				"disabled Caddy Component candidate has a pinned address",
+				"disabled router Component candidate has a pinned address",
 			)
 		}
 		return componentTaskAddressBinding{}, false, nil
 	}
-	if record.Desired.Config.Caddy == nil {
+	component := core.Component{Kind: record.Desired.Kind, Config: record.Desired.Config}
+	zoneIDs := component.HTTPRouterZoneIDs()
+	if len(zoneIDs) == 0 {
 		return componentTaskAddressBinding{}, false, errs.New(
 			errs.KindValidationFailed,
-			"enabled Caddy Component candidate has no typed config",
+			"enabled router Component candidate has no primary Zone",
 		)
 	}
-	if len(record.Desired.Config.Caddy.ZoneIDs) == 0 {
-		return componentTaskAddressBinding{}, false, errs.New(
-			errs.KindValidationFailed,
-			"enabled Caddy Component candidate has no primary Zone",
-		)
-	}
-	zoneID := record.Desired.Config.Caddy.ZoneIDs[0]
+	zoneID := zoneIDs[0]
 	if ids.Validate(ids.KindNetwork, zoneID) != nil {
 		return componentTaskAddressBinding{}, false, errs.New(
 			errs.KindValidationFailed,
-			"enabled Caddy Component candidate has an invalid Zone",
+			"enabled router Component candidate has an invalid Zone",
 		)
 	}
 	address, err := netip.ParseAddr(record.Runtime.PinnedIPv4)
 	if err != nil || !address.Is4() || address.String() != record.Runtime.PinnedIPv4 {
 		return componentTaskAddressBinding{}, false, errs.New(
 			errs.KindValidationFailed,
-			"enabled Caddy Component candidate has an invalid pinned address",
+			"enabled router Component candidate has an invalid pinned address",
 		)
 	}
 	return componentTaskAddressBinding{zoneID: zoneID, address: address.String()}, true, nil

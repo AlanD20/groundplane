@@ -22,6 +22,21 @@ func (repository *TaskRepository) recoveryAcknowledgementAtRevision(
 	result taskjournal.TaskResultRecord,
 	revision int64,
 ) (releaseRecoveryAcknowledgement, error) {
+	if assignment.AttachRemovalAuthoritySHA256 != "" {
+		return repository.attachRemovalRecoveryAcknowledgementAtRevision(
+			ctx,
+			task,
+			assignment,
+			status,
+			result,
+			revision,
+		)
+	}
+	if assignment.ManagedNetworkProcedureSHA256 != "" {
+		return repository.managedNetworkRecoveryAcknowledgementAtRevision(
+			ctx, task, assignment, status, result, revision,
+		)
+	}
 	if assignment.ComponentRecoveryProcedureSHA256 != "" {
 		return repository.componentRecoveryAcknowledgementAtRevision(ctx, task, assignment, status, result, revision)
 	}
@@ -48,12 +63,29 @@ func (repository *TaskRepository) normalizeRecoveryTerminalReplay(
 	assignmentID string,
 	revision int64,
 ) (taskjournal.TaskStatus, *taskjournal.TaskResultRecord, bool, error) {
+	if authoredBlueprintAttachRemovalTask(task) {
+		return repository.normalizeAttachRemovalRecoveryTerminalReplay(
+			ctx,
+			task,
+			status,
+			result,
+			agentID,
+			agentGeneration,
+			assignmentID,
+			revision,
+		)
+	}
+	if authoredBlueprintZoneRemovalTask(task) {
+		return repository.normalizeManagedNetworkRecoveryTerminalReplay(
+			ctx, task, status, result, agentID, agentGeneration, assignmentID, revision,
+		)
+	}
 	if result.ServiceAbsenceEvidence != nil {
 		return repository.normalizeServiceAbsenceTerminalReplay(
 			ctx, task, status, result, agentID, agentGeneration, assignmentID, revision,
 		)
 	}
-	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] == "" {
+	if !componentRecoveryTask(task) {
 		return repository.normalizeReleaseRecoveryTerminalReplay(
 			ctx, task, status, result, agentID, agentGeneration, assignmentID, revision,
 		)
@@ -101,7 +133,7 @@ func (repository *TaskRepository) transitionComponentAcknowledgementToRecovery(
 	result taskjournal.TaskResultRecord,
 	revision int64,
 ) (etcdstore.Versioned[TaskRecord], bool, error) {
-	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] == "" {
+	if !componentRecoveryTask(task) {
 		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
 	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||

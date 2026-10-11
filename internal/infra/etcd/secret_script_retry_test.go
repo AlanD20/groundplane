@@ -52,7 +52,7 @@ func TestSecretDeletionRetryCannotReacquireAfterScriptPreparation(t *testing.T) 
 	if _, found, err := tasks.ClaimNextControllerTask(ctx, at.Add(2*time.Second)); err != nil || !found {
 		t.Fatalf("initial removal claim = %t, %v", found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, at.Add(3*time.Second)); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, nil, at.Add(3*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	authority, err := testscriptsourcepublication.NewAuthority(store)
@@ -93,7 +93,7 @@ func TestSecretDeletionRetryCannotReacquireAfterScriptPreparation(t *testing.T) 
 	if _, found, err := tasks.ClaimNextControllerTask(ctx, retryAt.Add(time.Second)); err != nil || !found {
 		t.Fatalf("retry removal claim = %t, %v", found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, retryAt.Add(2*time.Second)); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, nil, retryAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := secrets.GetSecret(ctx, secretID); !isKind(err, errs.KindSecretNotFound) {

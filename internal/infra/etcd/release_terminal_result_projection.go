@@ -1,26 +1,81 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"slices"
 	"strconv"
 	"time"
 )
+
+func releasePreparedRuntime(
+	marker releases.ReleasePublicationMarker,
+	serviceID string,
+) (executionplan.CandidateRuntime, error) {
+	if marker.CandidateReleaseDescriptor.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+		for _, input := range marker.BlueprintRuntimes {
+			if input.ServiceID == serviceID {
+				return executionplan.OpenBlueprintRuntime(marker.ExecutedComposeArtifact, input)
+			}
+		}
+	} else {
+		for _, runtime := range marker.PreparedRuntimes {
+			if runtime.ServiceID == serviceID {
+				return runtime, nil
+			}
+		}
+	}
+	return executionplan.CandidateRuntime{}, errs.New(
+		errs.KindStateConflict,
+		"Release member has no captured final runtime",
+	)
+}
+
+func releaseRollingEvidence(result taskjournal.TaskResultRecord, serviceID string) (rollingrelease.Completion, bool) {
+	for _, evidence := range result.RollingEvidence {
+		if evidence.ServiceID == serviceID {
+			return evidence, true
+		}
+	}
+	return rollingrelease.Completion{}, false
+}
+
+// Completion belongs to the sealed member, not a fixed five-step array offset.
+func releaseCompletionStep(marker releases.ReleasePublicationMarker, serviceID string) (string, error) {
+	procedure, err := executionplan.OpenCandidateReleaseDescriptor(marker.CandidateReleaseDescriptor)
+	if err != nil {
+		return "", err
+	}
+	for _, member := range procedure.GetMembers() {
+		if member.GetServiceId() == serviceID && len(member.GetForwardStepIds()) != 0 {
+			return member.GetForwardStepIds()[len(member.GetForwardStepIds())-1], nil
+		}
+	}
+	return "", errs.New(errs.KindStateConflict, "Release completion has no captured member step")
+}
 
 func releaseFailedMemberOrdinal(
 	task TaskRecord,
 	terminalStatus taskjournal.TaskStatus,
 	result taskjournal.TaskResultRecord,
+	marker releases.ReleasePublicationMarker,
+	members []domain.GroupMember,
 ) (uint32, error) {
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		return 0, nil
 	}
-	ordinal := releaseFailedOrdinalFromResult(task, result)
+	ordinal, err := releaseFailedOrdinalFromResult(task, result, marker, members)
+	if err != nil {
+		return 0, err
+	}
 	if ordinal == 0 &&
-		(result.Diagnostic == taskjournal.TaskResultDiagnosticTimeoutBeforeEffect || unassignedReleaseAbort(task, terminalStatus)) {
+		(result.Diagnostic == taskjournal.TaskResultDiagnosticTimeoutBeforeEffect || unassignedReleaseTerminal(task, terminalStatus)) {
 		return 1, nil
 	}
 	if ordinal == 0 {
@@ -29,23 +84,43 @@ func releaseFailedMemberOrdinal(
 	return ordinal, nil
 }
 
-func releaseFailedOrdinalFromResult(task TaskRecord, result taskjournal.TaskResultRecord) uint32 {
-	for index, step := range task.Steps {
+func releaseFailedOrdinalFromResult(task TaskRecord, result taskjournal.TaskResultRecord,
+	marker releases.ReleasePublicationMarker, members []domain.GroupMember,
+) (uint32, error) {
+	procedure, err := executionplan.OpenCandidateReleaseDescriptor(marker.CandidateReleaseDescriptor)
+	if err != nil {
+		return 0, err
+	}
+	for _, step := range task.Steps {
 		if step.ID == result.FailedStepID {
 			if value := task.Params[releaserender.ReleaseHookStepMemberParam(step.ID)]; value != "" {
 				ordinal, err := strconv.ParseUint(value, 10, 32)
-				if err != nil || ordinal == 0 {
-					return 0
+				if err != nil || ordinal == 0 || ordinal > uint64(len(members)) ||
+					task.Params[releaserender.ReleaseHookStepExecutionParam(step.ID)] == "" {
+					return 0, nil
 				}
-				return uint32(ordinal)
+				return uint32(ordinal), nil
 			}
 			if task.Params[releaserender.ReleaseHookStepExecutionParam(step.ID)] != "" {
-				return 0
+				return 0, nil
 			}
-			return uint32(index/5 + 1)
+			for _, captured := range procedure.GetMembers() {
+				serving, absence := captured.GetServingPredecessor(), captured.GetCandidateAbsence()
+				if !slices.Contains(captured.GetForwardStepIds(), step.ID) &&
+					serving.GetProbeStepId() != step.ID && serving.GetCompensateStepId() != step.ID &&
+					absence.GetProbeStepId() != step.ID && absence.GetCompensateStepId() != step.ID {
+					continue
+				}
+				for _, member := range members {
+					if member.ServiceID == captured.GetServiceId() &&
+						member.ReleaseID == captured.GetCandidateReleaseId() {
+						return member.Ordinal, nil
+					}
+				}
+			}
 		}
 	}
-	return 0
+	return 0, nil
 }
 
 func releaseMemberTerminalState(

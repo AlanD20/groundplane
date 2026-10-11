@@ -5,10 +5,15 @@ import (
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
+
+// A rolling Service owns up to sixteen workloads and one stable proxy.
+// Blue-green's active/retained slots and proxy fit within the same physical bound.
+const MaximumServiceRuntimeMembers = rollingrelease.MaximumReplicas + 1
 
 func serviceLifecycleArtifactValidationPlan(
 	plan *agentpb.ExecutionPlan,
@@ -54,7 +59,7 @@ func validateServiceLifecyclePlan(plan *agentpb.ExecutionPlan) error {
 			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_STOP &&
 			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_DESTROY &&
 			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) ||
-		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > 3 ||
+		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > MaximumServiceRuntimeMembers ||
 		len(procedure.GetSources()) != len(plan.GetArtifacts()) || len(procedure.GetSources()) != len(plan.GetSteps()) {
 		return errs.New(errs.KindValidationFailed, "service lifecycle procedure shape is invalid")
 	}
@@ -111,7 +116,7 @@ func validateBlueprintServiceRemovalLifecyclePlan(plan *agentpb.ExecutionPlan) e
 		plan.GetManagedComponentProcedure() != nil || plan.GetComponentRecoveryProcedure() != nil ||
 		plan.GetServiceAbsenceRecoveryProcedure() != nil ||
 		plan.GetEntryMutationProcedure() != nil || plan.GetComponentRollbackObservation() != nil ||
-		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > 3 ||
+		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > MaximumServiceRuntimeMembers ||
 		len(plan.GetSteps()) != len(procedure.GetSources())+2 {
 		return invalid()
 	}

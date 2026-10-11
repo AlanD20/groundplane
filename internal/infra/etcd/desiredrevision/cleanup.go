@@ -100,7 +100,7 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 
 // CleanupEnvironmentBlueprintStaging performs bounded leader-owned private
 // staging cleanup. Each invocation processes at most limit descriptors and at
-// most one 32-record chunk batch per descriptor.
+// most one 32-record revision batch per descriptor.
 func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 	ctx context.Context,
 	now time.Time,
@@ -112,9 +112,14 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 	if !blueprints.ValidBlueprintRecordTime(now) || limit < 1 || limit > 128 {
 		return 0, errs.New(errs.KindValidationFailed, "Blueprint staging cleanup request is invalid")
 	}
+	after, cursorRevision, err := repository.readCleanupCursor(ctx)
+	if err != nil {
+		return 0, err
+	}
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: blueprints.EnvironmentBlueprintDescriptorPrefix,
-		Limit:  int64(limit),
+		Prefix:         blueprints.EnvironmentBlueprintDescriptorPrefix,
+		Limit:          int64(limit),
+		StartExclusive: after,
 	})
 	if err != nil {
 		return 0, err
@@ -172,6 +177,15 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 				processed++
 			}
 			continue
+		case blueprints.EnvironmentBlueprintStagePublishedMetadata:
+			deleted, cleanupErr := repository.cleanupPublishedMetadataRevision(ctx, descriptor, now)
+			if cleanupErr != nil {
+				return processed, cleanupErr
+			}
+			if deleted {
+				processed++
+			}
+			continue
 		default:
 			return processed, blueprints.CorruptEnvironmentBlueprintStage()
 		}
@@ -183,7 +197,7 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 			processed++
 		}
 	}
-	return processed, nil
+	return processed, repository.advanceCleanupCursor(ctx, page, cursorRevision)
 }
 
 func (repository *Repository) expireEnvironmentBlueprintStage(
@@ -262,11 +276,14 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 	descriptor blueprints.EnvironmentBlueprintStageDescriptor,
 	now time.Time,
 ) (bool, error) {
-	chunkPrefix := blueprints.EnvironmentBlueprintRevisionPrefixFinal(
+	revisionPrefix := blueprints.EnvironmentBlueprintRevisionPrefixFinal(
 		descriptor.Claim.EnvironmentID,
 		descriptor.Claim.RevisionID,
-	) + "chunks/"
-	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: chunkPrefix, Limit: 33})
+	)
+	// The abandoned descriptor fences every publisher for this exact private
+	// revision. Keep that owner until all chunks, root and companion records
+	// have been retired; deleting just chunks would strand the sealed root.
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: revisionPrefix, Limit: 33})
 	if err != nil {
 		return false, err
 	}
@@ -319,7 +336,7 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 	mutations := make([]etcdstore.Mutation, 0, count+1)
 	for index := 0; index < count; index++ {
 		entry := page.Values[index]
-		if entry.ModRevision <= 0 || !strings.HasPrefix(entry.Key, chunkPrefix) {
+		if entry.ModRevision <= 0 || !strings.HasPrefix(entry.Key, revisionPrefix) {
 			return false, blueprints.CorruptEnvironmentBlueprintStage()
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
@@ -374,8 +391,7 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	if err != nil {
 		return false, err
 	}
-	if evidence == nil || len(evidence.Values) != 5 || evidence.Values[0] == nil ||
-		evidence.Values[2] == nil || evidence.Values[3] == nil || evidence.Values[4] == nil {
+	if evidence == nil || len(evidence.Values) != 5 || evidence.Values[0] == nil {
 		return false, nil
 	}
 	defer clearKeyValues(evidence.Values)
@@ -389,6 +405,33 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 		if locatorErr != nil || owned {
 			return false, blueprints.CorruptEnvironmentBlueprintStage()
 		}
+	}
+	if evidence.Values[2] == nil && evidence.Values[3] == nil && evidence.Values[4] == nil {
+		conditions := []etcdstore.Condition{
+			{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision},
+			{Key: markerKey}, {Key: taskPrimaryKey},
+			{
+				Key: blueprints.EnvironmentBlueprintRevisionPrefixFinal(
+					stored.Claim.EnvironmentID,
+					stored.Claim.RevisionID,
+				),
+				Prefix: true,
+			},
+		}
+		mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: descriptorKey}}
+		if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 5,
+			blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
+			return false, err
+		}
+		result, err := repository.store.Transact(ctx, conditions, mutations)
+		if err != nil {
+			return false, err
+		}
+		clearKeyValues(result.FailureReads)
+		return result.Succeeded, nil
+	}
+	if evidence.Values[2] == nil || evidence.Values[3] == nil || evidence.Values[4] == nil {
+		return false, nil
 	}
 	markerOwned, err := environmentBlueprintMarkerOwnedBy(evidence.Values[2].Value, stored)
 	if err != nil || !markerOwned {

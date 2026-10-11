@@ -73,7 +73,7 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 		return writer, entryRuntimeConditions, nil
 	}
 	predecessor, predecessorCondition, err := repository.readTaskMaterializationAppliedPredecessor(
-		ctx, environmentID, record.RenderGeneration, readRevision,
+		ctx, environmentID, record, readRevision,
 	)
 	if err != nil {
 		return taskMaterializationWriterRecord{}, nil, err
@@ -105,7 +105,7 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 func (repository *TaskRepository) readTaskMaterializationAppliedPredecessor(
 	ctx context.Context,
 	environmentID string,
-	candidateGeneration int32,
+	task TaskRecord,
 	readRevision int64,
 ) (taskMaterializationAppliedPredecessor, etcdstore.Condition, error) {
 	key := projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID)
@@ -120,7 +120,7 @@ func (repository *TaskRepository) readTaskMaterializationAppliedPredecessor(
 		)
 	}
 	predecessor, err := taskMaterializationAppliedPredecessorFromValue(
-		read.Values[0], environmentID, candidateGeneration,
+		read.Values[0], environmentID, task,
 	)
 	if err != nil {
 		return taskMaterializationAppliedPredecessor{}, etcdstore.Condition{}, err
@@ -131,9 +131,9 @@ func (repository *TaskRepository) readTaskMaterializationAppliedPredecessor(
 func taskMaterializationAppliedPredecessorFromValue(
 	value *etcdstore.KeyValue,
 	environmentID string,
-	candidateGeneration int32,
+	task TaskRecord,
 ) (taskMaterializationAppliedPredecessor, error) {
-	if candidateGeneration <= 0 {
+	if task.RenderGeneration <= 0 {
 		return taskMaterializationAppliedPredecessor{}, errs.New(
 			errs.KindStateConflict,
 			"task candidate render generation is invalid",
@@ -145,7 +145,7 @@ func taskMaterializationAppliedPredecessorFromValue(
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(value.Value)
 	if err != nil || projection.EnvironmentID != environmentID ||
 		recordcodec.ValidateID(ids.KindTask, projection.RevisionID) != nil ||
-		projection.RenderGeneration >= uint64(candidateGeneration) {
+		!taskAcceptsAppliedGeneration(task, projection.RevisionID, projection.RenderGeneration) {
 		return taskMaterializationAppliedPredecessor{}, errs.New(
 			errs.KindStateConflict,
 			"task applied predecessor identity is invalid",
@@ -155,6 +155,15 @@ func taskMaterializationAppliedPredecessorFromValue(
 		Present: true, KeyRevision: value.ModRevision,
 		RevisionID: projection.RevisionID, RenderGeneration: projection.RenderGeneration,
 	}, nil
+}
+
+// Independent children share one authored generation. A completed sibling is
+// an admissible source only within that exact revision; equal generations from
+// another Apply and all newer applied state remain fenced out.
+func taskAcceptsAppliedGeneration(task TaskRecord, revisionID string, generation uint64) bool {
+	return generation < uint64(task.RenderGeneration) ||
+		generation == uint64(task.RenderGeneration) && taskjournal.IsBlueprintChild(task.Params) &&
+			revisionID == task.Params[blueprints.EnvironmentDesiredRevisionParam]
 }
 
 func validateTaskMaterializationWriterForTask(
@@ -168,6 +177,10 @@ func validateTaskMaterializationWriterForTask(
 	}
 	blueprintCandidate := taskHasBlueprintCandidateAppliedAuthority(record)
 	if blueprintCandidate != (writer.BlueprintAppliedPredecessor != nil) {
+		return corruptTaskMaterializationWriter()
+	}
+	if predecessor := writer.BlueprintAppliedPredecessor; predecessor != nil && predecessor.Present &&
+		!taskAcceptsAppliedGeneration(record, predecessor.RevisionID, predecessor.RenderGeneration) {
 		return corruptTaskMaterializationWriter()
 	}
 	return validateTaskMaterializationWriter(writer)
@@ -332,10 +345,10 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		if decodeErr != nil || current.EnvironmentID != environmentID {
 			return taskMaterializationProjectionChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 		}
-		if projection.RenderGeneration <= current.RenderGeneration {
+		if !taskAcceptsAppliedGeneration(record, current.RevisionID, current.RenderGeneration) {
 			return taskMaterializationProjectionChange{}, errs.New(
 				errs.KindStateConflict,
-				"task desired projection is not newer than the applied projection",
+				"task desired projection conflicts with the applied revision",
 			)
 		}
 		projectionRevisionCondition = state.Values[1].ModRevision
@@ -436,6 +449,19 @@ func clearTaskMaterializationProjectionChange(change taskMaterializationProjecti
 }
 
 func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {
+	if taskjournal.IsReleaseNetworkChild(record.Params) {
+		if err := taskjournal.ValidateReleaseNetworkChild(record.ID, record.Actor, record.Executor, record.Type, record.Params); err != nil {
+			return "", false, err
+		}
+		if record.Target != record.Owner.EnvironmentID ||
+			recordcodec.ValidateID(ids.KindEnvironment, record.Target) != nil ||
+			len(record.Materializations) != 0 ||
+			record.Configuration != nil ||
+			record.EntryRuntime != nil {
+			return "", false, errs.New(errs.KindValidationFailed, "release network writer ownership is invalid")
+		}
+		return record.Owner.EnvironmentID, true, nil
+	}
 	materializationEnvironment, materializes, err := taskMaterializationEnvironment(record)
 	if err != nil {
 		return "", false, err
@@ -522,7 +548,7 @@ func validateTaskMaterializationWriter(record taskMaterializationWriterRecord) e
 	}
 	if !predecessor.Present || predecessor.KeyRevision <= 0 ||
 		recordcodec.ValidateID(ids.KindTask, predecessor.RevisionID) != nil ||
-		predecessor.RenderGeneration >= uint64(record.RenderGeneration) {
+		predecessor.RenderGeneration > uint64(record.RenderGeneration) {
 		return corruptTaskMaterializationWriter()
 	}
 	return nil

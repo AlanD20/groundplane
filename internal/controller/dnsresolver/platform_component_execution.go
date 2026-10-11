@@ -282,7 +282,23 @@ func (planner *PlatformExecutionPlanner) resolve(
 			return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "platform resolver listener is corrupt")
 		}
 	}
-	renderInput, err := BuildRenderInput(hostInput.Hosts, config, baselineInput.Resolvers, privateListener)
+	zoneListeners := make([]netip.Addr, len(input.ZoneListeners))
+	for index, listener := range input.ZoneListeners {
+		zoneListeners[index], err = netip.ParseAddr(listener)
+		if err != nil {
+			return resolvedPlatformComponent{}, errs.New(
+				errs.KindInternal,
+				"platform resolver Zone listener is corrupt",
+			)
+		}
+	}
+	renderInput, err := BuildRenderInput(
+		hostInput.Hosts,
+		config,
+		baselineInput.Resolvers,
+		privateListener,
+		zoneListeners,
+	)
 	if err != nil {
 		return resolvedPlatformComponent{}, err
 	}

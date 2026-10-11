@@ -9,22 +9,30 @@ import (
 )
 
 func serviceCreateBody(input apiTypes.ServiceCreate) (generated.ServiceCreateJSONRequestBody, error) {
+	if input.RollingReplicaTimeoutSeconds > 86400 {
+		return generated.ServiceCreateJSONRequestBody{}, errs.New(
+			errs.KindValidationFailed,
+			"rolling replica timeout must not exceed 86400 seconds",
+		)
+	}
+	rollingTimeout := int32(input.RollingReplicaTimeoutSeconds)
 	resources, err := serviceResourcesBody(input.Resources)
 	if err != nil {
 		return generated.ServiceCreateJSONRequestBody{}, err
 	}
 	return generated.ServiceCreateJSONRequestBody{
-		EnvironmentId: input.EnvironmentID,
-		Name:          input.Name,
-		Image:         input.Image,
-		Zones:         optionalServiceStrings(input.Zones),
-		Strategy:      input.Strategy,
-		OnFailure:     string(input.OnFailure),
-		Healthcheck:   serviceHealthcheckBody(input.Healthcheck),
-		Resources:     resources,
-		Expose:        optionalServiceStrings(input.Expose),
-		Restart:       input.Restart,
-		Replicas:      int64(input.Replicas),
+		EnvironmentId:                input.EnvironmentID,
+		Name:                         input.Name,
+		Image:                        input.Image,
+		Zones:                        optionalServiceStrings(input.Zones),
+		Strategy:                     input.Strategy,
+		OnFailure:                    string(input.OnFailure),
+		RollingReplicaTimeoutSeconds: &rollingTimeout,
+		Healthcheck:                  serviceHealthcheckBody(input.Healthcheck),
+		Resources:                    resources,
+		Expose:                       optionalServiceStrings(input.Expose),
+		Restart:                      input.Restart,
+		Replicas:                     int64(input.Replicas),
 	}, nil
 }
 

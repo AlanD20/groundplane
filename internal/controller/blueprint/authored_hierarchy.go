@@ -20,7 +20,10 @@ func (service *Service) authoredOwnerTenant(
 			return keyvalue.Versioned[hierarchyrecord.TenantRecord]{}, err
 		}
 		if tenant.Record.ID != project.TenantID {
-			return keyvalue.Versioned[hierarchyrecord.TenantRecord]{}, errs.New(errs.KindStateConflict, "Blueprint Project's Tenant changed")
+			return keyvalue.Versioned[hierarchyrecord.TenantRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Project's Tenant changed",
+			)
 		}
 		return tenant, nil
 	case hierarchyrecord.ProjectKindBacking:
@@ -28,5 +31,8 @@ func (service *Service) authoredOwnerTenant(
 			return keyvalue.Versioned[hierarchyrecord.TenantRecord]{}, nil
 		}
 	}
-	return keyvalue.Versioned[hierarchyrecord.TenantRecord]{}, errs.New(errs.KindStateConflict, "Blueprint Project ownership is invalid")
+	return keyvalue.Versioned[hierarchyrecord.TenantRecord]{}, errs.New(
+		errs.KindStateConflict,
+		"Blueprint Project ownership is invalid",
+	)
 }

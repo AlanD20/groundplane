@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
 	component "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,6 +19,7 @@ type ComponentActionRecipe struct {
 	imagePlatform  component.OCIPlatform
 	validateArgs   []string
 	activateArgs   []string
+	activation     registeredcatalog.ContainerConfigActivation
 }
 
 func NewComponentActionRecipe(
@@ -27,6 +29,7 @@ func NewComponentActionRecipe(
 	imagePlatform component.OCIPlatform,
 	validateArgs []string,
 	activateArgs []string,
+	activation registeredcatalog.ContainerConfigActivation,
 ) (ComponentActionRecipe, error) {
 	if !validRelativeComponentConfigPath(relativePath) ||
 		!filepath.IsAbs(containerPath) || filepath.Clean(containerPath) != containerPath ||
@@ -44,13 +47,25 @@ func NewComponentActionRecipe(
 				Variant:      imagePlatform.Variant,
 			},
 		) != nil ||
-		!validComponentCommand(validateArgs) || !validComponentCommand(activateArgs) {
+		!validComponentCommand(validateArgs) || !validComponentActivation(activation, activateArgs) {
 		return ComponentActionRecipe{}, errs.New(errs.KindInternal, "compiled Component action recipe is invalid")
 	}
 	return ComponentActionRecipe{
 		relativePath: relativePath, containerPath: containerPath, imageReference: imageReference, imagePlatform: imagePlatform,
 		validateArgs: append([]string(nil), validateArgs...), activateArgs: append([]string(nil), activateArgs...),
+		activation: activation,
 	}, nil
+}
+
+func validComponentActivation(activation registeredcatalog.ContainerConfigActivation, arguments []string) bool {
+	switch activation {
+	case registeredcatalog.ContainerConfigActivationCommand:
+		return validComponentCommand(arguments)
+	case registeredcatalog.ContainerConfigActivationHTTPDiscovery:
+		return len(arguments) == 0
+	default:
+		return false
+	}
 }
 
 func (recipe ComponentActionRecipe) matchesImage(output []byte) bool {

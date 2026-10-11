@@ -28,6 +28,10 @@ func (p *WorkerPool) executeBackingHookStep(
 		return err
 	}
 	if ack.GetExisting() {
+		if procedure.GetEvent() == agentpb.BackingHookEvent_BACKING_HOOK_EVENT_DETACH &&
+			ack.GetResultAlreadyRecorded() {
+			return nil
+		}
 		return errs.New(
 			errs.KindStateConflict,
 			"agent: backing hook execution already started; explicit Task retry is required",

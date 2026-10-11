@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -33,10 +34,10 @@ func ValidateNativePredecessorWitness(environmentID, serviceID string, current, 
 		return err
 	}
 	currentWorkload, currentProxy, err := nativePredecessorServices(currentArtifact, serviceID)
-	if err != nil || currentWorkload == nil {
+	if err != nil || len(currentWorkload) == 0 {
 		return invalidNativePredecessorWitness()
 	}
-	if err := validateNativePredecessorWorkload(currentWorkload); err != nil {
+	if err := validateNativeWorkloadSet(currentWorkload); err != nil {
 		return err
 	}
 	if currentProxy != nil && validateNativePredecessorProxy(currentProxy) != nil {
@@ -50,17 +51,17 @@ func ValidateNativePredecessorWitness(environmentID, serviceID string, current, 
 		return err
 	}
 	retainedWorkload, retainedProxy, err := nativePredecessorServices(retainedArtifact, serviceID)
-	if err != nil || retainedWorkload == nil || retainedProxy != nil ||
+	if err != nil || len(retainedWorkload) != 1 || len(currentWorkload) != 1 || retainedProxy != nil ||
 		retainedArtifact.GetArtifactId() == currentArtifact.GetArtifactId() {
 		return invalidNativePredecessorWitness()
 	}
-	if err := validateNativePredecessorWorkload(retainedWorkload); err != nil {
+	if err := validateNativeWorkloadSet(retainedWorkload); err != nil {
 		return err
 	}
-	if currentWorkload.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT ||
-		retainedWorkload.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT ||
-		currentWorkload.GetSlot() == retainedWorkload.GetSlot() ||
-		nativePredecessorReleaseID(currentWorkload) == nativePredecessorReleaseID(retainedWorkload) {
+	if currentWorkload[0].GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT ||
+		retainedWorkload[0].GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT ||
+		currentWorkload[0].GetSlot() == retainedWorkload[0].GetSlot() ||
+		nativePredecessorReleaseID(currentWorkload[0]) == nativePredecessorReleaseID(retainedWorkload[0]) {
 		return invalidNativePredecessorWitness()
 	}
 	return nil
@@ -109,7 +110,7 @@ func SelectNativeRestorationMembers(
 			return nil, err
 		}
 		workload, _, err := nativePredecessorServices(artifact, candidate.ServiceID)
-		if err != nil || workload == nil || nativePredecessorReleaseID(workload) == candidate.ReleaseID {
+		if err != nil || len(workload) == 0 || nativePredecessorReleaseID(workload[0]) == candidate.ReleaseID {
 			return nil, invalidNativePredecessorWitness()
 		}
 		result[index] = CandidateRestorationSelection{
@@ -143,8 +144,9 @@ func openNativePredecessorArtifact(environmentID string, encoded []byte) (*agent
 func nativePredecessorServices(
 	artifact *agentpb.ComposeArtifact,
 	serviceID string,
-) (*agentpb.ComposeService, *agentpb.ComposeService, error) {
-	var workload, proxy *agentpb.ComposeService
+) ([]*agentpb.ComposeService, *agentpb.ComposeService, error) {
+	var workloads []*agentpb.ComposeService
+	var proxy *agentpb.ComposeService
 	for _, service := range artifact.GetServices() {
 		if service == nil || service.GetServiceId() != serviceID {
 			return nil, nil, invalidNativePredecessorWitness()
@@ -156,16 +158,43 @@ func nativePredecessorServices(
 			}
 			proxy = service
 		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
-			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
-			if workload != nil {
-				return nil, nil, invalidNativePredecessorWitness()
-			}
-			workload = service
+			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA:
+			workloads = append(workloads, service)
 		default:
 			return nil, nil, invalidNativePredecessorWitness()
 		}
 	}
-	return workload, proxy, nil
+	if err := validateNativeWorkloadSet(workloads); err != nil {
+		return nil, nil, err
+	}
+	return workloads, proxy, nil
+}
+
+// A serving artifact contains either one Compose workload or the complete
+// ordered replica set of one rolling Release. Mixed Releases and partial sets
+// are not current-runtime authority.
+func validateNativeWorkloadSet(workloads []*agentpb.ComposeService) error {
+	if len(workloads) == 0 || len(workloads) > rollingrelease.MaximumReplicas {
+		return invalidNativePredecessorWitness()
+	}
+	first := workloads[0]
+	rolling := first.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA
+	if !rolling && len(workloads) != 1 {
+		return invalidNativePredecessorWitness()
+	}
+	for index, workload := range workloads {
+		if err := validateNativePredecessorWorkload(workload); err != nil {
+			return err
+		}
+		if workload.GetRole() != first.GetRole() || workload.GetServiceId() != first.GetServiceId() ||
+			nativePredecessorReleaseID(workload) != nativePredecessorReleaseID(first) ||
+			workload.GetImageReference() != first.GetImageReference() ||
+			rolling && workload.GetRollingReplicaOrdinal() != uint32(index+1) {
+			return invalidNativePredecessorWitness()
+		}
+	}
+	return nil
 }
 
 func validateNativePredecessorWorkload(service *agentpb.ComposeService) error {
@@ -188,6 +217,10 @@ func validateNativePredecessorWorkload(service *agentpb.ComposeService) error {
 		if !service.GetHasHealthcheck() || (service.GetSlot() != "blue" && service.GetSlot() != "green") ||
 			labels[labelSlot] != service.GetSlot() ||
 			runtimeRole != "slot" {
+			return invalidNativePredecessorWitness()
+		}
+	case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA:
+		if labels[labelSlot] != "" || validateRollingReplica(service) != nil {
 			return invalidNativePredecessorWitness()
 		}
 	default:

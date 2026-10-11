@@ -3,6 +3,7 @@ package releaserender
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -12,6 +13,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,6 +25,7 @@ const TaskReleasePublicationParam = "release_publication_id"
 // candidate. It is staged before publication and never re-reads mutable labels,
 // Blueprint projection, image identity, or selected slot at dispatch time.
 type ReleaseRenderInput struct {
+	ProxyImplementation  serviceproxy.Implementation                        `json:"proxy_implementation,omitempty"`
 	ProxyAddresses       map[string]string                                  `json:"proxy_addresses,omitempty"`
 	ReleaseID            string                                             `json:"release_id"`
 	PlanID               string                                             `json:"plan_id"`
@@ -34,6 +37,7 @@ type ReleaseRenderInput struct {
 	CandidateWorkload    domain.WorkloadSeal                                `json:"candidate_workload"`
 	PriorWorkload        *domain.WorkloadSeal                               `json:"prior_workload,omitempty"`
 	Strategy             domain.Strategy                                    `json:"strategy"`
+	Rolling              *rollingrelease.Plan                               `json:"rolling,omitempty"`
 	PriorStrategy        domain.Strategy                                    `json:"prior_strategy"`
 	Slot                 domain.Slot                                        `json:"slot,omitempty"`
 	PriorSlot            domain.Slot                                        `json:"prior_slot"`
@@ -41,7 +45,7 @@ type ReleaseRenderInput struct {
 	PriorTarget          domain.WorkloadTarget                              `json:"prior_target"`
 	ProxyGeneration      uint64                                             `json:"proxy_generation"`
 	PriorProxyGeneration uint64                                             `json:"prior_proxy_generation"`
-	ProxyPorts           []uint16                                           `json:"proxy_ports"`
+	ProxyPorts           []domain.ProxyPort                                 `json:"proxy_ports"`
 	ProxyConfigDigest    string                                             `json:"proxy_config_digest"`
 	PriorProxyDigest     string                                             `json:"prior_proxy_digest"`
 	ProxyImage           *domain.ProxyImage                                 `json:"proxy_image,omitempty"`
@@ -99,9 +103,16 @@ func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
 	if err := validateOrdinaryPriorRuntime(input); err != nil {
 		return err
 	}
-	if (len(input.ProxyPorts) != 0) != (input.ProxyImage != nil) ||
+	if (len(input.ProxyPorts) != 0) != (input.ProxyImplementation != "") ||
+		len(input.ProxyPorts) != 0 &&
+			domain.ValidateProxyForwarding(input.ProxyImplementation, input.ProxyPorts) != nil ||
+		(len(input.ProxyPorts) != 0) != (input.ProxyImage != nil) ||
 		input.ProxyImage != nil && input.ProxyImage.Validate() != nil {
 		return errs.New(errs.KindValidationFailed, "release proxy image authority is invalid")
+	}
+	if err := domain.ValidateProxyTransition(input.ServiceName, input.Strategy,
+		domain.ProxySelection{Implementation: input.ProxyImplementation, Ports: input.ProxyPorts}, nil); err != nil {
+		return err
 	}
 	if ids.Validate(ids.KindDeployment, input.ReleaseID) != nil || ids.Validate(ids.KindPlan, input.PlanID) != nil ||
 		ids.Validate(
@@ -123,9 +134,14 @@ func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
 		input.PriorTarget != priorTarget {
 		return errs.New(errs.KindValidationFailed, "release render workload topology is invalid")
 	}
-	if input.Strategy == domain.StrategyBlueGreen {
+	if err := validateRollingRenderInput(input); err != nil {
+		return err
+	}
+	if input.Strategy == domain.StrategyRolling {
+		// Replica and proxy authority are checked together above.
+	} else if input.Strategy == domain.StrategyBlueGreen {
 		if input.CandidateWorkload.ReplicaCount != 1 ||
-			input.PriorWorkload != nil && input.PriorWorkload.ReplicaCount != 1 {
+			input.PriorWorkload != nil && input.PriorStrategy != domain.StrategyRolling && input.PriorWorkload.ReplicaCount != 1 {
 			return errs.New(errs.KindValidationFailed, "blue-green transition requires singleton workloads")
 		}
 		if input.Slot != domain.SlotBlue && input.Slot != domain.SlotGreen {
@@ -151,7 +167,8 @@ func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
 		}
 	} else if (input.PriorArtifactID != "" && ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil) ||
 		(input.PriorArtifactID == "") != (input.PriorWorkload == nil) ||
-		input.CandidateTarget != domain.WorkloadSingleton || input.PriorTarget != domain.WorkloadSingleton ||
+		input.CandidateTarget != domain.WorkloadSingleton ||
+		(input.PriorTarget != domain.WorkloadSingleton && input.PriorTarget != domain.WorkloadRolling) ||
 		input.ProxyGeneration != 0 || input.PriorProxyGeneration != 0 ||
 		input.ProxyConfigDigest != "" || input.PriorProxyDigest != "" {
 		return errs.New(errs.KindValidationFailed, "portless recreate render authority is invalid")
@@ -160,7 +177,8 @@ func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
 		return errs.New(errs.KindValidationFailed, "release prior topology artifact authority is invalid")
 	}
 	if input.PriorWorkload != nil && (domain.ValidateWorkloadSeal(*input.PriorWorkload) != nil ||
-		input.PriorStrategy == domain.StrategyBlueGreen && (input.PriorWorkload.ReplicaCount != 1 || input.CandidateWorkload.ReplicaCount != 1)) {
+		input.PriorStrategy == domain.StrategyBlueGreen && (input.PriorWorkload.ReplicaCount != 1 ||
+			input.Strategy != domain.StrategyRolling && input.CandidateWorkload.ReplicaCount != 1)) {
 		return errs.New(errs.KindValidationFailed, "release prior workload authority is invalid")
 	}
 	serviceNames := make([]string, 0, len(input.Projection.DesiredServices)+1)
@@ -183,9 +201,21 @@ func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
 	if !input.ServiceDependencyPlans.Equal(input.Projection.ServiceDependencyPlans) {
 		return errs.New(errs.KindValidationFailed, "release render dependency plans do not match the frozen projection")
 	}
-	if len(input.ProxyPorts) != 0 {
-		if _, err := domain.RenderProxyConfig(input.ServiceName, input.ReleaseID, input.CandidateTarget, input.ProxyGeneration, input.ProxyPorts); err != nil {
+	if len(input.ProxyPorts) != 0 && input.Strategy != domain.StrategyRolling {
+		if _, err := domain.RenderProxyConfig(input.ProxyImplementation, input.ServiceName, input.ReleaseID, input.CandidateTarget, input.ProxyGeneration, input.ProxyPorts); err != nil {
 			return err
+		}
+	}
+	if len(input.ProxyPorts) != 0 {
+		implementation, err := projectionrecord.ServiceProxyImplementation(input.Projection)
+		if err != nil {
+			return err
+		}
+		if implementation != input.ProxyImplementation {
+			return errs.New(
+				errs.KindValidationFailed,
+				"release proxy implementation differs from its captured Environment choice",
+			)
 		}
 	}
 	if projectionrecord.ValidateEnvironmentComposeProjection(input.Projection) != nil ||
@@ -213,6 +243,10 @@ func releaseRenderTargetsGeneratedService(components []componentrecord.Record, s
 }
 
 func CloneReleaseRenderInput(input ReleaseRenderInput) ReleaseRenderInput {
+	if input.Rolling != nil {
+		plan := rollingrelease.ClonePlan(*input.Rolling)
+		input.Rolling = &plan
+	}
 	if input.PriorRuntime != nil {
 		prior := *input.PriorRuntime
 		prior.CurrentArtifact = slices.Clone(prior.CurrentArtifact)

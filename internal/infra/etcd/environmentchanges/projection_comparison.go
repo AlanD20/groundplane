@@ -71,6 +71,7 @@ func SameServiceRemovalDesiredRoutes(left, right []projectionrecord.EnvironmentR
 func SameServiceRemovalDesired(left, right core.Service) bool {
 	if left.ID != right.ID || left.Name != right.Name || left.Image != right.Image ||
 		left.Strategy != right.Strategy || left.OnFailure != right.OnFailure ||
+		left.RollingReplicaTimeoutSeconds != right.RollingReplicaTimeoutSeconds ||
 		!left.Healthcheck.Equal(right.Healthcheck) || left.Resources != right.Resources ||
 		left.WorkingDir != right.WorkingDir || left.User != right.User ||
 		left.Restart != right.Restart || left.Logging != right.Logging || left.Replicas != right.Replicas ||
@@ -232,6 +233,7 @@ func sameServiceRemovalComponentRecord(left, right componentrecord.Record) bool 
 
 func sameServiceRemovalComponentConfig(left, right core.ComponentConfig) bool {
 	if (left.Caddy == nil) != (right.Caddy == nil) ||
+		(left.Envoy == nil) != (right.Envoy == nil) ||
 		(left.CloudflareTunnel == nil) != (right.CloudflareTunnel == nil) ||
 		(left.CoreDNS == nil) != (right.CoreDNS == nil) {
 		return false
@@ -243,6 +245,10 @@ func sameServiceRemovalComponentConfig(left, right core.ComponentConfig) bool {
 	}
 	if left.CloudflareTunnel != nil && (left.CloudflareTunnel.SecretID != right.CloudflareTunnel.SecretID ||
 		!slices.Equal(left.CloudflareTunnel.ZoneIDs, right.CloudflareTunnel.ZoneIDs)) {
+		return false
+	}
+	if left.Envoy != nil && (left.Envoy.Alias != right.Envoy.Alias ||
+		!slices.Equal(left.Envoy.ZoneIDs, right.Envoy.ZoneIDs)) {
 		return false
 	}
 	if left.CoreDNS == nil {

@@ -193,23 +193,7 @@ func validateNativePlanReferences(plan *agentpb.ExecutionPlan, authority *agentp
 		if artifact.GetArtifactId() != prior.GetPriorArtifactId() {
 			return invalidNativeRestorationAuthority()
 		}
-		found := false
-		for _, service := range artifact.GetServices() {
-			if service.GetServiceId() != member.GetServiceId() ||
-				service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-				continue
-			}
-			target := service.GetSlot()
-			if target == "" {
-				target = "singleton"
-			}
-			if found || nativePredecessorReleaseID(service) != prior.GetPriorReleaseId() ||
-				target != prior.GetPriorTarget() {
-				return invalidNativeRestorationAuthority()
-			}
-			found = true
-		}
-		if !found {
+		if err := validateNativePlanArtifactBinding(prior, member.GetServiceId(), artifact); err != nil {
 			return invalidNativeRestorationAuthority()
 		}
 		if len(witness.GetRetainedPriorArtifact()) == 0 {

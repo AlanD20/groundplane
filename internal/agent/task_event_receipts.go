@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type taskEventAckKey struct {
@@ -18,6 +19,7 @@ type taskEventAckKey struct {
 
 type taskEventReceipt struct {
 	waiter chan struct{}
+	ack    *agentpb.TaskEventAck
 }
 
 type taskEventAckInbox struct {
@@ -66,6 +68,8 @@ func (p *WorkerPool) emitProgress(runCtx context.Context, progress TaskProgress)
 func (p *WorkerPool) publishProgress(runCtx context.Context, progress TaskProgress) bool {
 	owned := progress
 	owned.Chunk = append([]byte(nil), progress.Chunk...)
+	owned.HealthWait = proto.CloneOf(progress.HealthWait)
+	owned.Failure = proto.CloneOf(progress.Failure)
 	select {
 	case p.outputs <- WorkerOutput{Progress: &owned}:
 		return true
@@ -75,24 +79,29 @@ func (p *WorkerPool) publishProgress(runCtx context.Context, progress TaskProgre
 }
 
 func (p *WorkerPool) emitProgressAndWait(ctx context.Context, progress TaskProgress) error {
+	_, err := p.emitProgressForReceipt(ctx, progress)
+	return err
+}
+
+func (p *WorkerPool) emitProgressForReceipt(ctx context.Context, progress TaskProgress) (*agentpb.TaskEventAck, error) {
 	key := taskEventAckKeyForProgress(progress)
 	accepted := make(chan struct{})
 	receipt, registered := p.registerTaskEventAck(key, accepted)
 	if !registered {
-		return errs.New(errs.KindStateConflict, "agent: Task event acceptance is already pending")
+		return nil, errs.New(errs.KindStateConflict, "agent: Task event acceptance is already pending")
 	}
 	// Cancellation stops waiting, not delivery: once published, the exact
 	// receipt must survive until the Controller acknowledges it. Removing it
 	// here would turn an in-flight acknowledgement into a fatal stale event.
 	if !p.publishProgress(ctx, progress) {
 		p.removeTaskEventAck(key, receipt)
-		return ctx.Err()
+		return nil, ctx.Err()
 	}
 	select {
 	case <-accepted:
-		return nil
+		return receipt.ack, nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return nil, ctx.Err()
 	}
 }
 
@@ -100,6 +109,14 @@ func (p *WorkerPool) AcceptTaskEventAck(_ context.Context, ack *agentpb.TaskEven
 	if p == nil || p.taskEventAcks == nil || ack == nil || ack.GetExecutionEpoch() == 0 || ack.GetOrdinal() == 0 ||
 		len(ack.GetPlanHash()) != 32 {
 		return errs.New(errs.KindValidationFailed, "agent: Controller Task event acknowledgement is invalid")
+	}
+	if budget := ack.GetRollingBudget(); budget != nil {
+		if ack.GetState() != agentpb.TaskState_TASK_STATE_RUNNING || ack.GetOrdinal() != 1 ||
+			budget.GetDeadline() == nil || budget.GetDeadline().CheckValid() != nil ||
+			budget.GetDrainUntil() != nil && (budget.GetDrainUntil().CheckValid() != nil ||
+				!budget.GetDrainUntil().AsTime().Before(budget.GetDeadline().AsTime())) {
+			return errs.New(errs.KindValidationFailed, "agent: rolling start acknowledgement has an invalid deadline")
+		}
 	}
 	state := TaskProgressState(0)
 	switch ack.GetState() {
@@ -132,6 +149,7 @@ func (p *WorkerPool) AcceptTaskEventAck(_ context.Context, ack *agentpb.TaskEven
 		return errs.New(errs.KindStateConflict, "agent: stale Task event acknowledgement")
 	}
 	if receipt.waiter != nil {
+		receipt.ack = proto.CloneOf(ack)
 		close(receipt.waiter)
 	}
 	return nil

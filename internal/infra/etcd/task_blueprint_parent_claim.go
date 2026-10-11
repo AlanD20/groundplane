@@ -29,7 +29,7 @@ func (repository *TaskRepository) ClaimNextBlueprintParent(
 	}
 	conflicts := 0
 	for {
-		candidate, found, err := repository.nextTaskClaimCandidate(ctx, taskjournal.TaskExecutorBlueprint)
+		candidate, found, err := repository.nextTaskClaimCandidate(ctx, taskjournal.TaskExecutorBlueprint, assignedAt)
 		if err != nil || !found {
 			return etcdstore.Versioned[TaskRecord]{}, found, err
 		}

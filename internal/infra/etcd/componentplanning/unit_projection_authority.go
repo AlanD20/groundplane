@@ -43,11 +43,21 @@ func (authority FrozenProjectionAuthority) ComponentPredecessorZones() ([]keyval
 // PrepareFrozenComponentUnitAuthority selects the acknowledged singleton
 // runtime, not the Environment's last aggregate Apply. Every predecessor and
 // its absence is compared again in the child's atomic publication.
-func (repository *Planner) PrepareFrozenComponentUnitAuthority(ctx context.Context, input FrozenProjectionAuthorityInput, current keyvalue.Versioned[componentrecord.Record]) (FrozenProjectionAuthority, error) {
-	if input.RuntimeSourceAuthority != ManagedRuntimeSourceAuthorityApplied || current.ReadRevision != input.ReadRevision || current.Revision <= 0 ||
-		current.Record.Desired.OwnerID != input.EnvironmentID || componentrecord.ValidateRecord(current.Record) != nil ||
+func (repository *Planner) PrepareFrozenComponentUnitAuthority(
+	ctx context.Context,
+	input FrozenProjectionAuthorityInput,
+	current keyvalue.Versioned[componentrecord.Record],
+) (FrozenProjectionAuthority, error) {
+	if input.RuntimeSourceAuthority != ManagedRuntimeSourceAuthorityApplied ||
+		current.ReadRevision != input.ReadRevision ||
+		current.Revision <= 0 ||
+		current.Record.Desired.OwnerID != input.EnvironmentID ||
+		componentrecord.ValidateRecord(current.Record) != nil ||
 		ids.Validate(ids.KindComponent, current.Record.Desired.ID) != nil {
-		return FrozenProjectionAuthority{}, errs.New(errs.KindValidationFailed, "Blueprint Component predecessor identity is invalid")
+		return FrozenProjectionAuthority{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Component predecessor identity is invalid",
+		)
 	}
 	authority, err := repository.prepareFrozenDesiredAuthority(ctx, input)
 	if err != nil {
@@ -63,8 +73,12 @@ func (repository *Planner) PrepareFrozenComponentUnitAuthority(ctx context.Conte
 	authority.appliedProjection = keyvalue.Versioned[projectionrecord.EnvironmentComposeProjection]{}
 	authority.appliedProjectionPresent = false
 	if !found {
-		if current.Record.Desired.Enabled || len(current.Record.Runtime.GeneratedServices) != 0 || current.Record.Runtime.PinnedIPv4 != "" {
-			return FrozenProjectionAuthority{}, errs.New(errs.KindStateConflict, "enabled Component has no acknowledged runtime; its exact predecessor cannot be inferred")
+		if current.Record.Desired.Enabled || len(current.Record.Runtime.GeneratedServices) != 0 ||
+			current.Record.Runtime.PinnedIPv4 != "" {
+			return FrozenProjectionAuthority{}, errs.New(
+				errs.KindStateConflict,
+				"enabled Component has no acknowledged runtime; its exact predecessor cannot be inferred",
+			)
 		}
 		return authority, nil
 	}
@@ -72,7 +86,10 @@ func (repository *Planner) PrepareFrozenComponentUnitAuthority(ctx context.Conte
 	acknowledged.Runtime.Healthy = current.Record.Runtime.Healthy
 	if runtime.Record.EnvironmentID != input.EnvironmentID ||
 		!componentrecord.EqualRecord(acknowledged, current.Record) {
-		return FrozenProjectionAuthority{}, errs.New(errs.KindStateConflict, "Blueprint Component acknowledged predecessor changed")
+		return FrozenProjectionAuthority{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component acknowledged predecessor changed",
+		)
 	}
 	projection := projectionrecord.EnvironmentComposeProjection{
 		EnvironmentID: input.EnvironmentID, RevisionID: runtime.Record.RevisionID,
@@ -80,16 +97,26 @@ func (repository *Planner) PrepareFrozenComponentUnitAuthority(ctx context.Conte
 		Components: []componentrecord.Record{runtime.Record.Component},
 	}
 	for _, zone := range runtime.Record.Zones {
-		projection.DesiredZones = append(projection.DesiredZones, projectionrecord.EnvironmentZoneProjection{EnvironmentID: input.EnvironmentID, Desired: zone.Desired})
+		projection.DesiredZones = append(
+			projection.DesiredZones,
+			projectionrecord.EnvironmentZoneProjection{EnvironmentID: input.EnvironmentID, Desired: zone.Desired},
+		)
 	}
-	authority.appliedProjection = keyvalue.Versioned[projectionrecord.EnvironmentComposeProjection]{Record: projection, Revision: runtime.Revision, ReadRevision: input.ReadRevision}
+	authority.appliedProjection = keyvalue.Versioned[projectionrecord.EnvironmentComposeProjection]{
+		Record:       projection,
+		Revision:     runtime.Revision,
+		ReadRevision: input.ReadRevision,
+	}
 	authority.appliedProjectionPresent = true
 	if !runtime.Record.Component.Desired.Enabled {
 		return authority, nil
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(runtime.Record.Artifact, artifact); err != nil {
-		return FrozenProjectionAuthority{}, errs.New(errs.KindStateConflict, "Blueprint Component predecessor artifact is unreadable")
+		return FrozenProjectionAuthority{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component predecessor artifact is unreadable",
+		)
 	}
 	source, err := projectionrecord.PrepareManagedComponentRuntimeSource(projection, runtime.Record.Component, artifact)
 	if err != nil {

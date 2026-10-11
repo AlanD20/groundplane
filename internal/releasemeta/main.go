@@ -14,6 +14,7 @@ import (
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 )
 
 func main() {
@@ -27,6 +28,8 @@ func run(args []string) error {
 	flags := flag.NewFlagSet("releasemeta", flag.ContinueOnError)
 	binary := flags.String("controller", "", "built Controller executable")
 	version := flags.String("version", "", "exact Controller build version")
+	sourceKind := flags.String("source-kind", "", "release or source_ref for the compiled build")
+	sourceCommit := flags.String("source-commit", "", "exact resolved source commit used by the build")
 	output := flags.String("output", "", "build metadata output file")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -55,7 +58,8 @@ func run(args []string) error {
 	if count != info.Size() {
 		return errors.New("controller build size changed during hashing")
 	}
-	metadata, err := upgrade.DescribeBuild(upgrade.Digest(fmt.Sprintf("sha256:%x", digest.Sum(nil))), *version)
+	metadata, err := upgrade.DescribeBuild(upgrade.Digest(fmt.Sprintf("sha256:%x", digest.Sum(nil))), *version,
+		buildversion.BuildProvenance{Kind: *sourceKind, Commit: *sourceCommit})
 	if err != nil {
 		return err
 	}

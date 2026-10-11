@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintretention"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
@@ -73,6 +74,33 @@ func (repository *TaskRepository) taskRetentionCandidateBlocked(
 	}
 	if held, err := repository.blueprintChildPruneHeld(ctx, task, revision); held || err != nil {
 		return held, err
+	}
+	if held, _, err := repository.releaseNetworkPruneAuthority(ctx, task, revision); held || err != nil {
+		return held, err
+	}
+	if held, _, err := repository.resolverTaskPruneAuthority(ctx, task, revision); held || err != nil {
+		return held, err
+	}
+	if held, err := repository.connectorCheckRetentionHeld(ctx, task, revision); held || err != nil {
+		return held, err
+	}
+	if held, err := repository.backingCheckRetentionHeld(ctx, task, revision); held || err != nil {
+		return held, err
+	}
+	if held, err := repository.dnsCheckRetentionHeld(ctx, task, revision); held || err != nil {
+		return held, err
+	}
+	if held, err := repository.edgeCheckRetentionHeld(ctx, task, revision); held || err != nil {
+		return held, err
+	}
+	if held, err := repository.runnerCheckRetentionHeld(ctx, task, revision); held || err != nil {
+		return held, err
+	}
+	if taskOwnsBlueprintRevision(task) {
+		_, held, err := blueprintretention.Guards(ctx, repository.store, task.Owner.EnvironmentID, task.ID, revision)
+		if held || err != nil {
+			return held, err
+		}
 	}
 	if held, err := repository.hierarchyDeletionChildPruneHeld(ctx, task, revision); held || err != nil {
 		return held, err

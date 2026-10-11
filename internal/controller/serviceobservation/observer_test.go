@@ -10,6 +10,7 @@ import (
 	wire "github.com/AlanD20/groundplane/internal/common/serviceobservation"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -169,7 +170,14 @@ func TestObserveUsesOneBoundedBatchAndPreservesUnavailableDesiredReads(t *testin
 	)
 	last := rebindEnvironment(
 		t,
-		newSourceFixture(t, 120, domain.StrategyBlueGreen, domain.SlotGreen, []uint16{8080}, 1),
+		newSourceFixture(
+			t,
+			120,
+			domain.StrategyBlueGreen,
+			domain.SlotGreen,
+			[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+			1,
+		),
 		first.service.Record.EnvironmentID,
 	)
 	input := []testkeyvalue.Versioned[testservices.ServiceRecord]{first.service, missing.service, last.service}
@@ -249,7 +257,14 @@ func TestObserveUsesOneBoundedBatchAndPreservesUnavailableDesiredReads(t *testin
 // Rationale: OBS-05; exact healthy workload counts must be degraded when the
 // Agent confirms the acknowledged stable proxy serves different live config.
 func TestObserveDegradesHealthyWorkloadForProxyConfigMismatch(t *testing.T) {
-	fixture := newSourceFixture(t, 125, domain.StrategyBlueGreen, domain.SlotBlue, []uint16{8080}, 1)
+	fixture := newSourceFixture(
+		t,
+		125,
+		domain.StrategyBlueGreen,
+		domain.SlotBlue,
+		[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+		1,
+	)
 	releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
 	services := &fakeServices{pages: []testkeyvalue.Page[testservices.ServiceRecord]{servicePage(60, fixture)}}
 	channel := &fakeChannel{result: func(targets []*agentpb.ServiceObservationTarget) (
@@ -281,7 +296,14 @@ func TestObserveDegradesHealthyWorkloadForProxyConfigMismatch(t *testing.T) {
 // Rationale: OBS-05; byte-identical proxy authority rewritten after the Agent
 // read is stale evidence and cannot be degraded or healthy current state.
 func TestObserveRejectsAcknowledgedProxyRuntimeRevisionABA(t *testing.T) {
-	fixture := newSourceFixture(t, 126, domain.StrategyRecreate, "", []uint16{8080}, 1)
+	fixture := newSourceFixture(
+		t,
+		126,
+		domain.StrategyRecreate,
+		"",
+		[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+		1,
+	)
 	releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
 	releases.mutateRuntime = func(_ string, call int, runtime *testkeyvalue.Versioned[serviceruntimerecord.Record]) {
 		if call == 2 {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/localdiag"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -33,6 +35,17 @@ func (fake fakeHostDocker) DockerVersion(context.Context) (string, error) {
 
 type fakeHostAgentHealth struct {
 	health []localagent.Health
+}
+
+type fakeHostEtcdSoftware struct {
+	identity buildversion.ContainerIdentity
+}
+
+func (fake fakeHostEtcdSoftware) InstalledSoftware(
+	context.Context,
+) (*buildversion.ContainerIdentity, error) {
+	identity := fake.identity
+	return &identity, nil
 }
 
 func (fake fakeHostAgentHealth) ListHealth(context.Context) ([]localagent.Health, error) {
@@ -76,14 +89,26 @@ func TestHostEtcdSourceProjectsSafeDependencyStates(t *testing.T) {
 	t.Parallel()
 
 	dbSize := int64(18 << 20)
+	software := buildversion.ContainerIdentity{
+		Image:        "registry.example/etcd@sha256:" + strings.Repeat("a", 64),
+		ConfigDigest: "sha256:" + strings.Repeat("b", 64),
+		SelectedTag:  "3.6.0",
+		Version:      "3.6.0",
+		Source: buildversion.BuildProvenance{
+			Kind: "release", Commit: strings.Repeat("c", 40),
+		},
+	}
 	healthy := &EtcdSource{
 		endpoints: []string{"private-endpoint"},
 		probe: func(context.Context, []string) ([]localdiag.EtcdEndpoint, error) {
 			return []localdiag.EtcdEndpoint{{Healthy: true, DBSizeBytes: &dbSize}}, nil
 		},
+		software: fakeHostEtcdSoftware{identity: software},
 	}
 	got, err := healthy.EtcdSnapshot(context.Background())
-	if err != nil || got.Node != hostEtcdNodeLabel || got.Status != apiTypes.HealthHealthy || got.DBSize != "18 MiB" {
+	if err != nil || got.Node != hostEtcdNodeLabel || got.Status != apiTypes.HealthHealthy || got.DBSize != "18 MiB" ||
+		got.Software == nil ||
+		*got.Software != software {
 		t.Fatalf("healthy EtcdSnapshot() = %#v, %v", got, err)
 	}
 
@@ -95,6 +120,7 @@ func TestHostEtcdSourceProjectsSafeDependencyStates(t *testing.T) {
 				"private endpoint diagnostic",
 			)
 		},
+		software: fakeHostEtcdSoftware{identity: software},
 	}
 	got, err = failed.EtcdSnapshot(context.Background())
 	if err != nil || got.Status != apiTypes.HealthFailed || got.DBSize != hostUnavailable {

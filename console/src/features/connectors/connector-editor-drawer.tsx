@@ -25,6 +25,12 @@ import type {
 } from "@/lib/types";
 import type { ConnectorEditSnapshot } from "./api";
 import {
+  connectorCreateRequest,
+  connectorEditRequest,
+  connectorSnapshotRevision,
+} from "./api";
+import { ConnectorCheckPanel } from "./connector-check-panel";
+import {
   ConnectorCredentialField,
   type CredentialDraft,
 } from "./connector-credential-fields";
@@ -438,6 +444,42 @@ export function ConnectorEditorDrawer(props: ConnectorEditorProps) {
             </Button>
           )}
         </div>
+      )}
+      {open && (mode === "create" || snapshot !== null) && (
+        <ConnectorCheckPanel
+          environmentId={env.id}
+          identity={`${env.id}:${mode}:${snapshot?.connector.id ?? ""}:${snapshot?.etag ?? ""}:${inputRevision.current}`}
+          connectorId={mode === "edit" ? snapshot?.connector.id : undefined}
+          open={open}
+          disabled={!fieldsValid || submitting}
+          getRequest={async () => {
+            if (mode === "edit" && snapshot && editInput)
+              return {
+                connector_id: snapshot.connector.id,
+                revision: connectorSnapshotRevision(snapshot),
+                changes: hasEdit(editInput)
+                  ? connectorEditRequest(editInput)
+                  : undefined,
+              };
+            return {
+              draft: connectorCreateRequest({
+                name: normalizedName,
+                kind: "s3-compatible",
+                scope: "environment",
+                scopeRef: env.id,
+                endpoint: resolvedEndpoint,
+                bucket: bucket.trim(),
+                prefix: normalizedPrefix(prefix),
+                region: isR2 ? "auto" : region.trim(),
+                pathStyle: isR2 || addressing === "path",
+                credentials: {
+                  accessKey: requiredCredential(accessKey),
+                  secretKey: requiredCredential(secretKey),
+                },
+              }),
+            };
+          }}
+        />
       )}
       <DialogFooter>
         <Button variant="outline" onClick={close}>

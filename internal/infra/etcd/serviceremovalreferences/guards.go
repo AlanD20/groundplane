@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -40,12 +42,20 @@ func Prepare(
 	current servicerecord.ServiceRecord,
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) (Guards, error) {
+	checkCondition, err := backingchecks.RequireServiceIdle(ctx, store, current.Desired.ID, projection.ReadRevision)
+	if err != nil {
+		return Guards{}, err
+	}
+	edgeCondition, err := edgechecks.RequireServiceIdle(ctx, store, current.Desired.ID, projection.ReadRevision)
+	if err != nil {
+		return Guards{}, err
+	}
 	for _, entry := range projection.Record.Entries {
 		if !entry.Entry.ExposesAll() && slices.Contains(entry.Entry.Exposure, current.Desired.Name) {
 			return Guards{}, errs.New(errs.KindResourceInUse, "Service is referenced by an Entry exposure")
 		}
 	}
-	if err := rejectReleaseGroupReferences(ctx, store, current, projection.ReadRevision); err != nil {
+	if err := rejectReleaseGroupReferences(ctx, store, current.EnvironmentID, current.Desired.ID, projection.ReadRevision); err != nil {
 		return Guards{}, err
 	}
 	condition, rewrite, err := groupstore.LoadReleaseGroupCollectionEpoch(
@@ -55,16 +65,16 @@ func Prepare(
 	if err != nil {
 		return Guards{}, err
 	}
-	return Guards{conditions: []etcdstore.Condition{condition}}, nil
+	return Guards{conditions: []etcdstore.Condition{condition, checkCondition, edgeCondition}}, nil
 }
 
 func rejectReleaseGroupReferences(
 	ctx context.Context,
 	store referenceStore,
-	current servicerecord.ServiceRecord,
+	environmentID, serviceID string,
 	revision int64,
 ) error {
-	prefix := groupstore.ReleaseGroupOwnerPrefix + current.EnvironmentID + "/"
+	prefix := groupstore.ReleaseGroupOwnerPrefix + environmentID + "/"
 	start := ""
 	for {
 		page, err := store.Range(ctx, etcdstore.RangeRequest{
@@ -89,7 +99,7 @@ func rejectReleaseGroupReferences(
 		}
 		more := page.More
 		etcdstore.ClearRangeValues(page.Values)
-		if err := rejectReleaseGroupPage(ctx, store, current, revision, keys); err != nil {
+		if err := rejectReleaseGroupPage(ctx, store, environmentID, serviceID, revision, keys); err != nil {
 			return err
 		}
 		if !more {
@@ -104,7 +114,7 @@ func rejectReleaseGroupReferences(
 func rejectReleaseGroupPage(
 	ctx context.Context,
 	store referenceStore,
-	current servicerecord.ServiceRecord,
+	environmentID, serviceID string,
 	revision int64,
 	keys []string,
 ) error {
@@ -124,10 +134,10 @@ func rejectReleaseGroupPage(
 			return recordcodec.CorruptRecord()
 		}
 		group, err := groupstore.DecodeReleaseGroupStored(stored.Value)
-		if err != nil || group.EnvironmentID != current.EnvironmentID {
+		if err != nil || group.EnvironmentID != environmentID {
 			return recordcodec.CorruptRecord()
 		}
-		if slices.Contains(group.ServiceIDs, current.Desired.ID) {
+		if slices.Contains(group.ServiceIDs, serviceID) {
 			return errs.New(errs.KindResourceInUse, "Service is referenced by a Release Group")
 		}
 	}

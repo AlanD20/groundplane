@@ -19,6 +19,7 @@ func bindServiceProxyImage(
 	p := image.Platform
 	native.Image = image.Reference()
 	service.ImageReference, service.ImageRepository = native.Image, image.Repository
+	service.ImageSelectedTag = image.SelectedTag
 	service.ImageIndexDigest = mustDecodePlatformDigest(image.IndexDigest)
 	service.ImageChildDigest = mustDecodePlatformDigest(p.ChildDigest)
 	service.ImageConfigDigest = mustDecodePlatformDigest(p.ConfigDigest)

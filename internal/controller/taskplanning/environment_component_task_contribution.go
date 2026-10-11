@@ -119,12 +119,6 @@ func ResolveEnvironmentManagedConfigApply(
 		return EnvironmentManagedConfigApply{}, false, err
 	}
 	if !hasCandidate {
-		if hasMaterialization {
-			return EnvironmentManagedConfigApply{}, false, errs.New(
-				errs.KindInternal,
-				"Blueprint managed configuration materialization has no candidate Component",
-			)
-		}
 		return EnvironmentManagedConfigApply{}, false, nil
 	}
 	if input.Artifact.GetOwnerId() != candidate.Desired.OwnerID {
@@ -133,16 +127,6 @@ func ResolveEnvironmentManagedConfigApply(
 			"Blueprint managed-config candidate and artifact owners differ",
 		)
 	}
-	if !candidate.Desired.Enabled {
-		if hasMaterialization {
-			return EnvironmentManagedConfigApply{}, false, errs.New(
-				errs.KindInternal,
-				"disabled Blueprint managed-config candidate has a managed configuration materialization",
-			)
-		}
-		return EnvironmentManagedConfigApply{}, false, nil
-	}
-
 	serviceID := candidate.Runtime.GeneratedServices[0]
 	if err := requireEnvironmentManagedConfigArtifactService(input.Artifact, serviceID); err != nil {
 		return EnvironmentManagedConfigApply{}, false, err
@@ -184,25 +168,31 @@ func resolveEnvironmentManagedConfigCandidate(
 	var candidate componentrecord.Record
 	var selected componentrender.EnvironmentComponentRegistration
 	found := false
+	seenKinds := make(map[core.ComponentKind]bool)
+	seenIDs := make(map[string]bool)
+	ownerID := ""
 	for _, component := range components {
 		registration, registered := environmentComponentRegistration(catalog, component.Desired.Kind)
 		if !registered || registration.ManagedConfiguration == nil {
 			continue
 		}
-		if found {
+		if seenKinds[component.Desired.Kind] || seenIDs[component.Desired.ID] {
 			return componentrecord.Record{}, componentrender.EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
-				"Blueprint managed-config provider is duplicated",
+				"Blueprint managed-config provider repeats its kind or identity",
 			)
 		}
 		if ids.Validate(ids.KindComponent, component.Desired.ID) != nil ||
 			component.Desired.Owner != core.ComponentOwnerEnvironment ||
-			ids.Validate(ids.KindEnvironment, component.Desired.OwnerID) != nil {
+			ids.Validate(ids.KindEnvironment, component.Desired.OwnerID) != nil ||
+			(ownerID != "" && component.Desired.OwnerID != ownerID) {
 			return componentrecord.Record{}, componentrender.EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
 				"Blueprint managed-config candidate identity is invalid",
 			)
 		}
+		seenKinds[component.Desired.Kind], seenIDs[component.Desired.ID] = true, true
+		ownerID = component.Desired.OwnerID
 		if component.Desired.Enabled {
 			if len(component.Runtime.GeneratedServices) != 1 ||
 				ids.Validate(ids.KindService, component.Runtime.GeneratedServices[0]) != nil {
@@ -215,6 +205,15 @@ func resolveEnvironmentManagedConfigCandidate(
 			return componentrecord.Record{}, componentrender.EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
 				"disabled Blueprint managed-config candidate has a generated Service",
+			)
+		}
+		if !component.Desired.Enabled {
+			continue
+		}
+		if found {
+			return componentrecord.Record{}, componentrender.EnvironmentComponentRegistration{}, false, errs.New(
+				errs.KindValidationFailed,
+				"Environment can enable only one proxy; disable the current proxy before selecting another",
 			)
 		}
 		candidate = component
@@ -246,14 +245,14 @@ func resolveEnvironmentManagedConfigMaterialization(
 	for index := range materializations {
 		reference := materializations[index]
 		componentFile := reference.Source.ComponentFile
-		if componentFile == nil || !claimsManagedConfiguration(
-			componentFile.ComponentID,
-			componentFile.Path,
-			componentID,
-			managed,
-			catalog,
-		) {
+		if componentFile == nil || !claimsManagedConfiguration(componentFile.Path, catalog) {
 			continue
+		}
+		if managed == nil || componentFile.ComponentID != componentID || componentFile.Path != managed.SourcePath {
+			return -1, false, errs.New(
+				errs.KindInternal,
+				"Blueprint managed configuration belongs to a disabled or unselected proxy",
+			)
 		}
 		if selected >= 0 {
 			return -1, false, errs.New(
@@ -267,15 +266,9 @@ func resolveEnvironmentManagedConfigMaterialization(
 }
 
 func claimsManagedConfiguration(
-	referenceComponentID string,
 	referencePath string,
-	componentID string,
-	managed *componentrender.EnvironmentManagedConfigurationRegistration,
 	catalog []componentrender.EnvironmentComponentRegistration,
 ) bool {
-	if managed != nil {
-		return referenceComponentID == componentID && referencePath == managed.SourcePath
-	}
 	for _, registration := range catalog {
 		if registration.ManagedConfiguration != nil &&
 			referencePath == registration.ManagedConfiguration.SourcePath {

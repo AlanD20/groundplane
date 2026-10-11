@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/controller/authoringyaml"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,6 +22,7 @@ type AuthoringDocument struct {
 	Attachments   map[string]core.AttachmentSpec
 	Entries       map[string]core.EntrySpec
 	Routes        []core.RouteSpec
+	DNS           map[string]dnsrecords.EnvironmentSpec
 	Scripts       map[string]core.ScriptSpec
 	Components    map[string]core.ComponentSpec
 	Backup        *core.BackupSpec
@@ -86,6 +88,14 @@ func MarshalAuthoringDocument(input AuthoringDocument) ([]byte, error) {
 	}
 	if len(input.Routes) != 0 {
 		if err := appendAuthoringField(root, "x-gp-routes", input.Routes); err != nil {
+			return nil, err
+		}
+	}
+	if len(input.DNS) != 0 {
+		if err := core.ValidateBlueprintDNSNames(input.DNS, input.Routes); err != nil {
+			return nil, err
+		}
+		if err := appendAuthoringField(root, "x-gp-dns", input.DNS); err != nil {
 			return nil, err
 		}
 	}

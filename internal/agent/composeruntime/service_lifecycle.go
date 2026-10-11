@@ -13,6 +13,7 @@ func (runtime *Runtime) executeServiceLifecycleMutation(
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	artifactID string,
+	report func(*agentpb.HealthWaitProgress),
 ) (StepResult, error) {
 	artifact, source, err := serviceLifecycleStepSource(assignment.Plan, artifactID, step.GetStepId())
 	if err != nil {
@@ -49,8 +50,9 @@ func (runtime *Runtime) executeServiceLifecycleMutation(
 	if serviceLifecycleNeedsHealthPoll(artifact) {
 		waitResult, waitErr := runtime.waitHealthy(ctx, assignment.Plan, &agentpb.WaitHealthy{
 			ArtifactId: artifactID, ServiceIds: []string{source.GetServiceId()},
-		})
+		}, report)
 		result.Observed = waitResult.Observed
+		result.Diagnostic = waitResult.Diagnostic
 		result.ReconciliationRequired = result.ReconciliationRequired || waitResult.ReconciliationRequired
 		if waitErr != nil {
 			return result, waitErr

@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -123,7 +124,14 @@ func TestCaptureAcknowledgedRuntimeRejectsMissingForeignAndMismatchedReceipts(t 
 		t.Run(test.name, func(t *testing.T) {
 			reader := acknowledgedRuntimeFixtureReader(record, revision)
 			test.mutate(reader)
-			if _, err := CaptureAcknowledgedRuntime(context.Background(), reader, testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{ReadRevision: revision}, environmentID, serviceID, ids.New(ids.KindConfig)); err == nil {
+			if _, err := CaptureAcknowledgedRuntime(
+				context.Background(),
+				reader,
+				testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{ReadRevision: revision},
+				environmentID,
+				serviceID,
+				ids.New(ids.KindConfig),
+			); err == nil {
 				t.Fatal("invalid acknowledged runtime was accepted")
 			}
 		})
@@ -217,12 +225,23 @@ func acknowledgedRuntimeArtifact(
 	}
 	var proxyConfig []byte
 	if proxy {
-		proxyConfig = []byte(`{"apps":{"http":{"servers":{"gp_g7_` + strings.ToLower(releaseID) + `_p":{}}}}}`)
+		var err error
+		proxyConfig, err = serviceproxy.Render(serviceproxy.Configuration{
+			Implementation: serviceproxy.Caddy,
+			ReleaseID:      releaseID,
+			Generation:     7,
+			Ports:          []serviceproxy.Port{{Number: 8080, Protocol: serviceproxy.TCP}},
+			Upstreams:      []string{"api--" + target},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 		digest := sha256.Sum256(proxyConfig)
 		artifact.Services = append(artifact.Services, &agentpb.ComposeService{
 			ServiceId: serviceID, ComposeName: "api--proxy",
-			Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			ExpectedReplicas: 1, ImageReference: "sha256:" + strings.Repeat("c", 64),
+			Role:                agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+			ProxyImplementation: agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY,
+			ExpectedReplicas:    1, ImageReference: "sha256:" + strings.Repeat("c", 64),
 			ExpectedLabels:  []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "proxy"}},
 			ProxyConfigJson: proxyConfig, ProxyConfigSha256: digest[:],
 		})

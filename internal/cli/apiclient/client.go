@@ -17,10 +17,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strings"
@@ -56,10 +58,11 @@ type Client struct {
 }
 
 func New(baseURL string) *Client {
+	jar, _ := cookiejar.New(nil)
 	return &Client{
 		BaseURL:       strings.TrimRight(baseURL, "/"),
-		HTTP:          &http.Client{Timeout: 30 * time.Second},
-		StreamingHTTP: &http.Client{},
+		HTTP:          &http.Client{Timeout: 30 * time.Second, Jar: jar},
+		StreamingHTTP: &http.Client{Jar: jar},
 	}
 }
 
@@ -440,6 +443,10 @@ func splitEventStreamLines(data []byte, atEOF bool) (advance int, token []byte, 
 func responseProblem(method, path string, resp *http.Response) error {
 	body, err := problemresponse.Read(resp)
 	if err != nil {
+		var domainError *errs.Error
+		if errors.As(err, &domainError) {
+			return domainError.WithRequestReference(problemresponse.RequestReference(resp))
+		}
 		return err
 	}
 
@@ -451,5 +458,5 @@ func responseProblem(method, path string, resp *http.Response) error {
 	if !ok {
 		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
 	}
-	return domainError
+	return domainError.WithRequestReference(problemresponse.RequestReference(resp))
 }

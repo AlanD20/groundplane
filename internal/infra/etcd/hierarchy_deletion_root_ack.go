@@ -31,12 +31,13 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTask(
 	ctx context.Context,
 	taskID string,
 	terminalStatus taskjournal.TaskStatus,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	var lastErr error
 	for attempt := 0; attempt < 8; attempt++ {
 		terminal, err := repository.acknowledgeHierarchyDeletionControllerTaskOnce(
-			ctx, taskID, terminalStatus, terminalAt,
+			ctx, taskID, terminalStatus, result, terminalAt,
 		)
 		if err == nil {
 			return terminal, nil
@@ -63,6 +64,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	ctx context.Context,
 	taskID string,
 	terminalStatus taskjournal.TaskStatus,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	claimKey := taskjournal.TaskExecutionClaimKey(taskjournal.TaskExecutorController, "", taskID)
@@ -89,7 +91,8 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if read.Values[1] == nil {
-		if read.Values[2] != nil || task.Status != terminalStatus {
+		if read.Values[2] != nil || task.Status != terminalStatus ||
+			task.Result == nil || !taskjournal.TaskResultsEqual(*task.Result, result) {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"hierarchy deletion root Task has no matching claim",
@@ -143,6 +146,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
+	terminal.Result = taskjournal.CloneTaskResult(&result)
 	terminalValue, err := EncodeTaskRecord(terminal)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err

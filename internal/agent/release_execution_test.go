@@ -136,7 +136,8 @@ func TestExecuteReleaseWaitsForDurableRunningEventBeforeCandidateMutation(t *tes
 	pool := releaseExecutionPool(t, helper)
 	plan := &agentpb.ExecutionPlan{
 		PlanHash: make([]byte, 32), Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
-		Steps: []*agentpb.ExecutionStep{releaseForwardSwitch("switch-api")},
+		Steps:     []*agentpb.ExecutionStep{releaseForwardSwitch("switch-api")},
+		Artifacts: []*agentpb.ComposeArtifact{releaseTestArtifact("candidate-artifact")},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -345,6 +346,7 @@ func TestExecuteReleaseCandidateAbsenceCompensationClosesWithExactProof(t *testi
 	}
 	plan := &agentpb.ExecutionPlan{
 		PlanHash: planHash, Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Artifacts: []*agentpb.ComposeArtifact{releaseTestArtifact("candidate-artifact")},
 		Steps: []*agentpb.ExecutionStep{
 			releaseForwardApply("apply-api"),
 			releaseForwardSwitch("fail-next"),
@@ -623,8 +625,10 @@ func executeReleaseFixture(t *testing.T, pool *WorkerPool, taskID, retryOf strin
 func releaseForwardSwitch(stepID string) *agentpb.ExecutionStep {
 	return &agentpb.ExecutionStep{
 		StepId: stepID, TimeoutSeconds: 5,
-		Policy:  agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
-		Payload: &agentpb.ExecutionStep_ServiceProxySwitch{ServiceProxySwitch: &agentpb.ServiceProxySwitch{}},
+		Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+		Payload: &agentpb.ExecutionStep_ServiceProxySwitch{ServiceProxySwitch: &agentpb.ServiceProxySwitch{
+			ServiceId: "api", CandidateArtifactId: "candidate-artifact", ToTarget: "blue",
+		}},
 	}
 }
 

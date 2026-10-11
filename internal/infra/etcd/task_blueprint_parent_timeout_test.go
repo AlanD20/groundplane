@@ -25,7 +25,8 @@ func TestBlueprintParentDeadlinePreservesStopOutcomeUntilRestoration(t *testing.
 			); err == nil {
 				t.Fatal("premature timeout accepted")
 			}
-			if outcome, err := fixture.repository.BlueprintParentStopRequested(fixture.ctx, fixture.parent.ID); err != nil || outcome != "" {
+			if outcome, err := fixture.repository.BlueprintParentStopRequested(fixture.ctx, fixture.parent.ID); err != nil ||
+				outcome != "" {
 				t.Fatalf("premature timeout changed stop state: %s, %v", outcome, err)
 			}
 			want := taskjournal.TaskStatusTimedOut
@@ -44,7 +45,8 @@ func TestBlueprintParentDeadlinePreservesStopOutcomeUntilRestoration(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			if outcome, err := resumed.BlueprintParentStopRequested(fixture.ctx, fixture.parent.ID); err != nil || outcome != want {
+			if outcome, err := resumed.BlueprintParentStopRequested(fixture.ctx, fixture.parent.ID); err != nil ||
+				outcome != want {
 				t.Fatalf("resumed outcome = %s, %v; want %s", outcome, err, want)
 			}
 			if _, err := resumed.TimeoutBlueprintParent(fixture.ctx, fixture.parent.Owner.EnvironmentID,

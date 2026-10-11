@@ -32,7 +32,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	result *taskjournal.TaskResultRecord,
 	revision int64,
 ) (platformComponentTaskChange, error) {
-	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
+	if dnsCheckTask(task) || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return platformComponentTaskChange{}, nil
 	}
@@ -212,6 +212,8 @@ func newPlatformComponentObservation(
 	}
 	if component.Desired.Enabled {
 		proof := *result.DNSResolverCandidateObservation
+		record.ResolvedDNSHosts = platformcomponents.CloneDNSHosts(input.Hosts)
+		record.EnvironmentDNS = platformcomponents.CloneEnvironmentDNS(input.EnvironmentDNS)
 		proof.CanonicalEvidence = append([]byte(nil), proof.CanonicalEvidence...)
 		record.DNSResolverProof = &proof
 		record.CorefileSHA256 = proof.ArtifactSHA256
@@ -267,7 +269,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 	task TaskRecord,
 	revision int64,
 ) error {
-	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
+	if dnsCheckTask(task) || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return nil
 	}

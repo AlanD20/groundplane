@@ -412,7 +412,9 @@ func validSubscribe() *agentpb.LogSubscribe {
 			ServiceName: "api",
 			Runtime: &agentpb.ServiceObservationTarget{
 				EnvironmentId: testEnvironmentID, ServiceId: testServiceID, ReleaseId: testReleaseID,
-				PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1, ComposeName: "api-blue",
+				Workloads: []*agentpb.ServiceWorkloadObservation{
+					{PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1, ComposeName: "api-blue"},
+				},
 				RuntimeRole: "slot", Slot: "blue",
 			},
 		}},

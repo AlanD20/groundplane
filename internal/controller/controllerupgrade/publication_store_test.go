@@ -173,3 +173,13 @@ func (*publicationStore) TransactBlueprintTaskTerminal(
 func unexpectedStorage() error {
 	return errs.New(errs.KindInternal, "unexpected storage operation in native publication test")
 }
+
+func (store *publicationStore) TransactBlueprintChild(ctx context.Context,
+	tx etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	conditions, mutations, err := tx.Operations()
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	return store.Transact(ctx, conditions, mutations)
+}

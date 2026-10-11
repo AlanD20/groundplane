@@ -7,10 +7,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	attachoutputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachoutputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -20,7 +22,13 @@ import (
 func blueprintAttachChildTaskMatches(task TaskRecord, unit blueprintunits.Unit) bool {
 	parentID := task.Params[taskjournal.TaskBlueprintParentParam]
 	attachID := task.Params[attachinputs.TaskAttachIDParam]
-	return unit.Target.Kind == ids.KindAttach && !unit.Removal && unit.Target.ID == attachID &&
+	if unit.Target.Kind != ids.KindAttach || unit.Target.ID != attachID {
+		return false
+	}
+	if unit.Removal {
+		return authoredBlueprintAttachRemovalTask(task)
+	}
+	return !unit.Removal &&
 		task.Type == taskjournal.TaskUpdate && task.Actor == taskjournal.TaskActorSystem &&
 		task.Executor == taskjournal.TaskExecutorAgent && task.Target == task.Owner.EnvironmentID &&
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] == parentID &&
@@ -45,6 +53,11 @@ func (repository *TaskRepository) prepareBlueprintAttachChildTerminal(
 	attachID := task.Params[attachinputs.TaskAttachIDParam]
 	if !taskjournal.IsBlueprintChild(task.Params) || attachID == "" {
 		return nil
+	}
+	if authoredBlueprintAttachRemovalTask(task) {
+		return repository.prepareBlueprintAttachRemovalChildTerminal(
+			ctx, task, assignment, revision, change,
+		)
 	}
 	if change == nil || !change.applies {
 		return errs.New(errs.KindStateConflict, "Blueprint Attach child intent is unavailable")
@@ -158,6 +171,57 @@ func (repository *TaskRepository) prepareBlueprintAttachChildTerminal(
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: outputKey, Value: outputValue},
 	)
 	change.values = append(change.values, factValue, outputValue)
+	change.verifiedChildResult = true
+	return nil
+}
+
+func (repository *TaskRepository) prepareBlueprintAttachRemovalChildTerminal(
+	ctx context.Context,
+	task TaskRecord,
+	assignment taskassignments.TaskAssignmentRecord,
+	revision int64,
+	change *blueprintAttachTaskChange,
+) error {
+	if change == nil || !change.applies || !taskjournal.IsTerminalTaskStatus(task.Status) ||
+		task.Result == nil || task.Result.Kind != taskjournal.TaskResultCompose ||
+		task.Result.ReconciliationRequired || task.Result.ExecutionEpoch == 0 ||
+		task.Result.ExecutionEpoch != assignment.ExecutionEpoch || task.TerminalAssignment == nil ||
+		task.TerminalAssignment.AssignmentID != assignment.AssignmentID ||
+		task.TerminalAssignment.AgentID != assignment.AgentID || task.FinishedAt == nil {
+		return errs.New(errs.KindStateConflict, "Blueprint Attach removal result proof is invalid")
+	}
+	if task.Status == taskjournal.TaskStatusCompleted &&
+		(task.Result.ExitCode != 0 || task.Result.Diagnostic != taskjournal.TaskResultDiagnosticNone) {
+		return errs.New(errs.KindStateConflict, "Blueprint Attach removal completion is not successful")
+	}
+	intentKey := environmentchanges.AttachRemovalIntentKey(task.ID)
+	renderKey := attachrender.AttachTaskRenderInputKey(task.PlanID)
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{intentKey, renderKey}, Revision: revision,
+	})
+	if err != nil {
+		return err
+	}
+	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 ||
+		read.Values[0] == nil || read.Values[1] == nil {
+		return errs.New(errs.KindStateConflict, "Blueprint Attach removal proof is unavailable")
+	}
+	defer etcdstore.ClearValues(read.Values)
+	intent, err := environmentchanges.DecodeAttachRemovalIntent(read.Values[0].Value)
+	if err != nil || intent.Status != taskjournal.TaskStatusPending ||
+		validateAuthoredAttachRemovalTaskOwner(task, intent) != nil {
+		return errs.New(errs.KindStateConflict, "Blueprint Attach removal intent changed")
+	}
+	input, err := attachrender.DecodeAttachTaskRenderInput(read.Values[1].Value)
+	if err != nil || input.PlanID != intent.RenderInput.PlanID || input.AttachID != intent.AttachID ||
+		input.EnvironmentID != intent.EnvironmentID || input.RuntimePreparation == nil ||
+		input.RuntimePreparation.PlanHash != task.PlanHash {
+		return errs.New(errs.KindStateConflict, "Blueprint Attach removal runtime proof changed")
+	}
+	change.conditions = append(change.conditions,
+		etcdstore.Condition{Key: intentKey, ModRevision: read.Values[0].ModRevision},
+		etcdstore.Condition{Key: renderKey, ModRevision: read.Values[1].ModRevision},
+	)
 	change.verifiedChildResult = true
 	return nil
 }

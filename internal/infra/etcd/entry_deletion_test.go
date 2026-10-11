@@ -71,7 +71,7 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	terminalAt := task.CreatedAt.Add(2 * time.Second)
-	terminal, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt)
+	terminal, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, terminalAt)
 	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask() = %#v/%v", terminal, err)
 	}
@@ -98,7 +98,7 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 		terminalIntent.Record.TerminalAt == nil || !terminalIntent.Record.TerminalAt.Equal(terminalAt) {
 		t.Fatalf("GetEntryRemovalIntent(terminal) = %#v/%v/%v", terminalIntent, found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
 }
@@ -125,8 +125,9 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	failed, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-	)
+		ctx, task.ID, testtaskjournal.TaskStatusFailed, nil,
+		task.CreatedAt.Add(2*time.Second))
+
 	if err != nil || failed.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeControllerTask(failed) = %#v/%v", failed, err)
 	}

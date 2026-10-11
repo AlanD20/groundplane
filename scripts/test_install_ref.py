@@ -15,6 +15,7 @@ class RefBuildCleanupTests(unittest.TestCase):
         builders = {"unrelated"}
         cache = {"unrelated"}
         identity = "a" * 32
+        source_commit = "b" * 40
         owned = f"groundplane-ref-{identity}"
 
         def docker(*args, **kwargs):
@@ -46,10 +47,10 @@ class RefBuildCleanupTests(unittest.TestCase):
                 if fail_at:
                     with self.assertRaises(subprocess.CalledProcessError):
                         install_ref.build(source, source, "0.0.1-ref.fixture", identity,
-                                          source_epoch=1789900000)
+                                          source_epoch=1789900000, source_commit=source_commit)
                 else:
                     install_ref.build(source, source, "0.0.1-ref.fixture", identity,
-                                      source_epoch=1789900000)
+                                      source_epoch=1789900000, source_commit=source_commit)
         self.assertEqual(builders, {"unrelated"})
         self.assertEqual(cache, {"unrelated"})
         self.assertEqual(images, {install_ref.CLIENT_IMAGE, "unrelated:keep"})

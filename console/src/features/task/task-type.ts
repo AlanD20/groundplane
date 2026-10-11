@@ -21,6 +21,7 @@ const taskTypes = new Set<TaskType>([
   "fetch",
   "prepare",
   "apply",
+  "check",
 ]);
 
 export function taskTypeFromAPI(value: string, actor: string): TaskType {

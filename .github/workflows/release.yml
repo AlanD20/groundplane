@@ -77,6 +77,8 @@ jobs:
       ARCH: ${{ matrix.arch }}
       SCOPE: ${{ needs.version.outputs.scope }}
       POSTGRES16_BASE: ${{ needs.version.outputs.postgres_base }}
+      SOURCE_KIND: release
+      SOURCE_COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/login-action@v4

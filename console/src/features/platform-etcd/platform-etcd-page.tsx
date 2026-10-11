@@ -17,8 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { requestTask } from "@/features/task/api";
-import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
+import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-identity";
+import { DetailRow } from "@/components/common/detail-row";
 import { newULID } from "@/lib/utils";
+import { useStore } from "@/lib/store";
 
 type Document =
   operations["etcd.config.show"]["responses"][200]["content"]["application/json"];
@@ -26,6 +28,7 @@ type Accepted =
   operations["etcd.config.apply"]["responses"][202]["content"]["application/json"];
 
 export default function PlatformEtcdPage() {
+  const { host } = useStore();
   const [document, setDocument] = useState<Document>();
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
@@ -133,8 +136,13 @@ export default function PlatformEtcdPage() {
     <div className="flex flex-col gap-6">
       <PageHeader title="etcd" icon={<Database />} />
       <ResourcePanel title="Installed etcd">
-        <SoftwareIdentity
-          unavailable="Version and image identity not reported by the Controller"
+        <ContainerSoftwareIdentity
+          software={host?.etcd.software}
+          unavailable="Image identity not reported by the Controller"
+        />
+        <DetailRow
+          label="Reported server version"
+          value={host?.etcd.version ?? "Not reported"}
         />
       </ResourcePanel>
       <ResourcePanel

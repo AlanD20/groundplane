@@ -32,8 +32,10 @@ class BundleTests(unittest.TestCase):
         self.sources = self.root / "sources"
         self.sources.mkdir()
         binary = b"test controller bytes"
-        metadata = {"schema": 1, "controller_sha256": "sha256:" + hashlib.sha256(binary).hexdigest(),
-                    "controller_version": "controller/v1.2.3", "storage_epoch": 1, "channel_schema": 1}
+        metadata = {"schema": 2, "controller_sha256": "sha256:" + hashlib.sha256(binary).hexdigest(),
+                    "controller_version": "controller/v1.2.3",
+                    "controller_source": {"kind": "release", "commit": "d" * 40},
+                    "storage_epoch": 1, "channel_schema": 1}
         for name, data in (("controller", binary), ("groundplane", b"test CLI"),
                            ("controller-release.json", json.dumps(metadata).encode())):
             (self.sources / name).write_bytes(data)

@@ -61,11 +61,11 @@ func TestEvaluateReleaseWorkloadConvergenceAcceptsRunningServiceWithoutHealthche
 	wait := &agentpb.WaitHealthy{ArtifactId: artifact.ArtifactId, ServiceIds: []string{"svc_api"}}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if result, err := runtime.waitHealthy(ctx, plan, wait); err != nil || result.ReconciliationRequired {
+	if result, err := runtime.waitHealthy(ctx, plan, wait, nil); err != nil || result.ReconciliationRequired {
 		t.Fatalf("unchecked recreate wait = %#v, %v", result, err)
 	}
 	artifact.Services[0].Role = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT
-	if _, err := runtime.waitHealthy(ctx, plan, wait); err == nil {
+	if _, err := runtime.waitHealthy(ctx, plan, wait, nil); err == nil {
 		t.Fatal("blue-green slot without a healthcheck passed runtime wait")
 	}
 }

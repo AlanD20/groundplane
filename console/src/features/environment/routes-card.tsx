@@ -1,4 +1,5 @@
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
+import { RouteAccessCheck } from "./edge-check-panel";
 import { AnimatedSection } from "@/components/common/animated-section";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
@@ -122,6 +123,17 @@ export function RoutesCard({ env }: { env: Environment }) {
             <span className="text-muted-foreground">Serving status: </span>
             {detailRoute.status}
           </p>
+          {detailRoute.exposure === "public" && (
+            <div className="mt-4">
+              <RouteAccessCheck
+                key={detailRoute.id}
+                environmentId={env.id}
+                route={detailRoute}
+                components={env.components}
+                open={detailTarget !== null}
+              />
+            </div>
+          )}
           <div className="mt-4 flex flex-wrap gap-3 border-t border-border pt-3">
             <CompactReference label="Route ID" value={detailRoute.id} />
             <CompactReference

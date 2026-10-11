@@ -3,6 +3,7 @@ package dnsresolver
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	resolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"net/netip"
 
@@ -24,6 +25,7 @@ type ResolverBaselineReader interface {
 // ManagedConfigProjector derives the CoreDNS managed file from durable desired
 // state and already-persisted resolver inputs without publishing state.
 type ManagedConfigProjector struct {
+	zoneListeners   *ZoneListenerSource
 	records         DNSRecordsResolver
 	projections     PlatformProjectionReader
 	baselines       ResolverBaselineReader
@@ -39,13 +41,16 @@ func NewManagedConfigProjector(
 	renderer componentdns.Renderer,
 	path string,
 	registryAddress netip.Addr,
+	zoneListeners *ZoneListenerSource,
 ) (*ManagedConfigProjector, error) {
-	if projections == nil || records == nil || baselines == nil || renderer == nil || path == "" {
+	if projections == nil || records == nil || zoneListeners == nil || baselines == nil || renderer == nil ||
+		path == "" {
 		return nil, errs.New(errs.KindInternal, "managed-config projector dependencies are required")
 	}
 	return &ManagedConfigProjector{
-		records:     records,
-		projections: projections, baselines: baselines, renderer: renderer, path: path, registryAddress: registryAddress,
+		zoneListeners: zoneListeners,
+		records:       records,
+		projections:   projections, baselines: baselines, renderer: renderer, path: path, registryAddress: registryAddress,
 	}, nil
 }
 
@@ -89,11 +94,23 @@ func (projector *ManagedConfigProjector) ProjectManagedConfigFiles(
 	if err != nil {
 		return nil, err
 	}
-	hosts, _, err := projector.records.ResolveDNSRecords(ctx, component.Config.CoreDNS.Records, revision)
+	hosts, _, captures, err := resolveManagedRecords(ctx, projector.records, component.Config.CoreDNS.Records, revision)
 	if err != nil {
 		return nil, err
 	}
-	resolverInput.HostResolution, _, err = mergeResolverHosts(resolverInput.HostResolution, hosts)
+	merged, durableHosts, err := mergeResolverHosts(resolverInput.HostResolution, hosts)
+	if err != nil {
+		return nil, err
+	}
+	if err := platformcomponents.ValidateEnvironmentDNS(captures, durableHosts); err != nil {
+		return nil, err
+	}
+	resolverInput.HostResolution = merged
+	zoneSelection, err := projector.zoneListeners.Resolve(ctx, revision)
+	if err != nil {
+		return nil, err
+	}
+	resolverInput.ZoneListeners, err = platformcomponents.ParseZoneListeners(zoneSelection.Addresses)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +119,7 @@ func (projector *ManagedConfigProjector) ProjectManagedConfigFiles(
 		config,
 		resolverInput.Baseline.Resolvers,
 		resolverInput.PrivateListener,
+		resolverInput.ZoneListeners,
 	)
 	if err != nil {
 		return nil, err

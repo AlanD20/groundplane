@@ -157,6 +157,7 @@ func entryReceiptRuntimeFromAuthority(
 			service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			var err error
 			runtime.ProxyGeneration, err = executionplan.ProxyConfigGeneration(
+				service.ProxyImplementation,
 				service.ProxyConfigJson,
 				runtime.ReleaseID,
 			)

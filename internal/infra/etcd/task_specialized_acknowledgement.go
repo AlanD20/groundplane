@@ -16,7 +16,7 @@ func (repository *TaskRepository) acknowledgeSpecializedTask(
 	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {
 		if executor == taskjournal.TaskExecutorController {
 			acknowledged, err := repository.acknowledgeHierarchyDeletionControllerTask(
-				ctx, taskID, terminalStatus, terminalAt,
+				ctx, taskID, terminalStatus, *result, terminalAt,
 			)
 			return acknowledged, true, err
 		}

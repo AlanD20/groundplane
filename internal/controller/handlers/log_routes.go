@@ -278,6 +278,7 @@ func publicLogEvent(sequence uint64, event *agentpb.LogEvent) (api.LogEvent, boo
 		agentpb.LogSlot_LOG_SLOT_BLUE:      "blue",
 		agentpb.LogSlot_LOG_SLOT_GREEN:     "green",
 		agentpb.LogSlot_LOG_SLOT_SINGLETON: "singleton",
+		agentpb.LogSlot_LOG_SLOT_ROLLING:   "rolling",
 	}
 	streams := map[agentpb.LogStream]string{
 		agentpb.LogStream_LOG_STREAM_STDOUT: "stdout",
@@ -307,7 +308,7 @@ func logEventOpenAPISchema() *huma.Schema {
 			"container_id":   {Type: huma.TypeString},
 			"container_name": {Type: huma.TypeString},
 			"release_id":     {Type: huma.TypeString},
-			"slot":           {Type: huma.TypeString, Enum: []any{"blue", "green", "singleton"}},
+			"slot":           {Type: huma.TypeString, Enum: []any{"blue", "green", "singleton", "rolling"}},
 			"stream":         {Type: huma.TypeString, Enum: []any{"stdout", "stderr"}},
 			"timestamp":      {Type: huma.TypeString, Format: "date-time"},
 			"line":           {Type: huma.TypeString, MaxLength: logInt(32 * 1024)},

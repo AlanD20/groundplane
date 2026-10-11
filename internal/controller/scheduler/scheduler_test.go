@@ -36,6 +36,24 @@ type fakeStaleAgentExpiration struct {
 	err   error
 }
 
+type fakeBlueprintRevisionCleanup struct {
+	now   time.Time
+	limit int
+	calls int
+	err   error
+}
+
+func (cleanup *fakeBlueprintRevisionCleanup) CleanupEnvironmentBlueprintStaging(
+	_ context.Context,
+	now time.Time,
+	limit int,
+) (int, error) {
+	cleanup.calls++
+	cleanup.now = now
+	cleanup.limit = limit
+	return 1, cleanup.err
+}
+
 func (expiration *fakeStaleAgentExpiration) ExpireStaleAgentTasks(_ context.Context, now time.Time) (int, error) {
 	expiration.calls++
 	expiration.now = now
@@ -70,17 +88,19 @@ func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 	expiration := &fakeTaskExpiration{}
 	pruning := &fakeIdempotencyPruning{}
 	agents := &fakeStaleAgentExpiration{}
+	blueprintRevisions := &fakeBlueprintRevisionCleanup{}
 	now := wantNow
 	scheduler := &Scheduler{
 		Interval: time.Second, tasks: expiration, idempotency: pruning, agents: agents,
-		now: func() time.Time { return now },
+		blueprintRevisions: blueprintRevisions, now: func() time.Time { return now },
 	}
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatalf("tick() error = %v", err)
 	}
 	if expiration.calls != 1 || !expiration.now.Equal(wantNow) ||
 		expiration.pruneCalls != 1 || !expiration.pruneNow.Equal(wantNow) ||
-		pruning.calls != 1 || !pruning.now.Equal(wantNow) || agents.calls != 1 || !agents.now.Equal(wantNow) {
+		pruning.calls != 1 || !pruning.now.Equal(wantNow) || agents.calls != 1 || !agents.now.Equal(wantNow) ||
+		blueprintRevisions.calls != 1 || !blueprintRevisions.now.Equal(wantNow) || blueprintRevisions.limit != 16 {
 		t.Fatalf("ExpireTimedOutTasks() calls/time = %d/%s", expiration.calls, expiration.now)
 	}
 	now = wantNow.Add(dailyMaintenanceInterval - time.Second)
@@ -89,7 +109,8 @@ func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 	}
 	// SEC-07: source release must run before the daily history-pruning deadline.
 	if expiration.calls != 2 || agents.calls != 2 || pruning.calls != 1 || expiration.pruneCalls != 1 ||
-		expiration.releaseCalls != 2 {
+		expiration.releaseCalls != 2 ||
+		blueprintRevisions.calls != 2 {
 		t.Fatalf(
 			"before daily deadline expiration/stale/pruning calls = %d/%d/%d",
 			expiration.calls,
@@ -102,7 +123,9 @@ func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 		t.Fatalf("tick(at daily prune) error = %v", err)
 	}
 	if expiration.calls != 3 || agents.calls != 3 || pruning.calls != 2 || expiration.pruneCalls != 2 ||
-		!pruning.now.Equal(now) || !expiration.pruneNow.Equal(now) {
+		!pruning.now.Equal(now) || !expiration.pruneNow.Equal(now) ||
+		blueprintRevisions.calls != 3 ||
+		!blueprintRevisions.now.Equal(now) {
 		t.Fatalf(
 			"at daily deadline expiration/stale/pruning calls/time = %d/%d/%d/%s",
 			expiration.calls,
@@ -118,7 +141,7 @@ func TestSchedulerTickHonorsCancellation(t *testing.T) {
 	cancel()
 	err := (&Scheduler{
 		tasks: &fakeTaskExpiration{}, idempotency: &fakeIdempotencyPruning{},
-		agents: &fakeStaleAgentExpiration{}, now: time.Now,
+		blueprintRevisions: &fakeBlueprintRevisionCleanup{}, agents: &fakeStaleAgentExpiration{}, now: time.Now,
 	}).tick(ctx)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("tick() error = %v, want context.Canceled", err)
@@ -131,7 +154,7 @@ func TestSchedulerRetriesFailedDailyPruningOnNextTick(t *testing.T) {
 	pruning := &fakeIdempotencyPruning{err: failure}
 	scheduler := &Scheduler{
 		tasks: &fakeTaskExpiration{}, idempotency: pruning, agents: &fakeStaleAgentExpiration{},
-		now: func() time.Time { return now },
+		blueprintRevisions: &fakeBlueprintRevisionCleanup{}, now: func() time.Time { return now },
 	}
 	if err := scheduler.tick(context.Background()); !errors.Is(err, failure) {
 		t.Fatalf("first tick error = %v, want prune failure", err)
@@ -155,7 +178,7 @@ func TestSchedulerRetriesFailedTaskPruningOnNextTick(t *testing.T) {
 	pruning := &fakeIdempotencyPruning{}
 	scheduler := &Scheduler{
 		tasks: tasks, idempotency: pruning, agents: &fakeStaleAgentExpiration{},
-		now: func() time.Time { return now },
+		blueprintRevisions: &fakeBlueprintRevisionCleanup{}, now: func() time.Time { return now },
 	}
 	if err := scheduler.tick(context.Background()); !errors.Is(err, failure) {
 		t.Fatalf("first tick error = %v, want Task prune failure", err)

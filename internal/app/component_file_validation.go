@@ -13,7 +13,7 @@ func newComponentFileValidator(
 		func(envelope componentsdk.ActionEnvelope) (componentfilevalidation.Recipe, error) {
 			_, _, recipe, err := catalog.ResolveContainerConfigActionEnvelope(envelope)
 			return componentfilevalidation.Recipe{
-				Path: recipe.RelativePath(), Image: recipe.Image(), Arguments: recipe.PreflightArgs(),
+				Path: recipe.RelativePath(), Image: recipe.Image(), Arguments: recipe.PreflightArgs(), Activation: recipe.Activation(),
 			}, err
 		},
 		executor,

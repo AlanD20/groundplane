@@ -36,6 +36,7 @@ type Zone struct {
 	Name          string
 	Subnet        string
 	Internal      bool
+	AllowGPDNS    bool
 	OwnerKind     ZoneOwnerKind
 	OwnerID       string
 }
@@ -46,6 +47,7 @@ type CreateZoneRequest struct {
 	Name          string
 	Subnet        string
 	Internal      bool
+	AllowGPDNS    bool
 }
 
 // Route is one immutable match and target plus its mutable exposure policy.
@@ -58,6 +60,7 @@ const (
 
 // Route is one immutable match and target plus its mutable exposure policy.
 type Route struct {
+	Revision        int64 // desired-head revision on reads; zero in a sealed mutation response
 	ID              string
 	EnvironmentID   string
 	Host            string

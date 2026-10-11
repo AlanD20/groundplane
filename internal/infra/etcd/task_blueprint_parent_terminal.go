@@ -46,10 +46,42 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 			"Blueprint parent claim reference is inconsistent",
 		)
 	}
+	stopKey := taskjournal.BlueprintParentAbortKey(taskID)
+	failureKey := blueprintParentFailureKey(taskID)
+	stop, stopErr := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+		Keys: []string{stopKey, failureKey}, Revision: snapshot.ReadRevision,
+	})
+	if stopErr != nil {
+		return keyvalue.Versioned[TaskRecord]{}, stopErr
+	}
+	if stop == nil || len(stop.Values) != 2 {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Blueprint parent stop read is incomplete")
+	}
+	defer keyvalue.ClearValues(stop.Values)
+	stopValue, failureValue := stop.Values[0], stop.Values[1]
+	var retainedFailure *taskjournal.BlueprintFailure
+	if failureValue != nil {
+		failure, decodeErr := decodeBlueprintParentFailureRecord(failureValue.Value)
+		if decodeErr != nil || failure.ParentTaskID != taskID || status != taskjournal.TaskStatusFailed ||
+			stopValue == nil {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint parent failure changed",
+			)
+		}
+		failureDetails := failure.terminalFailure()
+		retainedFailure = &failureDetails
+		// Preserve journal ordering if wall time moved backward after the first
+		// stop cause was durably recorded.
+		if at.Before(failure.FailedAt) {
+			at = failure.FailedAt
+		}
+	}
 	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusRunning, status, at)
 	if err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
+	terminal.BlueprintFailure = retainedFailure
 	prepared, markerKey, retentionKey, err := prepareTerminalTaskMarker(terminal, terminal.Status, *terminal.FinishedAt)
 	if err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
@@ -78,11 +110,6 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 	}
 	defer clear(prepared.Intent.Ciphertext)
 	defer clear(prepared.Response.Body)
-	terminalValue, err := EncodeTaskRecord(terminal)
-	if err != nil {
-		return keyvalue.Versioned[TaskRecord]{}, err
-	}
-	defer clear(terminalValue)
 	markerValue, err := idempotency.EncodeIdempotencyMarker(prepared)
 	if err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
@@ -113,28 +140,7 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 		{Key: blueprintunits.EpochKey(environmentID), ModRevision: snapshot.EpochRevision},
 		{Key: blueprintunits.DesiredPlanKey(environmentID), ModRevision: desiredRevision},
 	}
-	stopKey := taskjournal.BlueprintParentAbortKey(taskID)
-	failureKey := blueprintParentFailureKey(taskID)
-	stop, stopErr := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{stopKey, failureKey}, Revision: snapshot.ReadRevision,
-	})
-	if stopErr != nil {
-		return keyvalue.Versioned[TaskRecord]{}, stopErr
-	}
-	if stop == nil || len(stop.Values) != 2 {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Blueprint parent stop read is incomplete")
-	}
-	defer keyvalue.ClearValues(stop.Values)
-	stopValue, failureValue := stop.Values[0], stop.Values[1]
 	if failureValue != nil {
-		failure, decodeErr := decodeBlueprintParentFailureRecord(failureValue.Value)
-		if decodeErr != nil || failure.ParentTaskID != taskID || status != taskjournal.TaskStatusFailed ||
-			stopValue == nil {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(
-				errs.KindStateConflict,
-				"Blueprint parent failure changed",
-			)
-		}
 		request, decodeErr := decodeBlueprintParentStopRequest(stopValue.Value)
 		if decodeErr != nil || request.TaskID != taskID || request.Outcome != status {
 			return keyvalue.Versioned[TaskRecord]{}, errs.New(
@@ -171,6 +177,23 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 			conditions = append(conditions, keyvalue.Condition{Key: stopKey, ModRevision: stopValue.ModRevision})
 		}
 	}
+	sourceRelease, sourceAbsence, err := repository.prepareBlueprintParentSourceRelease(
+		ctx,
+		task,
+		snapshot.ReadRevision,
+		conditions,
+	)
+	if err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
+	}
+	defer sourceRelease.Clear()
+	conditions = append(conditions, sourceAbsence...)
+	conditions = append(conditions, sourceRelease.Conditions()...)
+	terminalValue, err := EncodeTaskRecord(terminal)
+	if err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
+	}
+	defer clear(terminalValue)
 	mutations := []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: taskKey, Value: terminalValue},
 		{Type: keyvalue.MutationDelete, Key: claimKey},
@@ -179,6 +202,7 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 		{Type: keyvalue.MutationPut, Key: retentionKey, Value: retentionValue},
 		{Type: keyvalue.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
 	}
+	mutations = append(mutations, sourceRelease.Mutations()...)
 	if stopValue != nil {
 		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: stopKey})
 	}

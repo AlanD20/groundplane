@@ -99,7 +99,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		retry.Target != source.Target || retry.Status != taskjournal.TaskStatusPending ||
 		retry.IdempotencyKey != source.IdempotencyKey || retry.PlanID != source.PlanID ||
 		retry.PlanHash != source.PlanHash || retry.RenderGeneration != source.RenderGeneration ||
-		retry.TimeoutSeconds != source.TimeoutSeconds || !runnerTaskStepsEqual(retry.Steps, source.Steps) ||
+		retry.TimeoutSeconds != source.TimeoutSeconds || !taskjournal.TaskStepsEqual(retry.Steps, source.Steps) ||
 		!runnerTaskMaterializationsEqual(retry.Materializations, source.Materializations) ||
 		len(retry.Params) != 2 || retry.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner ||
 		retry.Params[runnerrecord.RunnerRegistrationTokenPresentParam] != "true" {
@@ -237,18 +237,6 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
-}
-
-func runnerTaskStepsEqual(left []taskjournal.TaskStepRecord, right []taskjournal.TaskStepRecord) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }
 
 func runnerTaskMaterializationsEqual(left []materializationrecord.Record, right []materializationrecord.Record) bool {

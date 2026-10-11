@@ -3,6 +3,7 @@ package attachments
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -53,6 +54,10 @@ func PrepareAttachRemoval(
 	}
 	if revision <= 0 {
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Attach removal revision must be positive")
+	}
+	checkCondition, err := backingchecks.RequireAttachIdle(ctx, store, current.Record.ID, revision)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	exclusionCondition, err := RequireAttachBackupSourceExclusionAbsent(
 		ctx, store, current.Record.ID, revision,
@@ -114,6 +119,7 @@ func PrepareAttachRemoval(
 		{Key: AttachKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: deletions.TombstoneKey("attach", current.Record.ID)},
 		exclusionCondition,
+		checkCondition,
 		{Key: AttachGrantedByPrefix(current.Record.ID), Prefix: true},
 		{Key: AttachCredentialByPrefix(current.Record.ID), Prefix: true},
 	}

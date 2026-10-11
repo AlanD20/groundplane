@@ -12,15 +12,15 @@ func TestDecodeCloudflareTunnelConfigFileIsClosedBeforePlacement(t *testing.T) {
 	}{
 		{
 			name:  "unknown outer field",
-			value: `{"credential":{"mode":"new","secret_name":"TOKEN","token":"value"},"caddyfile_template":"mixed"}`,
+			value: `{"implementation":"cloudflare-tunnel","credential":{"mode":"new","secret_name":"TOKEN","token":"value"},"caddyfile_template":"mixed"}`,
 		},
 		{
 			name:  "unknown credential field",
-			value: `{"credential":{"mode":"new","secret_name":"TOKEN","token":"value","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}`,
+			value: `{"implementation":"cloudflare-tunnel","credential":{"mode":"new","secret_name":"TOKEN","token":"value","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}`,
 		},
 		{
 			name:  "multiple documents",
-			value: `{"credential":{"mode":"new","secret_name":"TOKEN","token":"value"}} {}`,
+			value: `{"implementation":"cloudflare-tunnel","credential":{"mode":"new","secret_name":"TOKEN","token":"value"}} {}`,
 		},
 	}
 	for _, test := range tests {
@@ -36,7 +36,7 @@ func TestDecodeCloudflareTunnelConfigFileIsClosedBeforePlacement(t *testing.T) {
 // Rationale: a credential-only Tunnel file is complete only when the command
 // supplies placement separately; otherwise it must not invent an empty Zone set.
 func TestDecodeCloudflareTunnelConfigFileAllowsMissingZonesOnlyForExplicitPlacement(t *testing.T) {
-	value := `{"credential":{"mode":"new","secret_name":"TOKEN","token":"value"}}`
+	value := `{"implementation":"cloudflare-tunnel","credential":{"mode":"new","secret_name":"TOKEN","token":"value"}}`
 	if _, err := decodeCloudflareTunnelConfigFile(value, false); err == nil {
 		t.Fatal("credential-only file without explicit placement was accepted")
 	}

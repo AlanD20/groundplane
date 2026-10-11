@@ -12,6 +12,7 @@ import {
   RotateCw,
   ScrollText,
   Settings2,
+  PlugZap,
   Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -38,6 +39,7 @@ const ICONS: Record<TaskType, React.ReactNode> = {
   fetch: <Download />,
   prepare: <Download />,
   apply: <ArrowUpCircle />,
+  check: <PlugZap />,
 }
 
 export function ActivityIcon({ type, status }: { type: TaskType; status: TaskStatus }) {

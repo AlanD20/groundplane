@@ -129,7 +129,7 @@ func (service *BackingHookCheckpointService) CheckpointBackingHook(
 			defer clear(facts.Ciphertext)
 		}
 	}
-	_, existing, err := service.repository.CheckpointBackingHook(ctx, backinghooks.CheckpointInput{
+	recorded, existing, err := service.repository.CheckpointBackingHook(ctx, backinghooks.CheckpointInput{
 		TaskID: validated.GetTaskId(), OperationID: validated.GetOperationId(),
 		AssignmentID: validated.GetAssignmentId(), AgentID: agentID, AgentGeneration: agentGeneration,
 		ExecutionEpoch: validated.GetExecutionEpoch(), StepID: validated.GetStepId(),
@@ -146,6 +146,8 @@ func (service *BackingHookCheckpointService) CheckpointBackingHook(
 		StepId: validated.GetStepId(), PlanHash: append([]byte(nil), validated.GetPlanHash()...),
 		Event: validated.GetEvent(), State: validated.GetState(),
 		ResultSha256: append([]byte(nil), validated.GetResultSha256()...), Existing: existing,
+		ResultAlreadyRecorded: existing && state == backinghooks.CheckpointStarted &&
+			recorded.Record.State == backinghooks.CheckpointResult && recorded.Record.Event == "detach",
 	}, nil
 }
 

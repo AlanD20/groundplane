@@ -2,6 +2,7 @@ package controllerupgrade
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,6 +22,7 @@ type JournalStore interface {
 	Installed(context.Context) (upgrade.Digest, error)
 	Prepare(context.Context, upgrade.Journal) error
 	Advance(context.Context, string, upgrade.Phase, upgrade.Phase) (upgrade.Journal, error)
+	BeginRollback(context.Context, string, upgrade.Phase, *taskprogress.Failure) (upgrade.Journal, error)
 }
 
 type ActivationUnit interface {
@@ -30,7 +33,12 @@ type ActivationUnit interface {
 type ManagedAgent interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 	Health(context.Context, string) (localagent.Health, error)
-	RecoverUpdate(context.Context, localagent.UpdateRequest, localagent.UpdateGoal) (localagent.UpdateResult, error)
+	RecoverUpdate(
+		context.Context,
+		localagent.UpdateRequest,
+		localagent.UpdateGoal,
+		*taskprogress.Failure,
+	) (localagent.UpdateResult, error)
 }
 
 type ActiveAgentWork interface {
@@ -75,6 +83,7 @@ type nativeOperation struct {
 	cancel   context.CancelFunc
 	aborted  bool
 	settled  taskjournal.TaskStatus
+	failure  *taskprogress.Failure
 }
 
 func NewCoordinator(dependencies Dependencies) (*Coordinator, error) {
@@ -130,8 +139,9 @@ func (coordinator *Coordinator) Restore(ctx context.Context, claim etcd.TaskAssi
 	return nil
 }
 
-func (coordinator *Coordinator) Execute(
+func (coordinator *Coordinator) execute(
 	ctx context.Context, task etcd.TaskRecord, deadline time.Time,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	coordinator.mu.Lock()
 	operation := coordinator.active
@@ -152,20 +162,20 @@ func (coordinator *Coordinator) Execute(
 		return "", err
 	}
 	if found && journal.Phase == upgrade.PhasePrepared && !coordinator.now().Before(journal.CandidateDeadline()) {
-		return coordinator.requestRollback(ctx, operation, context.DeadlineExceeded)
+		return coordinator.requestRollback(ctx, operation, context.DeadlineExceeded, progress)
 	}
 	if !found || journal.Phase == upgrade.PhasePrepared {
-		return coordinator.prepare(ctx, operation, found)
+		return coordinator.prepare(ctx, operation, found, progress)
 	}
 	switch journal.Phase {
 	case upgrade.PhaseActivating, upgrade.PhaseTrial, upgrade.PhaseRollingBack, upgrade.PhaseStopping:
-		return coordinator.handoff(ctx, operation)
+		return coordinator.handoff(ctx, operation, progress)
 	case upgrade.PhaseStarting:
-		return coordinator.qualify(ctx, operation)
+		return coordinator.qualify(ctx, operation, progress)
 	case upgrade.PhaseHealthy:
-		return coordinator.confirmHealthy(ctx, operation)
+		return coordinator.confirmHealthy(ctx, operation, progress)
 	case upgrade.PhaseRolledBack, upgrade.PhaseRecovered:
-		return coordinator.recoverPredecessor(ctx, operation, journal.Phase)
+		return coordinator.recoverPredecessor(ctx, operation, journal.Phase, progress)
 	case upgrade.PhaseCancelled:
 		return coordinator.settle(operation, taskjournal.TaskStatusAborted), nil
 	default:
@@ -214,13 +224,19 @@ func (coordinator *Coordinator) settle(
 func (coordinator *Coordinator) handoff(
 	ctx context.Context,
 	operation *nativeOperation,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	// The transient predecessor service must stop this process. Never ACK from
 	// the outgoing process, and never wait unboundedly if the manager is down.
 	duration := max(operation.expected.Deadline.Sub(coordinator.now()), upgrade.RecoveryReserveSeconds*time.Second)
 	ctx, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
-	if err := coordinator.unit.Launch(ctx, operation.expected.TaskID); err != nil {
+	if err := progress.Run(ctx, "controller_handoff", func(ctx context.Context) error {
+		return coordinator.unit.Launch(ctx, operation.expected.TaskID)
+	}); err != nil {
+		return "", err
+	}
+	if err := progress.Start("controller_wait_restart"); err != nil {
 		return "", err
 	}
 	<-ctx.Done()

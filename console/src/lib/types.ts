@@ -71,6 +71,7 @@ export type Service = {
   zones: string[];
   strategy: ServiceStrategy;
   onFailure?: "switch_back" | "leave_active";
+  rollingReplicaTimeoutSeconds?: number;
   healthcheck: Healthcheck | null;
   resources: { mem: string; cpus: string };
   command: string[];
@@ -113,6 +114,7 @@ export type Zone = {
   name: string;
   subnet: string;
   internal: boolean;
+  allowGPDNS: boolean;
   ownerKind: "environment" | "backing_project";
   ownerId: string;
 };
@@ -151,6 +153,7 @@ export type Route = {
 };
 
 type EnvironmentComponentBase = {
+  software?: import("./api.generated").components["schemas"]["ContainerIdentity"];
   id: string;
   owner: "environment";
   ownerRef: string;
@@ -176,7 +179,15 @@ export type CloudflareTunnelComponent = EnvironmentComponentBase & {
   state: Record<string, never>;
 };
 
-export type EnvironmentComponent = CaddyComponent | CloudflareTunnelComponent;
+export type EnvoyComponent = EnvironmentComponentBase & {
+  kind: "envoy";
+  config: { zone_ids: string[]; alias?: string } | null;
+  state: { pinnedIPv4?: string };
+};
+
+export type HTTPRouterComponent = CaddyComponent | EnvoyComponent;
+export type EnvironmentComponent =
+  HTTPRouterComponent | CloudflareTunnelComponent;
 
 export type SecretKind = "env" | "file";
 
@@ -334,6 +345,7 @@ export type Project = {
 };
 
 export type Runner = {
+  software?: import("./api.generated").components["schemas"]["ContainerIdentity"];
   id: string;
   slug: string;
   tenantId: string;
@@ -423,7 +435,8 @@ export type TaskType =
   | "rotate"
   | "fetch"
   | "prepare"
-  | "apply";
+  | "apply"
+  | "check";
 
 export type TaskStepState = "pending" | "running" | "done" | "failed";
 
@@ -435,6 +448,10 @@ export type TaskStep = {
   timeoutSeconds?: number;
   state: TaskStepState;
   detail?: string;
+  healthWait?: import("@/lib/api.generated").components["schemas"]["Readiness"];
+  healthWaitReceivedAt?: string;
+  failure?: import("@/lib/api.generated").components["schemas"]["TaskFailure"];
+  healthchecks?: import("@/lib/api.generated").components["schemas"]["ConfiguredHealthcheck"][];
 };
 
 export type TaskStatus =
@@ -474,6 +491,7 @@ export type TaskJournalState = {
 export type ActivityEntry = {
   reconciliationRequired?: boolean;
   imageFetch?: TaskResponse["image_fetch"];
+  interruptedDetachRetry?: TaskResponse["interrupted_detach_retry"];
   id: string;
   operationId?: string;
   retryOf?: string;
@@ -489,7 +507,10 @@ export type ActivityEntry = {
   executor?: TaskResponse["executor"];
   timeoutSeconds?: number;
   resultSummary?: string;
-  failureSummary?: string;
+  failure?: TaskResponse["failure"];
+  recovery?: TaskResponse["recovery"];
+  preparation?: TaskResponse["preparation"];
+  attemptHistory?: TaskResponse["attempt_history"];
   workspace: string; // "platform" or tenant slug
   status: TaskStatus;
   actor: string;
@@ -510,6 +531,7 @@ export type ActivityEntry = {
 // Platform runtime state rendered by the Controller. The Controller owns the
 // local Agent container lifecycle; the Agent only executes assigned work.
 export type PlatformComponent = {
+  software?: import("./api.generated").components["schemas"]["ContainerIdentity"];
   id: string;
   name: string;
   kind: "agent" | "coredns" | "controller";
@@ -526,6 +548,8 @@ export type PlatformAgent = {
   host: string;
   status: HealthState;
   version: string | null;
+  installedImage: string | null;
+  source?: import("@/lib/api.generated").components["schemas"]["BuildProvenance"];
   labels: Record<string, string>;
   readyAt: string | null;
   lastReportAt: string | null;

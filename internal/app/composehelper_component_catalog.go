@@ -27,6 +27,6 @@ func (catalog composeHelperComponentCatalog) ResolveContainerConfigAction(
 	platform, reference, _ := recipe.Image().Select(runtime.GOOS, runtime.GOARCH)
 	return composehelper.NewComponentActionRecipe(
 		recipe.RelativePath(), recipe.ContainerPath(), reference, platform,
-		recipe.ValidateArgs(), recipe.ActivateArgs(),
+		recipe.ValidateArgs(), recipe.ActivateArgs(), recipe.Activation(),
 	)
 }

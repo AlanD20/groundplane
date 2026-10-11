@@ -86,6 +86,7 @@ const (
 type routePolicy struct {
 	body         bodyClass
 	streaming    bool
+	upgrade      bool
 	validateJSON func([]byte) error
 }
 
@@ -97,6 +98,11 @@ func (s *Server) jsonRoute(pattern string, handler http.HandlerFunc) {
 func (s *Server) streamRoute(pattern string, handler http.HandlerFunc) {
 	s.Mux.HandleFunc(pattern, handler)
 	s.setRoutePolicy(pattern, routePolicy{streaming: true})
+}
+
+func (s *Server) upgradeRoute(pattern string, handler http.HandlerFunc) {
+	s.Mux.HandleFunc(pattern, handler)
+	s.setRoutePolicy(pattern, routePolicy{upgrade: true})
 }
 
 func (s *Server) blueprintRoute(pattern string, handler http.HandlerFunc) {
@@ -114,7 +120,7 @@ func (s *Server) setRoutePolicy(pattern string, policy routePolicy) {
 func (s *Server) policyFor(r *http.Request) routePolicy {
 	_, pattern := s.Mux.Handler(r)
 	policy := s.routePolicies[pattern]
-	policy.streaming = policy.streaming && acceptsEventStream(r)
+	policy.streaming = policy.upgrade || policy.streaming && acceptsEventStream(r)
 	return policy
 }
 
@@ -475,7 +481,12 @@ func (s *Server) serveListener(ctx context.Context, listener net.Listener, polic
 	defer cancelAll()
 
 	lifecycle := newHTTPLifecycle(s, policy)
-	srv := newHTTPServer(listener.Addr().String(), lifecycle.handler(s.requestHandler()), requestBase, policy)
+	srv := newHTTPServer(
+		listener.Addr().String(),
+		s.withRequestReference(lifecycle.handler(s.requestHandler())),
+		requestBase,
+		policy,
+	)
 	trackedListener := &readyListener{Listener: listener, ready: make(chan struct{})}
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(trackedListener) }()

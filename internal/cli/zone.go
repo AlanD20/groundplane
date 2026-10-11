@@ -71,6 +71,7 @@ func newZoneCmd() *cobra.Command {
 
 	var subnet string
 	var internal bool
+	var allowGPDNS bool
 	add := &cobra.Command{
 		Use:   "add <name>",
 		Short: "Add a zone",
@@ -82,6 +83,7 @@ func newZoneCmd() *cobra.Command {
 			}
 			zone, err := fromContext(cmd).Client.CreateZone(cmd.Context(), apiTypes.ZoneCreate{
 				EnvironmentID: environmentID, Name: args[0], Subnet: subnet, Internal: internal,
+				AllowGPDNS: allowGPDNS,
 			})
 			if err != nil {
 				return err
@@ -93,6 +95,8 @@ func newZoneCmd() *cobra.Command {
 	add.Flags().StringVar(&subnet, "subnet", "", "IPv4 CIDR reserved inside the Environment pool")
 	_ = add.MarkFlagRequired("subnet")
 	add.Flags().BoolVar(&internal, "internal", false, "no route to the host's default gateway")
+	add.Flags().
+		BoolVar(&allowGPDNS, "allow-gp-dns", false, "use shared CoreDNS from an internal Zone; requires --internal")
 	cmd.AddCommand(add)
 
 	cmd.AddCommand(&cobra.Command{
@@ -151,7 +155,8 @@ func zoneFields(zone apiTypes.Zone) map[string]any {
 	return map[string]any{
 		"id": zone.ID, "environment_id": zone.EnvironmentID, "name": zone.Name,
 		"subnet": zone.Subnet, "internal": zone.Internal,
-		"owner_kind": zone.OwnerKind, "owner_id": zone.OwnerID,
+		"allow_gp_dns": zone.AllowGPDNS,
+		"owner_kind":   zone.OwnerKind, "owner_id": zone.OwnerID,
 	}
 }
 

@@ -19,6 +19,7 @@ func (c *Client) CreateZone(ctx context.Context, input apiTypes.ZoneCreate) (api
 	body := generated.ZoneCreateJSONRequestBody{
 		EnvironmentId: input.EnvironmentID, Name: input.Name,
 		Subnet: input.Subnet, Internal: input.Internal,
+		AllowGpDns: input.AllowGPDNS,
 	}
 	response, err := client.ZoneCreateWithResponse(ctx, params, body)
 	if err != nil {
@@ -210,6 +211,7 @@ func zoneFromGenerated(zone generated.Zone) apiTypes.Zone {
 	return apiTypes.Zone{
 		ID: zone.Id, EnvironmentID: zone.EnvironmentId, Name: zone.Name,
 		Subnet: zone.Subnet, Internal: zone.Internal,
-		OwnerKind: apiTypes.ZoneOwnerKind(zone.OwnerKind), OwnerID: zone.OwnerId,
+		AllowGPDNS: zone.AllowGpDns,
+		OwnerKind:  apiTypes.ZoneOwnerKind(zone.OwnerKind), OwnerID: zone.OwnerId,
 	}
 }

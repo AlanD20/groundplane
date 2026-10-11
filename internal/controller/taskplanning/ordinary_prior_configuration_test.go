@@ -63,10 +63,8 @@ func TestOrdinaryReleaseRetainsInactivePredecessor(t *testing.T) {
 	source.ArtifactID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FC2"
 	source.CandidateWorkload = *member.Render.PriorWorkload
 	source.Slot, source.CandidateTarget = domain.SlotGreen, domain.WorkloadGreen
-	retained, err := resolver.renderRetainedServiceRuntimeArtifact(t.Context(), source, "", false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	retained := nativeRuntimeFixture(t, source, false)
+	var err error
 	member.Render.PriorRuntime.RetainedPriorArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(
 		retained,
 	)

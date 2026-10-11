@@ -19,23 +19,23 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 	}{
 		{
 			name: "caddy",
-			json: `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}`,
-			want: `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}`,
+			json: `{"implementation":"caddy","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}`,
+			want: `{"implementation":"caddy","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}`,
 		},
 		{
 			name: "cloudflare",
-			json: `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
-			want: `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+			json: `{"implementation":"cloudflare-tunnel","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+			want: `{"implementation":"cloudflare-tunnel","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
 		},
 		{
 			name: "coredns",
-			json: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
-			want: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+			json: `{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+			want: `{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
 		},
 		{
 			name: "coredns-forwarder",
-			json: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`,
-			want: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`,
+			json: `{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`,
+			want: `{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`,
 		},
 	}
 	for _, testCase := range valid {
@@ -55,8 +55,8 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 	}
 	for _, value := range []string{
 		`{}`,
-		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{gp.routes}","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
-		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+		`{"implementation":"cloudflare-tunnel","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{gp.routes}","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+		`{"implementation":"coredns","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
 		`{"unknown":true}`,
 	} {
 		var config ComponentConfig
@@ -79,17 +79,17 @@ func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Marshal(valid) error = %v", err)
 	}
-	if string(encoded) != `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}` {
+	if string(encoded) != `{"implementation":"caddy","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}` {
 		t.Fatalf("Marshal(valid) = %s", encoded)
 	}
 	for _, value := range []string{
 		`{}`,
-		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{gp.routes}","credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}}`,
-		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[]}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{}],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[null]}],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[],"unknown":true}],"tailnet_delegation":false}`,
+		`{"implementation":"cloudflare-tunnel","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{gp.routes}","credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}}`,
+		`{"implementation":"coredns","upstream_auto":true,"upstream_resolvers":[],"forwarders":[]}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{}],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[null]}],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[],"unknown":true}],"tailnet_delegation":false}`,
 	} {
 		var input ComponentConfigMutationInput
 		if err := json.Unmarshal([]byte(value), &input); err == nil {
@@ -109,16 +109,16 @@ func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) 
 func TestComponentConfigRejectsExplicitNullAndInvalidResponseState(t *testing.T) {
 	t.Parallel()
 	for _, value := range []string{
-		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":null}`,
-		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":null}`,
-		`{"secret_id":"sec_invalid"}`,
-		`{"corefile_template":null,"upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":null,"forwarders":[],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[null],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com"}],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[],"unknown":null}],"tailnet_delegation":false}`,
-		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":null}],"tailnet_delegation":false}`,
+		`{"implementation":"cloudflare-tunnel","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":null}`,
+		`{"implementation":"caddy","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":null}`,
+		`{"implementation":"cloudflare-tunnel","secret_id":"sec_invalid"}`,
+		`{"implementation":"coredns","corefile_template":null,"upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":null,"forwarders":[],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[null],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com"}],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[],"unknown":null}],"tailnet_delegation":false}`,
+		`{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":null}],"tailnet_delegation":false}`,
 	} {
 		var config ComponentConfig
 		if err := json.Unmarshal([]byte(value), &config); err == nil {

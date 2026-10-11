@@ -22,8 +22,13 @@ export class ControllerRequestError extends Error {
     message: string,
     readonly status: number,
     readonly code?: string,
+    readonly requestReference?: string,
   ) {
-    super(message);
+    super(
+      requestReference
+        ? `${message}\nRequest reference: ${requestReference}`
+        : message,
+    );
     this.name = "ControllerRequestError";
   }
 }
@@ -57,5 +62,15 @@ export async function controllerResponseError(
   } catch {
     // The status remains actionable even when a proxy returned a non-JSON body.
   }
-  return new ControllerRequestError(detail, response.status, code);
+  const rawReference = response.headers.get("X-GP-Request-Reference");
+  const requestReference =
+    rawReference && /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(rawReference)
+      ? rawReference
+      : undefined;
+  return new ControllerRequestError(
+    detail,
+    response.status,
+    code,
+    requestReference,
+  );
 }

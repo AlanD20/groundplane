@@ -8,7 +8,7 @@ import { useRequiredParams } from "@/lib/router";
 import { Router as RouterIcon } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { EnvironmentRouterUnavailable } from "@/features/environment/router-unavailable";
-import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
+import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { AdvancedDetails } from "@/components/common/resource-panel";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { ComponentZonePicker } from "@/features/environment/component-zone-picker";
 import { CaddyTemplateEditor } from "@/features/environment/caddy-template-editor";
+import { TunnelAccessCheck } from "@/features/environment/tunnel-check-panel";
 import type { Environment, Zone } from "@/lib/types";
 
 // ---- Router ----
@@ -29,13 +30,18 @@ import type { Environment, Zone } from "@/lib/types";
 export function RouterCard({ env }: { env: Environment }) {
   const store = useStore();
   const params = useRequiredParams("tenant");
-  const routerReady =
-    env.components.some((component) => component.kind === "caddy") &&
-    env.components.some((component) => component.kind === "cloudflare-tunnel");
+  const routerReady = env.components.some(
+    (component) =>
+      component.kind === "caddy" ||
+      component.kind === "envoy" ||
+      component.kind === "cloudflare-tunnel",
+  );
   const publicRoutes = env.routes.filter(
     (route) => route.exposure === "public",
   );
-  const caddy = env.components.find((component) => component.kind === "caddy");
+  const proxy = env.components.find(
+    (component) => component.kind === "caddy" || component.kind === "envoy",
+  );
   const tunnel = env.components.find(
     (component) => component.kind === "cloudflare-tunnel",
   );
@@ -53,9 +59,12 @@ export function RouterCard({ env }: { env: Environment }) {
     [],
   );
   const [creatingComponentZone, setCreatingComponentZone] = useState(false);
-  const [routerAlias, setRouterAlias] = useState(caddy?.config?.alias ?? "");
+  const [routerAlias, setRouterAlias] = useState(proxy?.config?.alias ?? "");
+  const [routerImplementation, setRouterImplementation] = useState<
+    "caddy" | "envoy"
+  >(proxy?.kind === "envoy" ? "envoy" : "caddy");
   const [caddyTemplate, setCaddyTemplate] = useState(
-    caddy?.config?.caddyfile_template ?? "",
+    proxy?.kind === "caddy" ? (proxy.config?.caddyfile_template ?? "") : "",
   );
   const [caddyTemplateBlocked, setCaddyTemplateBlocked] = useState(false);
   const [tunnelCredentialMode, setTunnelCredentialMode] = useState<
@@ -76,9 +85,14 @@ export function RouterCard({ env }: { env: Environment }) {
   ) => {
     setSelectedZoneIds(component.config?.zone_ids ?? []);
     setCreatedComponentZones([]);
-    if (component.kind === "caddy") {
+    if (component.kind !== "cloudflare-tunnel") {
+      setRouterImplementation(component.kind === "envoy" ? "envoy" : "caddy");
       setRouterAlias(component.config?.alias ?? "");
-      setCaddyTemplate(component.config?.caddyfile_template ?? "");
+      setCaddyTemplate(
+        component.kind === "caddy"
+          ? (component.config?.caddyfile_template ?? "")
+          : "",
+      );
       setCaddyTemplateBlocked(false);
     } else {
       setTunnelCredentialMode("existing");
@@ -103,16 +117,24 @@ export function RouterCard({ env }: { env: Environment }) {
     configuring &&
     (creatingComponentZone ||
       selectedZoneIds.length === 0 ||
-      (operation.component.kind === "caddy"
+      (operation.component.kind !== "cloudflare-tunnel"
         ? (routerAlias !== "" &&
             !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(routerAlias)) ||
-          caddyTemplateBlocked
+          (routerImplementation === "caddy" && caddyTemplateBlocked)
         : !tunnelHasEgress ||
           (tunnelCredentialMode === "existing"
             ? !tunnelSecret
             : !tunnelSecretName || !tunnelToken)));
+  const selectedKind =
+    configuring && operation?.component.kind !== "cloudflare-tunnel"
+      ? routerImplementation
+      : operation?.component.kind;
   const componentName =
-    operation?.component.kind === "caddy" ? "Caddy" : "Cloudflare Tunnel";
+    selectedKind === "caddy"
+      ? "Caddy"
+      : selectedKind === "envoy"
+        ? "Envoy"
+        : "Cloudflare Tunnel";
 
   const operationView = operation && (
     <TaskRunnerDialog
@@ -135,10 +157,37 @@ export function RouterCard({ env }: { env: Environment }) {
       review={
         configuring ? (
           <div className="flex flex-col gap-4">
+            {operation.component.kind !== "cloudflare-tunnel" && (
+              <FormSection title="Environment proxy">
+                <div className="flex flex-col gap-2 sm:col-span-2">
+                  <Label htmlFor="router-implementation">Implementation</Label>
+                  <Select
+                    id="router-implementation"
+                    value={routerImplementation}
+                    options={[
+                      { value: "caddy", label: "Caddy · HTTP" },
+                      { value: "envoy", label: "Envoy · HTTP, TCP, UDP" },
+                    ]}
+                    onValueChange={(value) => {
+                      if (value === "caddy" || value === "envoy") {
+                        setRouterImplementation(value);
+                        setCaddyTemplateBlocked(false);
+                      }
+                    }}
+                  />
+                  {routerImplementation !== operation.component.kind && (
+                    <p className="text-xs text-muted-foreground">
+                      Engine changes require Recreate for affected running
+                      Services. Routes stay in this Environment.
+                    </p>
+                  )}
+                </div>
+              </FormSection>
+            )}
             <FormSection
               title="Network access"
               description={
-                operation.component.kind === "caddy"
+                operation.component.kind !== "cloudflare-tunnel"
                   ? ""
                   : "Requires a Zone with outbound internet access."
               }
@@ -161,7 +210,7 @@ export function RouterCard({ env }: { env: Environment }) {
                   }}
                 />
               </div>
-              {operation.component.kind === "caddy" ? (
+              {operation.component.kind !== "cloudflare-tunnel" ? (
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <Label htmlFor="component-primary-zone">
                     Primary network
@@ -194,16 +243,18 @@ export function RouterCard({ env }: { env: Environment }) {
                 </p>
               )}
             </FormSection>
-            {operation.component.kind === "caddy" ? (
+            {operation.component.kind !== "cloudflare-tunnel" ? (
               <div className="flex flex-col gap-3">
-                <CaddyTemplateEditor
-                  key={operation.component.id}
-                  componentId={operation.component.id}
-                  enabled={operation.component.enabled}
-                  value={caddyTemplate}
-                  onChange={setCaddyTemplate}
-                  onBlockedChange={setCaddyTemplateBlocked}
-                />
+                {routerImplementation === "caddy" && (
+                  <CaddyTemplateEditor
+                    key={operation.component.id}
+                    componentId={operation.component.id}
+                    enabled={operation.component.enabled}
+                    value={caddyTemplate}
+                    onChange={setCaddyTemplate}
+                    onBlockedChange={setCaddyTemplateBlocked}
+                  />
+                )}
                 <AdvancedDetails title="Network alias (optional)">
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="router-alias">
@@ -309,23 +360,33 @@ export function RouterCard({ env }: { env: Environment }) {
         if (operation.action === "update")
           return store.reconcileEnvironmentComponent(operation.component.id);
         const config =
-          operation.component.kind === "caddy"
+          operation.component.kind !== "cloudflare-tunnel" &&
+          routerImplementation === "caddy"
             ? {
+                implementation: "caddy" as const,
                 zone_ids: selectedZoneIds,
                 alias: routerAlias,
                 ...(caddyTemplate ? { caddyfile_template: caddyTemplate } : {}),
               }
-            : {
-                zone_ids: selectedZoneIds,
-                credential:
-                  tunnelCredentialMode === "existing"
-                    ? { mode: "existing" as const, secret_id: tunnelSecret }
-                    : {
-                        mode: "new" as const,
-                        secret_name: tunnelSecretName,
-                        token: tunnelToken,
-                      },
-              };
+            : operation.component.kind !== "cloudflare-tunnel" &&
+                routerImplementation === "envoy"
+              ? {
+                  implementation: "envoy" as const,
+                  zone_ids: selectedZoneIds,
+                  alias: routerAlias,
+                }
+              : {
+                  implementation: "cloudflare-tunnel" as const,
+                  zone_ids: selectedZoneIds,
+                  credential:
+                    tunnelCredentialMode === "existing"
+                      ? { mode: "existing" as const, secret_id: tunnelSecret }
+                      : {
+                          mode: "new" as const,
+                          secret_name: tunnelSecretName,
+                          token: tunnelToken,
+                        },
+                };
         return operation.action === "enable"
           ? store.setComponentEnabled(operation.component.id, true, config)
           : store.updateComponentConfig(operation.component.id, config);
@@ -365,7 +426,9 @@ export function RouterCard({ env }: { env: Environment }) {
                         <span className="font-medium">
                           {component.kind === "caddy"
                             ? "Caddy"
-                            : "Cloudflare Tunnel"}
+                            : component.kind === "envoy"
+                              ? "Envoy"
+                              : "Cloudflare Tunnel"}
                         </span>
                         <StatusBadge status={component.status} />
                       </div>
@@ -373,7 +436,8 @@ export function RouterCard({ env }: { env: Environment }) {
                         value={component.id}
                         label="Component ID"
                       />
-                      <SoftwareIdentity
+                      <ContainerSoftwareIdentity
+                        software={component.software}
                         className="mt-1 text-xs"
                         showReferences={false}
                         unavailable="Installed identity not reported by the Controller"
@@ -409,7 +473,7 @@ export function RouterCard({ env }: { env: Environment }) {
                       </Button>
                     </div>
                   </div>
-                  {component.kind === "caddy" ? (
+                  {component.kind !== "cloudflare-tunnel" ? (
                     <div className="grid gap-3 border-t border-border pt-4 text-sm text-muted-foreground [overflow-wrap:anywhere] sm:grid-cols-2">
                       <span>
                         Networks:
@@ -450,6 +514,14 @@ export function RouterCard({ env }: { env: Environment }) {
                       {operationView}
                     </div>
                   )}
+                  {component.kind === "cloudflare-tunnel" &&
+                    component.enabled && (
+                      <TunnelAccessCheck
+                        key={component.id}
+                        env={env}
+                        connectorId={component.id}
+                      />
+                    )}
                 </div>
               </InlineEditorRegion>
             );

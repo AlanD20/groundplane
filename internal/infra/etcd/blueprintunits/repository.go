@@ -45,20 +45,33 @@ type Snapshot struct {
 }
 
 func (repository *Repository) Load(ctx context.Context, environmentID string) (Snapshot, error) {
+	return repository.LoadAtRevision(ctx, environmentID, 0)
+}
+
+// LoadAtRevision joins native lifecycle receipts to the caller's exact terminal
+// transaction view rather than selecting a later Blueprint head.
+func (repository *Repository) LoadAtRevision(
+	ctx context.Context,
+	environmentID string,
+	revision int64,
+) (Snapshot, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return Snapshot{}, err
 	}
-	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
+	if ids.Validate(ids.KindEnvironment, environmentID) != nil || revision < 0 {
 		return Snapshot{}, invalidRecord()
 	}
 	headKey := blueprints.EnvironmentBlueprintHeadKey(environmentID)
 	epochKey := EpochKey(environmentID)
 	desiredKey := DesiredPlanKey(environmentID)
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{headKey, epochKey, desiredKey}})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{headKey, epochKey, desiredKey}, Revision: revision,
+	})
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 3 || read.Values[0] == nil {
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != 3 || read.Values[0] == nil {
 		return Snapshot{}, errs.New(errs.KindStateConflict, "Environment Blueprint head is unavailable")
 	}
 	defer etcdstore.ClearValues(read.Values)
@@ -165,6 +178,12 @@ func (plan MutationPlan) Clear()                            { etcdstore.ClearMut
 func PrepareMutation(
 	snapshot Snapshot, applied []AppliedChange, executions []ExecutionChange,
 ) (MutationPlan, error) {
+	return prepareMutation(snapshot, applied, executions, "")
+}
+
+func prepareMutation(
+	snapshot Snapshot, applied []AppliedChange, executions []ExecutionChange, nativeOperationID string,
+) (MutationPlan, error) {
 	if ids.Validate(ids.KindEnvironment, snapshot.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, snapshot.HeadTaskID) != nil ||
 		snapshot.ReadRevision <= 0 || snapshot.HeadRevision <= 0 || snapshot.EpochRevision < 0 ||
@@ -233,7 +252,7 @@ func PrepareMutation(
 			continue
 		}
 		if change.Next.EnvironmentID != snapshot.EnvironmentID || change.Next.Target != change.Target ||
-			!validAppliedAdvance(snapshot, exists, *change.Next, knownExecutions) {
+			!validAppliedAdvance(snapshot, exists, *change.Next, knownExecutions, nativeOperationID) {
 			plan.Clear()
 			return MutationPlan{}, invalidRecord()
 		}
@@ -279,21 +298,31 @@ func PrepareMutation(
 
 func validAppliedAdvance(
 	snapshot Snapshot, exists bool, next AppliedRecord, executions map[string]etcdstore.Versioned[ExecutionRecord],
+	nativeOperationID string,
 ) bool {
+	if next.NativeOperationID != "" {
+		return nativeOperationID != "" && next.NativeOperationID == nativeOperationID &&
+			validateApplied(next) == nil
+	}
 	if next.ControllerOperationID != "" {
 		if !exists || (next.State != Applied &&
 			!((next.Target.Kind == ids.KindScript || next.Target.Kind == ids.KindEnvEntry ||
-				next.Target.Kind == ids.KindRoute || next.Target.Kind == ids.KindComponent) && next.State == Absent)) ||
+				next.Target.Kind == ids.KindRoute || next.Target.Kind == ids.KindComponent || next.Target.Kind == ids.KindDNSRecord ||
+				validServiceDeclarationAbsence(next)) && next.State == Absent)) ||
 			(next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService &&
-				next.Target.Kind != ids.KindRoute && next.Target.Kind != ids.KindScript && next.Target.Kind != ids.KindComponent) ||
+				next.Target.Kind != ids.KindRoute && next.Target.Kind != ids.KindScript && next.Target.Kind != ids.KindComponent && next.Target.Kind != ids.KindDNSRecord) ||
 			snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 			next.ParentTaskID != snapshot.HeadTaskID {
 			return false
 		}
 		for _, unit := range snapshot.Desired.Record.Units {
 			if unit.Target == next.Target {
+				writeScopeValid := len(unit.Writes) == 1 && unit.Writes[0] == next.Target
+				if next.Target.Kind == ids.KindComponent {
+					writeScopeValid = validControllerComponentWrites(unit)
+				}
 				return unit.Removal == (next.State == Absent) && next.Fingerprint == unit.Fingerprint &&
-					len(unit.Writes) == 1 && unit.Writes[0] == next.Target
+					writeScopeValid
 			}
 		}
 		return false

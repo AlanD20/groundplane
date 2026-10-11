@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -36,13 +37,17 @@ func taskCheckpointAssignmentMatches(
 }
 
 func validateTaskEventCheckpoints(task TaskRecord) error {
-	if len(task.EventCheckpoints) > len(task.Steps) {
+	limit := len(task.Steps)
+	if task.Executor == taskjournal.TaskExecutorController {
+		limit = 1
+	}
+	if len(task.EventCheckpoints) > limit {
 		return recordcodec.CorruptRecord()
 	}
 	previous := ""
-	for _, checkpoint := range task.EventCheckpoints {
+	for index, checkpoint := range task.EventCheckpoints {
 		if taskjournal.ValidateTaskEventIdentity(checkpoint.Identity) != nil || checkpoint.Identity.TaskID != task.ID ||
-			!taskContainsStep(task, checkpoint.Identity.StepID) || checkpoint.Identity.StepID <= previous ||
+			!taskEventBelongsToTask(task, checkpoint.Identity) || index > 0 && checkpoint.Identity.StepID <= previous ||
 			checkpoint.Sequence == 0 || checkpoint.Sequence >= firstTaskEventSequence(task) ||
 			!recordcodec.ValidSHA256(checkpoint.PayloadSHA256) || !taskjournal.ValidTaskEventState(checkpoint.State) ||
 			checkpoint.Completed && !checkpoint.Running || checkpoint.Running && !checkpoint.EffectPossible ||
@@ -52,6 +57,23 @@ func validateTaskEventCheckpoints(task TaskRecord) error {
 			return recordcodec.CorruptRecord()
 		}
 		previous = checkpoint.Identity.StepID
+		if checkpoint.ControllerOperation.Validate() != nil ||
+			checkpoint.Identity.ControllerOperation() != (checkpoint.ControllerOperation != nil) ||
+			checkpoint.ControllerOperation != nil && checkpoint.HealthWait != nil {
+			return recordcodec.CorruptRecord()
+		}
+		if checkpoint.Failure.Validate() != nil || checkpoint.Failure != nil &&
+			checkpoint.State != taskjournal.TaskEventStateFailed && checkpoint.State != taskjournal.TaskEventStateTimedOut && checkpoint.State != taskjournal.TaskEventStateAborted {
+			return recordcodec.CorruptRecord()
+		}
+		if checkpoint.HealthWait.Validate() != nil ||
+			checkpoint.HealthWait == nil &&
+				(checkpoint.HealthWaitOrdinal != 0 || checkpoint.HealthWaitReceivedAt != nil) ||
+			checkpoint.HealthWait != nil &&
+				(checkpoint.HealthWaitOrdinal < 2 || checkpoint.HealthWaitOrdinal > checkpoint.Identity.Ordinal ||
+					checkpoint.HealthWaitReceivedAt == nil || recordcodec.ValidateTimestamp("health wait received_at", *checkpoint.HealthWaitReceivedAt) != nil || checkpoint.HealthWaitReceivedAt.After(task.UpdatedAt)) {
+			return recordcodec.CorruptRecord()
+		}
 	}
 	return nil
 }
@@ -123,11 +145,22 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		dedup.PayloadSHA256 != event.PayloadSHA256 {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
+	payload, err := taskprogress.DecodePayload(event.Payload)
+	if err != nil {
+		return nil, nil, err
+	}
 	checkpoint := taskjournal.TaskEventCheckpoint{Identity: event.Identity, Sequence: event.Sequence,
 		PayloadSHA256: event.PayloadSHA256, State: event.State,
 		Running: event.State == taskjournal.TaskEventStateRunning ||
 			event.State == taskjournal.TaskEventStateCompleted,
 		Completed: event.State == taskjournal.TaskEventStateCompleted, EffectPossible: event.State != taskjournal.TaskEventStatePending}
+	checkpoint.HealthWait = payload.HealthWait
+	checkpoint.Failure = taskprogress.CloneFailure(payload.Failure)
+	checkpoint.ControllerOperation = taskprogress.CloneControllerOperation(payload.ControllerOperation)
+	if payload.HealthWait != nil {
+		checkpoint.HealthWaitOrdinal = event.Identity.Ordinal
+		checkpoint.HealthWaitReceivedAt = &event.ReceivedAt
+	}
 	index := slices.IndexFunc(
 		prepared.Task.EventCheckpoints,
 		func(value taskjournal.TaskEventCheckpoint) bool {
@@ -139,12 +172,21 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		checkpoint.Running = checkpoint.Running || prior.Running
 		checkpoint.Completed = checkpoint.Completed || prior.Completed
 		checkpoint.EffectPossible = checkpoint.EffectPossible || prior.EffectPossible
+		if prior.Identity.Attempt > checkpoint.Identity.Attempt ||
+			prior.Identity.Attempt == checkpoint.Identity.Attempt &&
+				prior.HealthWaitOrdinal > checkpoint.HealthWaitOrdinal {
+			checkpoint.HealthWait, checkpoint.HealthWaitOrdinal = prior.HealthWait, prior.HealthWaitOrdinal
+			checkpoint.HealthWaitReceivedAt = prior.HealthWaitReceivedAt
+		}
 		// Delivery order may differ from ordinal order. Never lower the replay
 		// watermark when a later-evicted event has an older protocol identity.
 		if prior.Identity.Attempt > checkpoint.Identity.Attempt ||
 			prior.Identity.Attempt == checkpoint.Identity.Attempt &&
 				prior.Identity.Ordinal > checkpoint.Identity.Ordinal {
 			checkpoint.Identity, checkpoint.Sequence, checkpoint.PayloadSHA256 = prior.Identity, prior.Sequence, prior.PayloadSHA256
+			checkpoint.State = prior.State
+			checkpoint.Failure = taskprogress.CloneFailure(prior.Failure)
+			checkpoint.ControllerOperation = taskprogress.CloneControllerOperation(prior.ControllerOperation)
 		}
 		prepared.Task.EventCheckpoints[index] = checkpoint
 	} else {
@@ -159,10 +201,15 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 			return 0
 		})
 	}
-	return []etcdstore.Condition{{Key: read.Values[0].Key, ModRevision: read.Values[0].ModRevision},
-			{Key: dedupKey, ModRevision: dedupRead.Values[0].ModRevision}},
-		[]etcdstore.Mutation{
-			{Type: etcdstore.MutationDelete, Key: read.Values[0].Key},
-			{Type: etcdstore.MutationDelete, Key: dedupKey},
-		}, nil
+	historyConditions, historyMutations, err := repository.prepareTrimmedAttemptHistory(ctx, task, event, revision)
+	if err != nil {
+		return nil, nil, err
+	}
+	conditions := []etcdstore.Condition{{Key: read.Values[0].Key, ModRevision: read.Values[0].ModRevision},
+		{Key: dedupKey, ModRevision: dedupRead.Values[0].ModRevision}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: read.Values[0].Key},
+		{Type: etcdstore.MutationDelete, Key: dedupKey},
+	}
+	return append(conditions, historyConditions...), append(mutations, historyMutations...), nil
 }

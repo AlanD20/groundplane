@@ -8,19 +8,20 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorchecks"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"io"
 )
 
 type controllerConnectorComposition struct {
 	mutations handlers.ConnectorMutator
 	deletions handlers.ConnectorDeleter
+	checks    handlers.ConnectorChecker
 }
 
 // Initialization owns failure cleanup here because Connector creation and
 // deletion preserve different shutdown-error policies.
 func newControllerConnectorComposition(
-	store io.Closer,
+	store controllerStore,
 	hierarchyRecords *etcd.HierarchyRepository,
 	secretRecords *etcd.SecretRepository,
 	connectorRecords *etcd.ConnectorRepository,
@@ -78,5 +79,18 @@ func newControllerConnectorComposition(
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	return &controllerConnectorComposition{mutations: connectorMutations, deletions: connectorDeletions}, nil
+	checkRecords, err := connectorchecks.NewRepository(store)
+	if err != nil {
+		return nil, errors.Join(err, store.Close())
+	}
+	checks, err := connectors.NewCheckService(hierarchyRecords, connectorRecords, secretRecords,
+		checkRecords, idempotency, intentCoordinator, intentProtector)
+	if err != nil {
+		return nil, errors.Join(err, store.Close())
+	}
+	return &controllerConnectorComposition{
+		mutations: connectorMutations,
+		deletions: connectorDeletions,
+		checks:    checks,
+	}, nil
 }

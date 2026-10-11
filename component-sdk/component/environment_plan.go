@@ -163,7 +163,10 @@ type OCIPlatform struct {
 type OCIImage struct {
 	Repository  string
 	IndexDigest string
-	Platforms   []OCIPlatform
+	// Tag records the tag verified when this compiled image was selected. Empty
+	// means selection was by digest or its original tag was not recorded.
+	Tag       string
+	Platforms []OCIPlatform
 }
 
 func (image OCIImage) IndexReference() string {
@@ -172,7 +175,7 @@ func (image OCIImage) IndexReference() string {
 
 func (image OCIImage) Validate() error {
 	if image.Repository == "" || strings.ContainsAny(image.Repository, "@ ") ||
-		!validOCIImageSHA256(image.IndexDigest) || len(image.Platforms) != 2 {
+		!validOCIImageSHA256(image.IndexDigest) || len(image.Platforms) != 2 || !ValidOCIImageTag(image.Tag) {
 		return fmt.Errorf("component: OCI image authority is invalid")
 	}
 	amd64, arm64 := image.Platforms[0], image.Platforms[1]
@@ -188,7 +191,7 @@ func (image OCIImage) Validate() error {
 }
 
 func (image OCIImage) Equal(other OCIImage) bool {
-	if image.Repository != other.Repository || image.IndexDigest != other.IndexDigest ||
+	if image.Repository != other.Repository || image.IndexDigest != other.IndexDigest || image.Tag != other.Tag ||
 		len(image.Platforms) != len(other.Platforms) {
 		return false
 	}
@@ -224,6 +227,23 @@ func validOCIImageSHA256(value string) bool {
 		nonzero = nonzero || character != '0'
 	}
 	return nonzero
+}
+
+// ValidOCIImageTag admits an absent tag or the OCI tag grammar. A valid tag is
+// presentation metadata; it never replaces the selected immutable digests.
+func ValidOCIImageTag(tag string) bool {
+	if len(tag) > 128 {
+		return false
+	}
+	for index, character := range tag {
+		if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' || character == '_' ||
+			index > 0 && (character == '.' || character == '-') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 type ManagedMountKind string
@@ -311,7 +331,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		return normalized.Files[left].Path < normalized.Files[right].Path
 	})
 	encoded := make([]byte, 0, 1024)
-	encoded = appendPlanString(encoded, "environment-plan-v7")
+	encoded = appendPlanString(encoded, "environment-plan-v8")
 	encoded = appendPlanCount(encoded, len(normalized.Services))
 	for _, service := range normalized.Services {
 		encoded = appendPlanString(encoded, service.ID)
@@ -367,6 +387,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 func appendOCIImage(encoded []byte, image OCIImage) []byte {
 	encoded = appendPlanString(encoded, image.Repository)
 	encoded = appendPlanString(encoded, image.IndexDigest)
+	encoded = appendPlanString(encoded, image.Tag)
 	encoded = appendPlanCount(encoded, len(image.Platforms))
 	for _, platform := range image.Platforms {
 		encoded = appendPlanString(encoded, platform.OS)

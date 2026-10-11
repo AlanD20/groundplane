@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -18,8 +20,13 @@ import (
 func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 	ctx context.Context, terminal TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (attachTaskChange, error) {
-	change, err := repository.prepareAttachTaskAcknowledgement(ctx, terminal, terminal.Status, revision)
-	if err != nil || !change.applies || terminal.Status != taskjournal.TaskStatusCompleted {
+	recovered := recoveredAuthoredAttachAbsence(terminal, assignment)
+	effectStatus := terminal.Status
+	if recovered {
+		effectStatus = taskjournal.TaskStatusCompleted
+	}
+	change, err := repository.prepareAttachTaskAcknowledgement(ctx, terminal, effectStatus, revision)
+	if err != nil || !change.applies || effectStatus != taskjournal.TaskStatusCompleted {
 		return change, err
 	}
 	input, inputRevision, err := repository.readAttachRuntimePreparation(ctx, terminal, revision)
@@ -38,12 +45,10 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 		clearAttachTaskChange(change)
 		return attachTaskChange{}, err
 	}
-	if len(prepared.Updates) == 0 {
-		return change, nil
-	}
 	result := terminal.Result
-	if result == nil || result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 ||
-		result.Diagnostic != taskjournal.TaskResultDiagnosticNone || result.ReconciliationRequired ||
+	if result == nil || result.Kind != taskjournal.TaskResultCompose ||
+		!recovered &&
+			(result.ExitCode != 0 || result.Diagnostic != taskjournal.TaskResultDiagnosticNone) || result.ReconciliationRequired ||
 		result.ExecutionEpoch == 0 || result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		terminal.TerminalAssignment == nil || terminal.TerminalAssignment.AssignmentID != assignment.AssignmentID ||
 		terminal.TerminalAssignment.AgentID != assignment.AgentID || terminal.FinishedAt == nil {
@@ -52,6 +57,29 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 			errs.KindStateConflict,
 			"Attach runtime requires an exact successful assignment",
 		)
+	}
+	if terminal.Type == taskjournal.TaskDetach && !taskjournal.IsBlueprintChild(terminal.Params) {
+		receipt, receiptErr := repository.prepareDirectRemovalReceipt(ctx, terminal, assignment, input.EnvironmentID,
+			blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: terminal.Target}, revision)
+		if receiptErr != nil {
+			clearAttachTaskChange(change)
+			return attachTaskChange{}, receiptErr
+		}
+		change.conditions, receiptErr = appendRemovalComparisons(change.conditions, receipt.Conditions())
+		if receiptErr != nil {
+			receipt.Clear()
+			clearAttachTaskChange(change)
+			return attachTaskChange{}, receiptErr
+		}
+		for _, mutation := range receipt.Mutations() {
+			change.mutations = append(change.mutations, mutation)
+			if mutation.Value != nil {
+				change.values = append(change.values, mutation.Value)
+			}
+		}
+	}
+	if len(prepared.Updates) == 0 {
+		return change, nil
 	}
 	update := prepared.Updates[0]
 	key := serviceruntimerecord.Key(update.Runtime.ServiceID)

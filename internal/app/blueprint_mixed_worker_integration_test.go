@@ -235,7 +235,7 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *ExecutedArtifactFixture, 
 				testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 					AssignmentID: progress.AssignmentID, AgentID: recovery.Assignment.Record.AgentID, AgentGeneration: 1,
 					TaskID: progress.TaskID, StepID: progress.StepID, Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
-				}, State: state, Payload: json.RawMessage(`{"message":"actual worker recovery"}`)},
+				}, State: state, Payload: json.RawMessage(`{}`)},
 				time.Now().UTC(),
 			)
 			if err != nil {

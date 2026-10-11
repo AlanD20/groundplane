@@ -16,12 +16,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -47,10 +45,10 @@ func (publicationSizeImages) ResolveWorkloadImages(
 		}}}, nil
 }
 
-// Rationale: two running Services repeat the same legal Environment projection
-// in the aggregate marker. Their individual render and assignment bounds fit;
-// the update must publish and retain exact recovery/terminal bytes without
-// enlarging the durable record ceiling or dropping historical witnesses.
+// Rationale: two running Services share one legal authored Environment
+// projection. A selected Service child must publish and retain exact recovery
+// and terminal bytes without enlarging the durable record ceiling or dropping
+// historical witnesses.
 func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 	ctx := context.Background()
 	fixture := NewExecutedArtifactFixture(t)
@@ -78,7 +76,7 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	producer, err := blueprintrelease.NewService(fixture.Ledger, scripts, resolver, artifacts, sources,
-		blueprintImageLookupAgent(t, fixture), publicationSizeImages{})
+		blueprintImageLookupAgent(t, fixture), publicationSizeImages{}, unexpectedBlueprintRollingObserver{t})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +85,6 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	serviceIDs := []string{ids.New(ids.KindService), ids.New(ids.KindService)}
-	previous := &composetypes.Project{Name: "test", Services: composetypes.Services{}}
 	var priorArtifact []byte
 	for pass := 0; pass < 2; pass++ {
 		task := fixture.Task(t, 2600+int64(pass))
@@ -95,12 +92,7 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		task.UpdatedAt = task.CreatedAt
 		task.RenderGeneration = int32(pass + 1)
 		artifactID := ids.New(ids.KindConfig)
-		task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
-		task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(
-			taskcontract.BlueprintComposeProcedureNone,
-		)
 		project := &composetypes.Project{Name: "test", Services: composetypes.Services{}}
-		changes := make([]testblueprints.EnvironmentBlueprintServiceChange, len(serviceIDs))
 		identities := make([]testcomposeidentity.Resource, len(serviceIDs))
 		projection := testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID:    fixture.Environment.Record.ID,
@@ -111,12 +103,7 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 			name := fmt.Sprintf("worker-%d", index)
 			desired := core.Service{ID: serviceID, Name: name, Image: "example/api:1",
 				Replicas: pass + 1, Strategy: core.StrategyRecreate}
-			record, err := testservices.NewServiceRecord(fixture.Environment.Record.ID, desired, "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			changes[index].Record = record
-			if pass > 0 {
+			if pass > 0 && index == 0 {
 				scope, err := fixture.Ledger.LoadPlanningScope(ctx, fixture.Environment.Record.ID)
 				if err != nil {
 					t.Fatal(err)
@@ -125,7 +112,6 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 				if err != nil || len(planning) != 1 || planning[0].Projection.ServingReleaseID == "" {
 					t.Fatalf("running predecessor: %v", err)
 				}
-				changes[index].Current = &planning[0].Service
 			}
 			definition := composetypes.ServiceConfig{Name: name, Image: desired.Image, Scale: &desired.Replicas,
 				NetworkMode: "none", Environment: composetypes.MappingWithEquals{},
@@ -143,14 +129,6 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 					Desired:       desired,
 				},
 			)
-		}
-		memberships, err := blueprintrelease.BuildNormalizedServiceMemberships(previous, project)
-		if err != nil {
-			t.Fatal(err)
-		}
-		workloads, err := producer.Preflight(ctx, fixture.Environment.Record.ID, changes, memberships, nil)
-		if err != nil {
-			t.Fatalf("pass%d preflight: %v", pass, err)
 		}
 		artifact, err := testcomposerender.RenderCompose(
 			testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
@@ -171,98 +149,95 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 			t.Fatal(err)
 		}
 		prefix := prepareBlueprintFileFixture(t, &task, &projection, artifactID, pass)
-		environment, err := fixture.Hierarchy.GetEnvironment(ctx, fixture.Environment.Record.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		prepared, err := producer.Prepare(
-			ctx,
-			blueprintrelease.PrepareInput{DesiredRevisionID: projection.RevisionID, Workloads: workloads,
-				VolumeRoot: "/var/lib/groundplane/vol", Task: task, Projection: projection, Tenant: tenant,
-				Project: fixture.Project, Environment: environment, Memberships: memberships, PrefixSteps: prefix,
-				ServiceChanges: changes, Artifact: artifact, CreatedAt: task.CreatedAt,
-				AllocateNamed: func(kind ids.Kind, purpose string) string {
-					return ids.DeriveAt(kind, task.CreatedAt, task.ID, purpose)
-				}},
-		)
-		if err != nil {
-			t.Fatalf("pass%d real producer publication: %v", pass, err)
-		}
+		revision := fixture.PublishNativeBlueprintRevision(t, task, projection, nil)
+		selected := serviceIDs
 		if pass > 0 {
-			fixture.AssertBlueprintNativePublicationSourceFences(t, prepared.Task, prepared.Publication)
+			selected = serviceIDs[:1]
 		}
-		fixture.Publish(t, prepared.Task, projection, prepared.Publication)
-		if pass > 0 {
-			fixture.AssertBlueprintNativeReferenceRejection(t, prepared.Task)
-		}
-		frozen, err := fixture.Ledger.GetBlueprintTaskRenderInput(ctx, prepared.Task)
-		if err != nil || len(frozen.Members) != 2 {
-			t.Fatalf("pass%d immutable publication read: %v", pass, err)
-		}
-		replayed, err := resolver.ResolveExecutionPlan(ctx, prepared.Task)
-		if err != nil || !proto.Equal(prepared.Plan, replayed) {
-			t.Fatalf("pass%d immutable plan replay: %v", pass, err)
-		}
-		assertBlueprintFileRecoveryFixture(t, prepared.Task, replayed, pass)
-		agentID := ids.New(ids.KindAgent)
-		claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
-		if err != nil || !found || claim.Task.Record.ID != task.ID {
-			t.Fatalf("pass%d assignment: %t %v", pass, found, err)
-		}
-		if pass > 0 {
-			authority := claim.Assignment.Record.RestorationAuthority
-			if authority == nil || authority.AppliedPredecessor == nil ||
-				!bytes.Equal(
-					authority.AppliedPredecessor.ComposeArtifact,
-					priorArtifact,
-				) || len(authority.NativePredecessors) != 2 {
-				t.Fatal("assignment lost the exact applied or native predecessor witnesses")
+		for _, serviceID := range selected {
+			prepared := fixture.PrepareNativeServiceUnit(t, producer, revision, serviceID, nil, prefix)
+			if pass > 0 {
+				fixture.AssertBlueprintNativePublicationSourceFences(t, prepared.Task, prepared.Publication)
 			}
-			for index, native := range frozen.NativePredecessors {
-				if native.Serving == nil ||
-					!bytes.Equal(native.CurrentArtifact, authority.NativePredecessors[index].CurrentArtifact) {
-					t.Fatal("assignment changed the native predecessor artifact")
+			fixture.PublishNativeServiceUnit(t, revision, serviceID, prepared)
+			if pass > 0 {
+				fixture.AssertBlueprintNativeReferenceRejection(t, prepared.Task, serviceIDs[1])
+			}
+			frozen, err := fixture.Ledger.GetBlueprintTaskRenderInput(ctx, prepared.Task)
+			if err != nil || len(frozen.Members) != 1 {
+				t.Fatalf("pass%d immutable publication read: %v", pass, err)
+			}
+			replayed, err := resolver.ResolveExecutionPlan(ctx, prepared.Task)
+			if err != nil || !proto.Equal(prepared.Plan, replayed) {
+				t.Fatalf("pass%d immutable plan replay: %v", pass, err)
+			}
+			filePass := pass
+			if len(priorArtifact) != 0 {
+				filePass = 1
+			}
+			assertBlueprintFileRecoveryFixture(t, prepared.Task, replayed, filePass)
+			agentID := ids.New(ids.KindAgent)
+			claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second))
+			if err != nil || !found || claim.Task.Record.ID != prepared.Task.ID {
+				t.Fatalf("pass%d assignment: %t %v", pass, found, err)
+			}
+			if pass > 0 {
+				authority := claim.Assignment.Record.RestorationAuthority
+				if authority == nil || authority.AppliedPredecessor == nil ||
+					!bytes.Equal(
+						authority.AppliedPredecessor.ComposeArtifact,
+						priorArtifact,
+					) || len(authority.NativePredecessors) != 1 {
+					t.Fatal("assignment lost the exact applied or native predecessor witnesses")
+				}
+				for index, native := range frozen.NativePredecessors {
+					if native.Serving == nil ||
+						!bytes.Equal(native.CurrentArtifact, authority.NativePredecessors[index].CurrentArtifact) {
+						t.Fatal("assignment changed the native predecessor artifact")
+					}
 				}
 			}
+			fixture.AssertBlueprintPublicationRecordSizes(t, prepared.Task, claim)
+			if audit.Publication.Comparisons == 0 || audit.Publication.Mutations == 0 ||
+				audit.Publication.Bytes > 1<<20 ||
+				audit.Assignment.Comparisons+audit.Assignment.Mutations > 96 ||
+				audit.Assignment.Bytes > 1<<20 {
+				t.Fatal("complete publication/assignment transaction exceeds its existing budget")
+			}
+			proveBoundedBlueprintAgentAdmission(t, claim, replayed)
+			result := testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1,
+				Diagnostic: testtaskjournal.TaskResultDiagnosticNone}
+			completed, err := fixture.Tasks.AcknowledgeTask(
+				ctx,
+				agentID,
+				1,
+				prepared.Task.ID,
+				claim.Assignment.Record.AssignmentID,
+				testtaskjournal.TaskStatusCompleted,
+				result,
+				prepared.Task.CreatedAt.Add(time.Minute),
+			)
+			if err != nil || completed.Record.Status != testtaskjournal.TaskStatusCompleted {
+				t.Fatalf("pass%d terminal completion: %v", pass, err)
+			}
+			replayedTerminal, err := fixture.Tasks.AcknowledgeTask(
+				ctx,
+				agentID,
+				1,
+				prepared.Task.ID,
+				claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result,
+				prepared.Task.CreatedAt.Add(2*time.Minute),
+			)
+			if err != nil || replayedTerminal.Revision != completed.Revision {
+				t.Fatalf("pass%d terminal replay: %v", pass, err)
+			}
+			latest, present, err := fixture.Hierarchy.GetEnvironmentAppliedComposeProjection(ctx, task.Target)
+			executed, marshalErr := proto.MarshalOptions{Deterministic: true}.Marshal(prepared.Plan.Artifacts[0])
+			if err != nil || marshalErr != nil || !present || !bytes.Equal(latest.Record.ComposeArtifact, executed) {
+				t.Fatal("terminal completion did not retain the exact executed artifact")
+			}
+			priorArtifact = executed
 		}
-		fixture.AssertBlueprintPublicationRecordSizes(t, prepared.Task, claim)
-		if audit.Publication.Comparisons == 0 || audit.Publication.Mutations == 0 || audit.Publication.Bytes > 1<<20 ||
-			audit.Assignment.Comparisons+audit.Assignment.Mutations > 96 || audit.Assignment.Bytes > 1<<20 {
-			t.Fatal("complete publication/assignment transaction exceeds its existing budget")
-		}
-		proveBoundedBlueprintAgentAdmission(t, claim, replayed)
-		result := testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1,
-			Diagnostic: testtaskjournal.TaskResultDiagnosticNone}
-		completed, err := fixture.Tasks.AcknowledgeTask(
-			ctx,
-			agentID,
-			1,
-			task.ID,
-			claim.Assignment.Record.AssignmentID,
-			testtaskjournal.TaskStatusCompleted,
-			result,
-			task.CreatedAt.Add(time.Minute),
-		)
-		if err != nil || completed.Record.Status != testtaskjournal.TaskStatusCompleted {
-			t.Fatalf("pass%d terminal completion: %v", pass, err)
-		}
-		replayedTerminal, err := fixture.Tasks.AcknowledgeTask(
-			ctx,
-			agentID,
-			1,
-			task.ID,
-			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result,
-			task.CreatedAt.Add(2*time.Minute),
-		)
-		if err != nil || replayedTerminal.Revision != completed.Revision {
-			t.Fatalf("pass%d terminal replay: %v", pass, err)
-		}
-		latest, present, err := fixture.Hierarchy.GetEnvironmentAppliedComposeProjection(ctx, task.Target)
-		executed, marshalErr := proto.MarshalOptions{Deterministic: true}.Marshal(prepared.Plan.Artifacts[0])
-		if err != nil || marshalErr != nil || !present || !bytes.Equal(latest.Record.ComposeArtifact, executed) {
-			t.Fatal("terminal completion did not retain the exact executed artifact")
-		}
-		previous, priorArtifact = project, executed
 	}
 }
 

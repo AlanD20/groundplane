@@ -13,15 +13,11 @@ import (
 	"testing"
 	"time"
 
-	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 
-	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	testtaskcontract "github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -29,7 +25,6 @@ import (
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
-	runtimeconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 
 	// Rationale: a Route that never reached an enabled provider projection must
 	// still use the durable deletion lifecycle without dispatching host work.
@@ -122,6 +117,7 @@ func TestPrepareControllerRouteRemovalTaskValidatesCandidateRenderGeneration(t *
 }
 
 type routeRemovalRepositoryFake struct {
+	tenant               testkeyvalue.Versioned[testhierarchy.TenantRecord]
 	environment          testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
 	project              testkeyvalue.Versioned[testhierarchy.ProjectRecord]
 	target               testkeyvalue.Versioned[testservices.ServiceRecord]
@@ -135,6 +131,7 @@ type routeRemovalRepositoryFake struct {
 	intent               testenvironmentchanges.RouteRemovalIntent
 	tombstone            testdeletions.DeletionTombstoneRecord
 	marker               testidempotency.IdempotencyMarker
+	transactionStore     *routeRemovalTransactionStore
 }
 
 func (fake *routeRemovalRepositoryFake) GetEnvironment(
@@ -198,12 +195,17 @@ func (fake *routeRemovalRepositoryFake) BeginRouteDeletionWithTask(
 	fake.tombstone = tombstone
 	fake.marker = marker
 	fake.marker.Response.Body = append([]byte(nil), marker.Response.Body...)
-	store := &routeRemovalTransactionStore{
-		routeID: route.Record.Desired.ID, environmentID: environment.Record.ID,
-		indexRevision: 40, revision: int64(100 + fake.begins), conflict: fake.begins <= fake.conflicts,
-		source: fake.serviceEvidence,
+	store := fake.transactionStore
+	if store == nil {
+		store = &routeRemovalTransactionStore{source: fake.serviceEvidence}
+		fake.transactionStore = store
 	}
-	if len(task.Materializations) != 0 {
+	store.routeID = route.Record.Desired.ID
+	store.environmentID = environment.Record.ID
+	store.indexRevision = 40
+	store.revision = int64(100 + fake.begins)
+	store.conflict = fake.begins <= fake.conflicts
+	if len(task.Materializations) != 0 && store.configuration == nil {
 		if err := store.seedConfiguration(ctx, projection); err != nil {
 			return etcd.IdempotencyTransactionResult{}, err
 		}
@@ -221,61 +223,6 @@ func (fake *routeRemovalRepositoryFake) BeginRouteDeletionWithTask(
 		fake.environment.ReadRevision = fake.environment.Revision
 	}
 	return result, err
-}
-
-type routeRemovalTransactionStore struct {
-	testkeyvalue.Store
-
-	routeID               string
-	environmentID         string
-	indexRevision         int64
-	revision              int64
-	conflict              bool
-	configuration         map[string]testkeyvalue.KeyValue
-	configurationRevision int64
-	source                *routeRemovalServiceEvidenceStore
-}
-
-// Model acknowledged configuration and immutable staging, not a second Route
-// planner. The production publisher still owns the final deletion transaction.
-func (store *routeRemovalTransactionStore) seedConfiguration(
-	ctx context.Context, projection *testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection],
-) error {
-	store.configuration = make(map[string]testkeyvalue.KeyValue)
-	store.configurationRevision = 1
-	sources, err := runtimeconfiguration.New(store)
-	if err != nil {
-		return err
-	}
-	reference, err := sources.Stage(ctx, runtimeconfiguration.Snapshot{
-		ID: ids.New(ids.KindConfig), EnvironmentID: store.environmentID,
-		Generation: projection.Record.RenderGeneration, Files: []testtaskmaterialization.Record{},
-	})
-	if err != nil {
-		return err
-	}
-	value, err := runtimeconfiguration.EncodeReference(reference)
-	if err != nil {
-		return err
-	}
-	headKey := "/v1/runtime/environment-configurations/" + store.environmentID
-	store.configuration[headKey] = testkeyvalue.KeyValue{
-		Key:         headKey,
-		Value:       value,
-		ModRevision: store.configurationRevision,
-	}
-	value, err = testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection.Record)
-	if err != nil {
-		return err
-	}
-	appliedKey := "/v1/records/environment-compose-projections/" + store.environmentID
-	store.configuration[appliedKey] = testkeyvalue.KeyValue{
-		Key:         appliedKey,
-		Value:       value,
-		ModRevision: projection.Revision,
-	}
-	store.configurationRevision = projection.ReadRevision
-	return nil
 }
 
 type routeRemovalServiceEvidenceStore struct {
@@ -372,7 +319,7 @@ func routeRemovalServiceEvidence(
 		}},
 		NormalizedCompose: routeRemovalTestNormalizedCompose(t),
 	}
-	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
+	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection, "/var/lib/groundplane/vol/test")
 	projectionValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		t.Fatalf("EncodeEnvironmentComposeProjectionStorage() error = %v", err)
@@ -437,84 +384,6 @@ func routeRemovalServiceEvidence(
 		identitiesKey: testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(environmentID, revisionID),
 		readRevision:  13,
 	}
-}
-
-func (store *routeRemovalTransactionStore) GetMany(
-	_ context.Context,
-	request testkeyvalue.GetManyRequest,
-) (*testkeyvalue.GetManyResult, error) {
-	if store.source != nil && len(request.Keys) != 0 &&
-		(strings.HasPrefix(request.Keys[0], "/v1/records/environment-blueprints/") ||
-			strings.HasPrefix(request.Keys[0], "/v1/records/environment-blueprint-revisions/")) {
-		return store.source.GetMany(context.Background(), request)
-	}
-	if len(request.Keys) != 0 && (strings.Contains(request.Keys[0], "/runtime-configuration-sources/") ||
-		strings.HasPrefix(request.Keys[0], "/v1/runtime/environment-configurations/")) {
-		revision := request.Revision
-		if revision == 0 {
-			revision = store.configurationRevision
-		}
-		values := make([]*testkeyvalue.KeyValue, len(request.Keys))
-		for index, key := range request.Keys {
-			if value, found := store.configuration[key]; found && value.ModRevision <= revision {
-				value.Value = append([]byte(nil), value.Value...)
-				values[index] = &value
-			}
-		}
-		return &testkeyvalue.GetManyResult{
-			Values:           values,
-			ReadRevision:     revision,
-			ResponseRevision: store.configurationRevision,
-		}, nil
-	}
-	return &testkeyvalue.GetManyResult{
-		Values: []*testkeyvalue.KeyValue{
-			{Value: []byte(store.routeID), ModRevision: store.indexRevision},
-			{Value: []byte(store.routeID), ModRevision: store.indexRevision + 1},
-		},
-		ReadRevision: store.revision, ResponseRevision: store.revision,
-	}, nil
-}
-
-func (store *routeRemovalTransactionStore) Transact(
-	_ context.Context,
-	conditions []testkeyvalue.Condition,
-	mutations []testkeyvalue.Mutation,
-) (testkeyvalue.TransactionResult, error) {
-	if len(mutations) != 0 && strings.Contains(mutations[0].Key, "/runtime-configuration-sources/") {
-		for _, condition := range conditions {
-			if store.configuration[condition.Key].ModRevision != condition.ModRevision {
-				return testkeyvalue.TransactionResult{Revision: store.configurationRevision}, nil
-			}
-		}
-		store.configurationRevision++
-		for _, mutation := range mutations {
-			if mutation.Type == testkeyvalue.MutationDelete {
-				delete(store.configuration, mutation.Key)
-			} else {
-				store.configuration[mutation.Key] = testkeyvalue.KeyValue{Key: mutation.Key,
-					Value: append([]byte(nil), mutation.Value...), ModRevision: store.configurationRevision}
-			}
-		}
-		return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.configurationRevision}, nil
-	}
-	if !store.conflict {
-		return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
-	}
-	failureReads := make([]*testkeyvalue.KeyValue, len(conditions))
-	for index, condition := range conditions {
-		if condition.ModRevision == 0 {
-			continue
-		}
-		revision := condition.ModRevision
-		if strings.HasPrefix(condition.Key, "/v1/records/environments/") {
-			revision++
-		}
-		failureReads[index] = &testkeyvalue.KeyValue{
-			Key: condition.Key, Value: []byte(store.routeID), ModRevision: revision,
-		}
-	}
-	return testkeyvalue.TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
 }
 
 type routeRemovalIdempotencyFake struct {
@@ -592,10 +461,11 @@ type routeRemovalPlanFake struct {
 	calls     int
 	intent    testenvironmentchanges.RouteRemovalIntent
 	procedure testtaskplanning.RouteRemovalTaskProcedureIDs
+	resolver  *testtaskplanning.TaskPlanResolver
 }
 
 func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
-	_ context.Context,
+	ctx context.Context,
 	task etcd.TaskRecord,
 	intent testenvironmentchanges.RouteRemovalIntent,
 	procedure testtaskplanning.RouteRemovalTaskProcedureIDs,
@@ -606,53 +476,11 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 	if fake.err != nil {
 		return etcd.RouteRemovalTaskPreparation{}, fake.err
 	}
-	if intent.CandidateProjection == nil || len(intent.CandidateProjection.Components) == 0 {
-		return etcd.RouteRemovalTaskPreparation{Intent: intent, Task: task}, nil
+	prepared, err := fake.resolver.PrepareRouteRemovalTask(ctx, task, intent, procedure)
+	if err == nil {
+		fake.intent = prepared.Intent
 	}
-	componentID := intent.CandidateProjection.Components[0].Desired.ID
-	intent.Provider = &testenvironmentchanges.RouteProviderPin{
-		ComponentID: componentID, DefinitionDigest: strings.Repeat("a", 64), CatalogDigest: strings.Repeat("b", 64),
-		InputRevision: 1, InputGeneration: intent.CandidateProjection.RenderGeneration,
-		Destination: "components/router/config", ActionID: "activate-config",
-		ServiceID: intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0],
-		Input: componentsdk.HTTPRouterInput{ComponentID: componentID, Enabled: true,
-			GeneratedServiceID: intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0],
-			Zones: []componentsdk.HTTPRouterZoneInput{{
-				ID: ids.New(ids.KindNetwork), Name: "frontend", StaticIPv4: "10.0.0.2",
-			}},
-			Origin: componentsdk.HTTPRouterOrigin{ServiceName: "caddy", URL: "http://caddy:80"}},
-	}
-	fake.intent = intent
-	task.Executor = testtaskjournal.TaskExecutorAgent
-	task.Params = map[string]string{
-		testtaskjournal.TaskRouteEnvironmentParam:           intent.EnvironmentID,
-		testtaskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
-		testblueprints.EnvironmentDesiredRevisionParam:      intent.CandidateProjection.RevisionID,
-		testtaskcontract.EnvironmentBlueprintArtifactParam:  procedure.ArtifactID,
-	}
-	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
-	task.Steps = []testtaskjournal.TaskStepRecord{
-		{
-			Kind: testtaskjournal.TaskStepOperation,
-			ID:   procedure.MaterializeStepID,
-		}, {Kind: testtaskjournal.TaskStepOperation, ID: procedure.ComposeApplyStepID}, {Kind: testtaskjournal.TaskStepOperation, ID: procedure.ActivateStepID},
-	}
-	task.Materializations = []testtaskmaterialization.Record{{
-		StepID: procedure.MaterializeStepID, MaterializationID: procedure.MaterializationID,
-		EnvironmentID: intent.EnvironmentID, Destination: "components/router/config",
-		OutputKind: testtaskmaterialization.OutputPlainFile,
-		Mode:       uint32(entrymaterialization.ModeReadOnly), Length: 1,
-		SHA256: strings.Repeat("a", 64),
-		Source: testtaskmaterialization.Source{
-			Kind: testtaskmaterialization.SourceComponentFile,
-			ComponentFile: &testtaskmaterialization.ComponentFileValueReference{
-				RevisionID: intent.CandidateProjection.RevisionID, ComponentID: componentID,
-				Path: "components/router/config", RouteTaskID: task.ID,
-			},
-		},
-	}}
-	task.PlanHash = strings.Repeat("b", 64)
-	return etcd.RouteRemovalTaskPreparation{Intent: intent, Task: task}, nil
+	return prepared, err
 }
 
 func routeRemovalServiceState(
@@ -660,6 +488,7 @@ func routeRemovalServiceState(
 ) (*routeRemovalRepositoryFake, *routeRemovalIdempotencyFake, *routeRemovalPlanFake, *routeRemovalService) {
 	t.Helper()
 	at := time.Date(2026, time.August, 24, 10, 0, 0, 0, time.UTC)
+	tenantID := ids.NewAt(ids.KindTenant, at, 1)
 	projectID := ids.NewAt(ids.KindProject, at, 2)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 3)
 	serviceID := ids.NewAt(ids.KindService, at, 4)
@@ -676,6 +505,10 @@ func routeRemovalServiceState(
 		t.Fatalf("NewServiceRecord() error = %v", err)
 	}
 	repository := &routeRemovalRepositoryFake{
+		tenant: testkeyvalue.Versioned[testhierarchy.TenantRecord]{
+			Record:   testhierarchy.TenantRecord{ID: tenantID, Slug: "acme", Name: "Acme"},
+			Revision: 10, ReadRevision: 10,
+		},
 		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
 			Record: testhierarchy.EnvironmentRecord{
 				ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.70.0.0/16",
@@ -687,7 +520,8 @@ func routeRemovalServiceState(
 		},
 		project: testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
 			Record: testhierarchy.ProjectRecord{
-				ID: projectID, Slug: "platform", Name: "Platform", Kind: testhierarchy.ProjectKindBacking,
+				ID: projectID, TenantID: tenantID, Slug: "platform", Name: "Platform",
+				Kind: testhierarchy.ProjectKindTenant,
 			},
 			Revision: 12, ReadRevision: 12,
 		},
@@ -709,8 +543,18 @@ func routeRemovalServiceState(
 	repository.projection = &testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
 		Record: repository.serviceEvidence.projection, Revision: 13, ReadRevision: 13,
 	}
+	repository.transactionStore = &routeRemovalTransactionStore{
+		routeID: repository.route.Record.Desired.ID, environmentID: environmentID,
+		indexRevision: 40, revision: 100, source: repository.serviceEvidence,
+	}
+	if err := repository.transactionStore.seedConfiguration(context.Background(), repository.projection); err != nil {
+		t.Fatalf("seedConfiguration() error = %v", err)
+	}
+	if err := repository.transactionStore.seedTenant(repository.tenant); err != nil {
+		t.Fatalf("seedTenant() error = %v", err)
+	}
 	idempotency := &routeRemovalIdempotencyFake{}
-	plans := &routeRemovalPlanFake{}
+	plans := newRouteRemovalPlanFake(t, repository)
 	service, err := newRouteRemovalService(repository, plans, idempotency)
 	if err != nil {
 		t.Fatalf("newRouteRemovalService() error = %v", err)
@@ -767,7 +611,7 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
 			ZoneIDs: []string{zoneID},
 		}},
-		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.2", Healthy: true,
+		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.1.2", Healthy: true,
 	})
 	if err != nil {
 		t.Fatalf("NewComponentRecord() error = %v", err)
@@ -800,8 +644,8 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 		}},
 		Components: []testcomponents.Record{component, edge},
 	}
-	projection.NormalizedCompose = routeRemovalTestNormalizedCompose(t)
-	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
+	projection.NormalizedCompose = routeRemovalTestRouterNormalizedCompose(t)
+	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection, repository.environment.Record.VolumeDir)
 	repository.projection = &testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
 		Record: projection, Revision: 13, ReadRevision: 13,
 	}
@@ -885,7 +729,7 @@ func TestRouteRemovalPropagatesProviderPlannerError(t *testing.T) {
 		Components: []testcomponents.Record{component, edge},
 	}
 	projection.NormalizedCompose = routeRemovalTestNormalizedCompose(t)
-	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
+	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection, repository.environment.Record.VolumeDir)
 	repository.projection = &testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
 		Record: projection, Revision: 16, ReadRevision: 16,
 	}
@@ -911,7 +755,10 @@ func routeRemovalTestNormalizedCompose(t *testing.T) []byte {
 	return normalized
 }
 
-func routeRemovalTestComposeArtifact(projection testenvironmentprojection.EnvironmentComposeProjection) []byte {
+func routeRemovalTestComposeArtifact(
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+	volumeDir string,
+) []byte {
 	canonicalYAML := []byte("services: {}\n")
 	digest := sha256.Sum256(canonicalYAML)
 	services := make([]*agentpb.ComposeService, len(projection.DesiredServices))
@@ -922,15 +769,37 @@ func routeRemovalTestComposeArtifact(projection testenvironmentprojection.Enviro
 		for _, component := range projection.Components {
 			if component.Desired.Enabled && slices.Contains(component.Runtime.GeneratedServices, service.Desired.ID) {
 				services[index].OwnerComponentId = component.Desired.ID
+				image := routeRemovalTestOCIImage()
+				platform := image.Platforms[0]
+				services[index].ImageRepository = image.Repository
+				services[index].ImageReference = image.Repository + "@sha256:" + platform.ChildDigest
+				services[index].ImageSelectedTag = image.Tag
+				services[index].ImageOs = platform.OS
+				services[index].ImageArchitecture = platform.Architecture
+				services[index].ImageVariant = platform.Variant
+				for _, digest := range []struct {
+					text string
+					out  *[]byte
+				}{
+					{image.IndexDigest, &services[index].ImageIndexDigest},
+					{platform.ChildDigest, &services[index].ImageChildDigest},
+					{platform.ConfigDigest, &services[index].ImageConfigDigest},
+				} {
+					value, err := hex.DecodeString(digest.text)
+					if err != nil {
+						panic(err)
+					}
+					*digest.out = value
+				}
 			}
 		}
 	}
 	value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
-		OwnerId:    projection.EnvironmentID, ProjectName: "groundplane-test",
+		OwnerId:    projection.EnvironmentID, ProjectName: "gp-" + strings.ToLower(projection.EnvironmentID),
 		CanonicalYaml: canonicalYAML, YamlSha256: digest[:],
-		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test", Services: services,
+		AuthorizedVolumeDir: volumeDir, Services: services,
 	})
 	if err != nil {
 		panic(err)

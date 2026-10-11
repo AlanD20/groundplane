@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
@@ -58,13 +59,40 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	defer etcdstore.ClearValues(ownerResult.Values)
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(current.Record.TaskID)},
 		{Key: backupruntime.BackupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
 		{Key: backupruntime.BackupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskStorageKey(current.Record.TaskID)},
+		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskAttemptHistoryKey(current.Record.TaskID)},
+		{
+			Type:   etcdstore.MutationDelete,
+			Key:    taskassignments.RollingReleaseTaskPrefix(current.Record.TaskID),
+			Prefix: true,
+		},
 	}
-	componentConditions, componentMutations, err := repository.prepareBlueprintComponentExecutionPrune(ctx, task, taskResult.ReadRevision)
+	networkHeld, networkConditions, err := repository.releaseNetworkPruneAuthority(ctx, task, taskResult.ReadRevision)
+	if err != nil {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
+	}
+	if networkHeld {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
+	}
+	conditions = append(conditions, networkConditions...)
+	resolverHeld, resolverConditions, err := repository.resolverTaskPruneAuthority(ctx, task, taskResult.ReadRevision)
+	if err != nil {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
+	}
+	if resolverHeld {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
+	}
+	conditions = append(conditions, resolverConditions...)
+	componentConditions, componentMutations, err := repository.prepareBlueprintComponentExecutionPrune(
+		ctx,
+		task,
+		taskResult.ReadRevision,
+	)
 	if err != nil {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
 	}

@@ -109,7 +109,7 @@ const (
 )
 
 type EnvironmentBlueprintChange struct {
-	ReleaseStrategy  string                `json:"release_strategy,omitempty" enum:"blue-green,recreate"`
+	ReleaseStrategy  string                `json:"release_strategy,omitempty" enum:"blue-green,recreate,rolling"`
 	Resource         string                `json:"resource"`
 	Key              string                `json:"key"`
 	Action           BlueprintChangeAction `json:"action" enum:"create,update,retain,remove"`

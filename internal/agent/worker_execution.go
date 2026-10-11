@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
@@ -17,6 +18,16 @@ import (
 )
 
 func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservation) {
+	if reservation.assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
+		reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_DETACH {
+		p.executeAttachRemovalRecovery(runCtx, reservation)
+		return
+	}
+	if reservation.assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
+		reservation.assignment.Plan.GetManagedNetworkRecoveryProcedure() != nil {
+		p.executeManagedNetworkRecovery(runCtx, reservation)
+		return
+	}
 	if isReleaseExecution(reservation.assignment.Plan) {
 		p.executeRelease(runCtx, reservation)
 		return
@@ -37,6 +48,9 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	var managedConfigStep *agentpb.ExecutionStep
 	attemptedSteps := make([]*agentpb.ExecutionStep, 0, len(reservation.assignment.Plan.Steps))
 	for _, step := range reservation.assignment.Plan.Steps {
+		if step.GetManagedNetworkPreparationProbe() != nil {
+			continue // Read-only settlement belongs exclusively to recovery-only assignment.
+		}
 		if err != nil {
 			break
 		}
@@ -46,7 +60,9 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			StepID: step.StepId, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
 			Ordinal: 1, State: TaskProgressRunning,
 		}
-		if reservation.eventsDurable && blueprintUnitMutationStep(reservation.assignment.Plan, step) {
+		nativeAttach := reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
+			reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_DETACH
+		if (reservation.eventsDurable || nativeAttach) && blueprintUnitMutationStep(reservation.assignment.Plan, step) {
 			if err = p.emitProgressAndWait(reservation.ctx, running); err != nil {
 				failedStepID = step.GetStepId()
 				break
@@ -58,6 +74,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			reservation.ctx,
 			time.Duration(step.TimeoutSeconds)*time.Second,
 		)
+		reportHealth, ordinal := p.healthWaitEvents(stepCtx, running)
 		attemptedSteps = append(attemptedSteps, step)
 		if step.GetMaterializeFile() != nil {
 			var payload filematerialization.Payload
@@ -82,12 +99,20 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 				}
 			}
 		} else if step.GetAdapterProcedure() != nil {
-			var stepResult backingadapter.StepResult
-			stepResult, err = p.adapter.ExecuteStep(stepCtx, step)
-			if stepResult.ExitCode != 0 {
-				exitCode = stepResult.ExitCode
+			if p.adapter == nil {
+				err = errs.New(errs.KindInternal, "agent: adapter runtime is not configured")
+			} else {
+				// A compiled procedure may finish a mutation before a later
+				// command or its response fails. Failure is not absence proof.
+				mutationAttempted = true
+				var stepResult backingadapter.StepResult
+				stepResult, err = p.adapter.ExecuteStep(stepCtx, step)
+				if stepResult.ExitCode != 0 {
+					exitCode = stepResult.ExitCode
+				}
 			}
 		} else if step.GetBackingHookProcedure() != nil {
+			mutationAttempted = true
 			err = p.executeBackingHookStep(stepCtx, reservation.assignment, step)
 		} else if (step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil ||
 			step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetManagedVolumeDirectoryRemove() != nil) &&
@@ -199,7 +224,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			err = p.executeStep(stepCtx, step)
 		} else {
 			var stepResult composeruntime.StepResult
-			stepResult, err = p.compose.ExecuteStep(stepCtx, reservation.assignment, step)
+			stepResult, err = p.compose.ExecuteStep(stepCtx, reservation.assignment, step, reportHealth)
 			if stepResult.ExitCode != 0 {
 				exitCode = stepResult.ExitCode
 			}
@@ -212,17 +237,29 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			reconciliationRequired = reconciliationRequired || stepResult.ReconciliationRequired
 			mutationAttempted = mutationAttempted || stepResult.MutationAttempted
 		}
+		err = errors.Join(err, stepCtx.Err())
 		cancel()
 		if err != nil {
 			failedStepID = step.GetStepId()
 		}
-		p.emitProgress(runCtx, TaskProgress{
+		completed := TaskProgress{
 			AssignmentID: reservation.assignment.AssignmentID,
 			TaskID:       reservation.assignment.TaskID, PlanHash: planHash,
-			StepID: step.StepId, ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: 2,
-			State: progressStateFor(reservation.ctx, err),
-		})
+			StepID: step.StepId, ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: *ordinal + 1,
+			State: progressStateFor(
+				reservation.ctx,
+				err,
+			), Failure: taskprogress.CaptureFailure(err, exitCode, diagnostic),
+		}
+		if reservation.eventsDurable && reservation.assignment.Plan.GetManagedNetworkRecoveryProcedure() != nil {
+			if eventErr := p.emitProgressAndWait(reservation.ctx, completed); eventErr != nil {
+				err, failedStepID = errors.Join(err, eventErr), step.GetStepId()
+			}
+		} else {
+			p.emitProgress(runCtx, completed)
+		}
 	}
+	failure := taskprogress.CaptureFailure(err, exitCode, diagnostic)
 	if reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 		if err == nil && managedConfigStep != nil {
 			finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -239,6 +276,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			}
 		}
 		if err != nil {
+			failure = taskprogress.CaptureFailure(err, exitCode, diagnostic)
 			var compensationErr error
 			dnsResolverRollbackObservation, compensationErr = p.compensateComponentLifecycle(
 				reservation.assignment, managedConfigStep, attemptedSteps,
@@ -269,10 +307,11 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		result.Backup = &agentpb.BackupTaskResult{
 			FailedStepId:     failedStepID,
 			RecoveryRequired: proto.Bool(reconciliationRequired),
+			Failure:          failure,
 		}
 		result.AssignmentGeneration = reservation.assignment.AssignmentGeneration
 	} else if environmentDirectoryTask {
-		result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{FailedStepId: failedStepID}
+		result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{FailedStepId: failedStepID, Failure: failure}
 		if environmentDirectoryResult != nil {
 			result.EnvironmentDirectory.NextCursor = environmentDirectoryResult.NextCursor
 			result.EnvironmentDirectory.MutationCount = environmentDirectoryResult.MutationCount
@@ -281,6 +320,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		}
 	} else {
 		result.Compose = composeTaskResult(projects, failedStepID, diagnostic, reconciliationRequired)
+		result.Compose.Failure = failure
 		result.Compose.DnsResolverCandidateObservation = dnsResolverCandidateObservation
 		result.Compose.DnsResolverRollbackObservation = dnsResolverRollbackObservation
 	}

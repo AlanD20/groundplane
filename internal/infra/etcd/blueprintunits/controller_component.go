@@ -20,11 +20,12 @@ func PrepareControllerDisabledComponentSettlement(
 	operationID string,
 	componentRecordRevision int64,
 	componentRuntimeRevision int64,
+	proxySelection bool,
 ) (MutationPlan, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 		unit.Target.Kind != ids.KindComponent ||
 		ids.Validate(ids.KindOperation, operationID) != nil || componentRecordRevision <= 0 ||
-		componentRuntimeRevision < 0 || len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
+		componentRuntimeRevision < 0 || !validControllerComponentWrites(unit) {
 		return MutationPlan{}, invalidRecord()
 	}
 	if !desiredControllerUnitMatches(snapshot.Desired.Record.Units, unit) {
@@ -50,6 +51,7 @@ func PrepareControllerDisabledComponentSettlement(
 		ControllerOperationID:              operationID,
 		ControllerComponentRecordRevision:  componentRecordRevision,
 		ControllerComponentRuntimeRevision: componentRuntimeRevision,
+		ControllerProxySelection:           proxySelection,
 	}
 	plan, err := PrepareMutation(snapshot, []AppliedChange{{Target: unit.Target, Next: &applied}}, nil)
 	if err != nil {
@@ -59,6 +61,21 @@ func PrepareControllerDisabledComponentSettlement(
 		Key: DesiredPlanKey(snapshot.EnvironmentID), ModRevision: snapshot.Desired.Revision,
 	})
 	return plan, nil
+}
+
+// Additional Service claims serialize the shared forwarding choice. This
+// metadata receipt acknowledges only its Component target, never those
+// Services' runtime. The coordinator separately requires their own receipts.
+func validControllerComponentWrites(unit Unit) bool {
+	if unit.Target.Kind != ids.KindComponent || !validUnit(unit) {
+		return false
+	}
+	for _, write := range unit.Writes {
+		if write != unit.Target && write.Kind != ids.KindService {
+			return false
+		}
+	}
+	return true
 }
 
 func ControllerDisabledComponentPublicationMatches(

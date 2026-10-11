@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConnectionValues } from "./connection-values";
+import { BackingAccessCheck } from "./backing-check-panel";
 import { StatusBadge } from "@/components/common/status-badge";
 import { AttachFormDialog } from "@/features/environment/attach-form-dialog";
 import { useRequiredParams } from "@/lib/router";
@@ -125,6 +126,8 @@ export function AttachesCard({
               <DetachAttach env={env} attach={a} />
             </div>
             <ConnectionValues attach={a} env={env} />
+            <BackingAccessCheck environmentId={env.id} attachId={a.id} disabled={a.status !== "healthy"}
+              grants={(a.grantAttachIds ?? []).map((id) => ({ id, name: env.attaches.find((attach) => attach.id === id)?.name ?? id }))} />
           </div>
         ))}
         {attaches.length === 0 && (

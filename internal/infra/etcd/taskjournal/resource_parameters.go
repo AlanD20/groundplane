@@ -18,11 +18,17 @@ const (
 	TaskResourceScript                   = "script"
 	TaskResourceSecret                   = "secret"
 	TaskResourceConnector                = "connector"
+	TaskConnectorCheckInputParam         = "connector_check_input"
+	TaskResourceAttach                   = "attach"
+	TaskBackingCheckInputParam           = "backing_check_input"
 	TaskResourceBackingZone              = "backing_zone"
 	TaskResourceService                  = "service"
 	TaskResourceReleaseGroup             = "release_group"
 	TaskResourceVolume                   = "volume"
 	TaskResourceComponent                = "component"
+	TaskDNSCheckInputParam               = "dns_check_input"
+	TaskRunnerCheckInputParam            = "runner_check_input"
+	TaskEdgeCheckInputParam              = "edge_check_input"
 	TaskResourceHierarchyDeletion        = "hierarchy_deletion"
 	TaskHierarchyDeletionOperationParam  = "hierarchy_deletion_operation_id"
 	TaskHierarchyDeletionTargetKindParam = "hierarchy_deletion_target_kind"
@@ -53,6 +59,8 @@ const (
 	TaskZoneEnvironmentParam             = "zone_environment_id"
 	TaskZoneImpactTokenParam             = "zone_impact_token"
 	TaskZoneRemovalOperationParam        = "zone_removal_operation_id"
+	TaskReleaseNetworkParentParam        = "release_network_parent_task_id"
+	TaskReleaseNetworkChildParam         = "release_network_task_id"
 )
 
 const (

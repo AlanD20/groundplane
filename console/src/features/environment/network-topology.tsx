@@ -234,6 +234,7 @@ export function ZoneColumn({
           ? "Environment-owned"
           : "Backing Project-owned"}{" "}
         · {zone.internal ? "internal" : "egress allowed"}
+        {zone.allowGPDNS && " · GP DNS"}
       </div>
       <div className="mt-1 flex flex-col gap-1.5">
         {services.length === 0 && (

@@ -6,22 +6,15 @@ import (
 	"context"
 	model "github.com/AlanD20/groundplane/internal/common/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/core"
-	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
-	"slices"
 	"sort"
 )
 
@@ -46,8 +39,15 @@ func (reader *Reader) ResolveDNSRecords(
 	if err := model.ValidateDNSRecords(records); err != nil {
 		return nil, nil, err
 	}
+	names := make([]string, len(records))
+	for index, record := range records {
+		names[index] = record.Hostname
+	}
+	conditions, err := reader.RequireHostnamesUnclaimed(ctx, names, revision)
+	if err != nil {
+		return nil, nil, err
+	}
 	hosts := make([]platformcomponents.PlatformDNSHost, 0, len(records))
-	var conditions []keyvalue.Condition
 	for _, record := range records {
 		address := record.Address
 		if record.ServiceID != "" {
@@ -62,77 +62,27 @@ func (reader *Reader) ResolveDNSRecords(
 			if err != nil {
 				return nil, nil, err
 			}
-			if service.Record.EnvironmentID != zone.Record.EnvironmentID ||
-				!slices.Contains(service.Record.Desired.Zones, zone.Record.Desired.Name) ||
-				service.Record.Desired.Adapter != "" {
-				return nil, nil, errs.New(
-					errs.KindValidationFailed,
-					"DNS Service target must belong to its selected Zone",
-				)
-			}
-			if _, err := domain.ProxyPorts(service.Record.Desired.Expose); err != nil {
-				return nil, nil, err
-			}
 			fence, err := environmentfence.LoadOrdinary(ctx, reader.store, service.Record.EnvironmentID, revision)
 			if err != nil {
 				return nil, nil, err
 			}
-			keys := []string{
-				networkreservations.ComponentAddressRegistryKey(record.ZoneID),
-				serviceruntimerecord.Key(record.ServiceID),
-				deletions.TombstoneKey("service", record.ServiceID),
-				deletions.TombstoneKey("zone", record.ZoneID),
-			}
-			read, err := reader.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
+			selection, err := reader.selectProxy(ctx, service, zone, revision)
 			if err != nil {
 				return nil, nil, err
 			}
-			if read == nil || len(read.Values) != len(keys) {
-				return nil, nil, errs.New(errs.KindInternal, "DNS target authority read is incomplete")
-			}
-			if read.Values[2] != nil || read.Values[3] != nil {
-				return nil, nil, errs.New(errs.KindResourceInUse, "DNS target is being removed")
-			}
-			if read.Values[0] == nil || read.Values[1] == nil {
+			if selection.waiting() {
 				return nil, nil, needsDeploy()
 			}
-			registry, err := recordcodec.Decode[networkreservations.ComponentAddressRegistry](
-				read.Values[0].Value,
-				"component_address_registry",
-			)
-			if err != nil || networkreservations.ValidateComponentAddressRegistry(zone.Record, registry) != nil {
-				return nil, nil, networkreservations.CorruptComponentAddressRegistry()
-			}
-			address = registry.ServiceReservations[record.ServiceID]
-			runtime, err := releases.DecodeReleaseRecord[serviceruntimerecord.Record](
-				read.Values[1].Value,
-				"service-acknowledged-runtime",
-			)
-			if err != nil {
-				return nil, nil, err
-			}
-			if serviceruntimerecord.Validate(runtime) != nil {
-				return nil, nil, errs.New(errs.KindInternal, "DNS target runtime authority is corrupt")
-			}
-			if !appliedProxyAddress(runtime, record.ServiceID, record.ZoneID, address) {
-				return nil, nil, needsDeploy()
-			}
-			conditions = append(conditions, services.ServiceDesiredCondition(service))
+			address = selection.address
+			conditions = append(conditions, selection.conditions...)
 			conditions = append(conditions, fence.TransactionConditions()...)
-			for i, key := range keys {
-				condition := keyvalue.Condition{Key: key}
-				if read.Values[i] != nil {
-					condition.ModRevision = read.Values[i].ModRevision
-				}
-				conditions = append(conditions, condition)
-			}
 		}
 		hosts = append(
 			hosts,
 			platformcomponents.PlatformDNSHost{Address: address, Hostnames: []string{record.Hostname}},
 		)
 	}
-	conditions, err := uniqueConditions(conditions)
+	conditions, err = uniqueConditions(conditions)
 	return hosts, conditions, err
 }
 

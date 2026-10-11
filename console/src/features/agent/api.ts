@@ -29,6 +29,8 @@ export function agentFromAPI(
     host: agent.host,
     status,
     version: agent.version ?? null,
+    installedImage: agent.installed_image,
+    source: agent.source,
     labels: { ...agent.labels },
     readyAt: agent.ready_at ?? null,
     lastReportAt: agent.last_report_at ?? null,

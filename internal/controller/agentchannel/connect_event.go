@@ -13,6 +13,12 @@ const (
 	connectEnded connectEventKind = iota
 	connectObservationExpired
 	connectObservationCommand
+	connectBackingAccessExpired
+	connectBackingAccessCommand
+	connectDNSCheckExpired
+	connectDNSCheckCommand
+	connectEdgeCheckExpired
+	connectEdgeCheckCommand
 	connectImageCommand
 	connectTaskAbort
 	connectLogCommand
@@ -23,14 +29,17 @@ const (
 )
 
 type connectEvent struct {
-	kind        connectEventKind
-	observation *observationCommand
-	image       *imageCommand
-	abort       taskAbortCommand
-	log         logCommand
-	received    agentReceiveResult
-	frame       *assignmentPayloadFrame
-	err         error
+	kind          connectEventKind
+	observation   *observationCommand
+	backingAccess *backingAccessCommand
+	dnsCheck      *dnsCheckCommand
+	edgeCheck     *edgeCheckCommand
+	image         *imageCommand
+	abort         taskAbortCommand
+	log           logCommand
+	received      agentReceiveResult
+	frame         *assignmentPayloadFrame
+	err           error
 }
 
 const maximumControlBurst = 4
@@ -41,6 +50,9 @@ const maximumControlBurst = 4
 func nextConnectEvent(
 	session *Session,
 	observations *observationExchange,
+	backingAccess *backingAccessExchange,
+	dnsChecks *dnsCheckExchange,
+	edgeChecks *edgeCheckExchange,
 	received <-chan agentReceiveResult,
 	payloads *assignmentPayloadDelivery,
 	controlBurst int,
@@ -66,6 +78,18 @@ func nextConnectEvent(
 		return connectEvent{kind: connectObservationExpired}
 	case command := <-session.state.observationCommands:
 		return connectEvent{kind: connectObservationCommand, observation: command}
+	case <-backingAccess.done():
+		return connectEvent{kind: connectBackingAccessExpired}
+	case command := <-session.state.backingAccessCommands:
+		return connectEvent{kind: connectBackingAccessCommand, backingAccess: command}
+	case <-dnsChecks.done():
+		return connectEvent{kind: connectDNSCheckExpired}
+	case command := <-session.state.dnsCheckCommands:
+		return connectEvent{kind: connectDNSCheckCommand, dnsCheck: command}
+	case <-edgeChecks.done():
+		return connectEvent{kind: connectEdgeCheckExpired}
+	case command := <-session.state.edgeCheckCommands:
+		return connectEvent{kind: connectEdgeCheckCommand, edgeCheck: command}
 	case command := <-session.state.imageCommands:
 		return connectEvent{kind: connectImageCommand, image: command}
 	case abort := <-session.taskAborts():
@@ -87,6 +111,18 @@ func nextConnectEvent(
 		return connectEvent{kind: connectObservationExpired}
 	case command := <-session.state.observationCommands:
 		return connectEvent{kind: connectObservationCommand, observation: command}
+	case <-backingAccess.done():
+		return connectEvent{kind: connectBackingAccessExpired}
+	case command := <-session.state.backingAccessCommands:
+		return connectEvent{kind: connectBackingAccessCommand, backingAccess: command}
+	case <-dnsChecks.done():
+		return connectEvent{kind: connectDNSCheckExpired}
+	case command := <-session.state.dnsCheckCommands:
+		return connectEvent{kind: connectDNSCheckCommand, dnsCheck: command}
+	case <-edgeChecks.done():
+		return connectEvent{kind: connectEdgeCheckExpired}
+	case command := <-session.state.edgeCheckCommands:
+		return connectEvent{kind: connectEdgeCheckCommand, edgeCheck: command}
 	case command := <-session.state.imageCommands:
 		return connectEvent{kind: connectImageCommand, image: command}
 	case abort := <-session.taskAborts():

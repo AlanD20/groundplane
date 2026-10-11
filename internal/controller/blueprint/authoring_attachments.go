@@ -137,8 +137,12 @@ func validateCurrentAttachmentDeclarations(
 ) error {
 	for _, versioned := range attaches {
 		record := versioned.Record
+		spec, retained := candidate[record.Name]
+		if !retained {
+			continue
+		}
 		if record.Status != core.AttachReady || record.Operation != attachrecord.AttachOperationProvision ||
-			!sameAttachmentSpec(current[record.Name], candidate[record.Name]) {
+			!sameAttachmentSpec(current[record.Name], spec) {
 			return errs.New(errs.KindStateConflict, "Existing Blueprint Attach does not match the authored topology")
 		}
 	}

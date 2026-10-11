@@ -26,6 +26,7 @@ type RouteRemovalIntent struct {
 	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
 	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
 	Provider                  *RouteProviderPin                              `json:"provider,omitempty"`
+	Plan                      []byte                                         `json:"plan,omitempty"`
 	Status                    taskjournal.TaskStatus                         `json:"status"`
 	CreatedAt                 time.Time                                      `json:"created_at"`
 	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
@@ -123,7 +124,7 @@ func ValidateRouteRemovalIntent(intent RouteRemovalIntent) error {
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil {
 		if intent.CurrentProjection != nil || intent.CandidateProjection != nil ||
 			intent.CurrentProjectionRevision != 0 ||
-			intent.Provider != nil {
+			intent.Provider != nil || len(intent.Plan) != 0 {
 			return errs.New(errs.KindValidationFailed, "Route removal intent projection state is incomplete")
 		}
 		return nil
@@ -144,6 +145,14 @@ func ValidateRouteRemovalIntent(intent RouteRemovalIntent) error {
 	}
 	if intent.Provider != nil && ValidateRouteProviderPin(intent.Provider) != nil {
 		return errs.New(errs.KindValidationFailed, "Route removal provider pin is invalid")
+	}
+	if intent.Provider != nil {
+		_, err := OpenRouteExecutionPlan(intent.Plan, intent.Provider, intent.EnvironmentID, intent.RouteID,
+			intent.CandidateProjection.RenderGeneration, true)
+		return err
+	}
+	if len(intent.Plan) != 0 {
+		return errs.New(errs.KindValidationFailed, "Route without a router cannot contain an Agent execution plan")
 	}
 	return nil
 }
@@ -222,6 +231,7 @@ func validateRouteRemovalDesiredProjection(projection projectionrecord.Environme
 
 func CloneRouteRemovalIntent(source RouteRemovalIntent) RouteRemovalIntent {
 	clone := source
+	clone.Plan = append([]byte(nil), source.Plan...)
 	if source.CurrentProjection != nil {
 		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CurrentProjection)
 		clone.CurrentProjection = &value

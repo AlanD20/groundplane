@@ -1,18 +1,22 @@
 package api
 
-import "time"
+import (
+	"github.com/AlanD20/groundplane/internal/common/version"
+	"time"
+)
 
 type ControllerUpdateRequest struct {
 	Release string `json:"release" minLength:"71" maxLength:"71" pattern:"^sha256:[0-9a-f]{64}$"`
 }
 
 type ControllerRelease struct {
-	Release           string `json:"release"`
-	ControllerSHA256  string `json:"controller_sha256"`
-	ControllerVersion string `json:"controller_version"`
-	AgentImage        string `json:"agent_image"`
-	StorageEpoch      int    `json:"storage_epoch"`
-	ChannelSchema     int    `json:"channel_schema"`
+	Release           string                   `json:"release"`
+	ControllerSHA256  string                   `json:"controller_sha256"`
+	ControllerVersion string                   `json:"controller_version"`
+	ControllerSource  *version.BuildProvenance `json:"controller_source,omitempty"`
+	AgentImage        string                   `json:"agent_image"`
+	StorageEpoch      int                      `json:"storage_epoch"`
+	ChannelSchema     int                      `json:"channel_schema"`
 }
 
 type ControllerUpdateSummary struct {

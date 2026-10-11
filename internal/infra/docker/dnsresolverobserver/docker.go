@@ -47,7 +47,8 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 		return runtimeEvidence{}, errs.Wrap(errs.KindInternal, err)
 	}
 	container := inspected.Container
-	if container.Config == nil || container.State == nil || !container.State.Running ||
+	if container.Config == nil || container.State == nil || container.HostConfig == nil ||
+		container.HostConfig.NetworkMode != "host" || !container.State.Running ||
 		container.Config.Image != request.ImageReference {
 		return runtimeEvidence{}, errs.New(errs.KindStateConflict, "DNS resolver runtime identity is invalid")
 	}

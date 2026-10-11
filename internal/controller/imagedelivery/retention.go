@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -68,6 +69,11 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 		if err != nil {
 			return err
 		}
+		if task.Executor == taskjournal.TaskExecutorBlueprint && !taskjournal.IsTerminalTaskStatus(task.Status) {
+			if err := service.retainControllerProxyReplacementImages(ctx, &result, task, revision); err != nil {
+				return err
+			}
+		}
 		if task.OperationID != operationID && task.Status != taskjournal.TaskStatusCompleted && task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceImage {
 			covered, err := service.retainTaskImages(ctx, &result, task, revision)
 			if err != nil {
@@ -96,6 +102,11 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 		}
 		result.retain(runner.ImageRef, "Retained Runner "+runner.ID)
 		return nil
+	}); err != nil {
+		return result, err
+	}
+	if err := read(componentplanning.ChildExecutionPrefix, func(value keyvalue.KeyValue) error {
+		return service.retainProxyReplacementImages(ctx, &result, value, revision)
 	}); err != nil {
 		return result, err
 	}

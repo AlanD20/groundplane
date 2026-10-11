@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"io"
 
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -10,6 +11,18 @@ import (
 
 type releasePlanningTestStore struct {
 	*memoryHierarchyStore
+}
+
+func (store *memoryHierarchyStore) TransactBlueprintChild(
+	ctx context.Context,
+	transaction etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	conditions, mutations, err := transaction.Operations()
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	defer testkeyvalue.ClearMutationValues(mutations)
+	return store.Transact(ctx, conditions, mutations)
 }
 
 func (*memoryHierarchyStore) Health(context.Context) error { return nil }

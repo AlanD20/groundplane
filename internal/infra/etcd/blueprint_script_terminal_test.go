@@ -16,8 +16,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: terminal completion must validate the executed resource set before
-// releasing hook sources, and an interrupted source release must remain retryable.
+// Rationale: the next authored Script set can stage independently, while terminal
+// completion must validate effects and cleanup before releasing the pinned old
+// hook sources. Interrupted source release must remain retryable.
 func TestBlueprintCompletedHooksReleaseSourceFenceBeforeNextPublication(t *testing.T) {
 	ctx := context.Background()
 	published, err := publishEnvironmentBlueprintAtomicShape(t, environmentBlueprintAtomicShape{
@@ -51,8 +52,8 @@ func TestBlueprintCompletedHooksReleaseSourceFenceBeforeNextPublication(t *testi
 		change.Clear()
 		return prepareErr
 	}
-	if err := prepare(); !isKind(err, errs.KindStateConflict) {
-		t.Fatalf("active hook publication = %v", err)
+	if err := prepare(); err != nil {
+		t.Fatalf("next Script set staging while a hook is active = %v", err)
 	}
 	steps, err := releaseHookExecutionSteps(task)
 	if err != nil || len(steps) != 1 {
@@ -152,8 +153,8 @@ func TestBlueprintCompletedHooksReleaseSourceFenceBeforeNextPublication(t *testi
 			}
 		}
 	}
-	if err := prepare(); !isKind(err, errs.KindStateConflict) {
-		t.Fatalf("cleanup alone released parent fence: %v", err)
+	if err := prepare(); err != nil {
+		t.Fatalf("next Script set staging after hook cleanup = %v", err)
 	}
 	result := testtaskjournal.TaskResultRecord{
 		Kind:           testtaskjournal.TaskResultCompose,

@@ -215,7 +215,8 @@ func routeFromGenerated(route generated.Route) (apiTypes.Route, error) {
 		host = *route.Host
 	}
 	return apiTypes.Route{
-		ID: route.Id, EnvironmentID: route.EnvironmentId, Host: host,
+		Revision: route.Revision,
+		ID:       route.Id, EnvironmentID: route.EnvironmentId, Host: host,
 		Path: route.Path, Exposure: string(route.Exposure),
 		TargetServiceID: route.TargetServiceId, TargetPort: uint16(route.TargetPort),
 		Status: string(route.Status),

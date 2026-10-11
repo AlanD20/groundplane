@@ -26,6 +26,12 @@
             "format": "int64",
             "type": "integer"
           },
+          "installed_image": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "labels": {
             "additionalProperties": {
               "type": "string"
@@ -46,6 +52,9 @@
               "null"
             ]
           },
+          "source": {
+            "$ref": "#/components/schemas/BuildProvenance"
+          },
           "status": {
             "type": "string"
           },
@@ -62,6 +71,7 @@
           "host",
           "status",
           "version",
+          "installed_image",
           "labels",
           "ready_at",
           "last_report_at",
@@ -214,6 +224,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           },
           "service_id": {
             "type": "string"
@@ -456,6 +470,235 @@
         "required": [
           "version",
           "image_pattern"
+        ],
+        "type": "object"
+      },
+      "BackingCheckConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "attach_id": {
+            "type": "string"
+          },
+          "attach_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "authentication": {
+            "type": "string"
+          },
+          "backing_service_id": {
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string"
+          },
+          "credential_attach_id": {
+            "type": "string"
+          },
+          "credential_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "database": {
+            "type": "string"
+          },
+          "facts_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "family": {
+            "type": "string"
+          },
+          "grant_id": {
+            "type": "string"
+          },
+          "grant_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "runtime_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attach_id",
+          "credential_attach_id",
+          "service_id",
+          "backing_service_id",
+          "family",
+          "authentication",
+          "host",
+          "port",
+          "attach_revision",
+          "credential_revision",
+          "facts_revision",
+          "agent_id",
+          "container_id",
+          "runtime_revision"
+        ],
+        "type": "object"
+      },
+      "BackingCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/BackingCheckRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "attach_id": {
+            "pattern": "^att_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "grant_id": {
+            "pattern": "^att_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attach_id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "BackingCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/BackingCheckResult.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "cleanup_required": {
+            "type": "boolean"
+          },
+          "cleanup_task_id": {
+            "type": "string"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/BackingCheckConfiguration"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "execution_location": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "helper_name": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "ready",
+              "checking",
+              "cleaning",
+              "finished",
+              "cleanup_required",
+              "transferred"
+            ],
+            "type": "string"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/BackingCheckStage"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "environment_id",
+          "execution_location",
+          "configuration",
+          "stale",
+          "phase",
+          "stages",
+          "cleanup_required",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "BackingCheckStage": {
+        "additionalProperties": false,
+        "properties": {
+          "elapsed_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "outcome",
+          "elapsed_ms"
         ],
         "type": "object"
       },
@@ -1017,6 +1260,28 @@
         ],
         "type": "object"
       },
+      "BuildProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "maxLength": 40,
+            "minLength": 40,
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "source_ref",
+              "release"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "commit"
+        ],
+        "type": "object"
+      },
       "Component": {
         "additionalProperties": false,
         "properties": {
@@ -1076,6 +1341,13 @@
           "pinned_ipv4": {
             "type": "string"
           },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "software": {
+            "$ref": "#/components/schemas/ContainerIdentity"
+          },
           "status": {
             "enum": [
               "disabled",
@@ -1089,6 +1361,7 @@
         },
         "required": [
           "id",
+          "revision",
           "owner",
           "environment_id",
           "kind",
@@ -1103,14 +1376,20 @@
         "oneOf": [
           {
             "additionalProperties": false,
-            "maxProperties": 3,
-            "minProperties": 1,
+            "maxProperties": 4,
+            "minProperties": 2,
             "properties": {
               "alias": {
                 "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$",
                 "type": "string"
               },
               "caddyfile_template": {
+                "type": "string"
+              },
+              "implementation": {
+                "enum": [
+                  "caddy"
+                ],
                 "type": "string"
               },
               "zone_ids": {
@@ -1125,15 +1404,54 @@
               }
             },
             "required": [
+              "implementation",
               "zone_ids"
             ],
             "type": "object"
           },
           {
             "additionalProperties": false,
-            "maxProperties": 2,
+            "maxProperties": 3,
             "minProperties": 2,
             "properties": {
+              "alias": {
+                "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$",
+                "type": "string"
+              },
+              "implementation": {
+                "enum": [
+                  "envoy"
+                ],
+                "type": "string"
+              },
+              "zone_ids": {
+                "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                "items": {
+                  "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "implementation",
+              "zone_ids"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "maxProperties": 3,
+            "minProperties": 3,
+            "properties": {
+              "implementation": {
+                "enum": [
+                  "cloudflare-tunnel"
+                ],
+                "type": "string"
+              },
               "secret_id": {
                 "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
                 "type": "string"
@@ -1150,6 +1468,7 @@
               }
             },
             "required": [
+              "implementation",
               "zone_ids",
               "secret_id"
             ],
@@ -1157,8 +1476,8 @@
           },
           {
             "additionalProperties": false,
-            "maxProperties": 6,
-            "minProperties": 5,
+            "maxProperties": 7,
+            "minProperties": 6,
             "properties": {
               "corefile_template": {
                 "type": "string"
@@ -1184,6 +1503,12 @@
                   "type": "object"
                 },
                 "type": "array"
+              },
+              "implementation": {
+                "enum": [
+                  "coredns"
+                ],
+                "type": "string"
               },
               "records": {
                 "items": {
@@ -1245,6 +1570,7 @@
               }
             },
             "required": [
+              "implementation",
               "corefile_template",
               "upstream_auto",
               "upstream_resolvers",
@@ -1273,14 +1599,20 @@
             "oneOf": [
               {
                 "additionalProperties": false,
-                "maxProperties": 3,
-                "minProperties": 1,
+                "maxProperties": 4,
+                "minProperties": 2,
                 "properties": {
                   "alias": {
                     "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$",
                     "type": "string"
                   },
                   "caddyfile_template": {
+                    "type": "string"
+                  },
+                  "implementation": {
+                    "enum": [
+                      "caddy"
+                    ],
                     "type": "string"
                   },
                   "zone_ids": {
@@ -1295,14 +1627,47 @@
                   }
                 },
                 "required": [
+                  "implementation",
                   "zone_ids"
                 ],
                 "type": "object"
               },
               {
                 "additionalProperties": false,
-                "maxProperties": 2,
+                "maxProperties": 3,
                 "minProperties": 2,
+                "properties": {
+                  "alias": {
+                    "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$",
+                    "type": "string"
+                  },
+                  "implementation": {
+                    "enum": [
+                      "envoy"
+                    ],
+                    "type": "string"
+                  },
+                  "zone_ids": {
+                    "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                    "items": {
+                      "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "implementation",
+                  "zone_ids"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "maxProperties": 3,
+                "minProperties": 3,
                 "properties": {
                   "credential": {
                     "oneOf": [
@@ -1357,6 +1722,12 @@
                       }
                     ]
                   },
+                  "implementation": {
+                    "enum": [
+                      "cloudflare-tunnel"
+                    ],
+                    "type": "string"
+                  },
                   "zone_ids": {
                     "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
                     "items": {
@@ -1369,6 +1740,7 @@
                   }
                 },
                 "required": [
+                  "implementation",
                   "zone_ids",
                   "credential"
                 ],
@@ -1376,8 +1748,8 @@
               },
               {
                 "additionalProperties": false,
-                "maxProperties": 6,
-                "minProperties": 5,
+                "maxProperties": 7,
+                "minProperties": 6,
                 "properties": {
                   "corefile_template": {
                     "type": "string"
@@ -1403,6 +1775,12 @@
                       "type": "object"
                     },
                     "type": "array"
+                  },
+                  "implementation": {
+                    "enum": [
+                      "coredns"
+                    ],
+                    "type": "string"
                   },
                   "records": {
                     "items": {
@@ -1464,6 +1842,7 @@
                   }
                 },
                 "required": [
+                  "implementation",
                   "corefile_template",
                   "upstream_auto",
                   "upstream_resolvers",
@@ -1562,14 +1941,20 @@
             "oneOf": [
               {
                 "additionalProperties": false,
-                "maxProperties": 3,
-                "minProperties": 1,
+                "maxProperties": 4,
+                "minProperties": 2,
                 "properties": {
                   "alias": {
                     "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$",
                     "type": "string"
                   },
                   "caddyfile_template": {
+                    "type": "string"
+                  },
+                  "implementation": {
+                    "enum": [
+                      "caddy"
+                    ],
                     "type": "string"
                   },
                   "zone_ids": {
@@ -1584,14 +1969,47 @@
                   }
                 },
                 "required": [
+                  "implementation",
                   "zone_ids"
                 ],
                 "type": "object"
               },
               {
                 "additionalProperties": false,
-                "maxProperties": 2,
+                "maxProperties": 3,
                 "minProperties": 2,
+                "properties": {
+                  "alias": {
+                    "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$",
+                    "type": "string"
+                  },
+                  "implementation": {
+                    "enum": [
+                      "envoy"
+                    ],
+                    "type": "string"
+                  },
+                  "zone_ids": {
+                    "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                    "items": {
+                      "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "implementation",
+                  "zone_ids"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "maxProperties": 3,
+                "minProperties": 3,
                 "properties": {
                   "credential": {
                     "oneOf": [
@@ -1646,6 +2064,12 @@
                       }
                     ]
                   },
+                  "implementation": {
+                    "enum": [
+                      "cloudflare-tunnel"
+                    ],
+                    "type": "string"
+                  },
                   "zone_ids": {
                     "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
                     "items": {
@@ -1658,6 +2082,7 @@
                   }
                 },
                 "required": [
+                  "implementation",
                   "zone_ids",
                   "credential"
                 ],
@@ -1677,13 +2102,86 @@
           "enabled": {
             "type": "boolean"
           },
+          "implementation": {
+            "type": "string"
+          },
           "pinned_ipv4": {
             "type": "string"
           }
         },
         "required": [
+          "implementation",
           "component_id",
           "enabled"
+        ],
+        "type": "object"
+      },
+      "ConfiguredHealthcheck": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_replicas": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "http_protocol": {
+            "enum": [
+              "http",
+              "https"
+            ],
+            "type": "string"
+          },
+          "interval": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "http",
+              "tcp",
+              "process",
+              "custom_exec",
+              "custom_shell",
+              "disabled",
+              "image_default",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "loopback_port": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "requires_healthy": {
+            "type": "boolean"
+          },
+          "retries": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "start_interval": {
+            "type": "string"
+          },
+          "start_period": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "string"
+          },
+          "workload": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_id",
+          "workload",
+          "kind",
+          "expected_replicas",
+          "requires_healthy"
         ],
         "type": "object"
       },
@@ -1743,6 +2241,201 @@
           "region",
           "path_style",
           "credentials"
+        ],
+        "type": "object"
+      },
+      "ConnectorCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ConnectorCheckRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/ConnectorEditRequest"
+          },
+          "connector_id": {
+            "type": "string"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/ConnectorCreateRequest"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ConnectorCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ConnectorCheckResult.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "cleanup_required": {
+            "type": "boolean"
+          },
+          "cleanup_task_id": {
+            "type": "string"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/Connector"
+          },
+          "connector_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "draft": {
+            "type": "boolean"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "execution_location": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "multipart_key": {
+            "type": "string"
+          },
+          "object_key": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "ready",
+              "checking",
+              "cleaning",
+              "finished",
+              "cleanup_required",
+              "transferred"
+            ],
+            "type": "string"
+          },
+          "secret_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorCheckSecretSource"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorCheckStage"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "upload_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "task_id",
+          "environment_id",
+          "execution_location",
+          "configuration",
+          "connector_revision",
+          "draft",
+          "stale",
+          "phase",
+          "stages",
+          "secret_sources",
+          "cleanup_required",
+          "upload_ids",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ConnectorCheckSecretSource": {
+        "additionalProperties": false,
+        "properties": {
+          "credential": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "secret_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential",
+          "secret_id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "ConnectorCheckStage": {
+        "additionalProperties": false,
+        "properties": {
+          "elapsed_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "succeeded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "elapsed_ms",
+          "succeeded"
         ],
         "type": "object"
       },
@@ -1908,6 +2601,31 @@
         },
         "type": "object"
       },
+      "ContainerIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "config_digest": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "selected_tag": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/BuildProvenance"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "image",
+          "config_digest"
+        ],
+        "type": "object"
+      },
       "ControllerConfigDocument": {
         "additionalProperties": false,
         "properties": {
@@ -1981,6 +2699,9 @@
           },
           "controller_sha256": {
             "type": "string"
+          },
+          "controller_source": {
+            "$ref": "#/components/schemas/BuildProvenance"
           },
           "controller_version": {
             "type": "string"
@@ -2098,6 +2819,312 @@
         ],
         "type": "object"
       },
+      "DNSCheckAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/DNSCheckAnswerSample"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "elapsed_ms": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "resolved",
+              "name_not_found",
+              "no_answer",
+              "refused",
+              "server_error",
+              "timeout",
+              "query_failed",
+              "canceled"
+            ],
+            "type": "string"
+          },
+          "rcode": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "server": {
+            "type": "string"
+          },
+          "through_resolver": {
+            "type": "boolean"
+          },
+          "total_answers": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "A",
+              "NS"
+            ],
+            "type": "string"
+          },
+          "used_tcp": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "domain",
+          "name",
+          "type",
+          "server",
+          "through_resolver",
+          "outcome",
+          "used_tcp",
+          "answers",
+          "total_answers",
+          "elapsed_ms"
+        ],
+        "type": "object"
+      },
+      "DNSCheckAnswerSample": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "A",
+              "NS"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "value"
+        ],
+        "type": "object"
+      },
+      "DNSCheckConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_generation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "applied_task_id": {
+            "type": "string"
+          },
+          "artifact_id": {
+            "type": "string"
+          },
+          "artifact_sha256": {
+            "type": "string"
+          },
+          "component_id": {
+            "type": "string"
+          },
+          "component_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "image_reference": {
+            "type": "string"
+          },
+          "observation_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "queries": {
+            "items": {
+              "$ref": "#/components/schemas/DNSCheckQuery"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "render_generation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "service_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "component_id",
+          "component_revision",
+          "observation_revision",
+          "agent_id",
+          "agent_generation",
+          "applied_task_id",
+          "service_id",
+          "artifact_id",
+          "artifact_sha256",
+          "image_reference",
+          "render_generation",
+          "queries"
+        ],
+        "type": "object"
+      },
+      "DNSCheckQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "maxLength": 254,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 254,
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "A",
+              "NS"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "name",
+          "type"
+        ],
+        "type": "object"
+      },
+      "DNSCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/DNSCheckRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "queries": {
+            "items": {
+              "$ref": "#/components/schemas/DNSCheckQuery"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
+      "DNSCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/DNSCheckResult.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/DNSCheckAnswer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/DNSCheckConfiguration"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "execution_location": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "ready",
+              "checking",
+              "finished"
+            ],
+            "type": "string"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "execution_location",
+          "configuration",
+          "stale",
+          "phase",
+          "answers",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "DeployRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2125,6 +3152,298 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "EdgeCheckConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_generation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "blueprint_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "connector_applied_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "connector_container_id": {
+            "type": "string"
+          },
+          "connector_id": {
+            "type": "string"
+          },
+          "connector_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "connector_service_id": {
+            "type": "string"
+          },
+          "origin_address": {
+            "type": "string"
+          },
+          "origin_runtime_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "origin_runtime_sha256": {
+            "type": "string"
+          },
+          "origin_service_id": {
+            "type": "string"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "route_observation_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "route_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "router_applied_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "router_id": {
+            "type": "string"
+          },
+          "router_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "runtime_sha256": {
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PublicTarget"
+          },
+          "token_secret_id": {
+            "type": "string"
+          },
+          "token_secret_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "token_value_revision": {
+            "description": "Token reference revision at capture; readiness does not verify remote provider ingress.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "route_id",
+          "blueprint_revision",
+          "route_revision",
+          "route_observation_revision",
+          "connector_id",
+          "connector_service_id",
+          "connector_revision",
+          "connector_applied_revision",
+          "connector_container_id",
+          "origin_address",
+          "target",
+          "runtime_sha256",
+          "token_secret_id",
+          "token_secret_revision",
+          "token_value_revision",
+          "agent_id",
+          "agent_generation"
+        ],
+        "type": "object"
+      },
+      "EdgeCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EdgeCheckRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "connector_id": {
+            "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "path": {
+            "description": "Concrete request path matching this Route; required for wildcard paths.",
+            "maxLength": 2048,
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "route_id": {
+            "pattern": "^rte_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route_id",
+          "revision",
+          "connector_id"
+        ],
+        "type": "object"
+      },
+      "EdgeCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EdgeCheckResult.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "certificate_expires_at": {
+            "type": "string"
+          },
+          "cleanup_required": {
+            "type": "boolean"
+          },
+          "cleanup_task_id": {
+            "type": "string"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/EdgeCheckConfiguration"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "helper_name": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "protected",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "ready",
+              "private_checking",
+              "public_checking",
+              "cleaning",
+              "cleanup_required",
+              "finished",
+              "transferred"
+            ],
+            "type": "string"
+          },
+          "private_failure": {
+            "type": "string"
+          },
+          "public_failure": {
+            "type": "string"
+          },
+          "selected_address": {
+            "type": "string"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeCheckStage"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "tls_version": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task_id",
+          "environment_id",
+          "configuration",
+          "stale",
+          "phase",
+          "stages",
+          "addresses",
+          "cleanup_required",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "EdgeCheckStage": {
+        "additionalProperties": false,
+        "properties": {
+          "elapsed_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "execution_location": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "http_status": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "outcome",
+          "elapsed_ms",
+          "execution_location"
+        ],
         "type": "object"
       },
       "Entry": {
@@ -2498,7 +3817,8 @@
           "release_strategy": {
             "enum": [
               "blue-green",
-              "recreate"
+              "recreate",
+              "rolling"
             ],
             "type": "string"
           },
@@ -2602,6 +3922,207 @@
           "project_id",
           "name",
           "network_pool"
+        ],
+        "type": "object"
+      },
+      "EnvironmentDNS": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EnvironmentDNS.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentDNSRecord"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "resolver_enabled": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "applied",
+              "failed",
+              "resolver_disabled"
+            ],
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "withdrawals": {
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentDNSWithdrawal"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "environment_id",
+          "revision",
+          "resolver_enabled",
+          "state",
+          "records",
+          "withdrawals"
+        ],
+        "type": "object"
+      },
+      "EnvironmentDNSRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "bound_service_id": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "resolved_address": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "environment",
+              "project",
+              "tenant"
+            ],
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "applied",
+              "waiting_for_service",
+              "failed",
+              "resolver_disabled"
+            ],
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "hostname",
+          "scope",
+          "state"
+        ],
+        "type": "object"
+      },
+      "EnvironmentDNSSaved": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EnvironmentDNSSaved.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "environment_id",
+          "record_id"
+        ],
+        "type": "object"
+      },
+      "EnvironmentDNSWithdrawal": {
+        "additionalProperties": false,
+        "properties": {
+          "hostname": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_id",
+          "hostname"
+        ],
+        "type": "object"
+      },
+      "EnvironmentDNSWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EnvironmentDNSWrite.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 63,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "environment",
+              "project",
+              "tenant"
+            ],
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
         ],
         "type": "object"
       },
@@ -2962,6 +4483,9 @@
           "service": {
             "type": "string"
           },
+          "source": {
+            "$ref": "#/components/schemas/BuildProvenance"
+          },
           "status": {
             "type": "string"
           },
@@ -2989,7 +4513,13 @@
           "node": {
             "type": "string"
           },
+          "software": {
+            "$ref": "#/components/schemas/ContainerIdentity"
+          },
           "status": {
+            "type": "string"
+          },
+          "version": {
             "type": "string"
           }
         },
@@ -3083,6 +4613,95 @@
           "total",
           "used",
           "used_pct"
+        ],
+        "type": "object"
+      },
+      "HostTerminalOpen": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/HostTerminalOpen.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "columns": {
+            "format": "int64",
+            "maximum": 500,
+            "minimum": 20,
+            "type": "integer"
+          },
+          "rows": {
+            "format": "int64",
+            "maximum": 300,
+            "minimum": 5,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "columns",
+          "rows"
+        ],
+        "type": "object"
+      },
+      "HostTerminalSession": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/HostTerminalSession.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input_inactivity_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "resumed": {
+            "type": "boolean"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "terminated"
+            ],
+            "type": "string"
+          },
+          "stream_path": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "host",
+          "user",
+          "state",
+          "input_inactivity_seconds",
+          "expires_at",
+          "stream_path",
+          "resumed"
         ],
         "type": "object"
       },
@@ -3304,7 +4923,8 @@
             "enum": [
               "blue",
               "green",
-              "singleton"
+              "singleton",
+              "rolling"
             ],
             "type": "string"
           },
@@ -4123,6 +5743,96 @@
         },
         "required": [
           "slug"
+        ],
+        "type": "object"
+      },
+      "PublicTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "hostname": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hostname",
+          "path"
+        ],
+        "type": "object"
+      },
+      "Readiness": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnostic": {
+            "enum": [
+              "none",
+              "pgrep_missing",
+              "curl_missing",
+              "nc_missing",
+              "command_missing",
+              "command_not_executable"
+            ],
+            "type": "string"
+          },
+          "elapsed_milliseconds": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "exited": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expected": {
+            "format": "int32",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "observed": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ready": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "running": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "starting": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "timeout_milliseconds": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unhealthy": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected",
+          "observed",
+          "running",
+          "ready",
+          "starting",
+          "unhealthy",
+          "exited",
+          "elapsed_milliseconds",
+          "timeout_milliseconds",
+          "diagnostic"
         ],
         "type": "object"
       },
@@ -5024,6 +6734,12 @@
             "minLength": 1,
             "type": "string"
           },
+          "revision": {
+            "description": "Desired configuration revision on reads; zero in a mutation reply. Read the Route before submitting a check.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "status": {
             "enum": [
               "unserved",
@@ -5044,6 +6760,7 @@
           }
         },
         "required": [
+          "revision",
           "id",
           "environment_id",
           "path",
@@ -5166,7 +6883,7 @@
             "readOnly": true,
             "type": "string"
           },
-          "caddy": {
+          "proxy": {
             "$ref": "#/components/schemas/ComponentProjection"
           },
           "tunnel": {
@@ -5241,8 +6958,15 @@
               "null"
             ]
           },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
           "slug": {
             "type": "string"
+          },
+          "software": {
+            "$ref": "#/components/schemas/ContainerIdentity"
           },
           "tenant_id": {
             "type": "string"
@@ -5260,6 +6984,187 @@
           "online",
           "observed_at",
           "created_at"
+        ],
+        "type": "object"
+      },
+      "RunnerCheckConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "controller_endpoint": {
+            "type": "string"
+          },
+          "github_url": {
+            "type": "string"
+          },
+          "image_reference": {
+            "type": "string"
+          },
+          "runner_id": {
+            "type": "string"
+          },
+          "runner_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "runtime_epoch": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runner_id",
+          "runner_revision",
+          "runtime_epoch",
+          "image_reference",
+          "github_url",
+          "controller_endpoint"
+        ],
+        "type": "object"
+      },
+      "RunnerCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerCheckRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
+      "RunnerCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerCheckResult.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/RunnerCheckConfiguration"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "execution_location": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "ready",
+              "checking",
+              "finished"
+            ],
+            "type": "string"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerCheckStage"
+            },
+            "type": "array"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "execution_location",
+          "configuration",
+          "stale",
+          "phase",
+          "stages",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "RunnerCheckStage": {
+        "additionalProperties": false,
+        "properties": {
+          "elapsed_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "failure": {
+            "enum": [
+              "connection",
+              "timeout",
+              "canceled",
+              "tls",
+              "authentication",
+              "permission",
+              "http_response",
+              "protocol",
+              "not_rootless",
+              "credentials_unavailable"
+            ],
+            "type": "string"
+          },
+          "http_status": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "enum": [
+              "github",
+              "rootless_docker",
+              "gp_api",
+              "registry"
+            ],
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "outcome",
+          "elapsed_ms"
         ],
         "type": "object"
       },
@@ -5840,6 +7745,13 @@
           "restart": {
             "type": "string"
           },
+          "rolling_replica_timeout_seconds": {
+            "description": "Per-replica rolling change/readiness budget in seconds; zero uses 300. The overall Task deadline still applies.",
+            "format": "int32",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
           "runtime_intent": {
             "type": "string"
           },
@@ -5968,6 +7880,13 @@
           },
           "restart": {
             "type": "string"
+          },
+          "rolling_replica_timeout_seconds": {
+            "description": "Per-replica rolling change/readiness budget; zero uses 300 seconds.",
+            "format": "int32",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
           },
           "strategy": {
             "type": "string"
@@ -6156,6 +8075,13 @@
           "restart": {
             "type": "string"
           },
+          "rolling_replica_timeout_seconds": {
+            "description": "Per-replica rolling change/readiness budget in seconds; zero uses 300. The overall Task deadline still applies.",
+            "format": "int32",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
           "runtime_intent": {
             "type": "string"
           },
@@ -6271,6 +8197,13 @@
           },
           "restart": {
             "type": "string"
+          },
+          "rolling_replica_timeout_seconds": {
+            "description": "Replacement per-replica rolling budget; omission preserves, zero restores 300 seconds.",
+            "format": "int32",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
           },
           "strategy": {
             "type": "string"
@@ -6822,6 +8755,9 @@
             ],
             "type": "string"
           },
+          "attempt_history": {
+            "$ref": "#/components/schemas/TaskAttemptHistory"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -6838,8 +8774,8 @@
             ],
             "type": "string"
           },
-          "failure_summary": {
-            "type": "string"
+          "failure": {
+            "$ref": "#/components/schemas/TaskFailure"
           },
           "finished_at": {
             "format": "date-time",
@@ -6854,17 +8790,26 @@
           "image_fetch": {
             "$ref": "#/components/schemas/TaskImageFetch"
           },
+          "interrupted_detach_retry": {
+            "$ref": "#/components/schemas/TaskDetachRetry"
+          },
           "operation_id": {
             "type": "string"
           },
           "plan_hash": {
             "type": "string"
           },
+          "preparation": {
+            "$ref": "#/components/schemas/TaskPreparation"
+          },
           "project_id": {
             "type": "string"
           },
           "reconciliation_required": {
             "type": "boolean"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/TaskRecovery"
           },
           "resource_kind": {
             "type": "string"
@@ -6928,7 +8873,8 @@
               "rotate",
               "fetch",
               "prepare",
-              "apply"
+              "apply",
+              "check"
             ],
             "type": "string"
           },
@@ -6983,15 +8929,153 @@
         ],
         "type": "object"
       },
+      "TaskAttemptHistory": {
+        "additionalProperties": false,
+        "properties": {
+          "dropped_summaries": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "summaries": {
+            "items": {
+              "$ref": "#/components/schemas/TaskAttemptSummary"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "through_sequence": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "through_sequence",
+          "dropped_summaries",
+          "summaries"
+        ],
+        "type": "object"
+      },
+      "TaskAttemptSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "attempt": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "controller_operation": {
+            "$ref": "#/components/schemas/TaskControllerOperation"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/TaskFailure"
+          },
+          "finished_received_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "first_sequence": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "last_received_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_sequence": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ordinal": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "started_received_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "step_id": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt",
+          "ordinal",
+          "action",
+          "state",
+          "first_sequence",
+          "last_sequence",
+          "last_received_at"
+        ],
+        "type": "object"
+      },
+      "TaskControllerOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "name"
+        ],
+        "type": "object"
+      },
+      "TaskDetachRetry": {
+        "additionalProperties": false,
+        "properties": {
+          "attach_id": {
+            "type": "string"
+          },
+          "step_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attach_id",
+          "step_id"
+        ],
+        "type": "object"
+      },
       "TaskEvent": {
         "additionalProperties": false,
         "properties": {
           "attempt": {
             "format": "int32",
+            "minimum": 1,
             "type": "integer"
+          },
+          "controller_operation": {
+            "$ref": "#/components/schemas/TaskControllerOperation"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/TaskFailure"
+          },
+          "health_wait": {
+            "$ref": "#/components/schemas/Readiness"
           },
           "ordinal": {
             "format": "int64",
+            "minimum": 1,
             "type": "integer"
           },
           "received_at": {
@@ -7000,6 +9084,7 @@
           },
           "sequence": {
             "format": "int64",
+            "minimum": 1,
             "type": "integer"
           },
           "state": {
@@ -7027,6 +9112,37 @@
         ],
         "type": "object"
       },
+      "TaskFailure": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "exit_code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "failed",
+              "timed_out",
+              "aborted"
+            ],
+            "type": "string"
+          },
+          "step_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
       "TaskImageFetch": {
         "additionalProperties": false,
         "properties": {
@@ -7048,6 +9164,95 @@
           "image",
           "platform",
           "progress"
+        ],
+        "type": "object"
+      },
+      "TaskPreparation": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/TaskFailure"
+          },
+          "network_count": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "network_queued",
+              "network_preparing",
+              "network_reconciling",
+              "network_proof_required",
+              "network_failed",
+              "dns_waiting",
+              "dns_failed",
+              "ready"
+            ],
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "summary",
+          "network_count",
+          "deadline"
+        ],
+        "type": "object"
+      },
+      "TaskRecovery": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_steps": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deadline": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_failure": {
+            "$ref": "#/components/schemas/TaskFailure"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "running",
+              "awaiting_confirmation",
+              "proof_required",
+              "completed"
+            ],
+            "type": "string"
+          },
+          "step_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "total_steps": {
+            "format": "int32",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "summary"
         ],
         "type": "object"
       },
@@ -7101,6 +9306,25 @@
           },
           "description": {
             "type": "string"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/TaskFailure"
+          },
+          "health_wait": {
+            "$ref": "#/components/schemas/Readiness"
+          },
+          "health_wait_received_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "healthchecks": {
+            "items": {
+              "$ref": "#/components/schemas/ConfiguredHealthcheck"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "kind": {
             "enum": [
@@ -7274,6 +9498,57 @@
         },
         "required": [
           "slug"
+        ],
+        "type": "object"
+      },
+      "TunnelCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/TunnelCheckRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "hostname": {
+            "description": "Concrete public hostname configured by the operator at the Tunnel provider; GP does not read or change provider ingress.",
+            "maxLength": 253,
+            "minLength": 1,
+            "type": "string"
+          },
+          "origin_port": {
+            "description": "An HTTP port exposed as TCP by the serving Service.",
+            "format": "int32",
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "origin_service_id": {
+            "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "path": {
+            "description": "Concrete HTTP request path without query or fragment.",
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "revision": {
+            "description": "Current Tunnel Component revision.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "origin_service_id",
+          "origin_port",
+          "hostname",
+          "path"
         ],
         "type": "object"
       },
@@ -7505,6 +9780,10 @@
             "readOnly": true,
             "type": "string"
           },
+          "allow_gp_dns": {
+            "description": "Use shared CoreDNS from this internal Zone; existing workloads change on their next deployment.",
+            "type": "boolean"
+          },
           "environment_id": {
             "type": "string"
           },
@@ -7537,6 +9816,7 @@
           "name",
           "subnet",
           "internal",
+          "allow_gp_dns",
           "owner_kind",
           "owner_id"
         ],
@@ -7553,6 +9833,10 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "allow_gp_dns": {
+            "description": "Opt into shared CoreDNS without enabling outbound connectivity; requires internal=true.",
+            "type": "boolean"
           },
           "environment_id": {
             "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
@@ -7573,7 +9857,8 @@
           "environment_id",
           "name",
           "subnet",
-          "internal"
+          "internal",
+          "allow_gp_dns"
         ],
         "type": "object"
       },
@@ -8332,6 +10617,145 @@
           }
         },
         "summary": "Attach a backing service",
+        "tags": [
+          "Attach"
+        ]
+      }
+    },
+    "/attaches/checks": {
+      "get": {
+        "operationId": "attach.check.show",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "task",
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "attach",
+            "schema": {
+              "pattern": "^att_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "grant",
+            "schema": {
+              "pattern": "^att_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackingCheckResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show an access check Task or an Attach's latest retained check",
+        "tags": [
+          "Attach"
+        ]
+      },
+      "post": {
+        "operationId": "attach.check",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackingCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Check Backing access from the consumer workload network",
         "tags": [
           "Attach"
         ]
@@ -9184,6 +11608,125 @@
         ]
       }
     },
+    "/components/{id}/dns-checks": {
+      "get": {
+        "operationId": "component.dns-check.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "task",
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNSCheckResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a DNS check Task or the latest retained result",
+        "tags": [
+          "Component"
+        ]
+      },
+      "post": {
+        "operationId": "component.dns-check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNSCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Query CoreDNS and its configured upstreams",
+        "tags": [
+          "Component"
+        ]
+      }
+    },
     "/components/{id}/enable": {
       "post": {
         "operationId": "component.enable",
@@ -9248,6 +11791,145 @@
           }
         },
         "summary": "Enable a Component with optional configuration",
+        "tags": [
+          "Component"
+        ]
+      }
+    },
+    "/components/{id}/tunnel-checks": {
+      "get": {
+        "operationId": "component.tunnel-check.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "task",
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeCheckResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a standalone Tunnel check Task or the latest retained result",
+        "tags": [
+          "Component"
+        ]
+      },
+      "post": {
+        "operationId": "component.tunnel-check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TunnelCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP",
         "tags": [
           "Component"
         ]
@@ -9444,6 +12126,143 @@
           }
         },
         "summary": "Create an Environment connector",
+        "tags": [
+          "Connector"
+        ]
+      }
+    },
+    "/connectors/checks": {
+      "get": {
+        "operationId": "connector.check.show",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "task",
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "connector",
+            "schema": {
+              "pattern": "^con_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorCheckResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a Task's Connector check or the latest saved Connector check",
+        "tags": [
+          "Connector"
+        ]
+      },
+      "post": {
+        "operationId": "connector.check",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectorCheckRequest"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Test saved or unsaved Connector permissions without saving",
         "tags": [
           "Connector"
         ]
@@ -10828,6 +13647,314 @@
         ]
       }
     },
+    "/environments/{id}/dns-records": {
+      "get": {
+        "operationId": "environment.dns.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentDNS"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Read Environment DNS intentions and resolver status",
+        "tags": [
+          "Environment DNS"
+        ]
+      },
+      "post": {
+        "operationId": "environment.dns.create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentDNSWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentDNSSaved"
+                }
+              }
+            },
+            "description": "DNS intention saved; read DNS status for resolver activation",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentDNSSaved"
+                }
+              }
+            },
+            "description": "DNS intention created; read DNS status for resolver activation",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create an Environment DNS record",
+        "tags": [
+          "Environment DNS"
+        ]
+      }
+    },
+    "/environments/{id}/dns-records/{record}": {
+      "delete": {
+        "operationId": "environment.dns.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record",
+            "required": true,
+            "schema": {
+              "pattern": "^dns_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentDNSSaved"
+                }
+              }
+            },
+            "description": "DNS intention saved; read DNS status for resolver activation",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentDNSSaved"
+                }
+              }
+            },
+            "description": "DNS intention created; read DNS status for resolver activation",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Withdraw an Environment DNS record",
+        "tags": [
+          "Environment DNS"
+        ]
+      },
+      "put": {
+        "operationId": "environment.dns.edit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record",
+            "required": true,
+            "schema": {
+              "pattern": "^dns_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentDNSWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentDNSSaved"
+                }
+              }
+            },
+            "description": "DNS intention saved; read DNS status for resolver activation",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentDNSSaved"
+                }
+              }
+            },
+            "description": "DNS intention created; read DNS status for resolver activation",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Replace an Environment DNS target or name",
+        "tags": [
+          "Environment DNS"
+        ]
+      }
+    },
     "/environments/{id}/export-key": {
       "post": {
         "operationId": "backup.key.export",
@@ -11559,6 +14686,72 @@
           }
         },
         "summary": "Show host health",
+        "tags": [
+          "Host"
+        ]
+      }
+    },
+    "/host/terminal": {
+      "post": {
+        "operationId": "host.terminal",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostTerminalOpen"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostTerminalSession"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Open or resume the owning browser session's interactive root host terminal",
         "tags": [
           "Host"
         ]
@@ -12799,6 +15992,136 @@
         ]
       }
     },
+    "/routes/checks": {
+      "get": {
+        "operationId": "route.check.show",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "task",
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "route",
+            "schema": {
+              "pattern": "^rte_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeCheckResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a check Task or a Route's latest retained check",
+        "tags": [
+          "Route"
+        ]
+      },
+      "post": {
+        "operationId": "route.check",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EdgeCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Check Tunnel readiness, Route origin and public DNS/TLS/HTTP",
+        "tags": [
+          "Route"
+        ]
+      }
+    },
     "/routes/{id}": {
       "delete": {
         "operationId": "route.remove",
@@ -13275,6 +16598,125 @@
           }
         },
         "summary": "Replace a Runner slug",
+        "tags": [
+          "Runner"
+        ]
+      }
+    },
+    "/runners/{id}/checks": {
+      "get": {
+        "operationId": "runner.check.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "task",
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCheckResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a Runner check Task or latest retained result",
+        "tags": [
+          "Runner"
+        ]
+      },
+      "post": {
+        "operationId": "runner.check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Check connections from the registered Runner",
         "tags": [
           "Runner"
         ]
@@ -15284,7 +18726,7 @@
             "description": "Error"
           }
         },
-        "summary": "Retry a failed task",
+        "summary": "Retry a failed Task or authorize a captured Blueprint Detach hook",
         "tags": [
           "Task"
         ]

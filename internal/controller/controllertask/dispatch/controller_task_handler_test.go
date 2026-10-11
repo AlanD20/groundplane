@@ -10,8 +10,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	testrunners "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -23,16 +21,16 @@ func TestLocalAgentControllerTaskHandlerEnrollsFromImmutableTaskInput(t *testing
 
 	task := testAgentEnrollmentTask()
 	agents := &fakeControllerTaskLocalAgents{healthErr: errs.New(errs.KindAgentNotFound, "missing")}
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		agents,
 		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
-		&recordingControllerTaskExecutor{},
-	)
+		&recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
-	if err := handler.Execute(context.Background(), task); err != nil {
+	if err := handler.Execute(context.Background(), task, testControllerProgress(context.Background(), task)); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	want := localagent.EnrollRequest{
@@ -47,42 +45,6 @@ func TestLocalAgentControllerTaskHandlerEnrollsFromImmutableTaskInput(t *testing
 	}
 }
 
-func TestControllerTaskHandlerFinalizesOwnershipFreeFailedRunner(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
-	runnerID := ids.NewAt(ids.KindRunner, now, 30)
-	tenantID := ids.NewAt(ids.KindTenant, now, 31)
-	task := etcd.TaskRecord{
-		ID: ids.NewAt(ids.KindTask, now, 32), Executor: testtaskjournal.TaskExecutorController,
-		Type: testtaskjournal.TaskRemove, Target: runnerID,
-		Params: map[string]string{
-			testtaskjournal.TaskResourceKindParam: testrunners.TaskResourceRunner,
-			testrunners.RunnerTenantIDParam:       tenantID,
-			testrunners.RunnerOwnerKindParam:      string(testrunners.RunnerOwnerTenant),
-			testrunners.RunnerOwnerIDParam:        tenantID,
-			testrunners.RunnerHostSlotParam:       "1",
-			testrunners.RunnerNetworkCIDRParam:    "10.0.0.0/29",
-		},
-	}
-	runners := &fakeControllerTaskRunners{
-		runner: testkeyvalue.Versioned[testrunners.RunnerRecord]{Record: testrunners.RunnerRecord{
-			RunnerLifecycleRecord: testrunners.RunnerLifecycleRecord{
-				RunnerID: runnerID, ProvisioningState: testrunners.RunnerProvisioningFailed,
-			},
-		}},
-	}
-	handler, err := NewResourceHandler(
-		&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), runners, &recordingControllerTaskExecutor{},
-	)
-	if err != nil {
-		t.Fatalf("NewResourceHandler() error = %v", err)
-	}
-	if err := handler.Execute(context.Background(), task); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-}
-
 func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	t.Parallel()
 
@@ -90,16 +52,16 @@ func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	agents := &fakeControllerTaskLocalAgents{health: localagent.Health{Agent: localagent.Agent{
 		ID: task.Target, EnrollmentTaskID: task.ID, Phase: localagent.PhaseReady,
 	}}}
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		agents,
 		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
-		&recordingControllerTaskExecutor{},
-	)
+		&recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
-	if err := handler.Execute(context.Background(), task); err != nil {
+	if err := handler.Execute(context.Background(), task, testControllerProgress(context.Background(), task)); err != nil {
 		t.Fatalf("Execute(replay) error = %v", err)
 	}
 	if agents.enrollCalls != 0 || agents.reconcileCalls != 1 || agents.healthCalls != 2 {
@@ -122,15 +84,15 @@ func TestLocalAgentControllerTaskHandlerReconcilesEnrollmentRetry(t *testing.T) 
 	agents := &fakeControllerTaskLocalAgents{health: localagent.Health{Agent: localagent.Agent{
 		ID: retry.Target, EnrollmentTaskID: original.ID, Phase: localagent.PhaseReady,
 	}}}
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		agents,
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
-	)
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
-	if err := handler.Execute(context.Background(), retry); err != nil {
+	if err := handler.Execute(context.Background(), retry, testControllerProgress(context.Background(), retry)); err != nil {
 		t.Fatalf("Execute(retry) error = %v", err)
 	}
 	if agents.enrollCalls != 0 || agents.reconcileCalls != 1 || agents.healthCalls != 2 {
@@ -152,16 +114,16 @@ func TestLocalAgentControllerTaskHandlerRejectsAnotherEnrollmentOwner(t *testing
 		EnrollmentTaskID: ids.NewAt(ids.KindTask, task.CreatedAt.Add(time.Second), 22),
 		Phase:            localagent.PhaseReady,
 	}}}
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		agents,
 		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
-		&recordingControllerTaskExecutor{},
-	)
+		&recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
-	err = handler.Execute(context.Background(), task)
+	err = handler.Execute(context.Background(), task, testControllerProgress(context.Background(), task))
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || agents.reconcileCalls != 0 {
 		t.Fatalf("Execute(mismatch) error/calls = %v/%d", err, agents.reconcileCalls)
 	}
@@ -172,15 +134,15 @@ func TestLocalAgentControllerTaskHandlerRejectsUnclosedParams(t *testing.T) {
 
 	task := testAgentEnrollmentTask()
 	task.Params["surprise"] = "value"
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		&fakeControllerTaskLocalAgents{},
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
-	)
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
-	if err := handler.Execute(context.Background(), task); !errors.Is(
+	if err := handler.Execute(context.Background(), task, testControllerProgress(context.Background(), task)); !errors.Is(
 		err,
 		errs.New(errs.KindValidationFailed, ""),
 	) {
@@ -215,16 +177,14 @@ type fakeControllerTaskLocalAgents struct {
 	request        localagent.EnrollRequest
 }
 
-type fakeControllerTaskRunners struct {
-	runner testkeyvalue.Versioned[testrunners.RunnerRecord]
-	err    error
+type fakeControllerTaskRunners struct{}
+
+func (*fakeControllerTaskRunners) ExecuteCreate(context.Context, etcd.TaskRecord) error {
+	return nil
 }
 
-func (runners *fakeControllerTaskRunners) GetRunner(
-	_ context.Context,
-	_ string,
-) (testkeyvalue.Versioned[testrunners.RunnerRecord], error) {
-	return runners.runner, runners.err
+func (*fakeControllerTaskRunners) ExecuteRemove(context.Context, etcd.TaskRecord) error {
+	return nil
 }
 
 func (agents *fakeControllerTaskLocalAgents) Enroll(

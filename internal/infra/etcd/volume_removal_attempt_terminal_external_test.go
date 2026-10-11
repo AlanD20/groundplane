@@ -234,6 +234,16 @@ type volumeAttemptTerminalRaceStore struct {
 	before func()
 }
 
+func (*volumeAttemptTerminalRaceStore) TransactBlueprintChild(
+	context.Context,
+	etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	return testkeyvalue.TransactionResult{}, errs.New(
+		errs.KindInternal,
+		"Blueprint child publication is outside the Volume race fixture",
+	)
+}
+
 func (store *volumeAttemptTerminalRaceStore) Transact(ctx context.Context, conditions []testkeyvalue.Condition,
 	mutations []testkeyvalue.Mutation) (testkeyvalue.TransactionResult, error) {
 	if store.before != nil {

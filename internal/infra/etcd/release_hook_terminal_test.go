@@ -2,7 +2,13 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -57,32 +63,55 @@ func TestReleaseHookProjectionConditionsFenceDesiredHeadRootAndZoneTombstones(t 
 }
 
 func TestReleaseHookFailureUsesOwningMemberOrdinal(t *testing.T) {
-	task := TaskRecord{
-		Params: map[string]string{
-			testreleaserender.ReleaseHookStepMemberParam("hook"):    "3",
-			testreleaserender.ReleaseHookStepExecutionParam("hook"): "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		},
-		Steps: []testtaskjournal.TaskStepRecord{
-			{
-				Kind: testtaskjournal.TaskStepOperation,
-				ID:   "one-apply",
-			}, {Kind: testtaskjournal.TaskStepOperation, ID: "one-health"}, {Kind: testtaskjournal.TaskStepOperation, ID: "one-switch"}, {Kind: testtaskjournal.TaskStepOperation, ID: "one-probe"}, {Kind: testtaskjournal.TaskStepOperation, ID: "one-compensate"},
-			{
-				Kind: testtaskjournal.TaskStepOperation,
-				ID:   "two-apply",
-			}, {Kind: testtaskjournal.TaskStepOperation, ID: "two-health"}, {Kind: testtaskjournal.TaskStepOperation, ID: "two-switch"}, {Kind: testtaskjournal.TaskStepOperation, ID: "two-probe"}, {Kind: testtaskjournal.TaskStepOperation, ID: "two-compensate"},
-			{
-				Kind: testtaskjournal.TaskStepOperation,
-				ID:   "three-apply",
-			}, {Kind: testtaskjournal.TaskStepOperation, ID: "three-health"}, {Kind: testtaskjournal.TaskStepOperation, ID: "three-switch"}, {Kind: testtaskjournal.TaskStepOperation, ID: "three-probe"}, {Kind: testtaskjournal.TaskStepOperation, ID: "three-compensate"},
-			{Kind: testtaskjournal.TaskStepOperation, ID: "hook"},
+	task := TaskRecord{Params: make(map[string]string)}
+	procedure := &agentpb.CandidateReleaseProcedure{}
+	members := make([]domain.GroupMember, 3)
+	for index := range members {
+		serviceID, releaseID := ids.New(ids.KindService), ids.New(ids.KindDeployment)
+		members[index] = domain.GroupMember{ServiceID: serviceID, ReleaseID: releaseID, Ordinal: uint32(index + 1)}
+		forward := []string{ids.New(ids.KindStep), ids.New(ids.KindStep), ids.New(ids.KindStep)}
+		probe, compensate := ids.New(ids.KindStep), ids.New(ids.KindStep)
+		for _, stepID := range append(append([]string(nil), forward...), probe, compensate) {
+			task.Steps = append(
+				task.Steps,
+				testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: stepID},
+			)
+		}
+		procedure.Members = append(procedure.Members, &agentpb.CandidateReleaseMember{
+			ServiceId: serviceID, CandidateReleaseId: releaseID, CandidateArtifactId: ids.New(ids.KindConfig), ForwardStepIds: forward,
+			ServingPredecessor: &agentpb.ServingPredecessorRestoration{ProbeStepId: probe, CompensateStepId: compensate,
+				PriorArtifactId: ids.New(
+					ids.KindConfig,
+				), PriorReleaseId: ids.New(ids.KindDeployment), PriorTarget: "singleton"},
+		})
+	}
+	coreFailure := procedure.Members[1].ForwardStepIds[2]
+	slices.SortFunc(
+		procedure.Members,
+		func(a, b *agentpb.CandidateReleaseMember) int { return strings.Compare(a.ServiceId, b.ServiceId) },
+	)
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(procedure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := testreleases.ReleasePublicationMarker{
+		CandidateReleaseDescriptor: executionplan.CandidateReleaseDescriptor{
+			PlanID: ids.New(
+				ids.KindPlan,
+			), PlanHash: make([]byte, 32), Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, ProcedureBytes: encoded,
 		},
 	}
-	if got := releaseFailedOrdinalFromResult(task, testtaskjournal.TaskResultRecord{FailedStepID: "hook"}); got != 3 {
-		t.Fatalf("hook failed ordinal = %d, want 3", got)
+	hook := ids.New(ids.KindStep)
+	task.Steps = append(task.Steps, testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: hook})
+	task.Params[testreleaserender.ReleaseHookStepMemberParam(hook)] = "3"
+	task.Params[testreleaserender.ReleaseHookStepExecutionParam(hook)] = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	if got, err := releaseFailedOrdinalFromResult(task, testtaskjournal.TaskResultRecord{FailedStepID: hook}, marker, members); err != nil ||
+		got != 3 {
+		t.Fatalf("hook failed ordinal = %d, %v, want 3", got, err)
 	}
-	if got := releaseFailedOrdinalFromResult(task, testtaskjournal.TaskResultRecord{FailedStepID: "two-switch"}); got != 2 {
-		t.Fatalf("core failed ordinal = %d, want 2", got)
+	if got, err := releaseFailedOrdinalFromResult(task, testtaskjournal.TaskResultRecord{FailedStepID: coreFailure}, marker, members); err != nil ||
+		got != 2 {
+		t.Fatalf("core failed ordinal = %d, %v, want 2", got, err)
 	}
 }
 

@@ -108,7 +108,7 @@ func (service *Service) prepareAuthoredEntryRemovalChild(
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	child.PlanHash = hex.EncodeToString(plan.GetPlanHash())
-	child.Steps = taskjournal.CaptureStepDescriptions(child.Steps, plan.GetSteps())
+	child.Steps = taskjournal.CaptureStepDescriptions(child.Steps, plan)
 	publication, err := etcd.NewBlueprintEntryRemovalPublication(child, intent)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err

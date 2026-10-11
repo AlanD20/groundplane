@@ -57,7 +57,13 @@ tag=${image##*:}
 	exit 2
 }
 
-make agent-image AGENT_VERSION="$version" AGENT_IMAGE="$image" >&2
+[[ -z "$(git status --porcelain --untracked-files=normal)" ]] || {
+	printf 'release Agent requires a clean tracked source checkout\n' >&2
+	exit 1
+}
+source_commit=$(git rev-parse HEAD)
+make agent-image AGENT_VERSION="$version" AGENT_IMAGE="$image" \
+	SOURCE_KIND=release SOURCE_COMMIT="$source_commit" >&2
 
 [[ "$(docker image inspect "$image" --format '{{json .Config.Entrypoint}}')" == '["/usr/local/bin/groundplane-agent"]' ]]
 [[ "$(docker image inspect "$image" --format '{{json .Config.Cmd}}')" == 'null' ]]

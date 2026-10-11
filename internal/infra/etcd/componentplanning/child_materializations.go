@@ -41,10 +41,16 @@ func (record ChildExecution) validateMaterializations(plan *agentpb.ExecutionPla
 			continue
 		}
 		file, found := files[step.GetStepId()]
-		if !found || file.MaterializationID != wire.GetMaterializationId() || file.EnvironmentID != wire.GetEnvironmentId() ||
-			file.Destination != wire.GetDestination() || file.ServiceID != wire.GetServiceId() || file.ServiceName != wire.GetServiceName() ||
-			file.UID != wire.GetUid() || file.GID != wire.GetGid() || file.Mode != wire.GetMode() ||
-			file.Length != wire.GetLength() || file.SHA256 != hex.EncodeToString(wire.GetSha256()) ||
+		if !found || file.MaterializationID != wire.GetMaterializationId() ||
+			file.EnvironmentID != wire.GetEnvironmentId() ||
+			file.Destination != wire.GetDestination() ||
+			file.ServiceID != wire.GetServiceId() ||
+			file.ServiceName != wire.GetServiceName() ||
+			file.UID != wire.GetUid() ||
+			file.GID != wire.GetGid() ||
+			file.Mode != wire.GetMode() ||
+			file.Length != wire.GetLength() ||
+			file.SHA256 != hex.EncodeToString(wire.GetSha256()) ||
 			!componentOutputMatches(file.OutputKind, wire.GetOutputKind()) {
 			return errs.New(errs.KindStateConflict, "Blueprint Component file step differs from its captured source")
 		}
@@ -57,6 +63,8 @@ func (record ChildExecution) validateMaterializations(plan *agentpb.ExecutionPla
 }
 
 func componentOutputMatches(output taskmaterialization.OutputKind, wire agentpb.MaterializationOutputKind) bool {
-	return output == taskmaterialization.OutputPlainFile && wire == agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE ||
-		output == taskmaterialization.OutputGeneratedEnvironment && wire == agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV
+	return output == taskmaterialization.OutputPlainFile &&
+		wire == agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE ||
+		output == taskmaterialization.OutputGeneratedEnvironment &&
+			wire == agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV
 }

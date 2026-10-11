@@ -122,7 +122,10 @@ operations, not autonomous container restarts or host boot. An omitted hook is
 a no-op. A hook failure blocks its operation. The operator owns command
 correctness and idempotency; GP owns targeting, time bounds, recording, and
 result validation. An interrupted custom command must not be silently executed
-again; retry is an explicit operator action.
+again; retry is an explicit operator action. For an interrupted Blueprint Detach,
+the visible Apply offers [Retry captured Detach hook](tasks-and-logs.md#retry),
+which resumes its original hidden Task with the captured command and inputs.
+Operators are responsible for whether that command can safely run again.
 
 Configuration uses `attach`, `detach`, `before_stop`, and `after_start` fields,
 each with a literal `command` argument array and an explicit `timeout_seconds`
@@ -226,18 +229,50 @@ owner's own set; naming a grant selects that granted set. Credential reuse and
 grants are independent relationships.
 
 Attach list results expose stable backing ownership and fact keys with their
-secret classification, never fact values. Fact values are returned only by the
-explicit fact-reveal operation. The Controller derives Environment scope from
+secret classification, never fact values. The explicit fact-reveal operation
+returns selected values; an access-check result shows only its non-secret tested
+host, port, database and user. The Controller derives Environment scope from
 the durable Attach and requires ready facts; the caller cannot override scope.
 Non-secret database and role facts may be used for labels. Password and
 credential-bearing URL facts remain masked until explicit reveal. Plaintext
-facts must not enter Attach primaries, Tasks, Activity, list responses, or
+secret facts must not enter Attach primaries, Tasks, Activity, list responses, or
 desired-state projections.
 
 Use `groundplane attach fact api-db pg_HOST` to read one ready fact, or
 `--grant <attach>` to select a granted fact set. Replace the Attach and key
 with your own. This explicitly reveals the selected value, including confidential
 facts; keep its output out of logs and public artifacts.
+
+### Check consumer access
+
+For a ready built-in Attach, open its **Test access** section. Deploy the consumer
+first: the check uses its exact running container's network context, not the
+Controller's network. Select the credential owner's own access or one of its
+grants. Custom hooks do not have a built-in access probe.
+
+The check reports network, authentication and database-access stages separately.
+PostgreSQL and MySQL execute `SELECT 1`; Valkey uses the selected authentication
+mode and `PING`. It does not write application data or certify every permission.
+Save, Deploy and container healthchecks remain separate actions.
+
+```sh
+groundplane attach check api-db
+groundplane attach check-result --latest api-db
+```
+
+Add `--grant <attach>` to either command to select granted access. The result
+shows the tested endpoint, database/user, time and stage outcomes, but never a
+password or credential-bearing URL. Changed Attach, credential, grant, consumer
+runtime or Agent versions mark the saved result stale. A pass is historical
+evidence, not a permanent availability guarantee.
+
+GP removes its temporary helper after the check. If cleanup cannot be proved,
+the result identifies the retained helper and blocks removal of its protected
+resources. **Retry cleanup** only removes that helper; it does not run the probe
+again. After interruption, submit a new check to obtain new access evidence.
+
+This capability is implemented locally but has not completed live qualification;
+see [current limitations](../capabilities.md).
 
 ### Adapter behavior and Valkey authentication
 

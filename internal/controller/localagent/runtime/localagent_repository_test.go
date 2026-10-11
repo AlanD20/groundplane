@@ -3,6 +3,8 @@ package runtime
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"testing"
 	"time"
 
@@ -56,7 +58,14 @@ func TestLocalAgentRepositoryAdapterTranslatesLifecycleWithoutAliasing(t *testin
 	}
 
 	readyAt := now.Add(time.Second)
-	ready, err := adapter.MarkReady(context.Background(), runtimeAdapterAgentID, 7, 11, readyAt)
+	ready, err := adapter.MarkReady(
+		context.Background(),
+		runtimeAdapterAgentID,
+		7,
+		11,
+		readyAt,
+		buildversion.BuildIdentity{Version: "test"},
+	)
 	if err != nil {
 		t.Fatalf("MarkReady() error = %v", err)
 	}
@@ -127,9 +136,10 @@ func TestLocalAgentRepositoryAdapterTranslatesReplacementWithoutAliasing(t *test
 		context.Background(),
 		current,
 		"ghcr.io/aland20/groundplane-agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		credential,
-		now.Add(time.Second),
-	)
+		credential, nil,
+
+		now.Add(time.Second))
+
 	if err != nil {
 		t.Fatalf("BeginReplacement() error = %v", err)
 	}
@@ -143,7 +153,13 @@ func TestLocalAgentRepositoryAdapterTranslatesReplacementWithoutAliasing(t *test
 	if string(replacement.Record.Credential.EncryptedToken) != "new-encrypted" {
 		t.Fatal("replacement result aliases durable encrypted token")
 	}
-	ready, err := adapter.MarkReplacementReady(context.Background(), runtimeAdapterAgentID, 8, 12)
+	ready, err := adapter.MarkReplacementReady(
+		context.Background(),
+		runtimeAdapterAgentID,
+		8,
+		12,
+		buildversion.BuildIdentity{Version: "test"},
+	)
 	if err != nil {
 		t.Fatalf("MarkReplacementReady() error = %v", err)
 	}
@@ -195,6 +211,7 @@ func (repository *fakeLocalAgentRecords) MarkReady(
 	generation uint64,
 	revision int64,
 	readyAt time.Time,
+	build buildversion.BuildIdentity,
 ) (testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], error) {
 	repository.markGeneration = generation
 	repository.markRevision = revision
@@ -202,6 +219,7 @@ func (repository *fakeLocalAgentRecords) MarkReady(
 	record := repository.created
 	record.Phase = testlocalagents.LocalAgentPhaseReady
 	record.ReadyAt = readyAt
+	record.Build = build
 	return testkeyvalue.Versioned[testlocalagents.LocalAgentRecord]{Record: record, Revision: 12}, nil
 }
 
@@ -211,9 +229,11 @@ func (repository *fakeLocalAgentRecords) ReplaceGeneration(
 	image string,
 	encryptedToken []byte,
 	tokenDigest string,
+	failure *taskprogress.Failure,
 	updatedAt time.Time,
 ) (testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], error) {
 	record := current.Record
+	record.ReplacementFailure = taskprogress.CloneFailure(failure)
 	record.Image = image
 	record.Generation++
 	record.Phase = testlocalagents.LocalAgentPhaseUpdating
@@ -235,10 +255,21 @@ func (repository *fakeLocalAgentRecords) MarkReplacementReady(
 	_ string,
 	_ uint64,
 	_ int64,
+	build buildversion.BuildIdentity,
 ) (testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], error) {
 	record := repository.replacement
+	record.Build = build
 	record.Phase = testlocalagents.LocalAgentPhaseReady
 	return testkeyvalue.Versioned[testlocalagents.LocalAgentRecord]{Record: record, Revision: 13}, nil
+}
+
+func (repository *fakeLocalAgentRecords) RecordReplacementFailure(_ context.Context,
+	current testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], failure *taskprogress.Failure,
+) (testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], error) {
+	current.Record.ReplacementFailure = taskprogress.CloneFailure(failure)
+	current.Revision++
+	repository.get = current
+	return current, nil
 }
 
 func (repository *fakeLocalAgentRecords) BeginDelete(

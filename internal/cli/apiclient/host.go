@@ -30,10 +30,22 @@ func (c *Client) ShowHost(ctx context.Context) (apiTypes.Host, error) {
 			return apiTypes.Host{}, err
 		}
 	}
-	return hostFromGenerated(*parsed), nil
+	return hostFromGenerated(*parsed)
 }
 
-func hostFromGenerated(host generated.Host) apiTypes.Host {
+func hostFromGenerated(host generated.Host) (apiTypes.Host, error) {
+	source, err := buildProvenanceFromGenerated(host.Controller.Source)
+	if err != nil {
+		return apiTypes.Host{}, err
+	}
+	update, err := controllerUpdateFromGenerated(host.Controller.Update)
+	if err != nil {
+		return apiTypes.Host{}, err
+	}
+	etcdSoftware, err := containerIdentityFromGenerated(host.Etcd.Software)
+	if err != nil {
+		return apiTypes.Host{}, err
+	}
 	labels := make([]string, 0)
 	if host.Agent.Labels != nil {
 		labels = append(labels, (*host.Agent.Labels)...)
@@ -53,12 +65,15 @@ func hostFromGenerated(host generated.Host) apiTypes.Host {
 		Docker: host.Docker,
 		Etcd: apiTypes.HostEtcd{
 			Node: host.Etcd.Node, Status: apiTypes.HealthState(host.Etcd.Status), DBSize: host.Etcd.DbSize,
+			Version:  host.Etcd.Version,
+			Software: etcdSoftware,
 		},
 		Controller: apiTypes.HostController{
 			Service: host.Controller.Service,
 			Status:  apiTypes.HealthState(host.Controller.Status),
 			Version: host.Controller.Version,
-			Update:  controllerUpdateFromGenerated(host.Controller.Update),
+			Source:  source,
+			Update:  update,
 		},
 		Agent: apiTypes.HostAgent{
 			Status:        apiTypes.HealthState(host.Agent.Status),
@@ -66,18 +81,23 @@ func hostFromGenerated(host generated.Host) apiTypes.Host {
 			MaxConcurrent: int(host.Agent.MaxConcurrent),
 			Labels:        labels,
 		},
-	}
+	}, nil
 }
 
-func controllerUpdateFromGenerated(update generated.ControllerUpdateState) apiTypes.ControllerUpdateState {
+func controllerUpdateFromGenerated(update generated.ControllerUpdateState) (apiTypes.ControllerUpdateState, error) {
 	result := apiTypes.ControllerUpdateState{
 		RunningSHA256: update.RunningSha256, Available: update.Available, Error: update.Error,
 	}
 	if candidate := update.Candidate; candidate != nil {
+		source, err := buildProvenanceFromGenerated(candidate.ControllerSource)
+		if err != nil {
+			return apiTypes.ControllerUpdateState{}, err
+		}
 		result.Candidate = &apiTypes.ControllerRelease{
 			Release: candidate.Release, ControllerSHA256: candidate.ControllerSha256,
 			ControllerVersion: candidate.ControllerVersion, AgentImage: candidate.AgentImage,
-			StorageEpoch: int(candidate.StorageEpoch), ChannelSchema: int(candidate.ChannelSchema),
+			ControllerSource: source,
+			StorageEpoch:     int(candidate.StorageEpoch), ChannelSchema: int(candidate.ChannelSchema),
 		}
 	}
 	if last := update.LastUpdate; last != nil {
@@ -85,5 +105,5 @@ func controllerUpdateFromGenerated(update generated.ControllerUpdateState) apiTy
 			TaskID: last.TaskId, Release: last.Release, Status: last.Status, Phase: last.Phase, CreatedAt: last.CreatedAt,
 		}
 	}
-	return result
+	return result, nil
 }

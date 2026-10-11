@@ -36,16 +36,20 @@ func (service *Service) authoredComponentIdentities(
 	if err != nil {
 		return nil, err
 	}
-	byKind := make(map[core.ComponentKind]string, len(selected))
+	byCapability := make(map[core.ComponentCapability]string, len(selected))
 	for _, component := range selected {
-		byKind[component.Kind] = component.ID
+		capability, _ := component.Kind.EnvironmentCapability()
+		byCapability[capability] = component.ID
 	}
 	result := make([]composeidentity.Resource, 0, len(specs))
 	for _, capability := range sortedAuthoredMapKeys(specs) {
-		id := byKind[specs[capability].Implementation]
+		id := byCapability[core.ComponentCapability(capability)]
 		for _, prior := range previous {
 			if prior.Name == capability && prior.ID != id {
-				return nil, errs.New(errs.KindStateConflict, "Blueprint Component identity differs from its Environment singleton")
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"Blueprint Component identity differs from its Environment singleton",
+				)
 			}
 		}
 		result = append(result, composeidentity.Resource{ID: id, Name: capability})

@@ -56,7 +56,7 @@ func ReleaseProbeEvidenceStatus(
 ) (bool, error) {
 	if result.RestorationRequired {
 		if !selectedServingProbe(assignment, step) || result.ProxyEvidence != nil ||
-			result.RecreateEvidence != nil || result.CandidateAbsenceEvidence != nil {
+			result.RecreateEvidence != nil || result.CandidateAbsenceEvidence != nil || result.RollingEvidence != nil {
 			return false, invalidReleaseProbeEvidence()
 		}
 		return true, nil
@@ -288,17 +288,22 @@ func restorationCandidateSet(values []*agentpb.ReleaseRestorationCandidate) (map
 
 func exclusiveProxyEvidence(result StepResult) bool {
 	return !result.RestorationRequired && result.ProxyEvidence != nil && result.RecreateEvidence == nil &&
-		result.CandidateAbsenceEvidence == nil
+		result.CandidateAbsenceEvidence == nil && result.RollingEvidence == nil
 }
 
 func exclusiveRecreateEvidence(result StepResult) bool {
 	return !result.RestorationRequired && result.ProxyEvidence == nil && result.RecreateEvidence != nil &&
-		result.CandidateAbsenceEvidence == nil
+		result.CandidateAbsenceEvidence == nil && result.RollingEvidence == nil
 }
 
 func exclusiveAbsenceEvidence(result StepResult) bool {
 	return !result.RestorationRequired && result.ProxyEvidence == nil && result.RecreateEvidence == nil &&
-		result.CandidateAbsenceEvidence != nil
+		result.CandidateAbsenceEvidence != nil && result.RollingEvidence == nil
+}
+
+func exclusiveRollingEvidence(result StepResult) bool {
+	return !result.RestorationRequired && result.ProxyEvidence == nil && result.RecreateEvidence == nil &&
+		result.CandidateAbsenceEvidence == nil && result.RollingEvidence != nil
 }
 
 func invalidReleaseProbeEvidence() error {

@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	Schema                   = "groundplane.runner-journal/v1"
+	Schema                   = "groundplane.runner-journal/v2"
 	maximumRevisionBytes     = 64 << 10
 	maximumJournalRevisions  = 32768
 	maximumOwnershipNonceLen = 64

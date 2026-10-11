@@ -1,6 +1,7 @@
 package taskplanning
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,12 +16,22 @@ func ValidateEnvironmentBlueprintAvailability(parsed blueprintparser.Result) err
 		return errs.New(errs.KindValidationFailed, "Blueprint uses a desired-state contract that is not available yet")
 	}
 	for _, network := range parsed.Project.Networks {
-		if network.External || len(network.Extensions) != 0 {
+		if network.External {
 			return errs.New(errs.KindValidationFailed, "Blueprint external network ownership is not available yet")
+		}
+		for extension := range network.Extensions {
+			if extension != zonedns.Extension {
+				return errs.New(errs.KindValidationFailed, "Blueprint network extension is not available")
+			}
 		}
 	}
 	if _, err := validatedBlueprintZones(parsed.Project); err != nil {
 		return err
+	}
+	for _, service := range parsed.Project.AllServices() {
+		if _, err := zonedns.Upstreams(service, parsed.Project.Networks); err != nil {
+			return err
+		}
 	}
 	for _, volume := range parsed.Project.Volumes {
 		if bool(volume.External) || (volume.Driver != "" && volume.Driver != "local") || len(volume.DriverOpts) != 0 ||
@@ -28,7 +39,7 @@ func ValidateEnvironmentBlueprintAvailability(parsed blueprintparser.Result) err
 			return errs.New(errs.KindValidationFailed, "Blueprint volume runtime is not managed by Groundplane")
 		}
 	}
-	return nil
+	return validateBlueprintDeploymentSettings(parsed)
 }
 
 func onlyVolumeSlugExtension(extensions map[string]any) bool {

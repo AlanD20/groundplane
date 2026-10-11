@@ -13,6 +13,7 @@ import (
 type ProxyImage struct {
 	Repository  string                   `json:"repository"`
 	IndexDigest string                   `json:"index_digest"`
+	SelectedTag string                   `json:"selected_tag,omitempty"`
 	Platform    componentsdk.OCIPlatform `json:"platform"`
 }
 
@@ -23,7 +24,9 @@ func (image ProxyImage) Reference() string {
 func (image ProxyImage) Validate() error {
 	p := image.Platform
 	if image.Repository == "" || strings.ContainsAny(image.Repository, "@ \t\r\n") ||
-		p.OS != "linux" || p.Architecture != "amd64" && p.Architecture != "arm64" ||
+		!componentsdk.ValidOCIImageTag(image.SelectedTag) ||
+		p.OS != "linux" ||
+		p.Architecture != "amd64" && p.Architecture != "arm64" ||
 		p.Architecture == "amd64" && p.Variant != "" ||
 		p.Architecture == "arm64" && p.Variant != "" && p.Variant != "v8" {
 		return errs.New(errs.KindValidationFailed, "release proxy image authority is invalid")

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -29,6 +30,17 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 ) (bool, error) {
 	if terminalStatus != taskjournal.TaskStatusCompleted || result.ReconciliationRequired {
 		return repository.returnReleaseToRecovery(ctx, task, head, base, terminalAt, proofConditions...)
+	}
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		base.Values[0].Value,
+		"release-publication",
+	)
+	if err != nil || marker.PublicationID != head.PublicationID || marker.OperationID != task.OperationID {
+		return false, releases.CorruptReleaseRecord()
+	}
+	procedure, err := executionplan.OpenCandidateReleaseDescriptor(marker.CandidateReleaseDescriptor)
+	if err != nil {
+		return false, err
 	}
 	pending := make([]int, 0, maximumReleaseTerminalBatchMembers)
 	for index, value := range terminals.Values {
@@ -102,7 +114,9 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		}
 		proxy, hasProxy := releaseProxyEvidence(result, member.ServiceID)
 		recreate, hasRecreate := releaseRecreateEvidence(result, member.ServiceID)
-		if hasProxy == hasRecreate {
+		rolling, hasRolling := releaseRollingEvidence(result, member.ServiceID)
+		if hasProxy && hasRecreate || hasRolling && (hasProxy || hasRecreate) ||
+			!hasProxy && !hasRecreate && !hasRolling {
 			return false, errs.New(
 				errs.KindStateConflict,
 				"release recovery omitted its strategy-specific serving evidence",
@@ -113,6 +127,9 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		if hasRecreate {
 			observedReleaseID, compensated = recreate.ReleaseID, recreate.Compensated
 			observedTarget = recreate.Target
+		}
+		if hasRolling {
+			observedReleaseID, compensated, observedTarget = rolling.ReleaseID, rolling.Compensated, "rolling"
 		}
 		candidate := !compensated && observedReleaseID == intent.ID
 		priorReleaseID := intent.PriorServingReleaseID
@@ -129,6 +146,20 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		checkpoint.Evidence = nil
 		checkpoint.UpdatedAt = terminalAt
 		if candidate {
+			probeStepID := ""
+			for _, captured := range procedure.GetMembers() {
+				if captured.GetServiceId() != member.ServiceID || captured.GetCandidateReleaseId() != member.ReleaseID {
+					continue
+				}
+				if captured.GetServingPredecessor() != nil {
+					probeStepID = captured.GetServingPredecessor().GetProbeStepId()
+				} else {
+					probeStepID = captured.GetCandidateAbsence().GetProbeStepId()
+				}
+			}
+			if probeStepID == "" {
+				return false, errs.New(errs.KindStateConflict, "recovered Release has no captured probe step")
+			}
 			projection.ServingReleaseID = intent.ID
 			projection.CurrentSuccessfulReleaseID = intent.ID
 			checkpoint.State = domain.StateCompleted
@@ -140,7 +171,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 				return false, err
 			}
 			effect := domain.EffectEvidence{
-				PlanID: task.PlanID, StepID: task.Steps[index*5+3].ID, AttemptID: task.ID,
+				PlanID: task.PlanID, StepID: probeStepID, AttemptID: task.ID,
 				AgentID: agentID, AcknowledgementID: assignment.AssignmentID, ObservedReleaseID: intent.ID,
 				ObservedRenderGeneration: uint64(
 					task.RenderGeneration,
@@ -150,6 +181,9 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 				effect.ObservedSlot, effect.RouterConfigurationDigest, effect.ObservedRouterTarget = domain.WorkloadTarget(proxy.Target).
 					Slot(),
 					proxy.ConfigSHA256, proxy.Target
+			}
+			if hasRolling && rolling.ProxyGeneration != 0 {
+				effect.RouterConfigurationDigest, effect.ObservedRouterTarget = rolling.ProxyConfigSHA256, "rolling"
 			}
 			checkpoint.Evidence = []domain.EffectEvidence{effect}
 			summary.EffectDigests = append(slices.Clone(summary.EffectDigests), effectDigest)

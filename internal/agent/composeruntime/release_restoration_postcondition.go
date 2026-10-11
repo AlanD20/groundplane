@@ -1,7 +1,6 @@
 package composeruntime
 
 import (
-	"bytes"
 	"context"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -53,6 +52,7 @@ func (runtime *Runtime) candidateRestoration(
 	if response.GetCandidateAbsenceEvidence() != nil {
 		result.CandidateAbsenceEvidence = proto.Clone(response.GetCandidateAbsenceEvidence()).(*agentpb.CandidateAbsenceEvidence)
 	}
+	result.RollingEvidence = proto.CloneOf(response.GetRollingEvidence())
 	return runtime.verifyReleaseRestorationPostcondition(ctx, assignment, step, result, nil)
 }
 
@@ -61,9 +61,15 @@ func (runtime *Runtime) proxyProcedure(
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (StepResult, error) {
-	result := StepResult{
-		MutationAttempted: step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil,
+	result := StepResult{}
+	if switching := step.GetServiceProxySwitch(); switching != nil {
+		var err error
+		result.Observed, err = runtime.proxyCandidateReady(ctx, assignment.Plan, switching)
+		if err != nil {
+			return result, err
+		}
 	}
+	result.MutationAttempted = step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
 		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
@@ -88,10 +94,46 @@ func (runtime *Runtime) proxyProcedure(
 	if response.GetProxyEvidence() != nil {
 		result.ProxyEvidence = proto.Clone(response.GetProxyEvidence()).(*agentpb.ServiceProxyEvidence)
 	}
+	if switching := step.GetServiceProxySwitch(); switching != nil {
+		result.Observed, err = runtime.proxyCandidateReady(ctx, assignment.Plan, switching)
+		if err != nil {
+			result.ReconciliationRequired = true
+			return result, err
+		}
+	}
 	if step.GetServiceProxyProbe() == nil && step.GetServiceProxyCompensate() == nil {
 		return result, nil
 	}
 	return runtime.verifyReleaseRestorationPostcondition(ctx, assignment, step, result, nil)
+}
+
+// Readiness is checked at activation, not inferred from an earlier health step.
+// Recheck after switching and retiring the old set before reporting success.
+func (runtime *Runtime) proxyCandidateReady(ctx context.Context, plan *agentpb.ExecutionPlan,
+	switching *agentpb.ServiceProxySwitch,
+) (*agentpb.ObservedProject, error) {
+	artifact := taskassignment.ComposeArtifact(plan, switching.GetCandidateArtifactId())
+	workload, err := executionplan.ReleaseWorkloadService(
+		artifact,
+		switching.GetServiceId(),
+		switching.GetToTarget(),
+		0,
+	)
+	if err != nil {
+		return nil, err
+	}
+	observed, err := runtime.observer.Observe(ctx, plan, artifact.GetArtifactId())
+	if err != nil {
+		return nil, err
+	}
+	convergence, err := evaluatePhysicalWorkloadConvergence(artifact, observed, workload)
+	if err != nil {
+		return observed, err
+	}
+	if !convergence.Ready {
+		return observed, errs.New(errs.KindStateConflict, "candidate workload is not healthy at the proxy switch")
+	}
+	return observed, nil
 }
 
 func (runtime *Runtime) verifyReleaseRestorationPostcondition(
@@ -239,40 +281,14 @@ func openServingPredecessorAuthority(
 	if len(encoded) == 0 {
 		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor authority is incomplete")
 	}
-	if err := executionplan.ValidateNativePredecessorWitness(
+	serving, err := executionplan.OpenNativeServingRuntime(
 		assignment.RestorationAuthority.GetEnvironmentId(), serviceID, encoded,
 		nativeServingPredecessorRetainedArtifact(assignment.RestorationAuthority, serviceID),
-	); err != nil {
+	)
+	if err != nil {
 		return nil, "", "", errs.New(errs.KindInternal, "agent: native serving predecessor authority is invalid")
 	}
-	artifact := &agentpb.ComposeArtifact{}
-	if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(encoded, artifact) != nil ||
-		executionplan.RejectUnknown(artifact) != nil {
-		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor artifact is invalid")
-	}
-	canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil || !bytes.Equal(canonical, encoded) {
-		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor artifact is not canonical")
-	}
-	var target, releaseID string
-	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() != serviceID ||
-			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY ||
-			restorationReleaseLabel(service) == "" {
-			continue
-		}
-		if releaseID != "" {
-			return nil, "", "", errs.New(errs.KindStateConflict, "agent: serving predecessor workload is ambiguous")
-		}
-		target, releaseID = service.GetSlot(), restorationReleaseLabel(service)
-		if target == "" {
-			target = "singleton"
-		}
-	}
-	if target == "" || releaseID == "" {
-		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor workload is absent")
-	}
-	return artifact, target, releaseID, nil
+	return serving.Artifact, serving.Target, serving.ReleaseID, nil
 }
 
 func nativeServingPredecessorRetainedArtifact(authority *agentpb.ReleaseRestorationAuthority, serviceID string) []byte {
@@ -293,6 +309,23 @@ func candidateServingPredecessorEvidenceMatches(
 	if err != nil {
 		return false
 	}
+	if target == "rolling" {
+		if !exclusiveRollingEvidence(result) {
+			return false
+		}
+		for _, witness := range assignment.RestorationAuthority.GetNativePredecessors() {
+			if witness.GetServiceId() == serviceID {
+				serving, err := executionplan.OpenNativeServingRuntime(
+					assignment.RestorationAuthority.GetEnvironmentId(),
+					serviceID,
+					witness.GetCurrentArtifact(),
+					witness.GetRetainedPriorArtifact(),
+				)
+				return err == nil && serving.Rolling != nil && proto.Equal(serving.Rolling, result.RollingEvidence)
+			}
+		}
+		return false
+	}
 	var proxy *agentpb.ComposeService
 	for _, service := range artifact.GetServices() {
 		if service.GetServiceId() == serviceID &&
@@ -307,7 +340,11 @@ func candidateServingPredecessorEvidenceMatches(
 		return exclusiveRecreateEvidence(result) && exactRecreateEvidence(result.RecreateEvidence,
 			serviceID, artifact.GetArtifactId(), releaseID, target, true)
 	}
-	generation, err := executionplan.ProxyConfigGeneration(proxy.GetProxyConfigJson(), releaseID)
+	generation, err := executionplan.ProxyConfigGeneration(
+		proxy.GetProxyImplementation(),
+		proxy.GetProxyConfigJson(),
+		releaseID,
+	)
 	return err == nil && exclusiveProxyEvidence(result) && exactProxyEvidence(result.ProxyEvidence,
 		serviceID, target, generation, proxy.GetProxyConfigSha256(), releaseID, true)
 }
@@ -339,7 +376,9 @@ func releaseRestorationWorkloadTargetProven(
 		}
 		known = append(known, service)
 		serviceTarget := service.GetSlot()
-		if serviceTarget == "" {
+		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA {
+			serviceTarget = "rolling"
+		} else if serviceTarget == "" {
 			serviceTarget = "singleton"
 		}
 		if target != "" && serviceTarget != target || releaseID != "" && restorationReleaseLabel(service) != releaseID {

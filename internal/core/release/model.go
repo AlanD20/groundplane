@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -34,6 +35,7 @@ type Strategy string
 const (
 	StrategyBlueGreen Strategy = "blue-green"
 	StrategyRecreate  Strategy = "recreate"
+	StrategyRolling   Strategy = "rolling"
 )
 
 type OnFailure string
@@ -245,6 +247,10 @@ func ValidateIntent(value Intent) error {
 	case StrategyRecreate:
 		if value.Slot != "" {
 			return invalid("recreate release must not have a slot")
+		}
+	case StrategyRolling:
+		if value.Slot != "" || value.CandidateWorkload.ReplicaCount > rollingrelease.MaximumReplicas {
+			return invalid("rolling release requires one to sixteen replicas and no slot")
 		}
 	default:
 		return invalid("release strategy is invalid")

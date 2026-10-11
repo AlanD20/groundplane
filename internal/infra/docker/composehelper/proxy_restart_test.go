@@ -51,7 +51,13 @@ func TestRestorationRequiresLiveAndRestartProxyConfig(t *testing.T) {
 				}
 				return runner.Result{Stdout: config}, nil
 			}
-			got, _ := observeRestorationProxy(context.Background(), fake, "aaaaaaaaaaaaaaaa", digest[:])
+			got, _ := observeRestorationProxy(
+				context.Background(),
+				fake,
+				"aaaaaaaaaaaaaaaa",
+				agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY,
+				digest[:],
+			)
 			if got != test.want {
 				t.Fatalf("restoration proven=%v want=%v", got, test.want)
 			}

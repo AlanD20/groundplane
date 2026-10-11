@@ -18,6 +18,12 @@ func Select(snapshot Snapshot) (blueprintreconcile.Selection, error) {
 		)
 	}
 	desired := snapshot.Desired.Record.Units
+	removals := make(map[ResourceKey]bool)
+	for _, unit := range desired {
+		if unit.Removal {
+			removals[unit.Target] = true
+		}
+	}
 	input := blueprintreconcile.Snapshot{
 		Desired:    make([]blueprintreconcile.Unit, 0, len(desired)),
 		Applied:    make([]blueprintreconcile.AppliedUnit, 0, len(snapshot.Applied)),
@@ -32,6 +38,11 @@ func Select(snapshot Snapshot) (blueprintreconcile.Selection, error) {
 	}
 	for _, value := range snapshot.Applied {
 		record := value.Record
+		if removals[record.Target] && value.Revision == 0 && record.State == Absent {
+			// Birth proves no prior Blueprint effect, not retirement of the
+			// resource definition or a later direct lifecycle operation.
+			continue
+		}
 		fingerprint, err := reconcileFingerprint(record.Fingerprint)
 		if err != nil {
 			return blueprintreconcile.Selection{}, err

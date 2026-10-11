@@ -13,6 +13,18 @@ import (
 )
 
 func ValidateTaskRecord(record TaskRecord) error {
+	if err := validateEdgeCheckTask(record); err != nil {
+		return err
+	}
+	if err := validateRunnerCheckTask(record); err != nil {
+		return err
+	}
+	if err := validateDNSCheckTask(record); err != nil {
+		return err
+	}
+	if err := validateBackingCheckTask(record); err != nil {
+		return err
+	}
 	if err := validateSoftwarePreparationTask(record); err != nil {
 		return err
 	}
@@ -51,6 +63,12 @@ func ValidateTaskRecord(record TaskRecord) error {
 	if err := taskjournal.ValidateBlueprintChild(record.ID, record.Actor, record.Executor, record.Params); err != nil {
 		return err
 	}
+	if err := taskjournal.ValidateReleaseNetworkChild(record.ID, record.Actor, record.Executor, record.Type, record.Params); err != nil {
+		return err
+	}
+	if err := taskjournal.ValidateReleaseNetworkParent(record.ID, record.Executor, record.Type, record.Params); err != nil {
+		return err
+	}
 	if !taskjournal.ValidExecutor(record.Executor) {
 		return errs.New(errs.KindValidationFailed, "task executor is invalid")
 	}
@@ -64,6 +82,15 @@ func ValidateTaskRecord(record TaskRecord) error {
 			len(record.Steps) != 0 || len(record.Materializations) != 0 ||
 			record.Configuration != nil || record.EntryRuntime != nil || record.Result != nil) {
 		return errs.New(errs.KindValidationFailed, "Blueprint parent Task shape is invalid")
+	}
+	if record.BlueprintFailure != nil {
+		failure := record.BlueprintFailure
+		if record.Executor != taskjournal.TaskExecutorBlueprint || record.Status != taskjournal.TaskStatusFailed ||
+			taskjournal.ValidateBlueprintFailure(*failure) != nil || record.StartedAt == nil ||
+			record.FinishedAt == nil || failure.FailedAt.Before(*record.StartedAt) ||
+			failure.FailedAt.After(*record.FinishedAt) || failure.ChildTaskID == record.ID {
+			return errs.New(errs.KindInternal, "Blueprint terminal failure is inconsistent")
+		}
 	}
 	if record.Type == taskjournal.TaskBackupPrune && record.Actor != taskjournal.TaskActorSystem {
 		return errs.New(errs.KindValidationFailed, "backup_prune task actor must be system")
@@ -166,6 +193,9 @@ func ValidateTaskRecord(record TaskRecord) error {
 		return err
 	}
 	if record.Result != nil {
+		if (record.Executor == taskjournal.TaskExecutorController) != (record.Result.Kind == taskjournal.TaskResultController) {
+			return errs.New(errs.KindInternal, "Task result does not match its executor")
+		}
 		if backupTask != (record.Result.Kind == taskjournal.TaskResultBackup) {
 			return errs.New(errs.KindInternal, "Task result does not match its execution family")
 		}

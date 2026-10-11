@@ -16,4 +16,7 @@ type Catalog interface {
 	ResolveDNSResolverObservationActionEnvelope(
 		componentsdk.ActionEnvelope,
 	) (componentsdk.Definition, componentsdk.ActionDefinition, registeredcatalog.DNSResolverObservationRecipe, error)
+	ResolveEdgeTunnelObservationActionEnvelope(
+		componentsdk.ActionEnvelope,
+	) (componentsdk.Definition, componentsdk.ActionDefinition, registeredcatalog.EdgeTunnelObservationRecipe, error)
 }

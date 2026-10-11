@@ -11,6 +11,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"maps"
 	"time"
@@ -245,6 +246,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 
 func (repository *TaskRepository) prepareRemovalTaskAcknowledgement(
 	ctx context.Context, task TaskRecord, terminalStatus taskjournal.TaskStatus, terminalAt time.Time, revision int64,
+	assignment taskassignments.TaskAssignmentRecord,
 ) (routeTaskChange, error) {
 	change, err := repository.prepareRouteTaskAcknowledgement(ctx, task, terminalStatus, terminalAt, revision)
 	if err != nil || change.applies {
@@ -254,7 +256,14 @@ func (repository *TaskRepository) prepareRemovalTaskAcknowledgement(
 	if err != nil || change.applies {
 		return change, err
 	}
-	return repository.prepareServiceRemovalTaskAcknowledgement(ctx, task, terminalStatus, terminalAt, revision)
+	return repository.prepareServiceRemovalTaskAcknowledgement(
+		ctx,
+		task,
+		terminalStatus,
+		terminalAt,
+		revision,
+		assignment,
+	)
 }
 
 func (repository *TaskRepository) prepareEntryTaskAcknowledgement(

@@ -40,12 +40,17 @@ func (manager *Manager) provision(ctx context.Context, stored StoredRecord) (Sto
 	if err := ctx.Err(); err != nil {
 		return StoredRecord{}, err
 	}
+	build, err := manager.acceptedBuild(stored.Record)
+	if err != nil {
+		return StoredRecord{}, err
+	}
 	updated, err := manager.repository.MarkReady(
 		ctx,
 		stored.Record.ID,
 		stored.Record.Generation,
 		stored.Revision,
 		manager.clock.Now(),
+		build,
 	)
 	if err != nil {
 		return StoredRecord{}, safePortError(ctx, err, "local agent ready transition failed")
@@ -53,7 +58,7 @@ func (manager *Manager) provision(ctx context.Context, stored StoredRecord) (Sto
 	if err := validateStored(updated); err != nil {
 		return StoredRecord{}, err
 	}
-	if updated.Record.Phase != PhaseReady {
+	if updated.Record.Phase != PhaseReady || updated.Record.Build != build {
 		return StoredRecord{}, errs.New(errs.KindInternal, "local agent repository did not mark the record ready")
 	}
 	return updated, nil

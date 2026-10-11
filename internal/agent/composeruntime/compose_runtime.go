@@ -44,6 +44,7 @@ type StepResult struct {
 	RestorationRequired          bool
 	ProxyEvidence                *agentpb.ServiceProxyEvidence
 	RecreateEvidence             *agentpb.ServiceRecreateEvidence
+	RollingEvidence              *agentpb.RollingReleaseEvidence
 	CandidateAbsenceEvidence     *agentpb.CandidateAbsenceEvidence
 	ComponentRestorationEvidence *agentpb.ComponentRestorationEvidence
 	ServiceAbsenceEvidence       *agentpb.ServiceAbsenceEvidence
@@ -60,6 +61,7 @@ func (runtime *Runtime) ExecuteStep(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
+	report func(*agentpb.HealthWaitProgress),
 ) (StepResult, error) {
 	if runtime == nil || runtime.helper == nil || runtime.observer == nil {
 		return StepResult{}, errs.New(errs.KindInternal, "agent: Compose runtime is not configured")
@@ -71,12 +73,12 @@ func (runtime *Runtime) ExecuteStep(
 	switch payload := step.GetPayload().(type) {
 	case *agentpb.ExecutionStep_ComposeApply:
 		if assignment.Plan.GetServiceLifecycleProcedure() != nil {
-			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeApply.GetArtifactId())
+			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeApply.GetArtifactId(), report)
 		}
 		return runtime.mutate(ctx, assignment, step, payload.ComposeApply.GetArtifactId(), nil)
 	case *agentpb.ExecutionStep_ComposeStop:
 		if assignment.Plan.GetServiceLifecycleProcedure() != nil {
-			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeStop.GetArtifactId())
+			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeStop.GetArtifactId(), report)
 		}
 		return runtime.mutate(
 			ctx,
@@ -92,7 +94,7 @@ func (runtime *Runtime) ExecuteStep(
 			return runtime.serviceAbsence(ctx, assignment, step)
 		}
 		if assignment.Plan.GetServiceLifecycleProcedure() != nil {
-			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeRemove.GetArtifactId())
+			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeRemove.GetArtifactId(), report)
 		}
 		postcondition := func(observed *agentpb.ObservedProject) error {
 			return removedServices(observed, payload.ComposeRemove.GetServiceIds())
@@ -114,18 +116,24 @@ func (runtime *Runtime) ExecuteStep(
 		)
 	case *agentpb.ExecutionStep_ManagedNetworkRemove:
 		return runtime.removeManagedNetwork(ctx, assignment, step)
-	case *agentpb.ExecutionStep_ManagedNetworkEnsure, *agentpb.ExecutionStep_ManagedVolumeEnsure:
+	case *agentpb.ExecutionStep_ManagedNetworkEnsure, *agentpb.ExecutionStep_ManagedVolumeEnsure, *agentpb.ExecutionStep_ManagedNetworkPreparationProbe:
 		return runtime.ensureManagedComposeResource(ctx, assignment, step)
 	case *agentpb.ExecutionStep_ManagedVolumeRemove:
 		return runtime.removeManagedVolume(ctx, assignment, step)
 	case *agentpb.ExecutionStep_WaitHealthy:
-		return runtime.waitHealthy(ctx, assignment.Plan, payload.WaitHealthy)
+		return runtime.waitHealthy(ctx, assignment.Plan, payload.WaitHealthy, report)
 	case *agentpb.ExecutionStep_ComposeWorkloadApply:
 		return runtime.mutate(ctx, assignment, step, payload.ComposeWorkloadApply.GetArtifactId(), nil)
+	case *agentpb.ExecutionStep_ComposeWorkloadRemove:
+		return runtime.removeWorkload(ctx, assignment, step, payload.ComposeWorkloadRemove)
 	case *agentpb.ExecutionStep_WaitWorkloadHealthy:
-		return runtime.waitWorkloadHealthy(ctx, assignment.Plan, payload.WaitWorkloadHealthy)
+		return runtime.waitWorkloadHealthy(ctx, assignment.Plan, payload.WaitWorkloadHealthy, report)
 	case *agentpb.ExecutionStep_ServiceProxySwitch, *agentpb.ExecutionStep_ServiceProxyProbe, *agentpb.ExecutionStep_ServiceProxyCompensate:
 		return runtime.proxyProcedure(ctx, assignment, step)
+	case *agentpb.ExecutionStep_RollingTrafficSwitch:
+		return runtime.rollingTrafficSwitch(ctx, assignment, step)
+	case *agentpb.ExecutionStep_RollingReleaseAcknowledge:
+		return runtime.acknowledgeRollingRelease(ctx, assignment, step)
 	case *agentpb.ExecutionStep_ServiceRecreateAcknowledge:
 		value := payload.ServiceRecreateAcknowledge
 		return runtime.observeRecreateSet(ctx, assignment.Plan, value.ArtifactId, "", value.ServiceId, value.ReleaseId, "")
@@ -149,19 +157,23 @@ func (runtime *Runtime) waitWorkloadHealthy(
 	ctx context.Context,
 	plan *agentpb.ExecutionPlan,
 	wait *agentpb.WaitWorkloadHealthy,
+	report func(*agentpb.HealthWaitProgress),
 ) (StepResult, error) {
 	result := StepResult{}
 	artifact := taskassignment.ComposeArtifact(plan, wait.ArtifactId)
-	role, slot := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, wait.Target
-	if wait.Target == "singleton" {
-		role, slot = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, ""
+	workload, err := executionplan.ReleaseWorkloadService(
+		artifact,
+		wait.ServiceId,
+		wait.Target,
+		wait.RollingReplicaOrdinal,
+	)
+	if err != nil {
+		return result, err
 	}
-	name := releaseRuntimeComposeName(artifact, wait.ServiceId, slot, role)
-	if name == "" {
-		return result, errs.New(errs.KindInternal, "agent: release workload is missing from the plan")
-	}
+	name := workload.GetComposeName()
 	ticker := time.NewTicker(composeHealthPollInterval)
 	defer ticker.Stop()
+	progress := newHealthWaitReporter(ctx, report)
 	for {
 		observed, err := runtime.observer.Observe(ctx, plan, wait.ArtifactId)
 		if err != nil {
@@ -170,6 +182,10 @@ func (runtime *Runtime) waitWorkloadHealthy(
 		}
 		result.Observed = observed
 		convergence, err := evaluateReleaseWorkloadConvergence(artifact, observed, []string{name})
+		if wait.GetRollingReplicaOrdinal() != 0 {
+			convergence, err = evaluatePhysicalWorkloadConvergence(artifact, observed, workload)
+		}
+		progress.observe(artifact, observed, []string{name}, convergence)
 		result.Diagnostic = convergence.Diagnostic
 		if err != nil {
 			result.ReconciliationRequired = true
@@ -330,6 +346,16 @@ func (runtime *Runtime) mutate(
 		result.ReconciliationRequired = true
 		return result, errs.New(errs.KindInternal, "agent: Compose helper returned an inconsistent success response")
 	}
+	if evidence := response.GetComponentRestorationEvidence(); evidence != nil {
+		if step.GetComponentRestorationCompensate() == nil {
+			result.ReconciliationRequired = true
+			return result, errs.New(
+				errs.KindInternal,
+				"agent: Component configuration evidence belongs to another operation",
+			)
+		}
+		result.ComponentRestorationEvidence = proto.CloneOf(evidence)
+	}
 	return result, nil
 }
 
@@ -351,6 +377,7 @@ func (runtime *Runtime) waitHealthy(
 	ctx context.Context,
 	plan *agentpb.ExecutionPlan,
 	wait *agentpb.WaitHealthy,
+	report func(*agentpb.HealthWaitProgress),
 ) (StepResult, error) {
 	result := StepResult{}
 	artifact := taskassignment.ComposeArtifact(plan, wait.GetArtifactId())
@@ -364,6 +391,7 @@ func (runtime *Runtime) waitHealthy(
 
 	ticker := time.NewTicker(composeHealthPollInterval)
 	defer ticker.Stop()
+	progress := newHealthWaitReporter(ctx, report)
 	for {
 		observed, observeErr := runtime.observer.Observe(ctx, plan, wait.GetArtifactId())
 		if observeErr != nil {
@@ -380,6 +408,7 @@ func (runtime *Runtime) waitHealthy(
 		} else {
 			convergence, convergeErr = evaluateComposeConvergence(artifact, observed, selected)
 		}
+		progress.observe(artifact, observed, selected, convergence)
 		if convergeErr != nil {
 			result.Diagnostic = convergence.Diagnostic
 			result.ReconciliationRequired = true

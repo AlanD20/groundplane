@@ -23,7 +23,7 @@ func newRouterCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fields := map[string]any{"caddy": router.Caddy, "tunnel": router.Tunnel}
+			fields := map[string]any{"proxy": router.Proxy, "tunnel": router.Tunnel}
 			headers, values := fieldsOfVia(fields)
 			return app.Out.RenderOne(headers, values, router)
 		},

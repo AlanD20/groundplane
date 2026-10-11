@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -10,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type controllerTaskExecutor interface {
+type Executor interface {
 	Execute(context.Context, etcd.TaskRecord) error
 }
 
@@ -19,12 +20,12 @@ type HierarchyExecutor interface {
 }
 
 type HierarchyDispatcher struct {
-	fallback  controllerTaskExecutor
+	fallback  controllertask.Handler
 	deletions HierarchyExecutor
 }
 
 func NewHierarchyDispatcher(
-	fallback controllerTaskExecutor,
+	fallback controllertask.Handler,
 	deletions HierarchyExecutor,
 ) (*HierarchyDispatcher, error) {
 	if fallback == nil || deletions == nil {
@@ -36,17 +37,20 @@ func NewHierarchyDispatcher(
 func (dispatcher *HierarchyDispatcher) Execute(
 	ctx context.Context,
 	task etcd.TaskRecord,
+	progress *controllertask.Progress,
 ) error {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "hierarchy deletion Task context is required")
 	}
 	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
-		return dispatcher.fallback.Execute(ctx, task)
+		return dispatcher.fallback.Execute(ctx, task, progress)
 	}
 	if err := validateHierarchyDeletionTask(task); err != nil {
 		return err
 	}
-	return dispatcher.deletions.Execute(ctx, task.ID)
+	return progress.Run(ctx, "hierarchy_remove", func(ctx context.Context) error {
+		return dispatcher.deletions.Execute(ctx, task.ID)
+	})
 }
 
 func validateHierarchyDeletionTask(task etcd.TaskRecord) error {

@@ -2,55 +2,29 @@ package app
 
 import (
 	"bytes"
+	"encoding/hex"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	migratedagentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
-	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	migratedscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
-// Rationale: component-only preflight must retain rollback C/2 even though the
+// Rationale: component-only runtime retention must keep rollback C/2 even though the
 // untouched acknowledged environment still contains original Blueprint A/2.
-func TestComponentOnlyPreflightAfterNativeRollback(t *testing.T) {
+func TestComponentOnlyRetentionAfterNativeRollback(t *testing.T) {
 	testBlueprintExecutedArtifact(
 		t,
 		true,
 		false,
-		func(f *ExecutedArtifactFixture, plans *testtaskplanning.TaskPlanResolver, original testreleaserender.ReleaseRenderInput, intent domain.Intent, _ *agentpb.ComposeArtifact) {
+		func(f *ExecutedArtifactFixture, _ *testtaskplanning.TaskPlanResolver, original testreleaserender.ReleaseRenderInput, intent domain.Intent, _ *agentpb.ComposeArtifact) {
 			current, _ := f.SeedRetainedRollback(t, original, intent)
-			scope, err := f.Ledger.LoadPlanningScope(t.Context(), original.EnvironmentID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			planning, err := f.Ledger.LoadPlanningServices(t.Context(), scope, []string{original.ServiceID})
-			if err != nil {
-				t.Fatal(err)
-			}
-			producer, err := blueprintrelease.NewService(
-				f.Ledger,
-				&etcd.ScriptRepository{},
-				plans,
-				&testtaskplanning.ScriptArtifactService{},
-				&migratedscriptsourcepublication.Authority{},
-				&migratedagentregistration.Repository{},
-				retainedUnexpectedImageResolver{t},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			changes := []testblueprints.EnvironmentBlueprintServiceChange{
-				{Current: &planning[0].Service, Record: planning[0].Service.Record},
-			}
 			project := &composetypes.Project{
 				Services: composetypes.Services{
 					"api": {
@@ -60,14 +34,6 @@ func TestComponentOnlyPreflightAfterNativeRollback(t *testing.T) {
 						Expose:      []string{"8080"},
 					},
 				},
-			}
-			memberships, err := blueprintrelease.BuildNormalizedServiceMemberships(project, project)
-			if err != nil {
-				t.Fatal(err)
-			}
-			workloads, err := producer.Preflight(t.Context(), current.EnvironmentID, changes, memberships, nil)
-			if err != nil {
-				t.Fatalf("component-only rollback preflight rejected: %v", err)
 			}
 			artifact, err := testcomposerender.RenderCompose(testcomposerender.ComposeRenderInput{
 				Project:             project,
@@ -89,7 +55,17 @@ func TestComponentOnlyPreflightAfterNativeRollback(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			mixed, err := producer.PrepareRuntimeArtifact(workloads, artifact, changes)
+			fragments := renderNativeRuntimeFixture(t, testreleaserender.ServiceLifecycleRelease{
+				ServingReleaseID: current.ReleaseID,
+				Current:          current,
+			})
+			f.SeedEntryAcknowledgedRuntime(t, current, fragments)
+			acknowledged := f.AcknowledgedRuntime(t, current.ServiceID)
+			mixed, err := testtaskplanning.RetainBlueprintNativeRuntimeSources(
+				artifact,
+				[]serviceruntimerecord.Record{acknowledged.Record},
+				[]string{current.ServiceID},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -119,15 +95,13 @@ func TestComponentOnlyPreflightAfterNativeRollback(t *testing.T) {
 			if workloadCount != 1 || proxyCount != 1 {
 				t.Fatalf("retained members workloads=%d proxies=%d", workloadCount, proxyCount)
 			}
-			f.AssertRetainedSourceRaces(t, current, mixed)
-			assertRetainedBlueGreenRendering(t, plans, artifact, original, current, f)
+			assertRetainedBlueGreenRendering(t, artifact, original, current, f)
 		},
 	)
 }
 
 func assertRetainedBlueGreenRendering(
 	t *testing.T,
-	plans *testtaskplanning.TaskPlanResolver,
 	desired *agentpb.ComposeArtifact,
 	prior, current testreleaserender.ReleaseRenderInput,
 	fixture *ExecutedArtifactFixture,
@@ -142,6 +116,18 @@ func assertRetainedBlueGreenRendering(
 	current.PriorStrategy, current.PriorSlot, current.PriorTarget = domain.StrategyBlueGreen, domain.SlotBlue, domain.WorkloadBlue
 	current.PriorArtifactID = ""
 	current.PriorWorkload = nil
+	config, err := domain.RenderProxyConfig(
+		current.ProxyImplementation,
+		current.ServiceName,
+		current.ReleaseID,
+		current.CandidateTarget,
+		current.ProxyGeneration,
+		current.ProxyPorts,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.ProxyConfigDigest = hex.EncodeToString(config.SHA256[:])
 	for _, source := range []*testreleaserender.ReleaseRenderInput{&prior, &current} {
 		source.Projection.NormalizedCompose = bytes.ReplaceAll(
 			source.Projection.NormalizedCompose,
@@ -154,21 +140,24 @@ func assertRetainedBlueGreenRendering(
 			[]byte("scale: 1"),
 		)
 	}
-	fragments, err := plans.RenderRetainedServiceRuntime(
-		t.Context(), testreleaserender.ServiceLifecycleRelease{
+	fragments := renderNativeRuntimeFixture(
+		t, testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID:      current.ReleaseID,
 			Current:               current,
 			PriorServingReleaseID: prior.ReleaseID,
 			RetainedPrior:         &prior,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if len(fragments) != 2 || len(fragments[0].Services) != 2 || len(fragments[1].Services) != 1 {
 		t.Fatal("sealed lifecycle renderer did not select current, inactive and one proxy")
 	}
-	mixed, err := testtaskplanning.RetainBlueprintNativeRuntimeSources(desired, fragments, []string{current.ServiceID})
+	fixture.SeedEntryAcknowledgedRuntime(t, current, fragments)
+	acknowledged := fixture.AcknowledgedRuntime(t, current.ServiceID)
+	mixed, err := testtaskplanning.RetainBlueprintNativeRuntimeSources(
+		desired,
+		[]serviceruntimerecord.Record{acknowledged.Record},
+		[]string{current.ServiceID},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,5 +175,4 @@ func assertRetainedBlueGreenRendering(
 	if found[current.ReleaseID] == 0 || found[prior.ReleaseID] == 0 {
 		t.Fatal("blue/green sealed Release identities were not retained")
 	}
-	fixture.AssertRetainedInactiveRenderRaces(t, prior, current, mixed)
 }

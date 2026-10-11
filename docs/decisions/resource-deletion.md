@@ -37,6 +37,19 @@ Removing a current Backup source does not delete historical Recovery Points or
 their Connector authority. If no active source remains, scheduling is disabled
 while policy configuration and historical fences remain.
 
+## Blueprint declarations without host effects
+
+An omitted Service may have an admitted definition but no compiled runtime. Its
+removal cannot require a fabricated Compose artifact or treat a missing runtime
+key as proof of absence. The coordinator settles this case in the Controller
+only when the original birth publication still proves absence, no unit execution
+can write the Service, and live runtime and references are absent. The retirement
+receipt records the exact retained declaration and birth proof; those checks and
+address release share one transaction. Executed or uncertain Services retain the
+protected Agent removal path. See the
+[settlement owner](../../internal/infra/etcd/environment_blueprint_service_omission.go).
+The implementation is locally compiled, not yet behaviorally qualified.
+
 ## Aggregate hierarchy deletion
 
 Tenant, ordinary Project and Environment deletion use one durable Controller

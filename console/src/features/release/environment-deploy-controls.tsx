@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { ImagePicker } from "@/features/image-delivery/image-picker";
+import { deploymentReadinessError } from "@/features/service/deployment-readiness";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, Service } from "@/lib/types";
@@ -98,6 +99,7 @@ export function DeployDialog({
 
   if (!svc)
     return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
+  const readinessError = deploymentReadinessError(svc, strategy);
 
   return (
     <TaskRunnerDialog
@@ -135,7 +137,7 @@ export function DeployDialog({
                 options={[
                   { value: "blue-green", label: "blue-green" },
                   { value: "recreate", label: "recreate" },
-                  { value: "rolling", label: "rolling (deferred)" },
+                  { value: "rolling", label: "rolling" },
                 ]}
               />
             </div>
@@ -158,14 +160,23 @@ export function DeployDialog({
               declared: {svc.strategy}
             </span>
             <span className="mx-2 text-muted-foreground">→</span>
-            <span className="flex-1 text-foreground">
-              {strategy}
-              {strategy === "rolling" ? " (declared-deferred)" : ""}
-            </span>
+            <span className="flex-1 text-foreground">{strategy}</span>
           </div>
+          {readinessError && (
+            <p role="alert" className="text-sm text-destructive">
+              {readinessError}
+            </p>
+          )}
+          {strategy === "rolling" && !readinessError && (
+            <p className="text-xs text-muted-foreground">
+              {svc.replicas} replicas, replaced one at a time. Each replacement
+              has {svc.rollingReplicaTimeoutSeconds || 300} seconds. Old and new
+              versions must support shared data.
+            </p>
+          )}
         </div>
       }
-      startDisabled={!image.trim()}
+      startDisabled={!image.trim() || !!readinessError}
       onDispatch={() =>
         store.commitDeploy(
           env.id,
@@ -225,7 +236,7 @@ export function RollbackDialog({
       onOpenChange={onOpenChange}
       variant="inline"
       title={`Roll back ${svc.name} · ${env.name}`}
-      description="Switch to a previous release. Database migrations are not reversed."
+      description="Deploy a previous image using the current configuration, replicas and release strategy. Database migrations are not reversed."
       type="rollback"
       target={env.id}
       workspace={params.tenant}

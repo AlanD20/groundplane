@@ -36,7 +36,7 @@ func ReconcileBlueprintComponents(
 			"Blueprint Component id allocator is required",
 		)
 	}
-	byKind, err := blueprintComponentMap(current)
+	byCapability, err := blueprintComponentMap(current)
 	if err != nil {
 		return BlueprintComponentChanges{}, err
 	}
@@ -45,15 +45,24 @@ func ReconcileBlueprintComponents(
 	if err != nil {
 		return BlueprintComponentChanges{}, err
 	}
-
-	kinds := []core.ComponentKind{
-		core.ComponentKindIngressCaddy,
-		core.ComponentKindEdgeCloudflare,
+	for capability := range authored {
+		if _, found := byCapability[capability]; !found {
+			return BlueprintComponentChanges{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Component capability has no Environment singleton",
+			)
+		}
 	}
-	result := BlueprintComponentChanges{Effective: make([]core.Component, 0, len(kinds))}
-	for _, kind := range kinds {
-		active := byKind[kind]
-		spec, present := authored[kind]
+
+	capabilities := make([]core.ComponentCapability, 0, len(byCapability))
+	for capability := range byCapability {
+		capabilities = append(capabilities, capability)
+	}
+	sort.Slice(capabilities, func(left, right int) bool { return capabilities[left] < capabilities[right] })
+	result := BlueprintComponentChanges{Effective: make([]core.Component, 0, len(capabilities))}
+	for _, capability := range capabilities {
+		active := byCapability[capability]
+		spec, present := authored[capability]
 		change, err := reconcileBlueprintComponent(active, spec, present, allocate)
 		if err != nil {
 			return BlueprintComponentChanges{}, err
@@ -77,7 +86,7 @@ func ReconcileBlueprintComponent(
 	allocate func(ids.Kind) string,
 ) (BlueprintComponentChanges, error) {
 	if allocate == nil || current.Validate() != nil ||
-		current.Owner != core.ComponentOwnerEnvironment || current.Kind != spec.Implementation {
+		current.Owner != core.ComponentOwnerEnvironment {
 		return BlueprintComponentChanges{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Component singleton input is invalid",
@@ -87,10 +96,10 @@ func ReconcileBlueprintComponent(
 	if err != nil {
 		return BlueprintComponentChanges{}, err
 	}
-	if kind != current.Kind {
+	if !current.Kind.SharesEnvironmentCapability(kind) {
 		return BlueprintComponentChanges{}, errs.New(
 			errs.KindStateConflict,
-			"Blueprint Component singleton implementation changed",
+			"Blueprint Component cannot change its Environment capability",
 		)
 	}
 	return reconcileBlueprintComponent(current, spec, true, allocate)
@@ -103,10 +112,12 @@ func reconcileBlueprintComponent(
 	allocate func(ids.Kind) string,
 ) (BlueprintComponentChanges, error) {
 	var config core.ComponentConfig
+	kind := active.Kind
 	if present {
 		config = core.ComponentConfigForSpec(spec)
+		kind = spec.Implementation
 	}
-	if active.Enabled == spec.Enabled && core.EqualComponentConfig(active.Config, config) {
+	if active.Kind == kind && active.Enabled == spec.Enabled && core.EqualComponentConfig(active.Config, config) {
 		if active.Enabled && !active.Healthy {
 			candidate := cloneBlueprintComponent(active)
 			candidate.PinnedIPv4 = ""
@@ -118,6 +129,7 @@ func reconcileBlueprintComponent(
 		return BlueprintComponentChanges{Effective: []core.Component{cloneBlueprintComponent(active)}}, nil
 	}
 	candidate := cloneBlueprintComponent(active)
+	candidate.Kind = kind
 	candidate.Enabled = spec.Enabled
 	candidate.Config = core.CloneComponentConfig(config)
 	candidate.PinnedIPv4 = ""
@@ -146,7 +158,7 @@ func reconcileBlueprintComponent(
 func SelectBlueprintComponentSingletons(
 	specs map[string]core.ComponentSpec, current []core.Component,
 ) ([]core.Component, error) {
-	byKind, err := blueprintComponentMap(current)
+	byCapability, err := blueprintComponentMap(current)
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +167,15 @@ func SelectBlueprintComponentSingletons(
 		return nil, err
 	}
 	selected := make([]core.Component, 0, len(authored))
-	for kind := range authored {
-		selected = append(selected, cloneBlueprintComponent(byKind[kind]))
+	for capability := range authored {
+		component, found := byCapability[capability]
+		if !found {
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Component capability has no Environment singleton",
+			)
+		}
+		selected = append(selected, cloneBlueprintComponent(component))
 	}
 	sort.Slice(selected, func(left, right int) bool { return selected[left].Kind < selected[right].Kind })
 	return selected, nil
@@ -164,36 +183,37 @@ func SelectBlueprintComponentSingletons(
 
 func blueprintAuthoredComponents(
 	specs map[string]core.ComponentSpec,
-) (map[core.ComponentKind]core.ComponentSpec, error) {
-	authored := make(map[core.ComponentKind]core.ComponentSpec, len(specs))
+) (map[core.ComponentCapability]core.ComponentSpec, error) {
+	authored := make(map[core.ComponentCapability]core.ComponentSpec, len(specs))
 	for capability, spec := range specs {
-		kind, err := validateBlueprintComponentSpec(core.ComponentCapability(capability), spec)
+		_, err := validateBlueprintComponentSpec(core.ComponentCapability(capability), spec)
 		if err != nil {
 			return nil, err
 		}
-		if _, duplicate := authored[kind]; duplicate {
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint Component kind is duplicated")
+		if _, duplicate := authored[core.ComponentCapability(capability)]; duplicate {
+			return nil, errs.New(errs.KindValidationFailed, "Blueprint Component capability is duplicated")
 		}
-		authored[kind] = spec
+		authored[core.ComponentCapability(capability)] = spec
 	}
 	return authored, nil
 }
 
-func blueprintComponentMap(current []core.Component) (map[core.ComponentKind]core.Component, error) {
-	byKind := make(map[core.ComponentKind]core.Component, len(current))
+func blueprintComponentMap(current []core.Component) (map[core.ComponentCapability]core.Component, error) {
+	byCapability := make(map[core.ComponentCapability]core.Component, len(current))
 	for _, component := range current {
 		if component.Owner != core.ComponentOwnerEnvironment || component.Validate() != nil ||
-			(component.Kind != core.ComponentKindIngressCaddy &&
+			(!component.Kind.IsEnvironmentProxy() &&
 				component.Kind != core.ComponentKindEdgeCloudflare) {
 			return nil, errs.New(
 				errs.KindInternal,
 				"active Environment Component projection is invalid",
 			)
 		}
-		if _, duplicate := byKind[component.Kind]; duplicate {
+		capability, _ := component.Kind.EnvironmentCapability()
+		if _, duplicate := byCapability[capability]; duplicate {
 			return nil, errs.New(
 				errs.KindInternal,
-				"active Environment Component kind is duplicated",
+				"active Environment Component capability is duplicated",
 			)
 		}
 		if component.Enabled && len(component.GeneratedServices) != 1 {
@@ -208,47 +228,27 @@ func blueprintComponentMap(current []core.Component) (map[core.ComponentKind]cor
 				"disabled Environment Component retains active runtime identity",
 			)
 		}
-		byKind[component.Kind] = cloneBlueprintComponent(component)
+		byCapability[capability] = cloneBlueprintComponent(component)
 	}
-	if len(byKind) != 2 {
+	_, router := byCapability[core.ComponentCapabilityHTTPRouter]
+	_, tunnel := byCapability[core.ComponentCapabilityEdgeTunnel]
+	if len(byCapability) != 2 || !tunnel || !router {
 		return nil, errs.New(
 			errs.KindInternal,
-			"Environment must have Caddy and Cloudflare Component singletons",
+			"Environment must have one proxy singleton and one Cloudflare Tunnel singleton",
 		)
 	}
-	return byKind, nil
+	return byCapability, nil
 }
 
 func validateBlueprintComponentSpec(
 	capability core.ComponentCapability,
 	spec core.ComponentSpec,
 ) (core.ComponentKind, error) {
-	switch capability {
-	case core.ComponentCapabilityHTTPRouter:
-		if spec.Implementation != core.ComponentKindIngressCaddy || spec.Settings.SecretID != "" ||
-			(spec.Enabled && len(spec.Settings.ZoneIDs) == 0) {
-			return "", errs.New(
-				errs.KindValidationFailed,
-				"http-router must select Caddy and provide zone_ids while enabled",
-			)
-		}
-		return core.ComponentKindIngressCaddy, nil
-	case core.ComponentCapabilityEdgeTunnel:
-		if spec.Implementation != core.ComponentKindEdgeCloudflare ||
-			spec.ImplementationConfig.CaddyfileTemplate != "" || spec.Settings.Alias != "" ||
-			(spec.Enabled && (spec.Settings.SecretID == "" || len(spec.Settings.ZoneIDs) == 0)) {
-			return "", errs.New(
-				errs.KindValidationFailed,
-				"edge-tunnel must select Cloudflare Tunnel and provide zone_ids and secret_id while enabled",
-			)
-		}
-		return core.ComponentKindEdgeCloudflare, nil
-	default:
-		return "", errs.New(
-			errs.KindValidationFailed,
-			"Blueprint Component capability is not supported for an Environment",
-		)
+	if err := spec.Validate(capability); err != nil {
+		return "", errs.New(errs.KindValidationFailed, err.Error())
 	}
+	return spec.Implementation, nil
 }
 
 func cloneBlueprintComponent(component core.Component) core.Component {

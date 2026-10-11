@@ -12,7 +12,8 @@ var authoredServiceGroundplaneExtensions = map[string]struct{}{
 }
 
 var authoredNetworkGroundplaneExtensions = map[string]struct{}{
-	"x-gp-network": {},
+	"x-gp-network":   {},
+	"x-gp-allow-dns": {},
 }
 
 var authoredVolumeGroundplaneExtensions = map[string]struct{}{
@@ -143,6 +144,16 @@ func validateServiceReleaseSource(source string, raw any) error {
 	for name, value := range release {
 		if value == nil {
 			return sourceExtensionError(source, "Service x-gp-release field %q must not be null", name)
+		}
+		if name == "rolling_replica_timeout_seconds" {
+			seconds, integer := value.(int)
+			if !integer || seconds < 0 || seconds > 86400 {
+				return sourceExtensionError(
+					source,
+					"Service x-gp-release rolling_replica_timeout_seconds must be an integer from 0 to 86400",
+				)
+			}
+			continue
 		}
 		text, ok := value.(string)
 		if !ok {
@@ -291,6 +302,7 @@ func decodeServiceRelease(raw any) (core.ServiceReleaseSpec, error) {
 	probe := core.Service{
 		ID: "authored", Name: "authored", Image: "authored",
 		Strategy: release.DefaultStrategy, OnFailure: release.OnFailure,
+		RollingReplicaTimeoutSeconds: release.RollingReplicaTimeoutSeconds,
 	}
 	if err := probe.Validate(); err != nil {
 		return core.ServiceReleaseSpec{}, validationError("blueprint Service x-gp-release is invalid")

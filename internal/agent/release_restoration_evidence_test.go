@@ -5,6 +5,8 @@ import (
 	sha256 "crypto/sha256"
 	testing "testing"
 
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+
 	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
@@ -188,11 +190,18 @@ func TestCandidateServingPredecessorAcceptsExactTypedRestorationVariant(t *testi
 	}
 	proxyAssignment, proxyArtifact, _ := nativeServingAssignment(t)
 	appliedBefore := proto.CloneOf(proxyAssignment.RestorationAuthority.AppliedPredecessor)
-	config := []byte(`{"apps":{"http":{"servers":{"gp_g7_dep_01arz3ndektsv4rrffq69g5faw_p":{}}}}}`)
+	config, err := serviceproxy.Render(serviceproxy.Configuration{
+		Implementation: serviceproxy.Caddy, ReleaseID: nativeAssignmentPriorRelease, Generation: 7,
+		Ports: []serviceproxy.Port{{Number: 80, Protocol: serviceproxy.TCP}}, Upstreams: []string{"api-blue"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	configDigest := sha256.Sum256(config)
 	proxyArtifact.Services = append(proxyArtifact.Services, &agentpb.ComposeService{
 		ServiceId: member.ServiceId, ComposeName: "api-proxy",
-		Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+		Role:                agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+		ProxyImplementation: agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY,
 		ExpectedLabels: []*agentpb.LabelPair{
 			{Key: "com.groundplane.runtime-role", Value: "proxy"},
 		},

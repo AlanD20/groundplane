@@ -83,7 +83,7 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+		result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 		if err != nil || result.ReconciliationRequired {
 			t.Fatalf(
 				"native Start with healthy selected footprint and later sibling network: result=%#v, error=%v",
@@ -112,7 +112,7 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := runtime.ExecuteStep(context.Background(), selected, step)
+			result, err := runtime.ExecuteStep(context.Background(), selected, step, nil)
 			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired {
 				t.Fatalf(
 					"native Start accepted selected or unnamed network collision: result=%#v, error=%v",
@@ -130,7 +130,7 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 		if err != nil {
 			t.Fatalf("NewComposeRuntime() error = %v", err)
 		}
-		result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+		result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 		if err != nil {
 			t.Fatalf("executeStep() error = %v", err)
 		}
@@ -156,7 +156,7 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 		if err != nil {
 			t.Fatalf("NewComposeRuntime() error = %v", err)
 		}
-		result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+		result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 		if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired ||
 			helper.request == nil {
 			t.Fatalf("executeStep() result = %#v, error = %v; want selected ownership conflict", result, err)
@@ -174,7 +174,7 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 		if err != nil {
 			t.Fatalf("NewComposeRuntime() error = %v", err)
 		}
-		result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+		result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 		if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired {
 			t.Fatalf("executeStep() result = %#v, error = %v; want renamed target conflict", result, err)
 		}
@@ -209,7 +209,7 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 			if err != nil {
 				t.Fatalf("NewComposeRuntime() error = %v", err)
 			}
-			result, err := runtime.ExecuteStep(context.Background(), assignment, mutation)
+			result, err := runtime.ExecuteStep(context.Background(), assignment, mutation, nil)
 			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired ||
 				helper.request != nil {
 				t.Fatalf(

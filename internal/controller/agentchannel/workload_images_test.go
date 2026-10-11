@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"context"
 	"errors"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +44,7 @@ func TestImageResolutionUnavailablePreservesSession(t *testing.T) {
 		t.Fatal("unavailable lookup queued transport work")
 	default:
 	}
-	if err := s.RecordReady(time.Now(), 1, "1.0.0"); err != nil {
+	if err := s.RecordReady(time.Now(), 1, "1.0.0", buildversion.BuildProvenance{}); err != nil {
 		t.Fatal(err)
 	}
 	select {

@@ -37,6 +37,9 @@ func RenderEnvironmentComponents(
 
 	componentsByKind := make(map[core.ComponentKind]core.Component, len(environment.Components))
 	componentIDs := make(map[string]struct{}, len(environment.Components))
+	if err := core.ValidateEnvironmentProxySelection(environment.ID, environment.Components); err != nil {
+		return EnvironmentComponentRender{}, errs.Wrap(errs.KindValidationFailed, err)
+	}
 	for _, instance := range environment.Components {
 		if _, exists := registrations[instance.Kind]; !exists ||
 			instance.Owner != core.ComponentOwnerEnvironment || instance.OwnerID != environment.ID ||

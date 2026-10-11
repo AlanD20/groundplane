@@ -12,6 +12,9 @@ import (
 func validRetainedOwnership(
 	plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact, serviceID string, labels map[string]string,
 ) (bool, retainedOwnershipReason) {
+	if validRouteRecoveryRetainedOwnership(plan, artifact, labels) {
+		return true, ""
+	}
 	if validEnvironmentComponentOwnership(plan, artifact, serviceID, labels) {
 		return true, ""
 	}

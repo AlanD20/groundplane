@@ -405,17 +405,17 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 
 	t.Run("config set", func(t *testing.T) {
 		const template = ". {\n    {groundplane}\n}\n"
-		const currentConfig = `{"corefile_template":". {\n    {groundplane}\n    log\n}\n",` +
+		const currentConfig = `{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n    log\n}\n",` +
 			`"upstream_auto":false,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`
 		const componentResponse = `{"id":"cmp_1","owner":"platform","owner_id":"platform",` +
 			`"environment_id":"","kind":"coredns","enabled":true,"config":` + currentConfig +
 			`,"healthy":true,"status":"healthy"}`
 		const configResponse = `{"config":` + currentConfig + `,"managed_files":[]}`
-		const body = `{"config":{"corefile_template":". {\n    {groundplane}\n}\n",` +
+		const body = `{"config":{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n",` +
 			`"upstream_auto":true,"upstream_resolvers":["1.1.1.1"],` +
 			`"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],` +
 			`"tailnet_delegation":true}}`
-		const response = `{"resource":{"corefile_template":". {\n    {groundplane}\n}\n",` +
+		const response = `{"resource":{"implementation":"coredns","corefile_template":". {\n    {groundplane}\n}\n",` +
 			`"upstream_auto":true,"upstream_resolvers":["1.1.1.1"],` +
 			`"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],` +
 			`"tailnet_delegation":true},"reconcile_task_id":null}`
@@ -487,8 +487,10 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/components/cmp_1" {
 				t.Fatalf("show request = %s %s", request.Method, request.URL.Path)
 			}
-			_, _ = io.WriteString(writer,
-				`{"kind":"caddy","config":{"zone_ids":["`+zoneID+`"],"caddyfile_template":"retired {routes}"}}`)
+			_, _ = io.WriteString(
+				writer,
+				`{"kind":"caddy","config":{"implementation":"caddy","zone_ids":["`+zoneID+`"],"caddyfile_template":"retired {routes}"}}`,
+			)
 		case 2:
 			if request.Method == http.MethodGet {
 				writer.Header().Set("Content-Type", "application/problem+json")
@@ -504,14 +506,14 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := `{"config":{"zone_ids":["` + zoneID +
+			want := `{"config":{"implementation":"caddy","zone_ids":["` + zoneID +
 				`"],"caddyfile_template":"http://{gp.route:app.example.com:/:host} {\n\trespond /internal/* 404\n\treverse_proxy {gp.route:app.example.com:/:upstream}\n}\n"}}`
 			if string(body) != want {
 				t.Fatalf("body = %s, want %s", body, want)
 			}
 			_, _ = io.WriteString(
 				writer,
-				`{"resource":{"zone_ids":["`+zoneID+`"],"caddyfile_template":"http://{gp.route:app.example.com:/:host} {\n\trespond /internal/* 404\n\treverse_proxy {gp.route:app.example.com:/:upstream}\n}\n"},"reconcile_task_id":null}`,
+				`{"resource":{"implementation":"caddy","zone_ids":["`+zoneID+`"],"caddyfile_template":"http://{gp.route:app.example.com:/:host} {\n\trespond /internal/* 404\n\treverse_proxy {gp.route:app.example.com:/:upstream}\n}\n"},"reconcile_task_id":null}`,
 			)
 		default:
 			t.Fatalf("unexpected request %d", requests)

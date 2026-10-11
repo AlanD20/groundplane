@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 )
 
@@ -18,7 +20,10 @@ func releaseProxyImageFixture() *domain.ProxyImage {
 
 func addressableReleaseProxyFixture() testreleaserender.ReleaseRenderInput {
 	input := portlessReleaseRenderInput(domain.StrategyRecreate)
-	input.ProxyPorts, input.ProxyGeneration, input.ProxyConfigDigest = []uint16{8080}, 2, "candidate"
+	input.ProxyImplementation = serviceproxy.Caddy
+	input.ProxyPorts, input.ProxyGeneration, input.ProxyConfigDigest = []domain.ProxyPort{
+		{Port: 8080, Protocol: serviceports.TCP},
+	}, 2, "candidate"
 	input.ProxyImage = releaseProxyImageFixture()
 	return input
 }

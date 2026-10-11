@@ -223,6 +223,17 @@ func (*blueprintTestStore) ValidateBlueprintTaskTerminal(
 	return envelope.ValidateBudget("")
 }
 
+func (s *blueprintTestStore) TransactBlueprintChild(
+	ctx context.Context,
+	envelope etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	conditions, mutations, err := envelope.Operations()
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	return s.transact(ctx, conditions, mutations, false)
+}
+
 func (s *blueprintTestStore) TransactBlueprintTaskTerminal(
 	ctx context.Context,
 	envelope etcd.BlueprintTaskTerminalTransaction,

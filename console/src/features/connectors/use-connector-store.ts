@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from "react";
 import type {
   Connector,
   ConnectorCreateInput,
-  ConnectorCredentialInput,
   ConnectorEditInput,
 } from "@/lib/types";
 import type { ConnectorMutationIntent } from "@/lib/connector-intent";
@@ -16,10 +15,10 @@ import {
 import {
   connectorFromAPI,
   connectorEditRequest,
+  connectorCreateRequest,
   listEnvironmentConnectors,
   listAllConnectors,
   type ConnectorResponse,
-  type ConnectorCreateRequest,
   type ConnectorTaskAccepted,
 } from "./api";
 export type ConnectorState = {
@@ -266,23 +265,7 @@ export function useConnectorStore(
 
   const actions: ConnectorActions = {
     addConnector: async (connector, intent) => {
-      const toAPI = (credential: ConnectorCredentialInput) =>
-        credential.kind === "ref"
-          ? { secret_ref: credential.name }
-          : { value: credential.value };
-      const body: ConnectorCreateRequest = {
-        name: connector.name,
-        kind: connector.kind,
-        endpoint: connector.endpoint,
-        bucket: connector.bucket,
-        prefix: connector.prefix || undefined,
-        region: connector.region,
-        path_style: connector.pathStyle,
-        credentials: {
-          access_key: toAPI(connector.credentials.accessKey),
-          secret_key: toAPI(connector.credentials.secretKey),
-        },
-      };
+      const body = connectorCreateRequest(connector);
       const query = new URLSearchParams({ environment: connector.scopeRef });
       try {
         const created = connectorFromAPI(

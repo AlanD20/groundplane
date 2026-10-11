@@ -15,9 +15,35 @@ Console or CLI → typed Controller API → capability-owned planning and public
 
 The Controller selects work, validates resource ownership and captures immutable
 inputs. The Agent runs only its assigned typed procedures. Native Controller
-execution handles the closed bootstrap, Runner and persistence operations that
-cannot depend on the Agent. These executors share the Task journal, not execution
-permission.
+execution owns bootstrap, Runner, connection-check and persistence orchestration.
+Bootstrap and persistence-only work can run without an Agent. Backing access
+checks delegate a fixed consumer-network helper through the authenticated Agent
+stream while the Controller retains the captured input, result and cleanup
+ownership. These executors share the Task journal, not execution permission.
+
+DNS checks capture the acknowledged resolver configuration rather than reconstruct
+authority from a previous Task's retained history. The compiled Component catalog
+selects the fixed read-only recipe; the authenticated Agent verifies that exact
+configuration before and after querying. The native Controller Task owns result
+settlement and retention, separate from configuration activation. Interruption
+records failure, not an automatic query replay. See the
+[DNS check owner](../internal/controller/dnsresolver/connection_check_service.go).
+
+Runner diagnostics reuse completed registration authority and the existing
+Runner container. The Controller captures that authority once, records execution
+before invoking the fixed read-only helper, and persists results under its native
+Task claim. Interruption is not permission to register or probe again. The runtime
+owner serializes checks with maintenance and removal; refreshed observations alone
+do not invalidate a result. See the
+[Runner check owner](../internal/controller/runner/connection_check_service.go).
+
+Tunnel diagnostics share one captured-input executor and cleanup owner for two
+origins: a managed public Route or an ordinary Service's acknowledged stable
+proxy. The operator supplies the public target for a standalone Tunnel; an opaque
+provider token cannot establish ingress policy. Private connector-network results
+remain separate from Controller-outbound public results. Interrupted checks retain
+only exact helper cleanup authority and do not replay probes. See the
+[Tunnel check owner](../internal/controller/edgechecks).
 
 The Controller runs natively so recovery can start without a working Agent.
 It manages the private etcd and Agent containers directly. etcd is not an
@@ -64,6 +90,16 @@ Desired input, prepared execution, acknowledged runtime and live observation are
 separate facts. A prepared value cannot become applied state merely because
 publication succeeded. Terminal publication needs evidence from the assigned
 execution and compares the sources used during preparation.
+
+Immutable Blueprint revisions retain one cleanup owner. Apply revisions use the
+native parent Task; synchronous metadata edits retain their publication descriptor
+instead of creating a no-op Task. Both use the same
+[retention guards](../internal/infra/etcd/blueprintretention/guards.go): current
+desired state, acknowledged runtime, unresolved omissions and active executions
+keep their captured revision available. Cleanup retires companions before the
+immutable root, after replay retention permits it. A durable scan cursor prevents
+held revisions from starving other cleanup. This implementation is locally compiled;
+interrupted cleanup and concurrent publication still require behavioral qualification.
 
 Current code entry points include
 [Blueprint preparation](../internal/infra/etcd/blueprintplanning),

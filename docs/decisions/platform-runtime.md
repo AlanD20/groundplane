@@ -91,6 +91,30 @@ publication is revision-fenced and recovered before admission reopens; it is
 never guessed from current container state. A successful rollback leaves the
 Agent ready on the predecessor but the update Task failed.
 
+Installed build identity belongs to the durable Ready transition, while capacity
+and health belong to the live session. Combining them would erase an installation's
+version after a Controller restart or relabel it with an unaccepted candidate.
+Enrollment and replacement capture the matching authenticated build report in the
+same lifecycle CAS; recovery verifies that report against the accepted identity.
+Component image reads use retained acknowledged artifacts at the desired read's
+fixed storage revision, never a mutable tag or a newer catalog.
+The compiled catalog retains a verified selection tag alongside its index and
+platform digests. That tag participates in catalog/plan identity and travels with
+the retained Compose artifact, including historical rerenders. Installed-software
+reads use this capture; they do not query the current tag to name old content.
+Digest-only selections keep an empty tag. Native etcd captures its verified tag
+in the owned container at creation and reads that capture independently of the
+next bootstrap selection.
+Optional version labels remain owned by that immutable local image configuration;
+the bounded reader cannot change the accepted image/configuration ids. Missing
+local metadata does not erase durable installation proof.
+
+Native Controller build descriptors bind source provenance to the binary digest.
+The preparation reader requires that provenance to match the frozen source
+selection, and the release store carries it unchanged into activation history.
+Installed etcd image metadata is read by immutable local image configuration id;
+its live server-version response remains a separate observation.
+
 Current source: [Agent channel](../../internal/controller/agentchannel),
 [assignment handling](../../internal/agent/taskassignment), and
 [Agent update orchestration](../../internal/controller/agentmanagement/update.go).

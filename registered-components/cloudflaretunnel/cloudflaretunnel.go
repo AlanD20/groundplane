@@ -7,13 +7,16 @@ import (
 )
 
 const (
-	ServiceName = "cloudflare-tunnel"
-	tokenName   = "TUNNEL_TOKEN"
+	ServiceName             = "cloudflare-tunnel"
+	tokenName               = "TUNNEL_TOKEN"
+	ObserveConnectionAction = component.ActionID("observe-connection")
+	ReadyURL                = "http://127.0.0.1:2000/ready"
 )
 
 var Image = component.OCIImage{
 	Repository:  "docker.io/cloudflare/cloudflared",
 	IndexDigest: "4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d",
+	Tag:         "2026.7.2",
 	Platforms: []component.OCIPlatform{
 		{
 			OS:           "linux",
@@ -57,10 +60,23 @@ func Definition() (component.Definition, error) {
 	if err != nil {
 		return component.Definition{}, err
 	}
+	edge, err := component.NewGrant(component.CapabilityEdgeTunnel, component.OperationObserve)
+	if err != nil {
+		return component.Definition{}, err
+	}
+	observe, err := component.NewActionDefinition(
+		ObserveConnectionAction,
+		component.CapabilityEdgeTunnel,
+		component.OperationObserve,
+	)
+	if err != nil {
+		return component.Definition{}, err
+	}
 	return component.NewDefinition(component.DefinitionInput{
 		Implementation: "cloudflare-tunnel", ConfigVariant: "cloudflare-tunnel-v1",
 		Provides:    []component.Capability{component.CapabilityEdgeTunnel},
-		Grants:      []component.Grant{services, secrets, networks},
+		Grants:      []component.Grant{services, secrets, networks, edge},
+		Actions:     []component.ActionDefinition{observe},
 		OwnerScopes: []component.OwnerScope{component.OwnerScopeEnvironment},
 	})
 }

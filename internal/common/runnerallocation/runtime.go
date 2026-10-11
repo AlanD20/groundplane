@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"net/netip"
 	"slices"
 )
@@ -110,10 +111,11 @@ func (plan RuntimePlan) Clone() RuntimePlan {
 }
 
 type RunnerRuntimeEvidence struct {
-	ContainerID  string `json:"container_id"`
-	DaemonNonce  string `json:"daemon_nonce"`
-	SocketDevice uint64 `json:"socket_device"`
-	SocketInode  uint64 `json:"socket_inode"`
+	Software     buildversion.ContainerIdentity `json:"software"`
+	ContainerID  string                         `json:"container_id"`
+	DaemonNonce  string                         `json:"daemon_nonce"`
+	SocketDevice uint64                         `json:"socket_device"`
+	SocketInode  uint64                         `json:"socket_inode"`
 }
 
 type RunnerRuntimeEffectState string
@@ -193,7 +195,7 @@ type RunnerRuntimeProgress struct {
 
 func (evidence RunnerRuntimeEvidence) Valid() bool {
 	return validRuntimeHex(evidence.ContainerID) && validRuntimeHex(evidence.DaemonNonce) &&
-		evidence.SocketDevice != 0 && evidence.SocketInode != 0
+		evidence.SocketDevice != 0 && evidence.SocketInode != 0 && evidence.Software.Validate() == nil
 }
 
 func validRuntimeHex(value string) bool {

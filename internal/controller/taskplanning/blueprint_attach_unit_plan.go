@@ -64,7 +64,7 @@ func PrepareBlueprintAttachUnit(
 		return etcd.TaskRecord{}, nil, err
 	}
 	prepared.PlanHash = hex.EncodeToString(plan.GetPlanHash())
-	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps)
+	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan)
 	return prepared, plan, nil
 }
 
@@ -72,6 +72,9 @@ func (resolver *TaskPlanResolver) resolveBlueprintAttachUnitPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
+	if task.Type == taskjournal.TaskDetach {
+		return resolver.resolveBlueprintAttachRemovalPlan(ctx, task)
+	}
 	reader, ok := resolver.blueprints.(blueprintAttachInputGenerationReader)
 	if !ok {
 		return nil, errs.New(errs.KindInternal, "Blueprint Attach input authority is not configured")

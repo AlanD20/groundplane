@@ -17,23 +17,55 @@ import (
 // acknowledge it. Entry removal must retire the same exact value generation.
 func TestBlueprintScriptReceiptSettlesMetadataAndFencesSupersession(t *testing.T) {
 	t.Run("Script", func(t *testing.T) {
-		testBlueprintControllerMetadataReceipt(t, ids.KindScript, func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, revision int64) (blueprintunits.MutationPlan, error) {
-			return blueprintunits.PrepareControllerScriptSettlement(snapshot, unit, ids.New(ids.KindOperation), revision)
-		})
+		testBlueprintControllerMetadataReceipt(
+			t,
+			ids.KindScript,
+			func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, revision int64) (blueprintunits.MutationPlan, error) {
+				return blueprintunits.PrepareControllerScriptSettlement(
+					snapshot,
+					unit,
+					ids.New(ids.KindOperation),
+					revision,
+				)
+			},
+		)
 	})
 	t.Run("Entry", func(t *testing.T) {
 		generationID := ids.New(ids.KindConfig)
-		testBlueprintControllerMetadataReceipt(t, ids.KindEnvEntry, func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, _ int64) (blueprintunits.MutationPlan, error) {
-			if unit.Removal {
-				return blueprintunits.PrepareControllerEntryRemoval(snapshot, unit, ids.New(ids.KindOperation), generationID)
-			}
-			return blueprintunits.PrepareControllerEntrySettlement(snapshot, unit, ids.New(ids.KindOperation), generationID)
-		})
+		testBlueprintControllerMetadataReceipt(
+			t,
+			ids.KindEnvEntry,
+			func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, _ int64) (blueprintunits.MutationPlan, error) {
+				if unit.Removal {
+					return blueprintunits.PrepareControllerEntryRemoval(
+						snapshot,
+						unit,
+						ids.New(ids.KindOperation),
+						generationID,
+					)
+				}
+				return blueprintunits.PrepareControllerEntrySettlement(
+					snapshot,
+					unit,
+					ids.New(ids.KindOperation),
+					generationID,
+				)
+			},
+		)
 	})
 	t.Run("Route without runtime projection", func(t *testing.T) {
-		testBlueprintControllerMetadataReceipt(t, ids.KindRoute, func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, revision int64) (blueprintunits.MutationPlan, error) {
-			return blueprintunits.PrepareControllerRouteSettlement(snapshot, unit, ids.New(ids.KindOperation), revision)
-		})
+		testBlueprintControllerMetadataReceipt(
+			t,
+			ids.KindRoute,
+			func(snapshot blueprintunits.Snapshot, unit blueprintunits.Unit, revision int64) (blueprintunits.MutationPlan, error) {
+				return blueprintunits.PrepareControllerRouteSettlement(
+					snapshot,
+					unit,
+					ids.New(ids.KindOperation),
+					revision,
+				)
+			},
+		)
 	})
 }
 
@@ -85,7 +117,11 @@ func testBlueprintControllerMetadataReceipt(
 	}
 	publishHead(parentID)
 	seedBlueprintUnitInitialAbsence(t, store, environmentID, parentID, target)
-	unit := blueprintunits.Unit{Target: target, Fingerprint: strings.Repeat("a", 64), Writes: []blueprintunits.ResourceKey{target}}
+	unit := blueprintunits.Unit{
+		Target:      target,
+		Fingerprint: strings.Repeat("a", 64),
+		Writes:      []blueprintunits.ResourceKey{target},
+	}
 	publishPlan(parentID, unit)
 	receipt, err := settle(load(), unit, 1)
 	if err != nil {

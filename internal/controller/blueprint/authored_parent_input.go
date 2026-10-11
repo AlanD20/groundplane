@@ -19,6 +19,7 @@ import (
 type authoredParentInput struct {
 	desired    projectionrecord.EnvironmentDesiredInput
 	identities projectionrecord.EnvironmentOwnedIdentities
+	owner      taskjournal.TaskOwner
 }
 
 func (service *Service) loadAuthoredParentInput(
@@ -75,5 +76,6 @@ func (service *Service) loadAuthoredParentInput(
 	return authoredParentInput{
 		desired:    projectionrecord.CloneEnvironmentDesiredInput(desired.Record),
 		identities: projectionrecord.CloneEnvironmentOwnedIdentities(identities.Record),
+		owner:      parent.Owner,
 	}, nil
 }

@@ -75,25 +75,26 @@ type EnvironmentServiceMutationAudit struct {
 	Request        *EnvironmentServiceMutationRequest
 }
 type EnvironmentServiceMutationRequest struct {
-	VolumeMounts  *[]core.Mount                      `json:"volume_mounts,omitempty"`
-	Command       *[]string                          `json:"command,omitempty"`
-	Entrypoint    *[]string                          `json:"entrypoint,omitempty"`
-	WorkingDir    *string                            `json:"working_dir,omitempty"`
-	User          *string                            `json:"user,omitempty"`
-	Aliases       *map[string][]string               `json:"aliases,omitempty"`
-	DependsOn     *map[string]core.ServiceDependency `json:"depends_on,omitempty"`
-	Logging       *core.ServiceLogging               `json:"logging,omitempty"`
-	EnvironmentID string                             `json:"environment_id,omitempty"`
-	Name          string                             `json:"name,omitempty"`
-	Image         string                             `json:"image"`
-	Zones         []string                           `json:"zones,omitempty"`
-	Strategy      core.Strategy                      `json:"strategy"`
-	OnFailure     core.OnFailure                     `json:"on_failure"`
-	Healthcheck   core.Healthcheck                   `json:"healthcheck,omitempty"`
-	Resources     core.Resources                     `json:"resources,omitempty"`
-	Expose        []string                           `json:"expose,omitempty"`
-	Restart       string                             `json:"restart,omitempty"`
-	Replicas      int                                `json:"replicas"`
+	VolumeMounts                 *[]core.Mount                      `json:"volume_mounts,omitempty"`
+	Command                      *[]string                          `json:"command,omitempty"`
+	Entrypoint                   *[]string                          `json:"entrypoint,omitempty"`
+	WorkingDir                   *string                            `json:"working_dir,omitempty"`
+	User                         *string                            `json:"user,omitempty"`
+	Aliases                      *map[string][]string               `json:"aliases,omitempty"`
+	DependsOn                    *map[string]core.ServiceDependency `json:"depends_on,omitempty"`
+	Logging                      *core.ServiceLogging               `json:"logging,omitempty"`
+	EnvironmentID                string                             `json:"environment_id,omitempty"`
+	Name                         string                             `json:"name,omitempty"`
+	Image                        string                             `json:"image"`
+	Zones                        []string                           `json:"zones,omitempty"`
+	Strategy                     core.Strategy                      `json:"strategy"`
+	OnFailure                    core.OnFailure                     `json:"on_failure"`
+	RollingReplicaTimeoutSeconds *uint32                            `json:"rolling_replica_timeout_seconds,omitempty"`
+	Healthcheck                  core.Healthcheck                   `json:"healthcheck,omitempty"`
+	Resources                    core.Resources                     `json:"resources,omitempty"`
+	Expose                       []string                           `json:"expose,omitempty"`
+	Restart                      string                             `json:"restart,omitempty"`
+	Replicas                     int                                `json:"replicas"`
 }
 
 type EnvironmentZoneMutationAction uint8
@@ -111,6 +112,7 @@ type EnvironmentZoneMutationRequest struct {
 	Name          string `json:"name"`
 	Subnet        string `json:"subnet"`
 	Internal      bool   `json:"internal"`
+	AllowGPDNS    bool   `json:"allow_gp_dns"`
 }
 type EnvironmentRouteMutationAction uint8
 

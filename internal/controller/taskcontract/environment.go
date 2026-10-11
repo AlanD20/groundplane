@@ -31,14 +31,3 @@ func ParseBlueprintComposeProcedure(value string) (BlueprintComposeProcedure, bo
 		return "", false
 	}
 }
-
-func BlueprintReleaseProcedureStepCount(memberCount, hookCount int) (int, bool) {
-	if memberCount <= 0 || hookCount < 0 || hookCount > MaximumBlueprintPostDeployHooks {
-		return 0, false
-	}
-	maxInt := int(^uint(0) >> 1)
-	if memberCount > (maxInt-hookCount)/5 {
-		return 0, false
-	}
-	return memberCount*5 + hookCount, true
-}

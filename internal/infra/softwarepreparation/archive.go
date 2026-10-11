@@ -17,7 +17,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -186,7 +188,11 @@ func extractSourceArchive(archivePath, destination, commit string) error {
 	return nil
 }
 
-func extractControllerBundle(archivePath, destination, version string, platform Platform) (controllerDigests, error) {
+func extractControllerBundle(
+	archivePath, destination, version string,
+	platform Platform,
+	source buildversion.BuildProvenance,
+) (controllerDigests, error) {
 	archive, err := os.Open(archivePath)
 	if err != nil {
 		return controllerDigests{}, errs.Wrap(errs.KindInternal, err)
@@ -292,14 +298,17 @@ func extractControllerBundle(archivePath, destination, version string, platform 
 			return controllerDigests{}, errs.New(errs.KindStateConflict, "controller release member digest differs")
 		}
 	}
-	digests, err := validateControllerPayload(destination, "controller/v"+version)
+	digests, err := validateControllerPayload(destination, "controller/v"+version, source)
 	if err != nil {
 		return controllerDigests{}, err
 	}
 	return digests, nil
 }
 
-func validateControllerPayload(directory, expectedVersion string) (controllerDigests, error) {
+func validateControllerPayload(
+	directory, expectedVersion string,
+	expectedSource buildversion.BuildProvenance,
+) (controllerDigests, error) {
 	binary, err := boundedFile(filepath.Join(directory, "controller"), 256<<20)
 	if err != nil {
 		return controllerDigests{}, err
@@ -312,20 +321,19 @@ func validateControllerPayload(directory, expectedVersion string) (controllerDig
 	if err != nil {
 		return controllerDigests{}, err
 	}
-	var release struct {
-		Schema            int    `json:"schema"`
-		ControllerSHA256  string `json:"controller_sha256"`
-		ControllerVersion string `json:"controller_version"`
-		StorageEpoch      int    `json:"storage_epoch"`
-		ChannelSchema     int    `json:"channel_schema"`
-	}
-	if err := decodeJSON(metadata, &release); err != nil || release.Schema < 1 || release.StorageEpoch < 1 ||
-		release.ChannelSchema < 1 || release.ControllerVersion != expectedVersion ||
-		release.ControllerSHA256 != sha256Value(binary) {
+	var release controllerupgrade.BuildMetadata
+	if err := decodeJSON(metadata, &release); err != nil || release.Schema != controllerupgrade.ManifestSchema ||
+		release.StorageEpoch < 1 ||
+		release.ChannelSchema < 1 ||
+		release.ControllerVersion != expectedVersion ||
+		release.ControllerSHA256 != controllerupgrade.Digest(sha256Value(binary)) ||
+		!expectedSource.Known() ||
+		expectedSource.Validate() != nil ||
+		release.ControllerSource != expectedSource {
 		return controllerDigests{}, errs.New(errs.KindStateConflict, "controller release metadata is invalid")
 	}
 	return controllerDigests{
-		binary: release.ControllerSHA256, metadata: sha256Value(metadata), cli: sha256Value(cli),
+		binary: string(release.ControllerSHA256), metadata: sha256Value(metadata), cli: sha256Value(cli),
 	}, nil
 }
 

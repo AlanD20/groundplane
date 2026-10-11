@@ -25,7 +25,11 @@ func Restore(
 		if service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			continue
 		}
-		generation, err := executionplan.ProxyConfigGeneration(service.ProxyConfigJson, releaseID)
+		generation, err := executionplan.ProxyConfigGeneration(
+			service.GetProxyImplementation(),
+			service.ProxyConfigJson,
+			releaseID,
+		)
 		if err != nil {
 			return Record{}, err
 		}

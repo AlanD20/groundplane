@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 
@@ -33,9 +34,10 @@ func validateRequest(request Request) error {
 }
 
 type parsedArtifact struct {
-	staticName    string
-	staticAddress netip.Addr
-	forwardGroups []forwardGroup
+	privateListeners []netip.Addr
+	staticName       string
+	staticAddress    netip.Addr
+	forwardGroups    []forwardGroup
 }
 
 type forwardGroup struct {
@@ -80,6 +82,21 @@ func parseArtifact(content []byte) (parsedArtifact, error) {
 		if len(fields) == 0 {
 			continue
 		}
+		if fields[0] == "bind" {
+			for _, field := range fields[1:] {
+				address, err := netip.ParseAddr(field)
+				if err != nil || !address.Is4() || address.String() != field ||
+					address != netip.MustParseAddr("127.0.0.1") && !address.IsPrivate() {
+					return parsedArtifact{}, errs.New(
+						errs.KindStateConflict,
+						"DNS resolver bind address must be loopback or canonical private IPv4",
+					)
+				}
+				if address.IsPrivate() {
+					result.privateListeners = append(result.privateListeners, address)
+				}
+			}
+		}
 		if fields[0] == "hosts" && len(fields) == 2 && fields[1] == "{" {
 			inHosts = true
 			continue
@@ -114,6 +131,11 @@ func parseArtifact(content []byte) (parsedArtifact, error) {
 	}
 	if err := scanner.Err(); err != nil {
 		return parsedArtifact{}, errs.Wrap(errs.KindInternal, err)
+	}
+	slices.SortFunc(result.privateListeners, func(left, right netip.Addr) int { return left.Compare(right) })
+	result.privateListeners = slices.Compact(result.privateListeners)
+	if len(result.privateListeners) > 257 {
+		return parsedArtifact{}, errs.New(errs.KindStateConflict, "DNS resolver has too many private listeners")
 	}
 	sort.Slice(result.forwardGroups, func(left, right int) bool {
 		return result.forwardGroups[left].domain < result.forwardGroups[right].domain

@@ -24,7 +24,8 @@ func backupTaskTimeout(taskType taskjournal.TaskType) int64 {
 func TaskForwardDeadline(task TaskRecord, assignedAt time.Time) time.Time {
 	start := assignedAt
 	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
-		task.Type == taskjournal.TaskRestore {
+		task.Type == taskjournal.TaskRestore || taskjournal.IsReleaseNetworkChild(task.Params) ||
+		task.Params[taskjournal.TaskReleaseNetworkChildParam] != "" {
 		start = task.CreatedAt
 	}
 	return start.Add(time.Duration(task.TimeoutSeconds) * time.Second)

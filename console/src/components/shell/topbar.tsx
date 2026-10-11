@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { HostTerminalAction } from "@/features/host-terminal/terminal-action";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown, ChevronRight, Server } from "lucide-react";
@@ -285,6 +286,7 @@ export function Topbar({ pathname }: { pathname: string }) {
       </nav>
 
       <div className="flex shrink-0 items-center gap-2">
+        <HostTerminalAction />
         {host ? (
           <Link
             to="/platform/host"

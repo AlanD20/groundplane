@@ -89,7 +89,7 @@ func (planner *Planner) BuildHierarchyDeletionAttachPlan(
 	return etcd.HierarchyDeletionAttachPlan{
 		PlanHash: hex.EncodeToString(
 			plan.GetPlanHash(),
-		), Steps: taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps),
+		), Steps: taskjournal.CaptureStepDescriptions(prepared.Steps, plan),
 		Configuration: prepared.Configuration, HookInputs: inputs,
 	}, nil
 }

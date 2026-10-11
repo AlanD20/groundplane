@@ -297,16 +297,17 @@ func serviceListRequest(environmentID string, limit int, cursor string) (etcdsto
 
 func serviceResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 	return apiTypes.Service{
-		ID:            record.Desired.ID,
-		EnvironmentID: record.EnvironmentID,
-		Name:          record.Desired.Name,
-		Image:         record.Desired.Image,
-		RuntimeIntent: apiTypes.ServiceRuntimeIntent(record.Runtime.RuntimeIntent),
-		Zones:         append([]string(nil), record.Desired.Zones...),
-		Strategy:      string(record.Desired.Strategy),
-		OnFailure:     apiTypes.OnFailure(record.Desired.OnFailure),
-		Replicas:      record.Desired.Replicas,
-		Healthcheck:   serviceHealthcheckResponse(record.Desired.Healthcheck),
+		ID:                           record.Desired.ID,
+		EnvironmentID:                record.EnvironmentID,
+		Name:                         record.Desired.Name,
+		Image:                        record.Desired.Image,
+		RuntimeIntent:                apiTypes.ServiceRuntimeIntent(record.Runtime.RuntimeIntent),
+		Zones:                        append([]string(nil), record.Desired.Zones...),
+		Strategy:                     string(record.Desired.Strategy),
+		OnFailure:                    apiTypes.OnFailure(record.Desired.OnFailure),
+		RollingReplicaTimeoutSeconds: record.Desired.RollingReplicaTimeoutSeconds,
+		Replicas:                     record.Desired.Replicas,
+		Healthcheck:                  serviceHealthcheckResponse(record.Desired.Healthcheck),
 		Resources: apiTypes.ServiceResources{
 			Mem:  record.Desired.Resources.Mem,
 			CPUs: record.Desired.Resources.CPUs,

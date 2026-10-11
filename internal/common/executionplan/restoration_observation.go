@@ -179,7 +179,8 @@ func RestorationCandidateWorkloads(plan *agentpb.ExecutionPlan, serviceID string
 			for _, service := range artifact.GetServices() {
 				if service.GetServiceId() != serviceID ||
 					(service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT &&
-						service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON) {
+						service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON &&
+						service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA) {
 					continue
 				}
 				for _, label := range service.GetExpectedLabels() {

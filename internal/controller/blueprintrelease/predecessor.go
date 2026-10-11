@@ -29,7 +29,7 @@ type predecessorSnapshot struct {
 
 func (service *Service) preparePredecessor(
 	ctx context.Context,
-	input PrepareInput,
+	input prepareInput,
 	candidate blueprints.EnvironmentBlueprintServiceChange,
 	render *releaserender.ReleaseRenderInput,
 	intent *domain.Intent,
@@ -149,7 +149,11 @@ func bindPredecessor(
 		artifact.GetArtifactId() == "" {
 		return errs.New(errs.KindStateConflict, "Blueprint acknowledged predecessor artifact is invalid")
 	}
-	matched := false
+	matched := uint32(0)
+	expectedMembers, expectedReplicas := uint32(1), serving.CandidateWorkload.ReplicaCount
+	if historical.CandidateTarget == domain.WorkloadRolling {
+		expectedMembers, expectedReplicas = serving.CandidateWorkload.ReplicaCount, 1
+	}
 	for _, previous := range artifact.Services {
 		if previous.GetServiceId() != serving.ServiceID {
 			continue
@@ -158,20 +162,32 @@ func bindPredecessor(
 			if previous.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
 				continue
 			}
+		} else if historical.CandidateTarget == domain.WorkloadRolling {
+			if previous.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA {
+				continue
+			}
+			if previous.GetRollingReplicaOrdinal() != matched+1 {
+				return errs.New(errs.KindStateConflict, "Blueprint acknowledged rolling predecessor has a missing or repeated replica")
+			}
 		} else if previous.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT || previous.GetSlot() != string(historical.CandidateTarget) {
 			continue
 		}
-		if matched || previous.GetImageReference() != serving.CandidateWorkload.LocalImageID ||
-			previous.GetExpectedReplicas() != serving.CandidateWorkload.ReplicaCount {
+		if matched >= expectedMembers || previous.GetImageReference() != serving.CandidateWorkload.LocalImageID ||
+			previous.GetExpectedReplicas() != expectedReplicas {
 			return errs.New(errs.KindStateConflict, "Blueprint acknowledged predecessor workload diverges")
 		}
+		identified := false
 		for _, label := range previous.GetExpectedLabels() {
 			if label.GetKey() == "com.groundplane.release-id" && label.GetValue() == serving.ID {
-				matched = true
+				identified = true
 			}
 		}
+		if !identified {
+			return errs.New(errs.KindStateConflict, "Blueprint acknowledged predecessor Release identity differs")
+		}
+		matched++
 	}
-	if !matched {
+	if matched != expectedMembers {
 		return errs.New(errs.KindStateConflict, "Blueprint acknowledged predecessor Release is absent")
 	}
 	workload := serving.CandidateWorkload

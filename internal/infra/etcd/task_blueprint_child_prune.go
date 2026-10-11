@@ -64,9 +64,12 @@ func (repository *TaskRepository) prepareBlueprintComponentExecutionPrune(
 	if err != nil {
 		return nil, nil, err
 	}
-	if !taskjournal.IsBlueprintChild(task.Params) || stored.Record.ParentTaskID != task.Params[taskjournal.TaskBlueprintParentParam] ||
-		stored.Record.EnvironmentID != task.Owner.EnvironmentID || stored.Record.Component.Desired.ID != task.Params[taskjournal.TaskBlueprintComponentUnitParam] ||
-		plan.GetPlanId() != task.PlanID || hex.EncodeToString(plan.GetPlanHash()) != task.PlanHash ||
+	if !taskjournal.IsBlueprintChild(task.Params) ||
+		stored.Record.ParentTaskID != task.Params[taskjournal.TaskBlueprintParentParam] ||
+		stored.Record.EnvironmentID != task.Owner.EnvironmentID ||
+		stored.Record.Component.Desired.ID != task.Params[taskjournal.TaskBlueprintComponentUnitParam] ||
+		plan.GetPlanId() != task.PlanID ||
+		hex.EncodeToString(plan.GetPlanHash()) != task.PlanHash ||
 		plan.GetRenderGeneration() != uint64(task.RenderGeneration) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component recipe prune ownership changed")
 	}
@@ -76,6 +79,7 @@ func (repository *TaskRepository) prepareBlueprintComponentExecutionPrune(
 		taskjournal.TaskAssignmentIndexKey(task.ID),
 		taskjournal.TaskRecoveryProofRequiredKey(task.ID),
 		taskassignments.ComponentRecoveryKey(task.ID),
+		taskjournal.TaskStorageKey(stored.Record.ParentTaskID),
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -85,12 +89,39 @@ func (repository *TaskRepository) prepareBlueprintComponentExecutionPrune(
 		return nil, nil, errs.New(errs.KindInternal, "Blueprint Component recipe prune read is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
-	conditions := []keyvalue.Condition{{Key: componentplanning.ChildExecutionKey(task.ID), ModRevision: stored.Revision}}
+	conditions := []keyvalue.Condition{
+		{Key: componentplanning.ChildExecutionKey(task.ID), ModRevision: stored.Revision},
+	}
 	for index, key := range keys {
+		if index == len(keys)-1 {
+			if read.Values[index] != nil {
+				parent, err := DecodeTaskRecord(read.Values[index].Value)
+				if err != nil || parent.ID != stored.Record.ParentTaskID ||
+					parent.Owner.EnvironmentID != task.Owner.EnvironmentID {
+					return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component recipe parent changed")
+				}
+				if !taskjournal.IsTerminalTaskStatus(parent.Status) {
+					return nil, nil, errs.New(
+						errs.KindStateConflict,
+						"Blueprint Apply still owns this Component's captured Service replacements",
+					)
+				}
+			}
+			conditions = append(
+				conditions,
+				keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[index])},
+			)
+			continue
+		}
 		if read.Values[index] != nil {
-			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component recipe still has an execution or recovery owner")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Component recipe still has an execution or recovery owner",
+			)
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: key})
 	}
-	return conditions, []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: componentplanning.ChildExecutionKey(task.ID)}}, nil
+	return conditions, []keyvalue.Mutation{
+		{Type: keyvalue.MutationDelete, Key: componentplanning.ChildExecutionKey(task.ID)},
+	}, nil
 }

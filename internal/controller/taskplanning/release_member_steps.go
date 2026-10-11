@@ -10,17 +10,20 @@ import (
 
 const releaseMemberStepTimeoutSeconds = uint32(5 * 60)
 
-func buildReleaseMemberSteps(
+func buildSingleTargetReleaseSteps(
 	task etcd.TaskRecord,
 	input etcd.ReleaseTaskRenderInput,
 	priorArtifacts map[string]*agentpb.ComposeArtifact,
 ) ([]*agentpb.ExecutionStep, error) {
+	if len(input.Members) != 1 || len(task.Steps) != 5 ||
+		(input.Members[0].Render.Strategy != domain.StrategyRecreate && input.Members[0].Render.Strategy != domain.StrategyBlueGreen) {
+		return nil, errs.New(errs.KindInternal, "single-target Release procedure is invalid")
+	}
 	first := input.Members[0].Render
 	steps := make([]*agentpb.ExecutionStep, 0, len(task.Steps))
-	for index, member := range input.Members {
-		base := index * 5
-		applyID, healthID, switchID := task.Steps[base].ID, task.Steps[base+1].ID, task.Steps[base+2].ID
-		probeID, compensateID := task.Steps[base+3].ID, task.Steps[base+4].ID
+	for _, member := range input.Members {
+		applyID, healthID, switchID := task.Steps[0].ID, task.Steps[1].ID, task.Steps[2].ID
+		probeID, compensateID := task.Steps[3].ID, task.Steps[4].ID
 		if ids.Validate(ids.KindStep, applyID) != nil || ids.Validate(ids.KindStep, healthID) != nil ||
 			ids.Validate(ids.KindStep, switchID) != nil || ids.Validate(ids.KindStep, probeID) != nil ||
 			ids.Validate(ids.KindStep, compensateID) != nil {
@@ -98,9 +101,6 @@ func buildReleaseMemberSteps(
 						},
 					},
 				)
-				if index > 0 {
-					steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
-				}
 				continue
 			}
 			steps = append(
@@ -175,12 +175,10 @@ func buildReleaseMemberSteps(
 					},
 				},
 			)
-			if index > 0 {
-				steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
-			}
 			continue
 		}
 		candidateConfig, err := domain.RenderProxyConfig(
+			member.Render.ProxyImplementation,
 			member.Render.ServiceName,
 			member.Intent.ID,
 			member.Render.CandidateTarget,
@@ -246,9 +244,6 @@ func buildReleaseMemberSteps(
 					},
 				},
 			)
-			if index > 0 {
-				steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
-			}
 			continue
 		}
 		priorConfig, err := releasePriorProxyConfig(member, priorArtifacts[member.Render.ServiceID])
@@ -291,10 +286,7 @@ func buildReleaseMemberSteps(
 				},
 			},
 		)
-		if index > 0 {
-			steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
-		}
 	}
-	bindRetainedOrdinaryRecovery(input.Members, steps)
+	bindRetainedOrdinaryRecovery(input.Members[0], steps)
 	return steps, nil
 }

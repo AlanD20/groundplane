@@ -37,6 +37,7 @@ type taskAbortService struct {
 	repository taskAbortRepository
 	agents     taskAbortAgentChannel
 	controller taskAbortControllerRunner
+	blueprints taskAbortControllerRunner
 	now        func() time.Time
 }
 
@@ -44,12 +45,13 @@ func NewAbortService(
 	repository taskAbortRepository,
 	agents taskAbortAgentChannel,
 	controller taskAbortControllerRunner,
+	blueprints taskAbortControllerRunner,
 ) (*taskAbortService, error) {
-	if repository == nil || agents == nil || controller == nil {
+	if repository == nil || agents == nil || controller == nil || blueprints == nil {
 		return nil, errs.New(errs.KindInternal, "Task abort service is not configured")
 	}
 	return &taskAbortService{
-		repository: repository, agents: agents, controller: controller, now: time.Now,
+		repository: repository, agents: agents, controller: controller, blueprints: blueprints, now: time.Now,
 	}, nil
 }
 
@@ -69,7 +71,7 @@ func (service *taskAbortService) AbortTask(
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		if taskjournal.IsBlueprintChild(current.Record.Params) {
+		if taskjournal.IsInternalChild(current.Record.Params) {
 			return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
 				errs.KindTaskNotFound,
 				"task not found: %s",
@@ -109,6 +111,12 @@ func (service *taskAbortService) AbortTask(
 				return idempotencyrecord.IdempotencyResponse{}, err
 			}
 		case taskjournal.TaskStatusRunning:
+			if current.Record.Executor == taskjournal.TaskExecutorBlueprint {
+				if err := service.blueprints.AbortTask(ctx, taskID); err != nil {
+					return idempotencyrecord.IdempotencyResponse{}, err
+				}
+				return taskAbortResponse(taskID)
+			}
 			assignment, err := service.repository.GetTaskAssignment(ctx, taskID)
 			if err != nil {
 				if isTaskAbortStateRace(err) {

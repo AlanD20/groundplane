@@ -53,13 +53,13 @@ func TestRouteFailedRemovalReplayIgnoresLaterVolumeRemovalLock(t *testing.T) {
 		t.Fatalf("claim: %v/%v", found, err)
 	}
 	at := task.CreatedAt.Add(2 * time.Second)
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, at); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, nil, at); err != nil {
 		t.Fatal(err)
 	}
 	putSpecializedRemovalLock(t, store, removalrecord.Owner{EnvironmentID: environment.Record.ID,
 		VolumeID: ids.New(ids.KindVolume), OperationID: ids.New(ids.KindOperation)})
 	before := store.revision
-	replayed, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, at)
+	replayed, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, nil, at)
 	if err != nil || replayed.Record.Status != testtaskjournal.TaskStatusFailed || store.revision != before {
 		t.Fatalf("failed acknowledgement replay changed state or rejected later lock: %v", err)
 	}
@@ -221,9 +221,10 @@ func TestRouteRemovalPublicationsExcludeVolumeRemovalLock(t *testing.T) {
 						_, err := tasks.AcknowledgeControllerTask(
 							ctx,
 							task.ID,
-							testtaskjournal.TaskStatusCompleted,
-							task.CreatedAt.Add(2*time.Second),
-						)
+							testtaskjournal.TaskStatusCompleted, nil,
+
+							task.CreatedAt.Add(2*time.Second))
+
 						return err
 					}
 				}

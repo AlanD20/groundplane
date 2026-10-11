@@ -312,8 +312,9 @@ func TestSystemInitiatedRetryRejectsChangedControllerParent(t *testing.T) {
 	}
 	if _, err := repository.AcknowledgeControllerTask(
 		ctx,
-		parent.ID, testtaskjournal.TaskStatusCompleted, now.Add(3*time.Second),
-	); err != nil {
+		parent.ID, testtaskjournal.TaskStatusCompleted, nil,
+
+		now.Add(3*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(parent) error = %v", err)
 	}
 	retryID := ids.NewAt(ids.KindTask, now.Add(4*time.Second), 2310)

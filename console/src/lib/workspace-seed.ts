@@ -172,6 +172,7 @@ export const platform: PlatformInfra = {
       host: "qa-workload-groundplane",
       status: "healthy",
       version: "v0.4.2",
+      installedImage: null,
       labels: { arch: "arm64", host: "qa-workload" },
       readyAt: "2026-08-08T09:12:00Z",
       lastReportAt: "2026-08-22T10:28:00Z",

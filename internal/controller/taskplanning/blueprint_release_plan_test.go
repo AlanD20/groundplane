@@ -15,6 +15,7 @@ import (
 	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -48,12 +49,23 @@ func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndepend
 			), Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
 		},
 		Render: testreleaserender.ReleaseRenderInput{
-			ReleaseID: candidateReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[testtaskcontract.EnvironmentBlueprintArtifactParam],
-			ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:next"),
-			Strategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
-			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
-			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-			AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection,
+			ReleaseID:           candidateReleaseID,
+			PlanID:              task.PlanID,
+			ArtifactID:          task.Params[testtaskcontract.EnvironmentBlueprintArtifactParam],
+			ServiceID:           "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			ServiceName:         "api",
+			CandidateWorkload:   releaseTestWorkload("example/api:next"),
+			Strategy:            domain.StrategyRecreate,
+			CandidateTarget:     domain.WorkloadSingleton,
+			PriorTarget:         domain.WorkloadSingleton,
+			TenantID:            reader.tenant.ID,
+			TenantSlug:          reader.tenant.Slug,
+			ProjectID:           reader.project.ID,
+			ProjectSlug:         reader.project.Slug,
+			EnvironmentID:       reader.environment.ID,
+			EnvironmentName:     reader.environment.Name,
+			AuthorizedVolumeDir: reader.environment.VolumeDir,
+			Projection:          reader.projection,
 		},
 	}
 	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
@@ -61,13 +73,15 @@ func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndepend
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
 	input := BlueprintReleasePlanInput{
-		Members:                   []testreleaserender.ReleaseTaskRenderMember{member},
-		ApplyStepIDs:              []string{task.Steps[0].ID},
-		HealthStepIDs:             []string{task.Steps[1].ID},
-		SwitchStepIDs:             []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
-		RecoveryProbeStepIDs:      []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAY"},
-		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAZ"},
-		PostStepIDs:               [][]string{nil},
+		Members: []testreleaserender.ReleaseTaskRenderMember{member},
+		MemberSteps: []ReleaseMemberStepIDs{
+			{
+				Forward:    []string{task.Steps[0].ID, task.Steps[1].ID, "step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
+				Probe:      "step_01ARZ3NDEKTSV4RRFFQ69G5FAY",
+				Compensate: "step_01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+			},
+		},
+		PostStepIDs: [][]string{nil},
 	}
 	_, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
 	if err != nil {
@@ -117,8 +131,20 @@ func TestPrepareBlueprintReleaseTaskBindsAddressableRecreateWorkload(t *testing.
 		t.Fatalf("marshal exposed normalized Compose fixture: %v", err)
 	}
 	reader.projection.NormalizedCompose = normalized
+	captureTestServiceProxySelection(t, &reader.projection, testServiceProxyImplementation())
 	freezeBlueprintNativeRuntimeFixture(t, reader, task, project)
 	const candidateReleaseID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAX"
+	proxyConfig, err := domain.RenderProxyConfig(
+		testServiceProxyImplementation(),
+		"api",
+		candidateReleaseID,
+		domain.WorkloadSingleton,
+		2,
+		[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	task.Params[testreleaserender.TaskReleasePublicationParam] = "publication"
 	member := testreleaserender.ReleaseTaskRenderMember{
 		Intent: domain.Intent{
@@ -129,13 +155,28 @@ func TestPrepareBlueprintReleaseTaskBindsAddressableRecreateWorkload(t *testing.
 			), Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
 		},
 		Render: testreleaserender.ReleaseRenderInput{
-			ProxyImage: testServiceProxyImage(),
-			ReleaseID:  candidateReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[testtaskcontract.EnvironmentBlueprintArtifactParam],
-			ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:next"),
-			Strategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
-			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
-			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-			AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection,
+			ProxyImplementation: testServiceProxyImplementation(),
+			ProxyImage:          testServiceProxyImage(),
+			ProxyPorts:          []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+			ProxyGeneration:     2,
+			ProxyConfigDigest:   hex.EncodeToString(proxyConfig.SHA256[:]),
+			ReleaseID:           candidateReleaseID,
+			PlanID:              task.PlanID,
+			ArtifactID:          task.Params[testtaskcontract.EnvironmentBlueprintArtifactParam],
+			ServiceID:           "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			ServiceName:         "api",
+			CandidateWorkload:   releaseTestWorkload("example/api:next"),
+			Strategy:            domain.StrategyRecreate,
+			CandidateTarget:     domain.WorkloadSingleton,
+			PriorTarget:         domain.WorkloadSingleton,
+			TenantID:            reader.tenant.ID,
+			TenantSlug:          reader.tenant.Slug,
+			ProjectID:           reader.project.ID,
+			ProjectSlug:         reader.project.Slug,
+			EnvironmentID:       reader.environment.ID,
+			EnvironmentName:     reader.environment.Name,
+			AuthorizedVolumeDir: reader.environment.VolumeDir,
+			Projection:          reader.projection,
 		},
 	}
 	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
@@ -143,13 +184,15 @@ func TestPrepareBlueprintReleaseTaskBindsAddressableRecreateWorkload(t *testing.
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
 	_, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, BlueprintReleasePlanInput{
-		Members:                   []testreleaserender.ReleaseTaskRenderMember{member},
-		ApplyStepIDs:              []string{task.Steps[0].ID},
-		HealthStepIDs:             []string{task.Steps[1].ID},
-		SwitchStepIDs:             []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
-		RecoveryProbeStepIDs:      []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB2"},
-		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB3"},
-		PostStepIDs:               [][]string{nil},
+		Members: []testreleaserender.ReleaseTaskRenderMember{member},
+		MemberSteps: []ReleaseMemberStepIDs{
+			{
+				Forward:    []string{task.Steps[0].ID, task.Steps[1].ID, "step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
+				Probe:      "step_01ARZ3NDEKTSV4RRFFQ69G5FB2",
+				Compensate: "step_01ARZ3NDEKTSV4RRFFQ69G5FB3",
+			},
+		},
+		PostStepIDs: [][]string{nil},
 	})
 	if err != nil {
 		t.Fatalf("PrepareBlueprintReleaseTask() error = %v", err)
@@ -198,12 +241,23 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 			), Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
 		},
 		Render: testreleaserender.ReleaseRenderInput{
-			ReleaseID: candidateReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[testtaskcontract.EnvironmentBlueprintArtifactParam],
-			ServiceID: serviceID, ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:next"),
-			Strategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
-			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
-			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-			AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection,
+			ReleaseID:           candidateReleaseID,
+			PlanID:              task.PlanID,
+			ArtifactID:          task.Params[testtaskcontract.EnvironmentBlueprintArtifactParam],
+			ServiceID:           serviceID,
+			ServiceName:         "api",
+			CandidateWorkload:   releaseTestWorkload("example/api:next"),
+			Strategy:            domain.StrategyRecreate,
+			CandidateTarget:     domain.WorkloadSingleton,
+			PriorTarget:         domain.WorkloadSingleton,
+			TenantID:            reader.tenant.ID,
+			TenantSlug:          reader.tenant.Slug,
+			ProjectID:           reader.project.ID,
+			ProjectSlug:         reader.project.Slug,
+			EnvironmentID:       reader.environment.ID,
+			EnvironmentName:     reader.environment.Name,
+			AuthorizedVolumeDir: reader.environment.VolumeDir,
+			Projection:          reader.projection,
 		},
 	}
 	artifactID := task.Params[testtaskcontract.EnvironmentBlueprintArtifactParam]
@@ -296,13 +350,15 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 	}
 	input := BlueprintReleasePlanInput{
 		Members: []testreleaserender.ReleaseTaskRenderMember{member}, PrefixSteps: []*agentpb.ExecutionStep{prefix},
-		ComponentSteps:            []*agentpb.ExecutionStep{component},
-		ApplyStepIDs:              []string{applyStepID},
-		HealthStepIDs:             []string{healthStepID},
-		SwitchStepIDs:             []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
-		RecoveryProbeStepIDs:      []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB2"},
-		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB3"},
-		PostStepIDs:               [][]string{nil},
+		ComponentSteps: []*agentpb.ExecutionStep{component},
+		MemberSteps: []ReleaseMemberStepIDs{
+			{
+				Forward:    []string{applyStepID, healthStepID, "step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
+				Probe:      "step_01ARZ3NDEKTSV4RRFFQ69G5FB2",
+				Compensate: "step_01ARZ3NDEKTSV4RRFFQ69G5FB3",
+			},
+		},
+		PostStepIDs: [][]string{nil},
 	}
 	configureInitialFileRecoveryFixture(t, resolver, &task)
 	preparedTask, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
@@ -374,7 +430,7 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 	}
 	forwardStepIDs := plan.GetCandidateReleaseProcedure().GetMembers()[0].GetForwardStepIds()
 	if len(forwardStepIDs) != 3 || forwardStepIDs[0] != applyStepID || forwardStepIDs[1] != healthStepID ||
-		forwardStepIDs[2] != input.SwitchStepIDs[0] {
+		forwardStepIDs[2] != input.MemberSteps[0].Forward[2] {
 		t.Fatalf("candidate forward anchors = %q, want apply, health and acknowledgement", forwardStepIDs)
 	}
 	originalDestination := prefix.GetMaterializeFile().GetDestination()

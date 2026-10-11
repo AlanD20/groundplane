@@ -110,6 +110,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/attaches/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show an access check Task or an Attach's latest retained check */
+        get: operations["attach.check.show"];
+        put?: never;
+        /** Check Backing access from the consumer workload network */
+        post: operations["attach.check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/attaches/{id}": {
         parameters: {
             query?: never;
@@ -333,6 +351,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/components/{id}/dns-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a DNS check Task or the latest retained result */
+        get: operations["component.dns-check.show"];
+        put?: never;
+        /** Query CoreDNS and its configured upstreams */
+        post: operations["component.dns-check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/components/{id}/enable": {
         parameters: {
             query?: never;
@@ -344,6 +380,24 @@ export interface paths {
         put?: never;
         /** Enable a Component with optional configuration */
         post: operations["component.enable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/components/{id}/tunnel-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a standalone Tunnel check Task or the latest retained result */
+        get: operations["component.tunnel-check.show"];
+        put?: never;
+        /** Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP */
+        post: operations["component.tunnel-check"];
         delete?: never;
         options?: never;
         head?: never;
@@ -379,6 +433,24 @@ export interface paths {
         put?: never;
         /** Create an Environment connector */
         post: operations["connector.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connectors/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a Task's Connector check or the latest saved Connector check */
+        get: operations["connector.check.show"];
+        put?: never;
+        /** Test saved or unsaved Connector permissions without saving */
+        post: operations["connector.check"];
         delete?: never;
         options?: never;
         head?: never;
@@ -617,6 +689,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/dns-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Environment DNS intentions and resolver status */
+        get: operations["environment.dns.list"];
+        put?: never;
+        /** Create an Environment DNS record */
+        post: operations["environment.dns.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/dns-records/{record}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace an Environment DNS target or name */
+        put: operations["environment.dns.edit"];
+        post?: never;
+        /** Withdraw an Environment DNS record */
+        delete: operations["environment.dns.remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/export-key": {
         parameters: {
             query?: never;
@@ -816,6 +924,23 @@ export interface paths {
         get: operations["host.show"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/host/terminal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open or resume the owning browser session's interactive root host terminal */
+        post: operations["host.terminal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1067,6 +1192,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/routes/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a check Task or a Route's latest retained check */
+        get: operations["route.check.show"];
+        put?: never;
+        /** Check Tunnel readiness, Route origin and public DNS/TLS/HTTP */
+        post: operations["route.check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/routes/{id}": {
         parameters: {
             query?: never;
@@ -1121,6 +1264,24 @@ export interface paths {
         head?: never;
         /** Replace a Runner slug */
         patch: operations["runner.edit"];
+        trace?: never;
+    };
+    "/runners/{id}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a Runner check Task or latest retained result */
+        get: operations["runner.check.show"];
+        put?: never;
+        /** Check connections from the registered Runner */
+        post: operations["runner.check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/runners/{id}/retry": {
@@ -1552,7 +1713,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Retry a failed task */
+        /** Retry a failed Task or authorize a captured Blueprint Detach hook */
         post: operations["task.retry"];
         delete?: never;
         options?: never;
@@ -1737,6 +1898,7 @@ export interface components {
             id: string;
             /** Format: int64 */
             in_flight: number;
+            installed_image: string | null;
             labels: {
                 [key: string]: string;
             };
@@ -1744,6 +1906,7 @@ export interface components {
             last_report_at: string | null;
             /** Format: date-time */
             ready_at: string | null;
+            source?: components["schemas"]["BuildProvenance"];
             status: string;
             version: string | null;
         };
@@ -1802,6 +1965,8 @@ export interface components {
             grant_attach_ids?: string[] | null;
             id: string;
             name: string;
+            /** Format: int64 */
+            revision?: number;
             service_id: string;
             status: string;
         };
@@ -1869,6 +2034,76 @@ export interface components {
             /** @description Accepted upstream image references for this server version. */
             image_pattern: string;
             version: string;
+        };
+        BackingCheckConfiguration: {
+            agent_id: string;
+            attach_id: string;
+            /** Format: int64 */
+            attach_revision: number;
+            authentication: string;
+            backing_service_id: string;
+            container_id: string;
+            credential_attach_id: string;
+            /** Format: int64 */
+            credential_revision: number;
+            database?: string;
+            /** Format: int64 */
+            facts_revision: number;
+            family: string;
+            grant_id?: string;
+            /** Format: int64 */
+            grant_revision?: number;
+            host: string;
+            /** Format: int32 */
+            port: number;
+            /** Format: int64 */
+            runtime_revision: number;
+            service_id: string;
+            username?: string;
+        };
+        BackingCheckRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/BackingCheckRequest.json
+             */
+            readonly $schema?: string;
+            attach_id: string;
+            grant_id?: string;
+            /** Format: int64 */
+            revision: number;
+        };
+        BackingCheckResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/BackingCheckResult.json
+             */
+            readonly $schema?: string;
+            cleanup_required: boolean;
+            cleanup_task_id?: string;
+            configuration: components["schemas"]["BackingCheckConfiguration"];
+            created_at: string;
+            environment_id: string;
+            execution_location: string;
+            failure?: string;
+            finished_at?: string;
+            helper_name?: string;
+            /** @enum {string} */
+            outcome?: "passed" | "failed" | "interrupted";
+            /** @enum {string} */
+            phase: "ready" | "checking" | "cleaning" | "finished" | "cleanup_required" | "transferred";
+            stages: components["schemas"]["BackingCheckStage"][] | null;
+            stale: boolean;
+            started_at?: string;
+            task_id: string;
+        };
+        BackingCheckStage: {
+            /** Format: int64 */
+            elapsed_ms: number;
+            failure?: string;
+            name: string;
+            outcome: string;
         };
         BackingHookConfiguration: {
             after_start?: components["schemas"]["BackingHookDefinition"];
@@ -2019,6 +2254,11 @@ export interface components {
             kind: "attach" | "volume" | "config";
             target_id: string;
         };
+        BuildProvenance: {
+            commit: string;
+            /** @enum {string} */
+            kind: "source_ref" | "release";
+        };
         Component: {
             /**
              * Format: uri
@@ -2037,15 +2277,28 @@ export interface components {
             owner: "environment" | "platform";
             owner_id?: string;
             pinned_ipv4?: string;
+            /** Format: int64 */
+            revision: number;
+            software?: components["schemas"]["ContainerIdentity"];
             /** @enum {string} */
             status: "disabled" | "pending" | "healthy" | "degraded" | "unknown";
         };
         ComponentConfig: {
             alias?: string;
             caddyfile_template?: string;
+            /** @enum {string} */
+            implementation: "caddy";
             /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
             zone_ids: string[];
         } | {
+            alias?: string;
+            /** @enum {string} */
+            implementation: "envoy";
+            /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+            zone_ids: string[];
+        } | {
+            /** @enum {string} */
+            implementation: "cloudflare-tunnel";
             secret_id: string;
             /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
             zone_ids: string[];
@@ -2055,6 +2308,8 @@ export interface components {
                 domain: string;
                 resolvers: string[];
             }[];
+            /** @enum {string} */
+            implementation: "coredns";
             records?: ({
                 /** Format: ipv4 */
                 address: string;
@@ -2078,6 +2333,14 @@ export interface components {
             config: {
                 alias?: string;
                 caddyfile_template?: string;
+                /** @enum {string} */
+                implementation: "caddy";
+                /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+                zone_ids: string[];
+            } | {
+                alias?: string;
+                /** @enum {string} */
+                implementation: "envoy";
                 /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
                 zone_ids: string[];
             } | {
@@ -2091,6 +2354,8 @@ export interface components {
                     secret_name: string;
                     token: string;
                 };
+                /** @enum {string} */
+                implementation: "cloudflare-tunnel";
                 /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
                 zone_ids: string[];
             } | {
@@ -2099,6 +2364,8 @@ export interface components {
                     domain: string;
                     resolvers: string[];
                 }[];
+                /** @enum {string} */
+                implementation: "coredns";
                 records?: ({
                     /** Format: ipv4 */
                     address: string;
@@ -2144,6 +2411,14 @@ export interface components {
             config?: {
                 alias?: string;
                 caddyfile_template?: string;
+                /** @enum {string} */
+                implementation: "caddy";
+                /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+                zone_ids: string[];
+            } | {
+                alias?: string;
+                /** @enum {string} */
+                implementation: "envoy";
                 /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
                 zone_ids: string[];
             } | {
@@ -2157,6 +2432,8 @@ export interface components {
                     secret_name: string;
                     token: string;
                 };
+                /** @enum {string} */
+                implementation: "cloudflare-tunnel";
                 /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
                 zone_ids: string[];
             };
@@ -2164,7 +2441,27 @@ export interface components {
         ComponentProjection: {
             component_id: string;
             enabled: boolean;
+            implementation: string;
             pinned_ipv4?: string;
+        };
+        ConfiguredHealthcheck: {
+            /** Format: int32 */
+            expected_replicas: number;
+            /** @enum {string} */
+            http_protocol?: "http" | "https";
+            interval?: string;
+            /** @enum {string} */
+            kind: "http" | "tcp" | "process" | "custom_exec" | "custom_shell" | "disabled" | "image_default" | "unavailable";
+            /** Format: int32 */
+            loopback_port?: number;
+            requires_healthy: boolean;
+            /** Format: int32 */
+            retries?: number;
+            service_id: string;
+            start_interval?: string;
+            start_period?: string;
+            timeout?: string;
+            workload: string;
         };
         Connector: {
             /**
@@ -2185,6 +2482,63 @@ export interface components {
             path_style: boolean;
             prefix?: string;
             region: string;
+        };
+        ConnectorCheckRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ConnectorCheckRequest.json
+             */
+            readonly $schema?: string;
+            changes?: components["schemas"]["ConnectorEditRequest"];
+            connector_id?: string;
+            draft?: components["schemas"]["ConnectorCreateRequest"];
+            /** Format: int64 */
+            revision?: number;
+        };
+        ConnectorCheckResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ConnectorCheckResult.json
+             */
+            readonly $schema?: string;
+            cleanup_required: boolean;
+            cleanup_task_id?: string;
+            configuration: components["schemas"]["Connector"];
+            /** Format: int64 */
+            connector_revision: number;
+            created_at: string;
+            draft: boolean;
+            environment_id: string;
+            execution_location: string;
+            failure?: string;
+            finished_at?: string;
+            multipart_key?: string;
+            object_key?: string;
+            /** @enum {string} */
+            outcome?: "passed" | "failed" | "interrupted";
+            /** @enum {string} */
+            phase: "ready" | "checking" | "cleaning" | "finished" | "cleanup_required" | "transferred";
+            secret_sources: components["schemas"]["ConnectorCheckSecretSource"][] | null;
+            stages: components["schemas"]["ConnectorCheckStage"][] | null;
+            stale: boolean;
+            started_at?: string;
+            task_id: string;
+            upload_ids: string[] | null;
+        };
+        ConnectorCheckSecretSource: {
+            credential: string;
+            /** Format: int64 */
+            revision: number;
+            secret_id: string;
+        };
+        ConnectorCheckStage: {
+            /** Format: int64 */
+            elapsed_ms: number;
+            failure?: string;
+            name: string;
+            succeeded: boolean;
         };
         ConnectorCreateRequest: {
             /**
@@ -2235,6 +2589,13 @@ export interface components {
             prefix?: string;
             region?: string;
         };
+        ContainerIdentity: {
+            config_digest: string;
+            image: string;
+            selected_tag?: string;
+            source?: components["schemas"]["BuildProvenance"];
+            version?: string;
+        };
         ControllerConfigDocument: {
             /**
              * Format: uri
@@ -2262,6 +2623,7 @@ export interface components {
             /** Format: int64 */
             channel_schema: number;
             controller_sha256: string;
+            controller_source?: components["schemas"]["BuildProvenance"];
             controller_version: string;
             release: string;
             /** Format: int64 */
@@ -2291,6 +2653,87 @@ export interface components {
             status: string;
             task_id: string;
         };
+        DNSCheckAnswer: {
+            answers: components["schemas"]["DNSCheckAnswerSample"][] | null;
+            domain: string;
+            /** Format: int32 */
+            elapsed_ms: number;
+            name: string;
+            /** @enum {string} */
+            outcome: "resolved" | "name_not_found" | "no_answer" | "refused" | "server_error" | "timeout" | "query_failed" | "canceled";
+            /** Format: int32 */
+            rcode?: number;
+            server: string;
+            through_resolver: boolean;
+            /** Format: int32 */
+            total_answers: number;
+            /** @enum {string} */
+            type: "A" | "NS";
+            used_tcp: boolean;
+        };
+        DNSCheckAnswerSample: {
+            name: string;
+            /** @enum {string} */
+            type: "A" | "NS";
+            value: string;
+        };
+        DNSCheckConfiguration: {
+            /** Format: int64 */
+            agent_generation: number;
+            agent_id: string;
+            applied_task_id: string;
+            artifact_id: string;
+            artifact_sha256: string;
+            component_id: string;
+            /** Format: int64 */
+            component_revision: number;
+            image_reference: string;
+            /** Format: int64 */
+            observation_revision: number;
+            queries: components["schemas"]["DNSCheckQuery"][] | null;
+            /** Format: int64 */
+            render_generation: number;
+            service_id: string;
+        };
+        DNSCheckQuery: {
+            domain: string;
+            name: string;
+            /** @enum {string} */
+            type: "A" | "NS";
+        };
+        DNSCheckRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/DNSCheckRequest.json
+             */
+            readonly $schema?: string;
+            queries?: components["schemas"]["DNSCheckQuery"][] | null;
+            /** Format: int64 */
+            revision: number;
+        };
+        DNSCheckResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/DNSCheckResult.json
+             */
+            readonly $schema?: string;
+            answers: components["schemas"]["DNSCheckAnswer"][] | null;
+            configuration: components["schemas"]["DNSCheckConfiguration"];
+            created_at: string;
+            execution_location: string;
+            failure?: string;
+            finished_at?: string;
+            observed_at?: string;
+            /** @enum {string} */
+            outcome?: "passed" | "failed" | "interrupted";
+            /** @enum {string} */
+            phase: "ready" | "checking" | "finished";
+            stale: boolean;
+            started_at?: string;
+            task_id: string;
+        };
         DeployRequest: {
             /**
              * Format: uri
@@ -2303,6 +2746,100 @@ export interface components {
             on_failure?: string;
             strategy?: string;
             tag?: string;
+        };
+        EdgeCheckConfiguration: {
+            /** Format: int64 */
+            agent_generation: number;
+            agent_id: string;
+            /** Format: int64 */
+            blueprint_revision: number;
+            /** Format: int64 */
+            connector_applied_revision: number;
+            connector_container_id: string;
+            connector_id: string;
+            /** Format: int64 */
+            connector_revision: number;
+            connector_service_id: string;
+            origin_address: string;
+            /** Format: int64 */
+            origin_runtime_revision?: number;
+            origin_runtime_sha256?: string;
+            origin_service_id?: string;
+            route_id: string;
+            /** Format: int64 */
+            route_observation_revision: number;
+            /** Format: int64 */
+            route_revision: number;
+            /** Format: int64 */
+            router_applied_revision?: number;
+            router_id?: string;
+            /** Format: int64 */
+            router_revision?: number;
+            runtime_sha256: string;
+            target: components["schemas"]["PublicTarget"];
+            token_secret_id: string;
+            /** Format: int64 */
+            token_secret_revision: number;
+            /**
+             * Format: int64
+             * @description Token reference revision at capture; readiness does not verify remote provider ingress.
+             */
+            token_value_revision: number;
+        };
+        EdgeCheckRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EdgeCheckRequest.json
+             */
+            readonly $schema?: string;
+            connector_id: string;
+            /** @description Concrete request path matching this Route; required for wildcard paths. */
+            path?: string;
+            /** Format: int64 */
+            revision: number;
+            route_id: string;
+        };
+        EdgeCheckResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EdgeCheckResult.json
+             */
+            readonly $schema?: string;
+            addresses: string[] | null;
+            certificate_expires_at?: string;
+            cleanup_required: boolean;
+            cleanup_task_id?: string;
+            configuration: components["schemas"]["EdgeCheckConfiguration"];
+            created_at: string;
+            environment_id: string;
+            failure?: string;
+            finished_at?: string;
+            helper_name?: string;
+            /** @enum {string} */
+            outcome?: "passed" | "protected" | "failed" | "interrupted";
+            /** @enum {string} */
+            phase: "ready" | "private_checking" | "public_checking" | "cleaning" | "cleanup_required" | "finished" | "transferred";
+            private_failure?: string;
+            public_failure?: string;
+            selected_address?: string;
+            stages: components["schemas"]["EdgeCheckStage"][] | null;
+            stale: boolean;
+            started_at?: string;
+            task_id: string;
+            /** Format: int32 */
+            tls_version?: number;
+        };
+        EdgeCheckStage: {
+            /** Format: int64 */
+            elapsed_ms: number;
+            execution_location: string;
+            failure?: string;
+            /** Format: int64 */
+            http_status?: number;
+            name: string;
+            outcome: string;
         };
         Entry: {
             /**
@@ -2420,7 +2957,7 @@ export interface components {
             empty_secret_value?: boolean;
             key: string;
             /** @enum {string} */
-            release_strategy?: "blue-green" | "recreate";
+            release_strategy?: "blue-green" | "recreate" | "rolling";
             resource: string;
         };
         EnvironmentBlueprintDocument: {
@@ -2455,6 +2992,65 @@ export interface components {
             name: string;
             network_pool: string;
             project_id: string;
+        };
+        EnvironmentDNS: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EnvironmentDNS.json
+             */
+            readonly $schema?: string;
+            environment_id: string;
+            records: components["schemas"]["EnvironmentDNSRecord"][] | null;
+            resolver_enabled: boolean;
+            revision: string;
+            /** @enum {string} */
+            state: "pending" | "applied" | "failed" | "resolver_disabled";
+            task_id?: string;
+            withdrawals: components["schemas"]["EnvironmentDNSWithdrawal"][] | null;
+        };
+        EnvironmentDNSRecord: {
+            address?: string;
+            bound_service_id?: string;
+            hostname: string;
+            id: string;
+            label: string;
+            resolved_address?: string;
+            /** @enum {string} */
+            scope: "environment" | "project" | "tenant";
+            service?: string;
+            /** @enum {string} */
+            state: "pending" | "applied" | "waiting_for_service" | "failed" | "resolver_disabled";
+            task_id?: string;
+            zone?: string;
+        };
+        EnvironmentDNSSaved: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EnvironmentDNSSaved.json
+             */
+            readonly $schema?: string;
+            environment_id: string;
+            record_id: string;
+        };
+        EnvironmentDNSWithdrawal: {
+            hostname: string;
+            record_id: string;
+        };
+        EnvironmentDNSWrite: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EnvironmentDNSWrite.json
+             */
+            readonly $schema?: string;
+            address?: string;
+            label: string;
+            /** @enum {string} */
+            scope?: "environment" | "project" | "tenant";
+            service?: string;
+            zone?: string;
         };
         EnvironmentEdit: {
             /**
@@ -2578,6 +3174,7 @@ export interface components {
         };
         HostController: {
             service: string;
+            source?: components["schemas"]["BuildProvenance"];
             status: string;
             update: components["schemas"]["ControllerUpdateState"];
             version: string;
@@ -2585,7 +3182,9 @@ export interface components {
         HostEtcd: {
             db_size: string;
             node: string;
+            software?: components["schemas"]["ContainerIdentity"];
             status: string;
+            version?: string;
         };
         HostImage: {
             container_uses: components["schemas"]["ImageContainer"][];
@@ -2609,6 +3208,38 @@ export interface components {
             used: string;
             /** Format: int64 */
             used_pct: number;
+        };
+        HostTerminalOpen: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/HostTerminalOpen.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            columns: number;
+            /** Format: int64 */
+            rows: number;
+        };
+        HostTerminalSession: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/HostTerminalSession.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            expires_at: string;
+            host: string;
+            id: string;
+            /** Format: int64 */
+            input_inactivity_seconds: number;
+            reason?: string;
+            resumed: boolean;
+            /** @enum {string} */
+            state: "active" | "terminated";
+            stream_path: string;
+            user: string;
         };
         ImageContainer: {
             id: string;
@@ -2679,7 +3310,7 @@ export interface components {
             service_id: string;
             service_name: string;
             /** @enum {string} */
-            slot: "blue" | "green" | "singleton";
+            slot: "blue" | "green" | "singleton" | "rolling";
             /** @enum {string} */
             stream: "stdout" | "stderr";
             /** Format: date-time */
@@ -2960,6 +3591,32 @@ export interface components {
             readonly $schema?: string;
             slug: string;
         };
+        PublicTarget: {
+            hostname: string;
+            path: string;
+        };
+        Readiness: {
+            /** @enum {string} */
+            diagnostic: "none" | "pgrep_missing" | "curl_missing" | "nc_missing" | "command_missing" | "command_not_executable";
+            /** Format: int64 */
+            elapsed_milliseconds: number;
+            /** Format: int32 */
+            exited: number;
+            /** Format: int32 */
+            expected: number;
+            /** Format: int32 */
+            observed: number;
+            /** Format: int32 */
+            ready: number;
+            /** Format: int32 */
+            running: number;
+            /** Format: int32 */
+            starting: number;
+            /** Format: int64 */
+            timeout_milliseconds: number;
+            /** Format: int32 */
+            unhealthy: number;
+        };
         RecoveryPoint: {
             capture?: components["schemas"]["RecoveryPointCapture"];
             connector_bucket: string;
@@ -3238,6 +3895,11 @@ export interface components {
             host?: string;
             id: string;
             path: string;
+            /**
+             * Format: int64
+             * @description Desired configuration revision on reads; zero in a mutation reply. Read the Route before submitting a check.
+             */
+            revision: number;
             /** @enum {string} */
             status: "unserved" | "pending" | "served" | "degraded";
             /** Format: int32 */
@@ -3287,7 +3949,7 @@ export interface components {
              * @example /api/v1/Router.json
              */
             readonly $schema?: string;
-            caddy?: components["schemas"]["ComponentProjection"];
+            proxy?: components["schemas"]["ComponentProjection"];
             tunnel?: components["schemas"]["ComponentProjection"];
         };
         Runner: {
@@ -3310,8 +3972,65 @@ export interface components {
             online: boolean;
             project_id?: string;
             remove_task_id: string | null;
+            /** Format: int64 */
+            revision?: number;
             slug: string;
+            software?: components["schemas"]["ContainerIdentity"];
             tenant_id: string;
+        };
+        RunnerCheckConfiguration: {
+            controller_endpoint: string;
+            github_url: string;
+            image_reference: string;
+            runner_id: string;
+            /** Format: int64 */
+            runner_revision: number;
+            /** Format: int64 */
+            runtime_epoch: number;
+        };
+        RunnerCheckRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerCheckRequest.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            revision: number;
+        };
+        RunnerCheckResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerCheckResult.json
+             */
+            readonly $schema?: string;
+            configuration: components["schemas"]["RunnerCheckConfiguration"];
+            created_at: string;
+            execution_location: string;
+            failure?: string;
+            finished_at?: string;
+            observed_at?: string;
+            /** @enum {string} */
+            outcome?: "passed" | "failed" | "interrupted";
+            /** @enum {string} */
+            phase: "ready" | "checking" | "finished";
+            stages: components["schemas"]["RunnerCheckStage"][];
+            stale: boolean;
+            started_at?: string;
+            task_id: string;
+        };
+        RunnerCheckStage: {
+            /** Format: int64 */
+            elapsed_ms: number;
+            /** @enum {string} */
+            failure?: "connection" | "timeout" | "canceled" | "tls" | "authentication" | "permission" | "http_response" | "protocol" | "not_rootless" | "credentials_unavailable";
+            /** Format: int64 */
+            http_status?: number;
+            /** @enum {string} */
+            name: "github" | "rootless_docker" | "gp_api" | "registry";
+            /** @enum {string} */
+            outcome: "passed" | "failed";
         };
         RunnerCreateRequest: {
             /**
@@ -3496,6 +4215,11 @@ export interface components {
             replicas?: number;
             resources?: components["schemas"]["ServiceResources"];
             restart?: string;
+            /**
+             * Format: int32
+             * @description Per-replica rolling change/readiness budget in seconds; zero uses 300. The overall Task deadline still applies.
+             */
+            rolling_replica_timeout_seconds?: number;
             runtime_intent: string;
             serving_release_id?: string;
             strategy?: string;
@@ -3531,6 +4255,11 @@ export interface components {
             replicas: number;
             resources: components["schemas"]["ServiceResources"];
             restart: string;
+            /**
+             * Format: int32
+             * @description Per-replica rolling change/readiness budget; zero uses 300 seconds.
+             */
+            rolling_replica_timeout_seconds?: number;
             strategy: string;
             zones: string[] | null;
         };
@@ -3577,6 +4306,11 @@ export interface components {
             replicas?: number;
             resources?: components["schemas"]["ServiceResources"];
             restart?: string;
+            /**
+             * Format: int32
+             * @description Per-replica rolling change/readiness budget in seconds; zero uses 300. The overall Task deadline still applies.
+             */
+            rolling_replica_timeout_seconds?: number;
             runtime_intent: string;
             serving_release_id?: string;
             strategy?: string;
@@ -3614,6 +4348,11 @@ export interface components {
             replicas: number;
             resources: components["schemas"]["ServiceResources"];
             restart: string;
+            /**
+             * Format: int32
+             * @description Replacement per-replica rolling budget; omission preserves, zero restores 300 seconds.
+             */
+            rolling_replica_timeout_seconds?: number;
             strategy: string;
             /** @description Replacement container user; omission preserves, an empty string restores the image default. */
             user?: string;
@@ -3786,20 +4525,24 @@ export interface components {
             readonly $schema?: string;
             /** @enum {string} */
             actor: "operator" | "system";
+            attempt_history?: components["schemas"]["TaskAttemptHistory"];
             /** Format: date-time */
             created_at: string;
             environment_id?: string;
             /** @enum {string} */
             executor: "agent" | "controller" | "blueprint" | "software";
-            failure_summary?: string;
+            failure?: components["schemas"]["TaskFailure"];
             /** Format: date-time */
             finished_at: string | null;
             id: string;
             image_fetch?: components["schemas"]["TaskImageFetch"];
+            interrupted_detach_retry?: components["schemas"]["TaskDetachRetry"];
             operation_id: string;
             plan_hash?: string;
+            preparation?: components["schemas"]["TaskPreparation"];
             project_id?: string;
             reconciliation_required: boolean;
+            recovery?: components["schemas"]["TaskRecovery"];
             resource_kind?: string;
             result_summary?: string;
             retry_of?: string;
@@ -3813,7 +4556,7 @@ export interface components {
             /** Format: int64 */
             timeout_seconds: number;
             /** @enum {string} */
-            type: "deploy" | "rollback" | "backup" | "backup_prune" | "restore" | "attach" | "detach" | "run" | "script" | "provision" | "create" | "update" | "remove" | "start" | "stop" | "destroy" | "rotate" | "fetch" | "prepare" | "apply";
+            type: "deploy" | "rollback" | "backup" | "backup_prune" | "restore" | "attach" | "detach" | "run" | "script" | "provision" | "create" | "update" | "remove" | "start" | "stop" | "destroy" | "rotate" | "fetch" | "prepare" | "apply" | "check";
             /** Format: date-time */
             updated_at: string;
             /** @enum {string} */
@@ -3828,9 +4571,49 @@ export interface components {
             readonly $schema?: string;
             task_id: string;
         };
+        TaskAttemptHistory: {
+            /** Format: int64 */
+            dropped_summaries: number;
+            summaries: components["schemas"]["TaskAttemptSummary"][] | null;
+            /** Format: int64 */
+            through_sequence: number;
+        };
+        TaskAttemptSummary: {
+            action: string;
+            /** Format: int32 */
+            attempt: number;
+            controller_operation?: components["schemas"]["TaskControllerOperation"];
+            failure?: components["schemas"]["TaskFailure"];
+            /** Format: date-time */
+            finished_received_at?: string;
+            /** Format: int64 */
+            first_sequence: number;
+            /** Format: date-time */
+            last_received_at: string;
+            /** Format: int64 */
+            last_sequence: number;
+            /** Format: int64 */
+            ordinal: number;
+            /** Format: date-time */
+            started_received_at?: string;
+            state: string;
+            step_id?: string;
+            target?: string;
+        };
+        TaskControllerOperation: {
+            name: string;
+            stage: string;
+        };
+        TaskDetachRetry: {
+            attach_id: string;
+            step_id: string;
+        };
         TaskEvent: {
             /** Format: int32 */
             attempt: number;
+            controller_operation?: components["schemas"]["TaskControllerOperation"];
+            failure?: components["schemas"]["TaskFailure"];
+            health_wait?: components["schemas"]["Readiness"];
             /** Format: int64 */
             ordinal: number;
             /** Format: date-time */
@@ -3841,15 +4624,52 @@ export interface components {
             state: "pending" | "running" | "completed" | "failed" | "aborted" | "timed_out";
             step_id: string;
         };
+        TaskFailure: {
+            code?: string;
+            /** Format: int32 */
+            exit_code?: number;
+            /** @enum {string} */
+            status: "failed" | "timed_out" | "aborted";
+            step_id?: string;
+            summary: string;
+        };
         TaskImageFetch: {
             image: string;
             platform: string;
             progress: components["schemas"]["Progress"];
             requested: string;
         };
+        TaskPreparation: {
+            /** Format: date-time */
+            deadline: string;
+            failure?: components["schemas"]["TaskFailure"];
+            /** Format: int64 */
+            network_count: number;
+            /** @enum {string} */
+            state: "network_queued" | "network_preparing" | "network_reconciling" | "network_proof_required" | "network_failed" | "dns_waiting" | "dns_failed" | "ready";
+            summary: string;
+        };
+        TaskRecovery: {
+            /** Format: int32 */
+            completed_steps?: number;
+            /** Format: date-time */
+            deadline?: string;
+            last_failure?: components["schemas"]["TaskFailure"];
+            /** @enum {string} */
+            state: "pending" | "running" | "awaiting_confirmation" | "proof_required" | "completed";
+            step_ids?: string[] | null;
+            summary: string;
+            /** Format: int32 */
+            total_steps?: number;
+        };
         TaskStep: {
             action: string;
             description?: string;
+            failure?: components["schemas"]["TaskFailure"];
+            health_wait?: components["schemas"]["Readiness"];
+            /** Format: date-time */
+            health_wait_received_at?: string;
+            healthchecks?: components["schemas"]["ConfiguredHealthcheck"][] | null;
             /** @enum {string} */
             kind: "operation" | "script";
             name: string;
@@ -3918,6 +4738,29 @@ export interface components {
              */
             readonly $schema?: string;
             slug: string;
+        };
+        TunnelCheckRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TunnelCheckRequest.json
+             */
+            readonly $schema?: string;
+            /** @description Concrete public hostname configured by the operator at the Tunnel provider; GP does not read or change provider ingress. */
+            hostname: string;
+            /**
+             * Format: int32
+             * @description An HTTP port exposed as TCP by the serving Service.
+             */
+            origin_port: number;
+            origin_service_id: string;
+            /** @description Concrete HTTP request path without query or fragment. */
+            path: string;
+            /**
+             * Format: int64
+             * @description Current Tunnel Component revision.
+             */
+            revision: number;
         };
         Volume: {
             /**
@@ -4000,6 +4843,8 @@ export interface components {
              * @example /api/v1/Zone.json
              */
             readonly $schema?: string;
+            /** @description Use shared CoreDNS from this internal Zone; existing workloads change on their next deployment. */
+            allow_gp_dns: boolean;
             environment_id: string;
             id: string;
             internal: boolean;
@@ -4016,6 +4861,8 @@ export interface components {
              * @example /api/v1/ZoneCreate.json
              */
             readonly $schema?: string;
+            /** @description Opt into shared CoreDNS without enabling outbound connectivity; requires internal=true. */
+            allow_gp_dns: boolean;
             environment_id: string;
             internal: boolean;
             name: string;
@@ -4383,6 +5230,78 @@ export interface operations {
             content: {
                 "application/json": components["schemas"]["AttachRequest"];
                 "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "attach.check.show": {
+        parameters: {
+            query: {
+                environment: string;
+                task?: string;
+                attach?: string;
+                grant?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackingCheckResult"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "attach.check": {
+        parameters: {
+            query: {
+                environment: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackingCheckRequest"];
             };
         };
         responses: {
@@ -4913,6 +5832,77 @@ export interface operations {
             };
         };
     };
+    "component.dns-check.show": {
+        parameters: {
+            query?: {
+                task?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DNSCheckResult"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "component.dns-check": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DNSCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "component.enable": {
         parameters: {
             query?: never;
@@ -4927,6 +5917,80 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": components["schemas"]["ComponentEnableRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "component.tunnel-check.show": {
+        parameters: {
+            query: {
+                environment: string;
+                task?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeCheckResult"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "component.tunnel-check": {
+        parameters: {
+            query: {
+                environment: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TunnelCheckRequest"];
             };
         };
         responses: {
@@ -5044,6 +6108,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Connector"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "connector.check.show": {
+        parameters: {
+            query: {
+                task?: string;
+                connector?: string;
+                environment: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorCheckResult"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "connector.check": {
+        parameters: {
+            query: {
+                environment: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectorCheckRequest"];
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -5887,6 +7023,156 @@ export interface operations {
             };
         };
     };
+    "environment.dns.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentDNS"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "environment.dns.create": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvironmentDNSWrite"];
+            };
+        };
+        responses: {
+            /** @description DNS intention saved; read DNS status for resolver activation */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentDNSSaved"];
+                };
+            };
+            /** @description DNS intention created; read DNS status for resolver activation */
+            201: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentDNSSaved"];
+                };
+            };
+        };
+    };
+    "environment.dns.edit": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+                record: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvironmentDNSWrite"];
+            };
+        };
+        responses: {
+            /** @description DNS intention saved; read DNS status for resolver activation */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentDNSSaved"];
+                };
+            };
+            /** @description DNS intention created; read DNS status for resolver activation */
+            201: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentDNSSaved"];
+                };
+            };
+        };
+    };
+    "environment.dns.remove": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+                record: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description DNS intention saved; read DNS status for resolver activation */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentDNSSaved"];
+                };
+            };
+            /** @description DNS intention created; read DNS status for resolver activation */
+            201: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentDNSSaved"];
+                };
+            };
+        };
+    };
     "backup.key.export": {
         parameters: {
             query?: never;
@@ -6320,6 +7606,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Host"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "host.terminal": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostTerminalOpen"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostTerminalSession"];
                 };
             };
             /** @description Error */
@@ -7060,6 +8383,77 @@ export interface operations {
             };
         };
     };
+    "route.check.show": {
+        parameters: {
+            query: {
+                environment: string;
+                task?: string;
+                route?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeCheckResult"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "route.check": {
+        parameters: {
+            query: {
+                environment: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgeCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "route.show": {
         parameters: {
             query?: never;
@@ -7325,6 +8719,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Runner"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "runner.check.show": {
+        parameters: {
+            query?: {
+                task?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerCheckResult"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "runner.check": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunnerCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */

@@ -22,10 +22,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// applyAuthoredOnce is the desired-head admission path. It deliberately does
-// not render an effective Compose artifact: a Custom Attach may produce the
-// facts needed for that work only after this revision is accepted. The caller
-// must not enable this path until the coordinator can complete every unit.
+// applyAuthoredOnce accepts the authored head without claiming rendered runtime.
+// The coordinator seals effective files after Custom Attaches produce their facts.
 func (service *Service) applyAuthoredOnce(
 	ctx context.Context,
 	environmentID, taskTarget string,
@@ -235,6 +233,7 @@ func (service *Service) applyAuthoredOnce(
 	owned, err := authoredOwnedIdentities(
 		environmentID, claim.RevisionID, baseline.generation, changes.Current, previous,
 		volumeSlugs, entries.Current, routeProjections, attaches, components, scripts,
+		selectAuthoredNamedResources(parsed.Extensions.DNS, previous.DNSRecords, ids.KindDNSRecord, allocator.Named),
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

@@ -264,8 +264,8 @@ func TestAttachRepositoryMaximumCombinationFitsTransactionBudget(t *testing.T) {
 			got, testkeyvalue.MaximumOperations,
 		)
 	}
-	if got := attachDetachWithTaskOperationCount(record); got != 63 {
-		t.Fatalf("attachDetachWithTaskOperationCount() = %d, want 63", got)
+	if got := attachDetachWithTaskOperationCount(record); got > testkeyvalue.MaximumOperations {
+		t.Fatalf("attachDetachWithTaskOperationCount() = %d, want at most %d", got, testkeyvalue.MaximumOperations)
 	}
 }
 

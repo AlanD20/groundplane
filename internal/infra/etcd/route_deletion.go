@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -37,6 +38,15 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := routepersistence.ValidateRouteVersion(route); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	checkCondition, err := edgechecks.RequireRouteIdle(
+		ctx,
+		repository.store,
+		route.Record.Desired.ID,
+		route.ReadRevision,
+	)
+	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
@@ -154,6 +164,14 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: deletionrecord.TombstoneKey("service", target.Record.Desired.ID)},
+	}
+	conditions = append(conditions, checkCondition)
+	if intent.Provider != nil {
+		condition, err := routeProviderRuntimeCondition(intent.Provider, intent.EnvironmentID)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		conditions = append(conditions, condition)
 	}
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, etcdstore.Condition{

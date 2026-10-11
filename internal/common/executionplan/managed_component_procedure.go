@@ -72,7 +72,7 @@ func validateManagedComponentProcedure(
 	previousKind := ""
 	for _, source := range procedure.GetServices() {
 		if source == nil || source.GetComponentKind() <= previousKind ||
-			(source.GetComponentKind() != "caddy" && source.GetComponentKind() != "cloudflare-tunnel") ||
+			(source.GetComponentKind() != "caddy" && source.GetComponentKind() != "envoy" && source.GetComponentKind() != "cloudflare-tunnel") ||
 			validateID(ids.KindComponent, source.GetComponentId()) != nil ||
 			validateID(ids.KindService, source.GetServiceId()) != nil ||
 			validateComposeName(source.GetComposeServiceName()) != nil ||

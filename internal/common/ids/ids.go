@@ -38,6 +38,7 @@ const (
 	KindVolume         Kind = "vol"
 	KindAttach         Kind = "att"
 	KindRoute          Kind = "rte"
+	KindDNSRecord      Kind = "dns"
 	KindSecret         Kind = "sec"
 	KindConnector      Kind = "con"
 	KindRunner         Kind = "run"
@@ -55,6 +56,7 @@ const (
 	KindBackingService Kind = "bks"
 	KindReleaseGroup   Kind = "rg"
 	KindComponent      Kind = "cmp"
+	KindTerminal       Kind = "term"
 )
 
 // NewULID returns a fresh raw ULID with no kind prefix. It is used where a

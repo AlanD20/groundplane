@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -22,6 +23,13 @@ type concurrentRouteProviderState struct {
 
 func (state *concurrentRouteProviderState) SnapshotRevision(context.Context) (int64, error) {
 	return state.snapshotRevision, nil
+}
+
+func (state *concurrentRouteProviderState) GetRouteProviderRuntimeAtRevision(
+	_ context.Context, _ string, revision int64,
+) (testkeyvalue.Versioned[testcomponentplanning.Runtime], bool, error) {
+	state.requested = append(state.requested, revision)
+	return testkeyvalue.Versioned[testcomponentplanning.Runtime]{ReadRevision: revision}, false, nil
 }
 
 func (state *concurrentRouteProviderState) ListZones(

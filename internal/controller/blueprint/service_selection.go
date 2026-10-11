@@ -156,6 +156,7 @@ func selectionAuthoringDocument(parsed blueprintparser.Result, compose []byte) b
 		Envelope: parsed.Envelope, NetworkPool: parsed.Extensions.NetworkPool, Compose: compose,
 		Requires: parsed.Extensions.Requires, Attachments: parsed.Extensions.Attachments,
 		Entries: parsed.Extensions.Entries, Routes: parsed.Extensions.Routes,
+		DNS:     parsed.Extensions.DNS,
 		Scripts: parsed.Extensions.Scripts, Components: parsed.Extensions.Components,
 		Backup: parsed.Extensions.Backup, ReleaseGroups: parsed.Extensions.ReleaseGroups,
 	}

@@ -144,7 +144,7 @@ func normalizeKeys(input []ResourceKey) ([]ResourceKey, error) {
 func validKey(key ResourceKey) bool {
 	switch key.Kind {
 	case ids.KindEnvironment, ids.KindService, ids.KindEnvEntry, ids.KindVolume, ids.KindAttach,
-		ids.KindRoute, ids.KindNetwork, ids.KindComponent, ids.KindSecret, ids.KindScript:
+		ids.KindRoute, ids.KindDNSRecord, ids.KindNetwork, ids.KindComponent, ids.KindSecret, ids.KindScript:
 		return ids.Validate(key.Kind, key.ID) == nil
 	default:
 		return false

@@ -20,6 +20,12 @@ explicitly configured trusted private interfaces. Public addresses, wildcard
 listeners and application-Tunnel exposure are forbidden until an authentication
 design is accepted.
 
+Host terminal access uses that same trusted-operator boundary: anyone who can
+reach the Console/API may open a root shell, without a separate login or token.
+Same-origin checks and session ownership protect browser connections; they do
+not authenticate operators. See [Host terminal](features/platform.md#host-terminal)
+for session lifetime and cleanup behavior.
+
 Tenant and credential ownership is enforced, but shared backing bridges permit
 peer reachability. The MVP makes no hostile-tenant network-isolation guarantee.
 Runners use dedicated rootless Docker engines but execute trusted workflows with
@@ -98,26 +104,35 @@ completed. A Backing Zone serving external Attaches also requires its separate
 impact-approved Remove action before omission; the Blueprint's Environment
 revision cannot approve effects on those consumers.
 
-DNS references also protect their Service, selected Zone and containing hierarchy.
-Removal requires a successful DNS update first; a saved or failed replacement
-cannot release references still applied by the resolver.
+Platform DNS references protect their Service, selected Zone and containing
+hierarchy. Removal requires a successful DNS update first; a saved or failed
+replacement cannot release references still applied by the resolver.
+Environment-owned named DNS targets retain their authored record after Service
+removal, but must first withdraw the active answer successfully. A same-named
+replacement can bind only in that owning Environment and selected Zone.
+These Environment DNS lifecycle changes are locally implemented but unqualified;
+see [capability status](capabilities.md).
 
 Reusable Project and Platform Secrets are separate resources; an Environment
 Blueprint declares their Entry references, never their values.
 Secret literal Entries carry a key and empty value in authored YAML. Accepted
 work captures exact inputs; Retry and recovery cannot silently use later desired
 state. [Current limitations](capabilities.md) distinguish this contract from
-unfinished removal paths.
+behavior that has not yet been qualified.
 
-Resource-level latest-wins reconciliation is an accepted design, not a completed
-runtime capability. Until connected and qualified, its design must not be
-advertised as active automatic cancellation. See [Blueprints](features/blueprints.md).
+Resource-level latest-wins reconciliation is locally implemented, not a qualified
+runtime capability. It must not be advertised as production-proven automatic
+cancellation before interruption and recovery qualification. See [Blueprints](features/blueprints.md).
 
 ### Execution and failure
 
-Workload effects run through typed Agent Tasks. Native Controller Tasks own the
-closed bootstrap, Runner and persistence-only operations that cannot depend on
-the Agent. An executor never derives permission from a Task label alone.
+Workload effects run through typed Agent Tasks. Native Controller Tasks own
+bootstrap, Runner, connection-check and persistence orchestration. Bootstrap
+and persistence-only operations do not require an Agent; a Backing access check
+uses the authenticated Agent to run its fixed, bounded consumer-network helper.
+DNS checks also use the authenticated Agent, querying only the exact acknowledged
+resolver configuration without changing it.
+An executor never derives permission from a Task label alone.
 
 Protected retries preserve operation identity and captured inputs. A lost response
 or cancellation is not proof that an external effect did not occur. Unknown
@@ -145,6 +160,12 @@ Services publish no host ports. Communication uses explicit Zone memberships,
 backing Attaches and declared Routes. Application DNS/provider policy and
 certificate issuance remain operator responsibilities.
 
+Proxy selection belongs to the Environment: Caddy is HTTP-only; Envoy supports
+HTTP, TCP and UDP. At most one choice may be enabled, and switching must preserve
+Environment-owned Routes and exact recovery authority. Envoy operator selection
+and protected switching are locally implemented but unqualified; see
+[Components](features/components.md).
+
 ### Credentials and configuration
 
 Secrets are encrypted at rest and excluded from public metadata and Task events.
@@ -171,7 +192,12 @@ cases must preserve data and unrelated resources.
 
 Recreate must reach the declared replica count but does not promise zero downtime.
 Blue-green supports one replica and requires an enabled explicit healthcheck
-before Task publication; replicated blue-green and rolling are rejected.
+before Task publication; replicated blue-green is rejected. Rolling supports
+1–16 replicas with an enabled explicit healthcheck, replacing one at a time with
+at most one extra candidate. A ready candidate receives traffic before the old
+replica drains and is removed. The configurable per-replica budget cannot extend
+the Task deadline. Overlapping application versions must support shared data;
+GP does not reverse database migrations. Managed Backing Services use recreate.
 Saving desired Service settings does not change running processes. Deploy and
 Blueprint Apply must honor each affected Service's declared release strategy;
 an incompatible disruptive change is rejected, never silently recreated.
@@ -191,7 +217,7 @@ evidence does not qualify the post-restructuring build.
 
 Multi-host scheduling, remote-Agent identity, human-API public authentication,
 hostile-tenant network isolation, external registry management, build-on-deploy,
-rolling and replicated blue-green deployment, runtime Component plugins,
+replicated blue-green deployment, runtime Component plugins,
 automatic provider DNS/certificate setup, scheduled Scripts, permanent Backing
 deletion, Runner autoscaling/in-place updates and automatic empty-host disaster
 recovery are outside the current scope. Accepted-but-unimplemented Backup and

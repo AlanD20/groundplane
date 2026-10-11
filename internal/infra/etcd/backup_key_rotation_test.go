@@ -129,8 +129,9 @@ func TestBackupKeyRotationTerminalTransactionIsAtomicAndReplayable(t *testing.T)
 	terminalAt := fixture.task.CreatedAt.Add(2 * time.Second)
 	if _, err := failingTasks.AcknowledgeControllerTask(
 		ctx,
-		fixture.task.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
-	); err == nil {
+		fixture.task.ID, testtaskjournal.TaskStatusCompleted, nil,
+
+		terminalAt); err == nil {
 		t.Fatal("AcknowledgeControllerTask() error = nil, want injected failure")
 	}
 	assertBackupKeyRotationState(
@@ -144,8 +145,10 @@ func TestBackupKeyRotationTerminalTransactionIsAtomicAndReplayable(t *testing.T)
 
 	terminal, err := failingTasks.AcknowledgeControllerTask(
 		ctx,
-		fixture.task.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
-	)
+		fixture.task.ID, testtaskjournal.TaskStatusCompleted, nil,
+
+		terminalAt)
+
 	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask(retry) = %#v, %v", terminal, err)
 	}
@@ -159,8 +162,10 @@ func TestBackupKeyRotationTerminalTransactionIsAtomicAndReplayable(t *testing.T)
 	)
 	replay, err := failingTasks.AcknowledgeControllerTask(
 		ctx,
-		fixture.task.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
-	)
+		fixture.task.ID, testtaskjournal.TaskStatusCompleted, nil,
+
+		terminalAt)
+
 	if err != nil || replay.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask(replay) = %#v, %v", replay, err)
 	}
@@ -222,9 +227,10 @@ func TestBackupKeyRotationTerminalFailureStatesRemainRetryable(t *testing.T) {
 				terminal, err = fixture.tasks.AcknowledgeControllerTask(
 					ctx,
 					fixture.task.ID,
-					status,
-					terminalAt,
-				)
+					status, nil,
+
+					terminalAt)
+
 			}
 			if err != nil || terminal.Record.Status != status {
 				t.Fatalf("terminalize(%s) = %#v, %v", status, terminal, err)

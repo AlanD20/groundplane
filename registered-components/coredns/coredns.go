@@ -32,6 +32,7 @@ const DefaultCorefileTemplate = ". {\n    {groundplane}\n    prometheus 127.0.0.
 var Image = component.OCIImage{
 	Repository:  "docker.io/coredns/coredns",
 	IndexDigest: "9caabbf6238b189a65d0d6e6ac138de60d6a1c419e5a341fbbb7c78382559c6e",
+	Tag:         "1.11.3",
 	Platforms: []component.OCIPlatform{
 		{
 			OS:           "linux",
@@ -152,6 +153,12 @@ func (Renderer) Render(input dnsresolver.RenderInput) ([]byte, error) {
 		output.WriteByte(' ')
 		output.WriteString(normalized.PrivateListener.String())
 	}
+	for _, listener := range normalized.ZoneListeners {
+		if listener != normalized.PrivateListener {
+			output.WriteByte(' ')
+			output.WriteString(listener.String())
+		}
+	}
 	output.WriteByte('\n')
 	if len(normalized.Hosts) > 0 {
 		output.WriteString("    hosts {\n")
@@ -191,6 +198,9 @@ func (Renderer) Digest(input dnsresolver.RenderInput) ([sha256.Size]byte, error)
 
 func normalize(input dnsresolver.RenderInput) (dnsresolver.RenderInput, error) {
 	input = dnsresolver.CloneRenderInput(input)
+	if err := dnsresolver.ValidateZoneListeners(input.ZoneListeners); err != nil {
+		return dnsresolver.RenderInput{}, err
+	}
 	if input.PrivateListener.IsValid() && (!input.PrivateListener.Is4() || !input.PrivateListener.IsPrivate()) {
 		return dnsresolver.RenderInput{}, fmt.Errorf("coredns: additional listener must be private IPv4")
 	}

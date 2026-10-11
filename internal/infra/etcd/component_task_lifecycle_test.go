@@ -149,10 +149,18 @@ func TestTaskAcknowledgementPromotesComponentCandidateAndMovesReservation(t *tes
 		runtime.Revision != terminal.Revision || runtime.Record.Component.Runtime.PinnedIPv4 != "10.40.11.2" {
 		t.Fatalf("acknowledged Component runtime = %#v, found=%v, error=%v", runtime, found, err)
 	}
-	seedTaskRepositoryValue(t, store,
-		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environmentID), []byte("unrelated aggregate unavailable"))
+	seedTaskRepositoryValue(
+		t,
+		store,
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(
+			environmentID,
+		),
+		[]byte("unrelated aggregate unavailable"),
+	)
 	state, err := store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{
-		testcomponents.RecordKey(records.candidate.Desired.ID), testblueprints.EnvironmentBlueprintHeadKey(environmentID),
+		testcomponents.RecordKey(
+			records.candidate.Desired.ID,
+		), testblueprints.EnvironmentBlueprintHeadKey(environmentID),
 	}})
 	if err != nil || state == nil || len(state.Values) != 2 || state.Values[0] == nil || state.Values[1] == nil {
 		t.Fatalf("read current Component authority = %#v, %v", state, err)

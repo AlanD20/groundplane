@@ -47,18 +47,107 @@ from the newest Release record or from observed container order.
 
 Before publication, candidate workload references are resolved through a
 bounded read-only Agent request and sealed with the exact host-local image id
-and replica count. Historical rollback, retry and compensation use that sealed
-identity. They do not resolve a mutable tag again, fabricate a repository
-digest or read current desired state. Missing historical image authority fails
-before mutation.
+and replica count. Retry and compensation retain their original sealed inputs;
+they do not read current desired state. Image-only rollback copies the historical
+image identity into a new candidate with the current Service configuration,
+replica count, strategy and failure policy. None of these paths resolves a
+historical mutable tag again or fabricates a repository digest. Missing historical
+image authority fails before mutation.
 
 Rollback selects eligible completed-and-served history at one fixed revision,
-then creates a new Release that copies the historical workload authority. It
+then creates a new Release that copies only the historical image authority. It
 never reactivates or edits the historical record. Release Groups publish one
 ordered operation, one Task and one fence set for all members. Members execute
 serially; `switch_back` compensates the proved switched set in reverse order,
 while `leave_active` preserves the last proved serving candidate. There are no
 child Deploy Tasks.
+
+## Proxy choice is captured, not rediscovered
+
+The [Environment proxy choice](../features/components.md#routes-and-the-http-router)
+governs both HTTP routing and stable Service traffic forwarding. A Task must keep
+its selected implementation, configuration and predecessor; recovery cannot use
+the Environment's later choice. Configuration rendering and strict routing-set
+validation share [one owner](../../internal/common/serviceproxy/configuration.go)
+so generation checks cannot accept listeners or upstreams that execution did not
+capture. Envoy's Service proxy retains stable listeners while captured cluster
+updates publish through filesystem discovery. A file write is not acknowledgement:
+the [runtime confirmation owner](../../internal/common/serviceproxy/envoy_observation.go)
+requires the complete active listener/cluster set and the configuration PID1 will
+load on restart. The admin endpoint stays on container loopback. Listener changes
+cannot use this target-only update path.
+
+Deploy and Blueprint release preparation obtain the selected engine from the
+frozen Environment projection, not from a caller's default. Stored render inputs
+must match that choice. Backing containers serve their declared ports directly
+through their Attach network; they do not receive the Environment's HTTP proxy.
+
+Blueprint Service fingerprints include the captured engine, so an engine change
+cannot skip an otherwise unchanged Service and leave its old proxy applied.
+Blueprint Route receipts acknowledge authored metadata before the router runs;
+waiting for the target Service would cycle through the shared runtime projection.
+Router units claim affected Service resources to serialize forwarding decisions.
+Those claims do not acknowledge Service runtime or grant workload mutation authority.
+
+[Release transition admission](../../internal/core/release/proxy_transition.go)
+uses the same rules for direct Deploy and Blueprint Apply. Blue-green and rolling
+retain the proxy process, image and listener set; changing those requires an
+explicit recreate selection. Blueprint preparation passes its captured historical
+selection rather than assuming a first deployment. Stored inputs and the machine
+plan independently bind the candidate to the actual retained proxy artifact.
+Recreate may select the captured new engine's compiled image while recovery keeps
+the exact old artifact and image. None of this enables the unfinished Environment
+switch coordinator or proves uninterrupted TCP/UDP operation.
+
+This Service-proxy execution is locally implemented, not behavior-qualified.
+
+The Environment HTTP router has separate host/path configuration. Its local
+[Envoy planner](../../registered-components/envoy/router.go) captures a consistent
+bootstrap, cluster and Route snapshot. Changes need the union of old and new
+backends active before replacing Routes, then removal of unused backends; publishing
+Routes first can reference unavailable clusters. The
+[discovery owner](../../internal/common/envoyrouter/activation.go) prepares that
+ordering and recognizes only the captured previous, intermediate and desired
+restart files. The compiled executor waits for each full active configuration;
+interruption does not authorize adopting an unrelated live configuration.
+[Task planning](../../internal/controller/taskplanning/container_config_transition.go)
+binds the previous source to retained configuration before sealing, not to the
+current desired head. Its [restoration owner](../../internal/common/envoyrouter/restoration.go)
+admits captured forward and compensation states. A distinct temporary recovery
+Route version lets Envoy acknowledge restored Routes even after rejecting a
+forward update. Rejection evidence may authorize a protected restoration write;
+it never proves success. Completion still requires the exact prior restart files
+and complete active resources without rejection evidence.
+
+[Component recovery](../../internal/common/executionplan/component_recovery_configuration.go)
+references the forward source pair rather than duplicating it. Disable/omission
+has no activation action: it captures the prior source bound to its file-restoration
+step and verifies it after exact runtime recreation. An engine change may leave the
+predecessor file untouched. That file is selected from the Task's pinned snapshot,
+not a newer configuration head, and carries read-only proof rather than a synthetic
+write step. The machine contract rejects a writer to the same path; the compiled
+recipe verifies its mount and active configuration. Healthy containers alone
+cannot prove that prior Routes serve. This is locally compiled, not qualified.
+Direct Routes retain their admission-time executable plan, file sources and
+acknowledged router artifact. Dispatch never rerenders them from newer state.
+Their [recovery planner](../../internal/controller/taskplanning/route_recovery_plan.go)
+uses the same file and singleton-runtime compensation as Blueprint Components;
+unrelated workloads in a historical artifact remain read-only inventory. Successful
+completion records the exact applied router artifact atomically with the Route
+outcome, so the next operation does not recover an obsolete predecessor. Assignment,
+reconnect and terminal replay keep the original failure and captured authority.
+This path is locally compiled, not behavior-qualified.
+
+The [composition registration](../../internal/app/componentregistration/envoy.go)
+binds the upstream image and HTTP-discovery recipe to this same captured-input
+path. Router address reservation, configuration preview and Tunnel diagnostics
+use the selected provider's typed Zone settings, not an assumed Caddy record.
+The Environment's single router slot is selectable through Blueprint, Console,
+CLI and API. Changing engines captures the affected native Service plans and
+retains their predecessor authority; replacing a running proxy requires explicit
+Recreate. Source implementation is complete, but live engine-change and recovery
+qualification is still pending.
+UDP session handling needs its own proof; TCP connection draining is not UDP evidence.
 
 ## Ambiguous effects retain recovery authority
 
@@ -74,6 +163,16 @@ captured acknowledged runtime and pinned files. Sharing forward rollout steps
 does not replace that authority with a later desired projection. The owning seams
 are [selection admission](../../internal/controller/blueprint/service_selection.go)
 and [release planning](../../internal/controller/taskplanning/blueprint_release_plan.go).
+
+Rolling uses one captured replica sequence for direct Deploy, Blueprint Apply
+and image-only rollback. Each replica change advances with its durable Task
+events under a fixed deadline; a duplicate start cannot renew that budget.
+Scaled recreate predecessors need observed container ids and names because their
+shared Compose service name cannot safely select one container. These identities
+are captured before publication and rechecked before removal; the original full
+runtime remains the recovery source. See the
+[replica planner](../../internal/common/rollingrelease/plan.go) and
+[predecessor capture](../../internal/controller/rollingpredecessor/capture.go).
 
 The sealed candidate procedure contains the lawful restoration alternatives
 for each Service: restore the exact proved serving predecessor, or prove exact

@@ -3,13 +3,18 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/AlanD20/groundplane/internal/app/softwareplatform"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/app/hostplatform"
+	"github.com/AlanD20/groundplane/internal/app/softwareplatform"
+	commonrunner "github.com/AlanD20/groundplane/internal/common/runner"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
+	"github.com/AlanD20/groundplane/internal/controller/environmentdns"
 	"github.com/AlanD20/groundplane/internal/controller/handlers"
+	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
 	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
@@ -21,13 +26,19 @@ type controllerStaleTaskMaintenance interface {
 	ExpireStaleAgentTasks(context.Context, time.Time) (int, error)
 }
 
+type controllerBlueprintService interface {
+	handlers.EnvironmentBlueprintService
+	blueprintcoordinator.Planner
+	blueprintcoordinator.ChildPreparer
+}
+
 type controllerHTTPDependencies struct {
 	bootstrap               controllerBootstrapComposition
 	store                   etcd.EnvironmentBlueprintStore
 	authority               controllerAuthorityComposition
 	dataServices            controllerDataComposition
 	execution               controllerExecutionComposition
-	platform                *controllerPlatform
+	platform                *hostplatform.Platform
 	software                *softwareplatform.Composition
 	images                  *imagedelivery.Service
 	agentRuntime            *channeltransport.Runtime
@@ -47,7 +58,7 @@ type controllerHTTPDependencies struct {
 	secretMutations         handlers.SecretMutator
 	secretDeletions         handlers.SecretDeleter
 	volumeMutations         handlers.VolumeMutator
-	environmentBlueprints   handlers.EnvironmentBlueprintService
+	environmentBlueprints   controllerBlueprintService
 	hierarchyDeletions      handlers.HierarchyDeletionService
 	attachMutations         *attachments.MutationService
 	taskMutations           handlers.TaskRetrier
@@ -56,10 +67,59 @@ type controllerHTTPDependencies struct {
 }
 
 func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Controller, error) {
-	taskAborts, err := taskoperations.NewAbortService(
-		dependencies.authority.tasks, dependencies.agentRuntime.Registry, dependencies.controllerTasks,
+	environmentDNS, err := environmentdns.NewService(dependencies.authority.environmentBlueprintRecords,
+		dependencies.authority.idempotency, dependencies.authority.intentCoordinator)
+	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment DNS: %w", err)
+	}
+	edgeChecks, err := newControllerEdgeCheckService(dependencies)
+	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Tunnel connection checks: %w", err)
+	}
+	dnsChecks, err := newControllerDNSCheckService(dependencies)
+	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize DNS connection checks: %w", err)
+	}
+	backingChecks, err := newControllerBackingCheckService(dependencies)
+	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Backing access checks: %w", err)
+	}
+	blueprintCoordinator, err := newBlueprintCoordinatorRuntime(
+		dependencies.store, dependencies.authority.tasks,
+		dependencies.environmentBlueprints, dependencies.environmentBlueprints,
+		dependencies.agentRuntime.Registry, dependencies.bootstrap.tick, dependencies.bootstrap.logger,
 	)
 	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Blueprint coordinator: %w", err)
+	}
+	terminalInactivity, err := dependencies.bootstrap.config.ParsedHostTerminalInputInactivity()
+	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize host terminal policy: %w", err)
+	}
+	hostTerminals, err := hostterminal.New(commonrunner.New(dependencies.bootstrap.logger), terminalInactivity)
+	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize host terminal service: %w", err)
+	}
+	taskAborts, err := taskoperations.NewAbortService(
+		dependencies.authority.tasks, dependencies.agentRuntime.Registry, dependencies.controllerTasks,
+		blueprintCoordinator,
+	)
+	if err != nil {
+		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
@@ -73,19 +133,21 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		dependencies.agentRuntime.Registry,
 	)
 	if err != nil {
+		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close() // Preserve the initialization error; cleanup is best-effort.
 		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
 	}
 	server := handlers.New(dependencies.store, dependencies.bootstrap.logger, handlers.Options{
-		Host: dependencies.platform.host, ControllerConfig: dependencies.bootstrap.controllerConfig,
-		EtcdConfig: dependencies.bootstrap.etcdLifecycle.Configuration(), EtcdConfigApplier: dependencies.platform.etcdConfig,
-		ControllerUpdates: dependencies.platform.upgrades,
+		Host: dependencies.platform.Host, HostTerminals: hostTerminals,
+		ControllerConfig: dependencies.bootstrap.controllerConfig,
+		EtcdConfig:       dependencies.bootstrap.etcdLifecycle.Configuration(), EtcdConfigApplier: dependencies.platform.EtcdConfig,
+		ControllerUpdates: dependencies.platform.Upgrades,
 		SoftwarePreparer:  dependencies.software.Preparations, SoftwareReleases: dependencies.software.Releases,
 		SoftwareActivator: dependencies.software.Activations,
 		Images:            dependencies.images,
-		OnHTTPReady:       dependencies.platform.readiness.MarkHTTPReady, MutationAdmission: dependencies.platform.upgrades,
-		Agents: dependencies.platform.reads, AgentMutations: dependencies.platform.mutations,
+		OnHTTPReady:       dependencies.platform.Readiness.MarkHTTPReady, MutationAdmission: dependencies.platform.Upgrades,
+		Agents: dependencies.platform.AgentReads, AgentMutations: dependencies.platform.AgentMutations,
 		Tenants:                 dependencies.authority.hierarchyService,
 		Projects:                dependencies.authority.hierarchyService,
 		ProjectMutations:        dependencies.hierarchy.projectMutations,
@@ -116,8 +178,10 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		Connectors:              dependencies.dataServices.connectorReads,
 		ConnectorMutations:      dependencies.connectors.mutations,
 		ConnectorDeletions:      dependencies.connectors.deletions,
+		ConnectorChecks:         dependencies.connectors.checks,
 		Runners:                 dependencies.authority.runnerRecords,
 		RunnerProvisioning:      dependencies.runner.provisioning,
+		RunnerChecks:            dependencies.runner.checks,
 		RunnerMutations:         dependencies.runner.mutations,
 		RunnerRemovals:          dependencies.runner.removals,
 		BackupPolicies:          dependencies.backup.policies,
@@ -137,6 +201,10 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		HierarchyDeletions:      dependencies.hierarchyDeletions,
 		AttachMutations:         dependencies.attachMutations,
 		AttachFacts:             dependencies.execution.attachFactReads,
+		BackingChecks:           backingChecks,
+		EdgeChecks:              edgeChecks,
+		DNSChecks:               dnsChecks,
+		EnvironmentDNS:          environmentDNS,
 		TaskMutations:           dependencies.taskMutations,
 		TaskAborts:              taskAborts,
 		ControllerTaskWake:      dependencies.controllerTasks.Wake,
@@ -154,18 +222,20 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		agent:  dependencies.agentRuntime,
 		scheduler: scheduler.New(
 			dependencies.bootstrap.logger,
-			dependencies.platform.upgrades,
+			dependencies.platform.Upgrades,
 			dependencies.bootstrap.tick,
 			dependencies.authority.tasks,
 			dependencies.authority.idempotency.Retention,
+			dependencies.dataServices.serviceDesiredRevisionRecords,
 			dependencies.staleTasks,
 			dependencies.backup.schedules,
 			dependencies.backup.retention,
 			dependencies.backup.orphans,
 		),
 		controllerTasks: dependencies.controllerTasks,
+		blueprints:      blueprintCoordinator,
 		software:        dependencies.software,
-		localAgent:      dependencies.platform.reconciliation,
+		localAgent:      dependencies.platform,
 		attachMutations: dependencies.attachMutations,
 		container:       dependencies.platform,
 		etcdContainer:   dependencies.bootstrap.etcdLifecycle,

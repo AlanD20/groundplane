@@ -1,5 +1,10 @@
 package api
 
+import (
+	"github.com/AlanD20/groundplane/internal/common/version"
+	"time"
+)
+
 type HostCPU struct {
 	Model string `json:"model"`
 	Cores int    `json:"cores"`
@@ -13,16 +18,19 @@ type HostResource struct {
 }
 
 type HostEtcd struct {
-	Node   string      `json:"node"`
-	Status HealthState `json:"status"`
-	DBSize string      `json:"db_size"`
+	Software *version.ContainerIdentity `json:"software,omitempty"`
+	Version  *string                    `json:"version,omitempty"`
+	Node     string                     `json:"node"`
+	Status   HealthState                `json:"status"`
+	DBSize   string                     `json:"db_size"`
 }
 
 type HostController struct {
-	Service string                `json:"service"`
-	Status  HealthState           `json:"status"`
-	Version string                `json:"version"`
-	Update  ControllerUpdateState `json:"update"`
+	Service string                   `json:"service"`
+	Status  HealthState              `json:"status"`
+	Version string                   `json:"version"`
+	Source  *version.BuildProvenance `json:"source,omitempty"`
+	Update  ControllerUpdateState    `json:"update"`
 }
 
 type HostAgent struct {
@@ -45,4 +53,25 @@ type Host struct {
 	Etcd       HostEtcd       `json:"etcd"`
 	Controller HostController `json:"controller"`
 	Agent      HostAgent      `json:"agent"`
+}
+
+// HostTerminalOpen is the initial PTY geometry. The executable, user,
+// environment, and working directory are fixed by the Controller.
+type HostTerminalOpen struct {
+	Columns int `json:"columns" minimum:"20" maximum:"500"`
+	Rows    int `json:"rows" minimum:"5" maximum:"300"`
+}
+
+// HostTerminalSession is the safe, content-free projection of one transient
+// host shell. Ownership is carried only by an HttpOnly browser-session cookie.
+type HostTerminalSession struct {
+	ID                     string    `json:"id"`
+	Host                   string    `json:"host"`
+	User                   string    `json:"user"`
+	State                  string    `json:"state" enum:"active,terminated"`
+	Reason                 string    `json:"reason,omitempty"`
+	InputInactivitySeconds int       `json:"input_inactivity_seconds"`
+	ExpiresAt              time.Time `json:"expires_at"`
+	StreamPath             string    `json:"stream_path"`
+	Resumed                bool      `json:"resumed"`
 }

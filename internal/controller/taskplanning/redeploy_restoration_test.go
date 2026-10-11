@@ -4,6 +4,9 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
+
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -151,6 +154,7 @@ func redeployRestorationInput(
 ) (*TaskPlanResolver, etcd.TaskRecord, etcd.ReleaseTaskRenderInput) {
 	t.Helper()
 	reader, task := blueprintPlanTestState(t)
+	captureTestServiceProxySelection(t, &reader.projection, serviceproxy.Caddy)
 	project := &composetypes.Project{
 		Services: composetypes.Services{"api": {
 			Name: "api", Image: "example/api:next", Expose: []string{"8080"},
@@ -186,17 +190,35 @@ func redeployRestorationInput(
 			OperationID: task.OperationID, OperationKind: domain.OperationDeploy,
 			CandidateWorkload: releaseTestWorkload("example/api:next"), Strategy: strategy,
 			OnFailure: domain.OnFailureSwitchBack, PriorServingReleaseID: priorID},
-		Render: testreleaserender.ReleaseRenderInput{ReleaseID: releaseID, PlanID: task.PlanID,
-			ArtifactID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAZ", PriorArtifactID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAY",
-			ServiceID: serviceID, ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:next"),
-			PriorWorkload: &prior, Strategy: strategy, PriorStrategy: strategy,
-			CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
-			ProxyPorts: []uint16{
-				8080,
-			}, ProxyGeneration: 2, PriorProxyGeneration: 1, ProxyImage: testServiceProxyImage(),
-			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
-			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-			AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection},
+		Render: testreleaserender.ReleaseRenderInput{
+			ReleaseID:         releaseID,
+			PlanID:            task.PlanID,
+			ArtifactID:        "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+			PriorArtifactID:   "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAY",
+			ServiceID:         serviceID,
+			ServiceName:       "api",
+			CandidateWorkload: releaseTestWorkload("example/api:next"),
+			PriorWorkload:     &prior,
+			Strategy:          strategy,
+			PriorStrategy:     strategy,
+			CandidateTarget:   domain.WorkloadSingleton,
+			PriorTarget:       domain.WorkloadSingleton,
+			ProxyPorts: []domain.ProxyPort{
+				{Port: 8080, Protocol: serviceports.TCP},
+			},
+			ProxyGeneration:      2,
+			PriorProxyGeneration: 1,
+			ProxyImage:           testServiceProxyImage(),
+			ProxyImplementation:  serviceproxy.Caddy,
+			TenantID:             reader.tenant.ID,
+			TenantSlug:           reader.tenant.Slug,
+			ProjectID:            reader.project.ID,
+			ProjectSlug:          reader.project.Slug,
+			EnvironmentID:        reader.environment.ID,
+			EnvironmentName:      reader.environment.Name,
+			AuthorizedVolumeDir:  reader.environment.VolumeDir,
+			Projection:           reader.projection,
+		},
 	}
 	if strategy == domain.StrategyBlueGreen {
 		member.Intent.Slot = domain.SlotGreen
@@ -212,7 +234,14 @@ func redeployRestorationInput(
 		if candidate {
 			target, id, generation = member.Render.CandidateTarget, releaseID, 2
 		}
-		config, err := domain.RenderProxyConfig("api", id, target, generation, []uint16{8080})
+		config, err := domain.RenderProxyConfig(
+			serviceproxy.Caddy,
+			"api",
+			id,
+			target,
+			generation,
+			[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -232,13 +261,8 @@ func redeployRestorationInput(
 	priorSource.Strategy, priorSource.Slot = member.Render.PriorStrategy, member.Render.PriorSlot
 	priorSource.CandidateTarget = member.Render.PriorTarget
 	priorSource.ProxyGeneration, priorSource.ProxyConfigDigest = member.Render.PriorProxyGeneration, member.Render.PriorProxyDigest
-	priorArtifacts, err := resolver.RenderRetainedServiceRuntime(
-		t.Context(), testreleaserender.ServiceLifecycleRelease{Current: priorSource},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	priorBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(priorArtifacts[0])
+	priorArtifact := nativeRuntimeFixture(t, priorSource, true)
+	priorBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(priorArtifact)
 	if err != nil {
 		t.Fatal(err)
 	}

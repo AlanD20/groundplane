@@ -24,6 +24,7 @@ type ComponentImage struct {
 	Repository  string
 	IndexDigest string
 	Reference   string
+	SelectedTag string
 	Platform    componentsdk.OCIPlatform
 }
 

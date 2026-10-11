@@ -28,6 +28,12 @@ type fakeTaskRetryRepository struct {
 	mutationCalls int
 }
 
+func (*fakeTaskRetryRepository) RetryInterruptedDetach(context.Context, string,
+	testidempotency.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "unexpected interrupted Detach retry")
+}
+
 type fakeBackupTaskRetryer struct {
 	sourceID string
 	retryID  string

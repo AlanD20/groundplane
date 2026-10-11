@@ -83,7 +83,7 @@ func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Jour
 		return upgrade.Journal{}, err
 	}
 	journal := upgrade.Journal{
-		Schema: 1, TaskID: task.ID, Release: input.Release, Manifest: input.Manifest,
+		Schema: 2, TaskID: task.ID, Release: input.Release, Manifest: input.Manifest,
 		PreviousController: input.PreviousController, Agent: input.Agent,
 		StartedAt: started, Deadline: deadline, Phase: upgrade.PhasePrepared,
 	}

@@ -17,7 +17,12 @@ func TestManifestBoundary(t *testing.T) {
 			`","channel_schema":%d,"controller_sha256":"sha256:`,
 			executionplan.SchemaVersion,
 		) + strings.Repeat("b", 64) +
-		fmt.Sprintf(`","controller_version":"0.1.0","schema":1,"storage_epoch":%d}`, StorageEpoch))
+		fmt.Sprintf(
+			`","controller_source":{"commit":"%s","kind":"release"},"controller_version":"0.1.0","schema":%d,"storage_epoch":%d}`,
+			strings.Repeat("c", 40),
+			ManifestSchema,
+			StorageEpoch,
+		))
 	id := Digest(fmt.Sprintf("sha256:%x", sha256.Sum256(valid)))
 	manifest, err := ParseManifest(valid, id)
 	if err != nil || manifest.ControllerVersion != "0.1.0" {
@@ -25,10 +30,20 @@ func TestManifestBoundary(t *testing.T) {
 	}
 	for name, raw := range map[string][]byte{
 		"digest mismatch": append([]byte(" "), valid...),
-		"duplicate":       []byte(strings.Replace(string(valid), `"schema":1`, `"schema":1,"schema":1`, 1)),
-		"unknown":         []byte(strings.Replace(string(valid), `"schema":1`, `"other":1,"schema":1`, 1)),
-		"tag":             []byte(strings.Replace(string(valid), "@sha256:"+strings.Repeat("a", 64), ":latest", 1)),
-		"storage":         []byte(strings.Replace(string(valid), fmt.Sprintf(`"storage_epoch":%d`, StorageEpoch), `"storage_epoch":3`, 1)),
+		"duplicate": []byte(strings.Replace(
+			string(valid),
+			fmt.Sprintf(`"schema":%d`, ManifestSchema),
+			fmt.Sprintf(`"schema":%d,"schema":%d`, ManifestSchema, ManifestSchema),
+			1,
+		)),
+		"unknown": []byte(strings.Replace(
+			string(valid),
+			fmt.Sprintf(`"schema":%d`, ManifestSchema),
+			fmt.Sprintf(`"other":1,"schema":%d`, ManifestSchema),
+			1,
+		)),
+		"tag":     []byte(strings.Replace(string(valid), "@sha256:"+strings.Repeat("a", 64), ":latest", 1)),
+		"storage": []byte(strings.Replace(string(valid), fmt.Sprintf(`"storage_epoch":%d`, StorageEpoch), `"storage_epoch":3`, 1)),
 		"protocol": []byte(strings.Replace(string(valid), fmt.Sprintf(`"channel_schema":%d`, executionplan.SchemaVersion),
 			fmt.Sprintf(`"channel_schema":%d`, executionplan.SchemaVersion+1), 1)),
 		"version control character": []byte(strings.Replace(string(valid), "0.1.0", `0.1.0\n`, 1)),

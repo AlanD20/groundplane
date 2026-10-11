@@ -47,23 +47,32 @@ func TestServingRecoveryRestoresRetainedInactiveSlot(t *testing.T) {
 			candidate := proto.CloneOf(retained)
 			candidate.Services[0].ExpectedLabels[0].Value = servingRecoveryCandidateID
 			candidate.Services[0].ImageReference = "sha256:" + strings.Repeat("b", 64)
-			request := &agentpb.ComposeHelperRequest{RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
-				EnvironmentId: helperEnvironmentID,
-				Candidates: []*agentpb.ReleaseRestorationCandidate{
-					{ServiceId: helperServiceID, ReleaseId: servingRecoveryCandidateID,
-						Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR},
+			request := &agentpb.ComposeHelperRequest{
+				RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
+					EnvironmentId: helperEnvironmentID,
+					Candidates: []*agentpb.ReleaseRestorationCandidate{
+						{
+							ServiceId: helperServiceID,
+							ReleaseId: servingRecoveryCandidateID,
+							Target:    agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
+						},
+					},
+					NativePredecessors: []*agentpb.ReleaseNativePredecessorAuthority{
+						{ServiceId: helperServiceID,
+							CurrentArtifact: marshalNativeHelperArtifact(
+								t,
+								current,
+							), RetainedPriorArtifact: marshalNativeHelperArtifact(t, retained)},
+					},
 				},
-				NativePredecessors: []*agentpb.ReleaseNativePredecessorAuthority{{ServiceId: helperServiceID,
-					CurrentArtifact: marshalNativeHelperArtifact(
-						t,
-						current,
-					), RetainedPriorArtifact: marshalNativeHelperArtifact(t, retained)}},
-			}}
-			step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
-				CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
-					ServiceId: helperServiceID, CandidateReleaseId: servingRecoveryCandidateID,
+			}
+			step := &agentpb.ExecutionStep{
+				Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
+					CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+						ServiceId: helperServiceID, CandidateReleaseId: servingRecoveryCandidateID,
+					},
 				},
-			}}
+			}
 			if scenario == "missing probe" {
 				step.Payload = &agentpb.ExecutionStep_CandidateRestorationProbe{
 					CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
@@ -87,7 +96,10 @@ func TestServingRecoveryRestoresRetainedInactiveSlot(t *testing.T) {
 								options.Args[index:],
 								[]string{"up", "--detach", "--no-deps", "--", "api-green"},
 							) {
-							t.Fatalf("retained restoration exceeds sealed scope or precedes cleanup: %v", options.Args)
+							t.Fatalf(
+								"retained restoration exceeds sealed scope or precedes cleanup: %v",
+								options.Args,
+							)
 						}
 						retainedPresent, started = true, true
 					}
@@ -104,7 +116,10 @@ func TestServingRecoveryRestoresRetainedInactiveSlot(t *testing.T) {
 					}
 					return runner.Result{Stdout: []byte(ids)}, nil
 				case "rm":
-					if !slices.Equal(options.Args, []string{"container", "rm", "--force", "--", "bbbbbbbbbbbbbbbb"}) {
+					if !slices.Equal(
+						options.Args,
+						[]string{"container", "rm", "--force", "--", "bbbbbbbbbbbbbbbb"},
+					) {
 						t.Fatalf("removed runtime outside failed candidate: %v", options.Args)
 					}
 					candidatePresent, removed = false, true
@@ -119,8 +134,11 @@ func TestServingRecoveryRestoresRetainedInactiveSlot(t *testing.T) {
 					}
 					switch options.Args[3] {
 					case "{{json .Config.Labels}}":
-						labels := map[string]string{"com.docker.compose.project": current.ProjectName,
-							"com.docker.compose.service": service.ComposeName, "com.groundplane.service-id": helperServiceID}
+						labels := map[string]string{
+							"com.docker.compose.project": current.ProjectName,
+							"com.docker.compose.service": service.ComposeName,
+							"com.groundplane.service-id": helperServiceID,
+						}
 						for _, label := range service.ExpectedLabels {
 							labels[label.Key] = label.Value
 						}
@@ -141,13 +159,22 @@ func TestServingRecoveryRestoresRetainedInactiveSlot(t *testing.T) {
 								Stdout: []byte(`{"Running":true,"Health":{"Status":"unhealthy"}}`),
 							}, nil
 						}
-						return runner.Result{Stdout: []byte(`{"Running":true,"Health":{"Status":"healthy"}}`)}, nil
+						return runner.Result{
+							Stdout: []byte(`{"Running":true,"Health":{"Status":"healthy"}}`),
+						}, nil
 					}
 				}
 				t.Fatalf("unexpected command: %v", options.Args)
 				return runner.Result{}, nil
 			}
-			response, err := executeServingPredecessor(context.Background(), fake, 30, request, candidate, step)
+			response, err := executeServingPredecessor(
+				context.Background(),
+				fake,
+				30,
+				request,
+				candidate,
+				step,
+			)
 			want := agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED
 			if scenario == "missing probe" {
 				want = agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_RESTORATION_REQUIRED
@@ -157,7 +184,13 @@ func TestServingRecoveryRestoresRetainedInactiveSlot(t *testing.T) {
 			if err != nil || response.GetOutcome() != want ||
 				scenario == "candidate replaced retained" &&
 					(!started || !removed) || scenario == "retained unhealthy" && !started {
-				t.Fatalf("retained recovery = %v, %v; started=%t removed=%t", response, err, started, removed)
+				t.Fatalf(
+					"retained recovery = %v, %v; started=%t removed=%t",
+					response,
+					err,
+					started,
+					removed,
+				)
 			}
 		})
 	}
@@ -178,10 +211,10 @@ func testServingCandidateCleanup(t *testing.T, scenario string) {
 	}
 	predecessor := &agentpb.ComposeArtifact{ArtifactId: helperArtifactID, ProjectName: "gp-serving",
 		CanonicalYaml: []byte("services:\n  api: {}\n"), Services: []*agentpb.ComposeService{old}}
+	request, _ := sealedServingPredecessorRequest(t, predecessor)
 	candidate := proto.CloneOf(predecessor)
 	candidate.Services[0].ExpectedLabels[3].Value = servingRecoveryCandidateID
 	candidate.Services[0].ImageReference = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	request, _ := sealedServingPredecessorRequest(t, predecessor)
 	request.RestorationAuthority.Candidates[0].ReleaseId = servingRecoveryCandidateID
 	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
 		CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
@@ -224,7 +257,10 @@ func testServingCandidateCleanup(t *testing.T, scenario string) {
 			if scenario == "probe only" || scenario == "actual image differs" {
 				t.Fatal("observation-only case removed runtime")
 			}
-			if !slices.Equal(options.Args, []string{"container", "rm", "--force", "--", "bbbbbbbbbbbbbbbb"}) {
+			if !slices.Equal(
+				options.Args,
+				[]string{"container", "rm", "--force", "--", "bbbbbbbbbbbbbbbb"},
+			) {
 				t.Fatalf("wrong cleanup target: %v", options.Args)
 			}
 			if scenario == "cleanup failed" {
@@ -281,7 +317,9 @@ func testServingCandidateCleanup(t *testing.T, scenario string) {
 						),
 					}, nil
 				}
-				return runner.Result{Stdout: []byte(service.ImageReference + "\n" + service.ImageReference)}, nil
+				return runner.Result{
+					Stdout: []byte(service.ImageReference + "\n" + service.ImageReference),
+				}, nil
 			case "{{json .State}}":
 				return runner.Result{Stdout: []byte(`{"Running":true}`)}, nil
 			}
@@ -289,7 +327,14 @@ func testServingCandidateCleanup(t *testing.T, scenario string) {
 		t.Fatalf("unexpected command: %v", options.Args)
 		return runner.Result{}, nil
 	}
-	response, err := executeServingPredecessor(context.Background(), fake, 30, request, candidate, step)
+	response, err := executeServingPredecessor(
+		context.Background(),
+		fake,
+		30,
+		request,
+		candidate,
+		step,
+	)
 	if scenario == "probe only" {
 		if err != nil || removed || restored ||
 			response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_RESTORATION_REQUIRED ||
@@ -308,7 +353,14 @@ func testServingCandidateCleanup(t *testing.T, scenario string) {
 		return
 	}
 	if err != nil || response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED ||
-		response.GetRecreateEvidence().GetReleaseId() != candidateAbsenceReleaseID || !removed || !restored {
-		t.Fatalf("exact recovery = %v, %v, removed=%t restored=%t", response, err, removed, restored)
+		response.GetRecreateEvidence().GetReleaseId() != candidateAbsenceReleaseID || !removed ||
+		!restored {
+		t.Fatalf(
+			"exact recovery = %v, %v, removed=%t restored=%t",
+			response,
+			err,
+			removed,
+			restored,
+		)
 	}
 }

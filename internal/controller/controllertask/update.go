@@ -15,7 +15,7 @@ import (
 // Restore establishes admission holds without requiring a running channel.
 type UpdateExecutor interface {
 	Restore(context.Context, etcd.TaskAssignment) error
-	Execute(context.Context, etcd.TaskRecord, time.Time) (taskjournal.TaskStatus, error)
+	Execute(context.Context, etcd.TaskRecord, time.Time, *Progress) (taskjournal.ControllerOutcome, error)
 	Abort(context.Context, string) error
 }
 
@@ -54,14 +54,18 @@ func (runner *Runner) executeUpdate(ctx context.Context, claim etcd.TaskAssignme
 	if err := runner.updates.Restore(ctx, claim); err != nil {
 		return err
 	}
-	status, err := runner.updates.Execute(ctx, claim.Task.Record, claim.Assignment.Record.Deadline)
+	progress := NewProgress(ctx, runner.store, claim, runner.now)
+	outcome, err := runner.updates.Execute(ctx, claim.Task.Record, claim.Assignment.Record.Deadline, progress)
+	if recordErr := progress.Err(); recordErr != nil {
+		return recordErr
+	}
 	if err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	switch status {
+	switch outcome.Status {
 	case taskjournal.TaskStatusCompleted,
 		taskjournal.TaskStatusFailed,
 		taskjournal.TaskStatusAborted,
@@ -69,7 +73,13 @@ func (runner *Runner) executeUpdate(ctx context.Context, claim etcd.TaskAssignme
 	default:
 		return errs.New(errs.KindInternal, "controller update recovery returned no settled result")
 	}
-	_, err = runner.store.AcknowledgeControllerTask(ctx, claim.Task.Record.ID, status, runner.now().UTC())
+	_, err = runner.store.AcknowledgeControllerTask(
+		ctx,
+		claim.Task.Record.ID,
+		outcome.Status,
+		outcome.Failure,
+		runner.now().UTC(),
+	)
 	return err
 }
 

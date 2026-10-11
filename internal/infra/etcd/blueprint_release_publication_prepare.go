@@ -35,6 +35,10 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if _, err := validateReleaseCandidateDescriptor(evidence.CandidateReleaseDescriptor, evidence.Task, evidence.Manifest.Record); err != nil {
 		return BlueprintReleasePublication{}, err
 	}
+	rolloutCondition, err := blueprintServiceRolloutPublicationCondition(evidence)
+	if err != nil {
+		return BlueprintReleasePublication{}, err
+	}
 	artifact, err := blueprintExecutedArtifact(evidence)
 	if err != nil {
 		return BlueprintReleasePublication{}, err
@@ -52,6 +56,9 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			ModRevision: evidence.Manifest.Revision,
 		},
 		{Key: releases.ReleasePublicationKey(evidence.Manifest.Record.PublicationID)},
+	}
+	if rolloutCondition != nil {
+		conditions = append(conditions, *rolloutCondition)
 	}
 	conditions = append(conditions, evidence.ProxyAddresses.Conditions()...)
 	nativeConditions, err := ledger.blueprintNativePredecessorConditions(ctx, evidence)

@@ -114,22 +114,38 @@ func commandsFor(
 		return []runner.RunCmdOpts{mutation}, nil
 	}
 	if apply := step.GetComposeWorkloadApply(); apply != nil {
+		workload, err := executionplan.ReleaseWorkloadService(
+			artifact,
+			apply.ServiceId,
+			apply.Target,
+			apply.RollingReplicaOrdinal,
+		)
+		if err != nil {
+			return nil, err
+		}
+		proxyName := releaseProxyName(artifact, apply.ServiceId)
+		if apply.EnsureProxy && proxyName == "" {
+			return nil, errs.New(errs.KindValidationFailed, "workload apply requests an absent stable proxy")
+		}
 		validation := base
 		validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
 		mutation := base
 		mutation.Args = append(append([]string(nil), prefix...), "up", "--detach")
-		if apply.EnsureProxy {
-			mutation.Args = append(mutation.Args, releaseProxyName(artifact, apply.ServiceId))
+		if apply.RollingReplicaOrdinal != 0 {
+			mutation.Args = append(mutation.Args, "--no-deps")
 		}
-		mutation.Args = append(mutation.Args, releaseWorkloadName(artifact, apply.ServiceId, apply.Target))
-		if !apply.EnsureProxy {
+		if apply.EnsureProxy {
+			mutation.Args = append(mutation.Args, proxyName)
+		}
+		mutation.Args = append(mutation.Args, workload.GetComposeName())
+		if !apply.EnsureProxy && proxyName != "" {
 			// Start the existing stable proxy without reconciling its candidate
 			// YAML: it retains predecessor ownership and live connections.
 			start := base
 			start.Args = append(
 				append([]string(nil), prefix...),
 				"start",
-				releaseProxyName(artifact, apply.ServiceId),
+				proxyName,
 			)
 			return []runner.RunCmdOpts{validation, mutation, start}, nil
 		}
@@ -137,6 +153,20 @@ func commandsFor(
 	}
 	mutation := base
 	switch payload := step.Payload.(type) {
+	case *agentpb.ExecutionStep_ComposeWorkloadRemove:
+		remove := payload.ComposeWorkloadRemove
+		replica, err := executionplan.RollingRetirement(request.Plan, step)
+		if err != nil {
+			return nil, err
+		}
+		if replica.ContainerID != "" {
+			return nil, errs.New(errs.KindValidationFailed, "captured container retirement requires the verified container executor")
+		}
+		workload, err := executionplan.ReleaseWorkloadService(artifact, remove.ServiceId, remove.Target, remove.RollingReplicaOrdinal)
+		if err != nil {
+			return nil, err
+		}
+		mutation.Args = append(append([]string(nil), prefix...), "rm", "--stop", "--force", workload.GetComposeName())
 	case *agentpb.ExecutionStep_ComposeStop:
 		mutation.Args = append(append([]string(nil), prefix...),
 			"stop", "--timeout", strconv.FormatUint(uint64(payload.ComposeStop.GraceSeconds), 10))

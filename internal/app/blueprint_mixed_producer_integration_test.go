@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -13,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -45,14 +45,14 @@ func (r *mixedCandidateImageResolver) ResolveWorkloadImages(
 		want = 2
 	}
 	if agentID == "" || len(selectors) != want || selectors[0].GetRequestedReference() != r.seal.RequestedReference {
-		r.t.Fatal("mixed preflight image selection diverged")
+		r.t.Fatal("mixed Service-unit image selection diverged")
 	}
 	resolutions := []*agentpb.WorkloadImageResolution{
 		{Selector: proto.CloneOf(selectors[0]), LocalImageId: r.seal.LocalImageID},
 	}
 	if r.withPredecessor {
 		if selectors[1].GetLocalImageId() != r.seal.LocalImageID {
-			r.t.Fatal("mixed preflight did not select the sealed predecessor image")
+			r.t.Fatal("mixed Service unit did not select the sealed predecessor image")
 		}
 		resolutions = append(
 			resolutions,
@@ -65,8 +65,8 @@ func (r *mixedCandidateImageResolver) ResolveWorkloadImages(
 		}}}, nil
 }
 
-// Rationale: full preflight/pre-stage merge/producer must preserve serving
-// replicas and proxy while starting an independently selected new Service.
+// Rationale: the native Service-unit producer must preserve serving replicas
+// and proxy while starting an independently selected new Service.
 func TestBlueprintMixedProducerPreservesServingServices(t *testing.T) {
 	for _, addressable := range []bool{false, true} {
 		name := "portless"
@@ -106,24 +106,17 @@ func proveFullMixedProducer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	imageResolver := &mixedCandidateImageResolver{t: t, seal: prior.CandidateWorkload, withPredecessor: recoverMixed}
+	acknowledged, err := fixture.Ledger.LoadAcknowledgedServiceRuntimesAtRevision(
+		ctx, prior.EnvironmentID, []string{prior.ServiceID}, scope.ReadRevision,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	scripts, sources := fixture.HookDependencies(t)
 	if err := resolver.EnableScriptPlans(scripts); err != nil {
 		t.Fatal(err)
 	}
 	artifacts, err := testtaskplanning.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
-	if err != nil {
-		t.Fatal(err)
-	}
-	producer, err := blueprintrelease.NewService(
-		fixture.Ledger,
-		scripts,
-		resolver,
-		artifacts,
-		sources,
-		blueprintImageLookupAgent(t, fixture),
-		imageResolver,
-	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,10 +153,6 @@ func proveFullMixedProducer(
 		}
 		project.Services[name] = definition
 	}
-	previous := &composetypes.Project{
-		Name:     project.Name,
-		Services: composetypes.Services{"api": project.Services["api"]},
-	}
 	slices.SortFunc(identities, func(a, b testcomposeidentity.Resource) int {
 		return strings.Compare(a.Name, b.Name)
 	})
@@ -172,18 +161,6 @@ func proveFullMixedProducer(
 		definition.Scale = &changes[0].Record.Desired.Replicas
 		project.Services["api"] = definition
 	}
-	memberships, err := blueprintrelease.BuildNormalizedServiceMemberships(previous, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	before := fixture.ReadRevision()
-	workloads, err := producer.Preflight(ctx, prior.EnvironmentID, changes, memberships, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fixture.ReadRevision() != before || imageResolver.calls != 1 {
-		t.Fatal("preflight wrote state or repeated image lookup")
-	}
 	task := fixture.Task(t, 1700)
 	if recoverMixed {
 		task.CreatedAt = time.Now().UTC()
@@ -191,18 +168,12 @@ func proveFullMixedProducer(
 	}
 	task.RenderGeneration = 3
 	artifactID := ids.New(ids.KindConfig)
-	task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
-	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(taskcontract.BlueprintComposeProcedureNone)
 	artifact, err := testcomposerender.RenderCompose(
 		testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
 			ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: prior.TenantID, ProjectID: prior.ProjectID,
 			EnvironmentID: prior.EnvironmentID, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 			AuthorizedVolumeDir: prior.AuthorizedVolumeDir, Identities: testcomposeidentity.Snapshot{Services: identities}},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	artifact, err = producer.PrepareRuntimeArtifact(workloads, artifact, changes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,36 +195,75 @@ func proveFullMixedProducer(
 	}
 	projection.DesiredServices[0].Desired = changes[0].Record.Desired
 	hooks := fixture.StageHookScripts(t, task, worker, hookCount)
-	tenant, err := fixture.Hierarchy.GetTenant(ctx, prior.TenantID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prepared, err := producer.Prepare(ctx, blueprintrelease.PrepareInput{
-		DesiredRevisionID: projection.RevisionID,
-		Scripts:           hooks,
-		Workloads:         workloads, VolumeRoot: "/var/lib/groundplane/vol", Task: task, Projection: projection,
-		Tenant:  tenant,
-		Project: fixture.Project, Environment: fixture.Environment, Memberships: memberships, ServiceChanges: changes,
-		Artifact: artifact, CreatedAt: task.CreatedAt, AllocateNamed: func(kind ids.Kind, purpose string) string {
-			return ids.DeriveAt(kind, task.CreatedAt, task.ID, purpose)
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, expected := range applied.Services {
-		if recoverMixed {
-			break // This journey replaces the old native as well as starting worker.
+	revision := fixture.PublishNativeBlueprintRevision(t, task, projection, hooks)
+	targets := make([]string, 0, len(changes))
+	if recoverMixed {
+		for _, change := range changes {
+			targets = append(targets, change.Record.Desired.ID)
 		}
-		found := false
-		for _, actual := range prepared.Plan.Artifacts[0].Services {
-			found = found || proto.Equal(expected, actual)
-		}
-		if !found {
-			t.Fatal("full producer lost retained runtime metadata")
+	} else {
+		for _, change := range changes {
+			if change.Record.Desired.ID != prior.ServiceID {
+				targets = append(targets, change.Record.Desired.ID)
+			}
 		}
 	}
-	fixture.Publish(t, prepared.Task, projection, prepared.Publication)
+	if len(targets) == 0 {
+		t.Fatal("native mixed fixture has no selected Service unit")
+	}
+	preparedUnits := make([]blueprintrelease.Prepared, len(targets))
+	imageResolvers := make([]*mixedCandidateImageResolver, len(targets))
+	for index, serviceID := range targets {
+		imageResolvers[index] = &mixedCandidateImageResolver{
+			t: t, seal: prior.CandidateWorkload, withPredecessor: serviceID == prior.ServiceID,
+		}
+		producer, producerErr := blueprintrelease.NewService(
+			fixture.Ledger,
+			scripts,
+			resolver,
+			artifacts,
+			sources,
+			blueprintImageLookupAgent(t, fixture),
+			imageResolvers[index],
+			unexpectedBlueprintRollingObserver{t},
+		)
+		if producerErr != nil {
+			t.Fatal(producerErr)
+		}
+		selectedScripts := hooks
+		if serviceID != worker.Desired.ID {
+			selectedScripts = nil
+		}
+		preparedUnits[index] = fixture.PrepareNativeServiceUnit(
+			t, producer, revision, serviceID, selectedScripts, nil,
+		)
+		members := preparedUnits[index].Plan.GetCandidateReleaseProcedure().GetMembers()
+		if len(members) != 1 || members[0].GetServiceId() != serviceID {
+			t.Fatal("native Service unit did not select exactly its own candidate")
+		}
+		fixture.PublishNativeServiceUnit(t, revision, serviceID, preparedUnits[index])
+	}
+	prepared := preparedUnits[0]
+	if !recoverMixed {
+		for _, unit := range preparedUnits {
+			for _, member := range unit.Plan.GetCandidateReleaseProcedure().GetMembers() {
+				if member.ServiceId == prior.ServiceID {
+					t.Fatal("independent Service unit executes the unchanged serving workload")
+				}
+			}
+		}
+		currentScope, readErr := fixture.Ledger.LoadPlanningScope(ctx, prior.EnvironmentID)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		current, readErr := fixture.Ledger.LoadAcknowledgedServiceRuntimesAtRevision(
+			ctx, prior.EnvironmentID, []string{prior.ServiceID}, currentScope.ReadRevision,
+		)
+		if readErr != nil || current[0].Revision != acknowledged[0].Revision ||
+			!reflect.DeepEqual(current[0].Record, acknowledged[0].Record) {
+			t.Fatalf("independent Service publication changed acknowledged serving authority: %v", readErr)
+		}
+	}
 	replayed, err := resolver.ResolveExecutionPlan(ctx, prepared.Task)
 	if err != nil || !proto.Equal(prepared.Plan, replayed) {
 		t.Fatalf(
@@ -263,13 +273,23 @@ func proveFullMixedProducer(
 			prepared.Task.TimeoutSeconds,
 		)
 	}
-	if imageResolver.calls != 1 {
-		t.Fatal("producer or replay re-resolved images")
+	for _, imageResolver := range imageResolvers {
+		if imageResolver.calls != 1 {
+			t.Fatal("producer or replay re-resolved images")
+		}
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, claimed, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
-	if err != nil || !claimed || claim.Task.Record.ID != task.ID {
+	claim, claimed, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second))
+	if err != nil || !claimed {
 		t.Fatalf("full producer claim: %t %v", claimed, err)
+	}
+	preparedByTask := make(map[string]blueprintrelease.Prepared, len(preparedUnits))
+	for _, unit := range preparedUnits {
+		preparedByTask[unit.Task.ID] = unit
+	}
+	prepared, found := preparedByTask[claim.Task.Record.ID]
+	if !found {
+		t.Fatal("full producer claimed a Task outside its sibling Service units")
 	}
 	if reconnectHooks {
 		claim = fixture.AtMaximumExecutionEpoch(t, claim)
@@ -283,17 +303,39 @@ func proveFullMixedProducer(
 		return
 	}
 	if recoverMixed {
-		fixture.ProveMixedMemberRecovery(
-			t,
-			agentID,
-			claim,
-			prepared.Plan,
-			prior.ServiceID,
-			prior.ReleaseID,
-			func(recovery etcd.TaskAssignment, expected testtaskjournal.TaskResultRecord) testtaskjournal.TaskResultRecord {
-				return executeMixedWorkerRecovery(t, fixture, recovery, prepared.Plan, expected)
-			},
-		)
+		for remaining := len(preparedUnits); remaining > 0; remaining-- {
+			member := prepared.Plan.GetCandidateReleaseProcedure().GetMembers()[0]
+			priorID := ""
+			if member.GetServiceId() == prior.ServiceID {
+				priorID = prior.ReleaseID
+			}
+			var worker []func(etcd.TaskAssignment, testtaskjournal.TaskResultRecord) testtaskjournal.TaskResultRecord
+			if len(preparedUnits) == 1 {
+				worker = append(
+					worker,
+					func(recovery etcd.TaskAssignment, expected testtaskjournal.TaskResultRecord) testtaskjournal.TaskResultRecord {
+						return executeMixedWorkerRecovery(t, fixture, recovery, prepared.Plan, expected)
+					},
+				)
+			}
+			fixture.ProveMixedMemberRecovery(
+				t, agentID, claim, prepared.Plan, member.GetServiceId(), priorID, worker...,
+			)
+			delete(preparedByTask, prepared.Task.ID)
+			if remaining == 1 {
+				break
+			}
+			claim, claimed, err = fixture.Tasks.ClaimNextTask(
+				ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Minute),
+			)
+			if err != nil || !claimed {
+				t.Fatalf("sibling Service-unit claim: %t %v", claimed, err)
+			}
+			prepared, found = preparedByTask[claim.Task.Record.ID]
+			if !found {
+				t.Fatal("claimed sibling is outside the authored revision")
+			}
+		}
 		return
 	}
 	result := testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1,
@@ -302,11 +344,11 @@ func proveFullMixedProducer(
 		ctx,
 		agentID,
 		1,
-		task.ID,
+		prepared.Task.ID,
 		claim.Assignment.Record.AssignmentID,
 		testtaskjournal.TaskStatusCompleted,
 		result,
-		task.CreatedAt.Add(time.Minute),
+		prepared.Task.CreatedAt.Add(time.Minute),
 	)
 	if err != nil || completed.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("full producer terminal completion: %s %v", completed.Record.Status, err)
@@ -315,17 +357,17 @@ func proveFullMixedProducer(
 		ctx,
 		agentID,
 		1,
-		task.ID,
+		prepared.Task.ID,
 		claim.Assignment.Record.AssignmentID,
 		testtaskjournal.TaskStatusCompleted,
 		result,
-		task.CreatedAt.Add(2*time.Minute),
+		prepared.Task.CreatedAt.Add(2*time.Minute),
 	)
 	if err != nil || replayedTerminal.Revision != completed.Revision ||
 		replayedTerminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("full producer terminal replay changed authority: %v", err)
 	}
-	latest, found, err := fixture.Hierarchy.GetEnvironmentAppliedComposeProjection(ctx, task.Target)
+	latest, found, err := fixture.Hierarchy.GetEnvironmentAppliedComposeProjection(ctx, prepared.Task.Target)
 	if err != nil || !found {
 		t.Fatalf("full producer applied projection: %t %v", found, err)
 	}

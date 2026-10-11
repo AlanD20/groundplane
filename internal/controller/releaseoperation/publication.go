@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/rollingpredecessor"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -49,9 +50,7 @@ func (service *Service) publish(
 	proxyServices := make([]core.Service, len(candidates))
 	for i, candidate := range candidates {
 		proxyServices[i] = candidate.planning.Service.Record.Desired
-		if candidate.planning.Service.Record.Runtime.PostgresToolsImage != "" {
-			proxyServices[i].Expose = nil
-		}
+		proxyServices[i].Expose = proxyServices[i].ProxyExposures()
 	}
 	addresses, err := taskplanning.PrepareServiceProxyAddresses(ctx, service.ledger.Planner, projection, proxyServices)
 	if err != nil {
@@ -98,11 +97,8 @@ func (service *Service) publish(
 			releaserender.TaskReleasePublicationParam: publicationID,
 			taskjournal.TaskComposeArtifactParam:      artifactID,
 		},
-		Steps: make([]taskjournal.TaskStepRecord, len(candidates)*5), TimeoutSeconds: configured,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	for index := range task.Steps {
-		task.Steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
+		TimeoutSeconds: configured,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	stage := releases.ReleaseStage{
 		PublicationID: publicationID, OperationID: operationID,
@@ -157,9 +153,18 @@ func (service *Service) publish(
 			}
 			priorRender = &prior.Record
 		}
-		expose := candidate.planning.Service.Record.Desired.Expose
-		if candidate.planning.Service.Record.Runtime.PostgresToolsImage != "" {
-			expose = nil
+		expose := candidate.planning.Service.Record.Desired.ProxyExposures()
+		if err := service.captureServingRuntime(ctx, scope, &render, candidate.priorReleaseID); err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		if err := rollingpredecessor.Capture(ctx, service.agents, service.observer, &render, candidate.planning.Service.Record.Desired.RollingReplicaTimeoutSeconds); err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		if render.Rolling != nil {
+			// Each replica has one bounded budget shared across its phases;
+			// final whole-set acknowledgement has one additional budget.
+			changes := max(len(render.Rolling.Prior), len(render.Rolling.Candidate))
+			budget += int64(changes+1)*int64(render.Rolling.ReplicaTimeoutSeconds) - int64(10*time.Minute/time.Second)
 		}
 		if err := configureReleaseProxy(&render, expose,
 			priorRender, candidate.planning.Projection.Revision); err != nil {
@@ -168,9 +173,14 @@ func (service *Service) publish(
 		if err := service.plans.PrepareReleaseProxyImage(&render, priorRender); err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		if err := service.captureServingRuntime(ctx, scope, &render, candidate.priorReleaseID); err != nil {
+		layout, err := taskplanning.AllocateReleaseMemberSteps(
+			render,
+			func(string) string { return ids.New(ids.KindStep) },
+		)
+		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
+		task.Steps = append(task.Steps, layout.Records()...)
 		raw, err := releaserender.EncodeReleaseRenderInput(render)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
@@ -264,6 +274,13 @@ func (service *Service) publish(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
+	networkTask, networkPlan, err := service.prepareNetworkTask(ctx, task, plan)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if networkTask != nil {
+		task.Params[taskjournal.TaskReleaseNetworkChildParam] = networkTask.ID
+	}
 	var executions []scriptexecutions.ScriptExecutionRecord
 	if len(plan.GetScriptRunnerSnapshots()) != 0 {
 		executions, err = etcd.NewScriptExecutionRecords(task, plan, now)
@@ -309,7 +326,7 @@ func (service *Service) publish(
 			EnvironmentID: scope.Environment.Record.ID, Generation: 1, OperationID: operationID,
 			AttemptTaskID: taskID, Group: groupID != "", Members: fenceMembers,
 		}, Operation: head, CandidateReleaseDescriptor: candidateDescriptor, Plan: plan,
-		Hooks: hookPublications, PublishedAt: now,
+		Hooks: hookPublications, PublishedAt: now, NetworkTask: networkTask, NetworkPlan: networkPlan,
 	})
 	if err != nil {
 		if !releaseGroupUnknownOutcome(err) {

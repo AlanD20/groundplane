@@ -10,6 +10,7 @@ import (
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -158,6 +159,18 @@ func (store *watchdogStore) Rollback(context.Context, string) error {
 	return nil
 }
 
+func (store *watchdogStore) BeginRollback(ctx context.Context, id string, from upgrade.Phase,
+	failure *taskprogress.Failure,
+) (upgrade.Journal, error) {
+	journal, err := store.Advance(ctx, id, from, upgrade.PhaseRollingBack)
+	if err != nil {
+		return upgrade.Journal{}, err
+	}
+	store.journal.Failure = taskprogress.CloneFailure(failure)
+	journal.Failure = store.journal.Failure
+	return journal, nil
+}
+
 type watchdogUnit struct {
 	store         *watchdogStore
 	starts, stops int
@@ -179,13 +192,13 @@ func (unit *watchdogUnit) Start(context.Context) error {
 func watchdogJournal() upgrade.Journal {
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	return upgrade.Journal{
-		Schema:             1,
+		Schema:             2,
 		TaskID:             ids.NewAt(ids.KindTask, now, 1),
 		Release:            upgrade.Hash([]byte("release")),
 		PreviousController: upgrade.Hash([]byte("previous")),
 		Phase:              upgrade.PhaseActivating,
 		Manifest: upgrade.Manifest{
-			Schema:            1,
+			Schema:            upgrade.ManifestSchema,
 			ControllerSHA256:  upgrade.Hash([]byte("candidate")),
 			ControllerVersion: "0.1.0",
 			AgentImage: "registry.example/agent@sha256:" + strings.Repeat(

@@ -71,7 +71,7 @@ func TestServiceRemovalRequiresPhysicalAbsence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = runtime.ExecuteStep(context.Background(), taskassignment.Assignment{Plan: plan}, step)
+			_, err = runtime.ExecuteStep(context.Background(), taskassignment.Assignment{Plan: plan}, step, nil)
 			if (err == nil) != test.wantSuccess || (helper.request != nil) != test.wantMutation {
 				t.Fatalf("success=%t mutation=%t error=%v", err == nil, helper.request != nil, err)
 			}

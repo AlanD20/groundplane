@@ -16,7 +16,7 @@ func (runtime *Runtime) ensureManagedComposeResource(
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (StepResult, error) {
-	result := StepResult{MutationAttempted: true}
+	result := StepResult{MutationAttempted: step.GetManagedNetworkPreparationProbe() == nil}
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID,
 		TaskId: assignment.TaskID, OperationId: assignment.OperationID,

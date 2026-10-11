@@ -52,7 +52,7 @@ func (repository *TaskRepository) validatePendingAbortReplay(
 	); err != nil {
 		return err
 	}
-	if err := repository.validateConnectorTaskAcknowledgementReplay(
+	if err := repository.validateResourceTaskAcknowledgementReplay(
 		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err

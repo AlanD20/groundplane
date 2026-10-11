@@ -30,7 +30,7 @@ func selectAuthoredOwnedUnitTargets(
 	targets := make([]authoredOwnedUnitTarget, 0,
 		len(identities.Services)+len(identities.Networks)+len(identities.Volumes)+
 			len(identities.Entries)+len(identities.Routes)+len(identities.Attaches)+
-			len(identities.Components)+len(identities.Scripts),
+			len(identities.Components)+len(identities.Scripts)+len(identities.DNSRecords),
 	)
 	appendIdentities := func(kind ids.Kind, values []projectionrecord.OwnedIdentity) {
 		for _, identity := range values {
@@ -45,6 +45,7 @@ func selectAuthoredOwnedUnitTargets(
 	appendIdentities(ids.KindVolume, identities.Volumes)
 	appendIdentities(ids.KindEnvEntry, identities.Entries)
 	appendIdentities(ids.KindRoute, identities.Routes)
+	appendIdentities(ids.KindDNSRecord, identities.DNSRecords)
 	appendIdentities(ids.KindAttach, identities.Attaches)
 	appendIdentities(ids.KindComponent, identities.Components)
 	appendIdentities(ids.KindScript, identities.Scripts)
@@ -57,14 +58,14 @@ func selectAuthoredOwnedUnitTargets(
 	return targets, nil
 }
 
-// planAcknowledgedOwnedOmissions derives cleanup work only from the unit
-// ledger's acknowledged effect state. A resource missing from the current
-// desired identities is not presumed absent merely because its desired record
-// was omitted. Already acknowledged absence requires no further unit.
+// planAcknowledgedOwnedOmissions combines retained omission intent with the
+// ledger's acknowledged effect state. Desired identity omission never implies
+// runtime absence; only an acknowledged absence can skip native removal.
 func planAcknowledgedOwnedOmissions(
 	environmentID string,
 	selected []authoredOwnedUnitTarget,
 	snapshot blueprintunits.Snapshot,
+	pending []projectionrecord.OwnedOmission,
 ) ([]blueprintunits.Unit, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		snapshot.EnvironmentID != environmentID {
@@ -78,6 +79,10 @@ func planAcknowledgedOwnedOmissions(
 		selectedByTarget[target.Target] = struct{}{}
 	}
 	omissions := make([]blueprintunits.Unit, 0)
+	pendingByTarget := make(map[blueprintunits.ResourceKey]bool, len(pending))
+	for _, target := range pending {
+		pendingByTarget[blueprintunits.ResourceKey{Kind: target.Kind, ID: target.ID}] = true
+	}
 	seenApplied := make(map[blueprintunits.ResourceKey]struct{}, len(snapshot.Applied))
 	for _, versioned := range snapshot.Applied {
 		applied := versioned.Record
@@ -88,7 +93,8 @@ func planAcknowledgedOwnedOmissions(
 			return nil, errs.New(errs.KindInternal, "Blueprint applied unit is duplicated")
 		}
 		seenApplied[applied.Target] = struct{}{}
-		if _, retained := selectedByTarget[applied.Target]; retained || applied.State == blueprintunits.Absent {
+		if _, retained := selectedByTarget[applied.Target]; retained ||
+			applied.State == blueprintunits.Absent && (versioned.Revision > 0 || !pendingByTarget[applied.Target]) {
 			continue
 		}
 		switch applied.Target.Kind {
@@ -97,7 +103,7 @@ func planAcknowledgedOwnedOmissions(
 				errs.KindResourceInUse,
 				"Blueprint omits a persistent Volume; remove the Volume separately before Apply",
 			)
-		case ids.KindService, ids.KindNetwork, ids.KindEnvEntry, ids.KindRoute,
+		case ids.KindService, ids.KindNetwork, ids.KindEnvEntry, ids.KindRoute, ids.KindDNSRecord,
 			ids.KindAttach, ids.KindComponent, ids.KindScript:
 			omissions = append(omissions, blueprintunits.Unit{
 				Target: applied.Target, Removal: true,
@@ -109,6 +115,25 @@ func planAcknowledgedOwnedOmissions(
 				"Blueprint cannot reconcile an owned resource whose immutable desired identity is unavailable",
 			)
 		}
+	}
+	// Admission retains omitted identities even when their direct lifecycle never
+	// wrote a Blueprint-unit receipt. Their removal still needs native source
+	// capture; this inventory is not synthesized applied-effect evidence.
+	for _, target := range pending {
+		key := blueprintunits.ResourceKey{Kind: target.Kind, ID: target.ID}
+		if _, retained := selectedByTarget[key]; retained {
+			return nil, errs.New(errs.KindInternal, "Blueprint omission remains declared")
+		}
+		if _, acknowledged := seenApplied[key]; acknowledged {
+			continue
+		}
+		if key.Kind == ids.KindVolume {
+			return nil, errs.New(errs.KindResourceInUse,
+				"Blueprint omits a persistent Volume; remove the Volume separately before Apply")
+		}
+		omissions = append(omissions, blueprintunits.Unit{
+			Target: key, Removal: true, Writes: []blueprintunits.ResourceKey{key},
+		})
 	}
 	slices.SortFunc(omissions, func(left, right blueprintunits.Unit) int {
 		return compareBlueprintUnitKeys(left.Target, right.Target)

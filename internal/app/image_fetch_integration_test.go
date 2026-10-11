@@ -83,7 +83,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		failedProgress.Record.ImageFetchProgress.Phase != "verifying" {
 		t.Fatalf("fetch failure diagnostic was not persisted: %#v, %v", failedProgress.Record.ImageFetchProgress, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, accepted.TaskID, taskjournal.TaskStatusFailed, time.Now().UTC()); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, accepted.TaskID, taskjournal.TaskStatusFailed, nil, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	replay, err := service.FetchImage(ctx, original.Requested, key)
@@ -129,7 +129,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	} else if len(registry.tagged) != tagged {
 		t.Fatal("resume repeated an already receipted tag effect")
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retry.TaskID, taskjournal.TaskStatusCompleted, time.Now().UTC()); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, retry.TaskID, taskjournal.TaskStatusCompleted, nil, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	verified, err := tasks.GetTask(ctx, retry.TaskID)
@@ -187,7 +187,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err := service.Execute(ctx, claim.Task.Record); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, newSelection.TaskID, taskjournal.TaskStatusCompleted, time.Now().UTC()); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, newSelection.TaskID, taskjournal.TaskStatusCompleted, nil, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	inventory, err = service.ListImages(ctx)
@@ -228,7 +228,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		t.Fatal("mismatched stale content was accepted")
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, staleAccepted.TaskID, taskjournal.TaskStatusFailed, time.Now().UTC(),
+		ctx, staleAccepted.TaskID, taskjournal.TaskStatusFailed, nil, time.Now().UTC(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, latestAccepted.TaskID, taskjournal.TaskStatusCompleted, time.Now().UTC(),
+		ctx, latestAccepted.TaskID, taskjournal.TaskStatusCompleted, nil, time.Now().UTC(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		t.Fatalf("stale retry moved the newer tag: %#v", registry.tagged)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, staleRetry.TaskID, taskjournal.TaskStatusFailed, time.Now().UTC(),
+		ctx, staleRetry.TaskID, taskjournal.TaskStatusFailed, nil, time.Now().UTC(),
 	); err != nil {
 		t.Fatal(err)
 	}

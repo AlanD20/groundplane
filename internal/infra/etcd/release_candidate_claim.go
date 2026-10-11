@@ -213,7 +213,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 		return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
 	observed, observedErr := taskMaterializationAppliedPredecessorFromValue(
-		read.Values[2], task.Owner.EnvironmentID, task.RenderGeneration,
+		read.Values[2], task.Owner.EnvironmentID, task,
 	)
 	if observedErr != nil || observed != *writer.BlueprintAppliedPredecessor {
 		return taskassignments.ReleaseRestorationAuthority{}, "", nil, errs.New(

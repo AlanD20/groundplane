@@ -7,6 +7,7 @@ import (
 	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
+	registeredenvoy "github.com/AlanD20/groundplane-registered-components/envoy"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -16,7 +17,7 @@ import (
 const ManagedConfigActivateAction = componentsdk.ActionID("activate-config")
 
 func ConfigureReleasePlans(resolver *taskplanning.TaskPlanResolver, ledger *etcd.ReleaseLedger) error {
-	if err := resolver.EnableServiceProxyImage(registeredcaddy.Image); err != nil {
+	if err := resolver.EnableServiceProxyImages(registeredcaddy.Image, registeredenvoy.Image); err != nil {
 		return err
 	}
 	return resolver.EnableReleasePlans(ledger)
@@ -39,6 +40,18 @@ func NewCatalog() (Catalog, error) {
 		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	coreDNS, err := registeredcoredns.Definition()
+	if err != nil {
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
+	}
+	envoy, err := registeredenvoy.Definition()
+	if err != nil {
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
+	}
+	envoyActivate, err := registeredcatalog.NewContainerConfigActionRecipe(
+		registeredenvoy.ActivateConfigAction, registeredenvoy.ConfigurationSource, registeredenvoy.ConfigurationTarget,
+		registeredenvoy.PreflightConfigCommand(), registeredenvoy.ValidateConfigCommand(), nil,
+		registeredcatalog.ContainerConfigActivationHTTPDiscovery, registeredenvoy.Image,
+	)
 	if err != nil {
 		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -70,18 +83,36 @@ func NewCatalog() (Catalog, error) {
 		registeredcaddy.PreflightConfigCommand(),
 		registeredcaddy.ValidateConfigCommand(),
 		registeredcaddy.ActivateConfigCommand(),
+		registeredcatalog.ContainerConfigActivationCommand,
 		registeredcaddy.Image,
+	)
+	if err != nil {
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
+	}
+	tunnelObservation, err := registeredcatalog.NewEdgeTunnelObservationRecipe(
+		registeredtunnel.ObserveConnectionAction,
+		registeredtunnel.ServiceName,
+		registeredtunnel.Image,
+		registeredtunnel.ReadyURL,
 	)
 	if err != nil {
 		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	compiled, err := registeredcatalog.NewRegistered(
 		registeredcatalog.Registration{
+			Definition: envoy, Images: []componentsdk.OCIImage{registeredenvoy.Image},
+			ContainerConfigActions: []registeredcatalog.ContainerConfigActionRecipe{envoyActivate},
+		},
+		registeredcatalog.Registration{
 			Definition:             caddy,
 			Images:                 []componentsdk.OCIImage{registeredcaddy.Image},
 			ContainerConfigActions: []registeredcatalog.ContainerConfigActionRecipe{caddyActivate},
 		},
-		registeredcatalog.Registration{Definition: tunnel, Images: []componentsdk.OCIImage{registeredtunnel.Image}},
+		registeredcatalog.Registration{
+			Definition:             tunnel,
+			Images:                 []componentsdk.OCIImage{registeredtunnel.Image},
+			EdgeTunnelObservations: []registeredcatalog.EdgeTunnelObservationRecipe{tunnelObservation},
+		},
 		registeredcatalog.Registration{
 			Definition:              coreDNS,
 			Images:                  []componentsdk.OCIImage{registeredcoredns.Image},
@@ -117,6 +148,9 @@ func (catalog Catalog) FindActionByCapability(
 	capability componentsdk.Capability,
 	actionID componentsdk.ActionID,
 ) (componentsdk.Definition, componentsdk.ActionDefinition, bool) {
+	var selectedDefinition componentsdk.Definition
+	var selectedAction componentsdk.ActionDefinition
+	selected := false
 	for _, definition := range catalog.catalog.Definitions() {
 		provides := false
 		for _, provided := range definition.Provides() {
@@ -127,10 +161,13 @@ func (catalog Catalog) FindActionByCapability(
 		}
 		action, found := definition.FindAction(actionID)
 		if found {
-			return definition, action, true
+			if selected {
+				return componentsdk.Definition{}, componentsdk.ActionDefinition{}, false
+			}
+			selectedDefinition, selectedAction, selected = definition, action, true
 		}
 	}
-	return componentsdk.Definition{}, componentsdk.ActionDefinition{}, false
+	return selectedDefinition, selectedAction, selected
 }
 
 func (catalog Catalog) Plan(
@@ -222,6 +259,10 @@ func EnvironmentCatalog() ([]componentrender.EnvironmentComponentRegistration, e
 	if err != nil {
 		return nil, err
 	}
+	envoy, err := registeredEnvoyEnvironmentComponent(actionCatalog)
+	if err != nil {
+		return nil, err
+	}
 	cloudflareTunnel, err := registeredCloudflareTunnelEnvironmentComponent(actionCatalog)
 	if err != nil {
 		return nil, err
@@ -229,7 +270,7 @@ func EnvironmentCatalog() ([]componentrender.EnvironmentComponentRegistration, e
 	if err := validateRegisteredCoreDNSComponent(); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	catalog := []componentrender.EnvironmentComponentRegistration{caddy, cloudflareTunnel}
+	catalog := []componentrender.EnvironmentComponentRegistration{caddy, envoy, cloudflareTunnel}
 	if err := componentrender.ValidateEnvironmentComponentCatalog(catalog); err != nil {
 		return nil, err
 	}

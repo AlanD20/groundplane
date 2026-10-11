@@ -13,9 +13,10 @@ func catalogDigest(
 	actions []registeredManagedConfigAction,
 	containerActions []registeredContainerConfigAction,
 	observations []registeredDNSResolverObservation,
+	edgeObservations []registeredEdgeTunnelObservation,
 ) [sha256.Size]byte {
-	encoded := appendLength(nil, len("groundplane-component-catalog-v12"))
-	encoded = append(encoded, "groundplane-component-catalog-v12"...)
+	encoded := appendLength(nil, len("groundplane-component-catalog-v15"))
+	encoded = append(encoded, "groundplane-component-catalog-v15"...)
 	encoded = appendLength(encoded, len(definitions))
 	for _, definition := range definitions {
 		implementation := string(definition.Implementation())
@@ -57,7 +58,7 @@ func catalogDigest(
 		actionID := string(action.recipe.actionID)
 		encoded = appendLength(encoded, len(actionID))
 		encoded = append(encoded, actionID...)
-		for _, value := range []string{action.recipe.relativePath, action.recipe.containerPath} {
+		for _, value := range []string{action.recipe.relativePath, action.recipe.containerPath, string(action.recipe.activation)} {
 			encoded = appendLength(encoded, len(value))
 			encoded = append(encoded, value...)
 		}
@@ -90,11 +91,19 @@ func catalogDigest(
 		encoded = appendLength(encoded, len(observation.recipe.image.Repository))
 		encoded = append(encoded, observation.recipe.image.Repository...)
 	}
+	encoded = appendLength(encoded, len(edgeObservations))
+	for _, observation := range edgeObservations {
+		for _, value := range []string{string(observation.implementation), string(observation.recipe.actionID), observation.recipe.serviceName, observation.recipe.readyURL} {
+			encoded = appendLength(encoded, len(value))
+			encoded = append(encoded, value...)
+		}
+		encoded = appendCatalogOCIImage(encoded, observation.recipe.image)
+	}
 	return sha256.Sum256(encoded)
 }
 
 func appendCatalogOCIImage(encoded []byte, image component.OCIImage) []byte {
-	for _, value := range []string{image.Repository, image.IndexDigest} {
+	for _, value := range []string{image.Repository, image.IndexDigest, image.Tag} {
 		encoded = appendLength(encoded, len(value))
 		encoded = append(encoded, value...)
 	}

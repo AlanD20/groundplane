@@ -60,7 +60,7 @@ func TestComposeRuntimeDispatchesServiceLifecycleStopFootprint(t *testing.T) {
 			t.Fatalf("fixture container is not stopped: %#v", container)
 		}
 	}
-	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired {
 		t.Fatalf("executeStep() result = %#v, error = %v; expected sealed-footprint conflict", result, err)
 	}
@@ -112,7 +112,7 @@ func TestComposeRuntimePollsServiceLifecycleStartUntilHealthy(t *testing.T) {
 			}}},
 		},
 	}
-	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 	if err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}

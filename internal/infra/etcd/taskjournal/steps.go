@@ -2,9 +2,11 @@ package taskjournal
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskdescription"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"slices"
 )
 
 func ValidateTaskSteps(steps []TaskStepRecord) error {
@@ -62,5 +64,20 @@ func CloneTaskSteps(steps []TaskStepRecord) []TaskStepRecord {
 	}
 	cloned := make([]TaskStepRecord, len(steps))
 	copy(cloned, steps)
+	for index := range cloned {
+		cloned[index].Healthchecks = taskdescription.CloneHealthchecks(steps[index].Healthchecks)
+	}
 	return cloned
+}
+
+// TaskStepsEqual compares immutable procedure metadata by value, including
+// owned healthcheck projections, rather than comparing pointer identities.
+func TaskStepsEqual(left, right []TaskStepRecord) bool {
+	return slices.EqualFunc(left, right, func(a, b TaskStepRecord) bool {
+		return a.Kind == b.Kind && a.ID == b.ID && a.ScriptID == b.ScriptID &&
+			a.ScriptSlug == b.ScriptSlug && a.Action == b.Action &&
+			a.Description == b.Description && a.Target == b.Target &&
+			a.TimeoutSeconds == b.TimeoutSeconds &&
+			taskdescription.HealthchecksEqual(a.Healthchecks, b.Healthchecks)
+	})
 }

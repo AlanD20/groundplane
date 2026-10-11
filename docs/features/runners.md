@@ -100,9 +100,41 @@ Runner preserves shared registry data and application images. See the
 
 ## Status and removal
 
+### Connection checks
+
+The Console Runner inspector offers **Test connections**. Equivalent CLI actions
+are `runner check <slug>` and `runner check-result <slug>`; the result command
+accepts `--task` to inspect a particular check rather than the latest retained one.
+This capability is implemented locally but has not been live-qualified or deployed.
+
+The check runs inside the existing registered Runner. It reports GitHub HTTPS
+reachability, the dedicated Docker daemon's rootless status, private GP API access
+and an authenticated registry read separately. It uses the Runner's existing
+registry credentials and trust configuration; no registration token is requested
+or consumed. It does not restart the Runner, build an image or publish anything.
+
+A GitHub response establishes a network path, not GitHub registration or job
+readiness. A registry read does not establish push permission. Passing is evidence
+at the recorded time, not a CI/CD qualification or permanent availability guarantee.
+
+Results retain the exact Runner configuration and runtime generation tested.
+Changed configuration, replacement of the container or daemon, and removal mark
+the result stale. Routine observation refreshes do not. Interruption records a
+failure; generic Task Retry cannot replay the probe. Start a new check instead.
+After uncertain acceptance, reuse the same CLI `--idempotency-key` and `--revision`;
+the Console retains the exact unresolved submission when its inspector is reopened.
+
+### Runtime lifecycle
+
 Online status comes from current local runtime observation, not an editable flag.
 Missing, stale or mismatched evidence reports offline. Reboot recovery must prove
 new runtime ownership rather than reuse stale process identities.
+
+Installed software details retain the accepted image, image configuration digest
+and reported GP package version/source commit. They survive a Controller restart
+and are separate from online status. Source-built packages show their short commit;
+packages without recorded version metadata show a compact digest. A pending or
+failed registration does not advertise its candidate as installed software.
 
 Removal cleans up only ownership-proved local resources. Failed cleanup retains
 the record and allocations needed for retry. **It does not deregister the Runner

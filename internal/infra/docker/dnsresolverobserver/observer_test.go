@@ -54,6 +54,26 @@ type observerDNSStub struct {
 	calls []string
 }
 
+func (dns *observerDNSStub) QueryTCP(ctx context.Context, endpoint, name string,
+	queryType agentpb.DNSQueryType,
+) (*agentpb.DNSQueryProof, error) {
+	proof, err := dns.Query(ctx, endpoint, name, queryType)
+	if proof != nil {
+		proof.LocalUsedTcp = true
+	}
+	return proof, err
+}
+
+func (query observerDNSFunc) QueryTCP(ctx context.Context, endpoint, name string,
+	queryType agentpb.DNSQueryType,
+) (*agentpb.DNSQueryProof, error) {
+	proof, err := query(ctx, endpoint, name, queryType)
+	if proof != nil {
+		proof.LocalUsedTcp = true
+	}
+	return proof, err
+}
+
 type observerDNSFunc func(
 	context.Context,
 	string,

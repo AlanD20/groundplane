@@ -43,7 +43,10 @@ func componentTaskDesiredProjectionZones(
 ) (componentTaskAcknowledgementAuthority, error) {
 	desiredRevisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	if ids.Validate(ids.KindTask, desiredRevisionID) != nil {
-		return componentTaskAcknowledgementAuthority{}, errs.New(errs.KindStateConflict, "Component Task desired revision is invalid")
+		return componentTaskAcknowledgementAuthority{}, errs.New(
+			errs.KindStateConflict,
+			"Component Task desired revision is invalid",
+		)
 	}
 	hierarchy := composeHierarchyRepository(store)
 	projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(
@@ -77,7 +80,10 @@ func componentTaskDesiredProjectionZones(
 	for _, zoneID := range zones {
 		zone, ok := projected[zoneID]
 		if !ok {
-			return componentTaskAcknowledgementAuthority{}, errs.New(errs.KindStateConflict, "Component Task Zone is not in its desired projection")
+			return componentTaskAcknowledgementAuthority{}, errs.New(
+				errs.KindStateConflict,
+				"Component Task Zone is not in its desired projection",
+			)
 		}
 		result[zoneID] = zone
 	}

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -59,6 +60,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		return runnerTaskChange{}, err
 	}
 	proofValue := result.Values[4]
+	var software buildversion.ContainerIdentity
 	if terminalStatus == taskjournal.TaskStatusCompleted || proofValue != nil {
 		if result.Values[3] == nil || proofValue == nil || record.ContainerID == "" {
 			return runnerTaskChange{}, errs.New(errs.KindStateConflict, "exact runner readiness proof is required")
@@ -75,11 +77,13 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 				"runner readiness proof does not match its lifecycle",
 			)
 		}
+		software = proof.Software
 	}
 	replacement, err := runnerrecord.CompleteRunnerProvisioning(
 		record,
 		task.ID,
 		terminalStatus == taskjournal.TaskStatusCompleted,
+		software,
 	)
 	if err != nil {
 		return runnerTaskChange{}, err

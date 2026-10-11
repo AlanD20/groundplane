@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -11,6 +12,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"time"
@@ -25,6 +27,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	readRevision int64,
+	assignment taskassignments.TaskAssignmentRecord,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	environmentID, operationID, err := zoneRemovalTaskIdentity(task)
 	if err != nil {
@@ -45,8 +48,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		return nil, nil, err
 	}
 	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil ||
-		state.Values[1] == nil || state.Values[3] == nil || state.Values[4] == nil ||
-		state.Values[6] == nil {
+		state.Values[1] == nil || state.Values[3] == nil || state.Values[6] == nil {
 		return nil, nil, errs.New(errs.KindInternal, "Zone removal state is inconsistent")
 	}
 	intent, err := environmentchanges.DecodeZoneRemovalIntent(state.Values[3].Value)
@@ -56,16 +58,20 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	if err := validateZoneRemovalTaskOwner(task, intent); err != nil {
 		return nil, nil, err
 	}
-	if intent.Status != taskjournal.TaskStatusPending || state.Values[4].ModRevision != intent.DesiredHeadRevision ||
-		!environmentchanges.ZoneRemovalAppliedEvidenceMatches(
-			intent,
-			state.Values[5],
-		) || string(state.Values[6].Value) != task.ID {
+	if intent.Status != taskjournal.TaskStatusPending || !environmentchanges.ZoneRemovalAppliedEvidenceMatches(
+		intent,
+		state.Values[5],
+	) || string(state.Values[6].Value) != task.ID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal terminal ownership changed")
 	}
-	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[4].Value)
-	if err != nil || headID != intent.DesiredProjection.RevisionID {
-		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal desired head changed")
+	if intent.Authored == nil {
+		if state.Values[4] == nil || state.Values[4].ModRevision != intent.DesiredHeadRevision {
+			return nil, nil, errs.New(errs.KindStateConflict, "Zone removal desired head changed")
+		}
+		headID, decodeErr := idempotencyrecord.DecodeTaskReference(state.Values[4].Value)
+		if decodeErr != nil || headID != intent.DesiredProjection.RevisionID {
+			return nil, nil, errs.New(errs.KindStateConflict, "Zone removal desired head changed")
+		}
 	}
 	zone, err := projectedZoneRemovalTarget(intent, readRevision)
 	if err != nil {
@@ -97,9 +103,11 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		{Key: keys[1], ModRevision: state.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: etcdstore.RevisionOf(state.Values[2])},
 		{Key: keys[3], ModRevision: state.Values[3].ModRevision},
-		{Key: keys[4], ModRevision: state.Values[4].ModRevision},
 		{Key: keys[5], ModRevision: etcdstore.RevisionOf(state.Values[5])},
 		{Key: keys[6], ModRevision: state.Values[6].ModRevision},
+	}
+	if intent.Authored == nil {
+		conditions = append(conditions, etcdstore.Condition{Key: keys[4], ModRevision: state.Values[4].ModRevision})
 	}
 	if terminalStatus != taskjournal.TaskStatusCompleted {
 		terminalIntent, transitionErr := environmentchanges.TerminalZoneRemovalIntent(
@@ -119,6 +127,51 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 			{Type: etcdstore.MutationDelete, Key: keys[0]},
 			{Type: etcdstore.MutationDelete, Key: keys[6]},
 		}, nil
+	}
+	dnsConditions, withdrawn, err := repository.zoneDNSWithdrawalConditions(ctx, zone.Desired,
+		readRevision, resolverWithdrawalFinalization)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !withdrawn {
+		return nil, nil, errs.New(
+			errs.KindResourceInUse,
+			"CoreDNS still owns the Zone gateway; subnet reservation is retained",
+		)
+	}
+	conditions = append(conditions, dnsConditions...)
+	if intent.Authored != nil {
+		projectionValue, encodeErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(
+			intent.CandidateProjection,
+		)
+		if encodeErr != nil {
+			return nil, nil, encodeErr
+		}
+		nextPool, releaseErr := pool.Release(zone)
+		if releaseErr != nil {
+			clear(projectionValue)
+			return nil, nil, releaseErr
+		}
+		mutations := []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: keys[5], Value: projectionValue},
+			{Type: etcdstore.MutationDelete, Key: keys[3]},
+			{Type: etcdstore.MutationDelete, Key: keys[0]},
+			{Type: etcdstore.MutationDelete, Key: keys[6]},
+		}
+		if state.Values[2] != nil {
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[2]})
+		}
+		if len(nextPool.Reservations) == 0 {
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[1]})
+		} else {
+			poolValue, encodeErr := recordcodec.Encode("zone_pool_registry", nextPool)
+			if encodeErr != nil {
+				etcdstore.ClearMutationValues(mutations)
+				return nil, nil, encodeErr
+			}
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[1], Value: poolValue})
+		}
+		return conditions, mutations, nil
 	}
 	hierarchy := composeHierarchyRepository(repository.store)
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
@@ -180,7 +233,14 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		etcdstore.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		etcdstore.Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	)
-	conditions = append(conditions, identityPublication.conditions...)
+	conditions, err = appendRemovalComparisons(conditions, identityPublication.conditions)
+	if err != nil {
+		clear(publication.publishedDescriptor)
+		identityPublication.clear()
+		clear(headValue)
+		clear(projectionValue)
+		return nil, nil, err
+	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
@@ -213,6 +273,19 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[1], Value: poolValue})
 	}
+	receipt, err := repository.prepareDirectRemovalReceipt(ctx, task, assignment, intent.EnvironmentID,
+		blueprintunits.ResourceKey{Kind: ids.KindNetwork, ID: intent.ZoneID}, readRevision)
+	if err != nil {
+		etcdstore.ClearMutationValues(mutations)
+		return nil, nil, err
+	}
+	conditions, err = appendRemovalComparisons(conditions, receipt.Conditions())
+	if err != nil {
+		receipt.Clear()
+		etcdstore.ClearMutationValues(mutations)
+		return nil, nil, err
+	}
+	mutations = append(mutations, receipt.Mutations()...)
 	return conditions, mutations, nil
 }
 
@@ -235,8 +308,13 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	if err != nil {
 		return err
 	}
-	if state == nil || len(state.Values) != len(keys) || state.Values[0] != nil ||
-		state.Values[3] == nil || state.Values[5] != nil {
+	if state == nil || len(state.Values) != len(keys) || state.Values[0] != nil || state.Values[5] != nil {
+		return errs.New(errs.KindStateConflict, "Zone removal terminal state does not match its Task")
+	}
+	if authoredBlueprintZoneRemovalTask(task) {
+		return validateAuthoredZoneRemovalReplay(task, terminalStatus, readRevision, state.Values)
+	}
+	if state.Values[3] == nil {
 		return errs.New(errs.KindStateConflict, "Zone removal terminal state does not match its Task")
 	}
 	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[3].Value)
@@ -294,15 +372,74 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	return nil
 }
 
+func validateAuthoredZoneRemovalReplay(
+	task TaskRecord,
+	terminalStatus taskjournal.TaskStatus,
+	readRevision int64,
+	values []*etcdstore.KeyValue,
+) error {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
+		if values[2] != nil || values[4] == nil {
+			return errs.New(errs.KindStateConflict, "completed authored Zone removal retained old state")
+		}
+		applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(values[4].Value)
+		parentID := task.Params[taskjournal.TaskBlueprintParentParam]
+		if err != nil || applied.EnvironmentID != task.Owner.EnvironmentID ||
+			projectionContainsZone(applied, task.Target) ||
+			applied.RenderGeneration < uint64(task.RenderGeneration) ||
+			applied.RenderGeneration == uint64(task.RenderGeneration) && applied.RevisionID != parentID {
+			return errs.New(errs.KindStateConflict, "completed authored Zone removal projection changed")
+		}
+		if values[1] != nil {
+			pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](
+				values[1].Value, "zone_pool_registry",
+			)
+			if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil {
+				return errs.New(errs.KindInternal, "Zone pool registry is inconsistent")
+			}
+			if _, retained := pool.Reservations[task.Target]; retained {
+				return errs.New(errs.KindStateConflict, "completed authored Zone removal retained its subnet")
+			}
+		}
+		return nil
+	}
+	if values[1] == nil || values[2] == nil {
+		return errs.New(errs.KindStateConflict, "failed authored Zone removal lost durable state")
+	}
+	intent, err := environmentchanges.DecodeZoneRemovalIntent(values[2].Value)
+	if err != nil || intent.Authored == nil || validateZoneRemovalTaskOwner(task, intent) != nil ||
+		intent.Status != terminalStatus || intent.TerminalAt == nil || task.FinishedAt == nil ||
+		!intent.TerminalAt.Equal(*task.FinishedAt) ||
+		!environmentchanges.ZoneRemovalAppliedEvidenceMatches(intent, values[4]) {
+		return errs.New(errs.KindStateConflict, "failed authored Zone removal changed sealed applied state")
+	}
+	zone, err := projectedZoneRemovalTarget(intent, readRevision)
+	if err != nil {
+		return err
+	}
+	pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](values[1].Value, "zone_pool_registry")
+	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
+		pool.Reservations[task.Target] != zone.Desired.Subnet {
+		return errs.New(errs.KindStateConflict, "failed authored Zone removal changed its subnet reservation")
+	}
+	return nil
+}
+
 func projectedZoneRemovalTarget(
 	intent environmentchanges.ZoneRemovalIntent,
 	readRevision int64,
 ) (zonerecord.Record, error) {
+	source := intent.DesiredProjection
+	sourceRevision := intent.DesiredHeadRevision
+	if intent.Authored != nil {
+		source = intent.AppliedProjection
+		sourceRevision = intent.AppliedProjectionRevision
+	}
 	projection := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
-		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: readRevision,
+		Record: source, Revision: sourceRevision, ReadRevision: readRevision,
 	}
 	var matched *zonerecord.Record
-	for _, desired := range intent.DesiredProjection.DesiredZones {
+	for _, desired := range source.DesiredZones {
 		if desired.Desired.ID != intent.ZoneID {
 			continue
 		}
@@ -316,7 +453,7 @@ func projectedZoneRemovalTarget(
 		matched = &joined.Record
 	}
 	if matched == nil || matched.EnvironmentID != intent.EnvironmentID || matched.Desired.Name != intent.ZoneName ||
-		intent.ZoneRevision != intent.DesiredHeadRevision {
+		intent.ZoneRevision != sourceRevision {
 		return zonerecord.Record{}, errs.New(errs.KindStateConflict, "Zone removal projected target changed")
 	}
 	return *matched, nil

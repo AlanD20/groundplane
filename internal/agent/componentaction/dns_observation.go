@@ -24,6 +24,12 @@ func dnsResolverObservationRequest(
 			"agent: DNS resolver observation artifact is invalid",
 		)
 	}
+	return dnsResolverRuntimeRequest(artifact, action, recipe)
+}
+
+func dnsResolverRuntimeRequest(artifact *agentpb.ComposeArtifact, action *agentpb.ComponentApply,
+	recipe registeredcatalog.DNSResolverObservationRecipe,
+) (dnsresolverobserver.Request, error) {
 	if artifact.GetProjectName() == "" || len(artifact.GetServices()) != 1 {
 		return dnsresolverobserver.Request{}, errs.New(
 			errs.KindValidationFailed,

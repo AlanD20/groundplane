@@ -9,6 +9,9 @@ import (
 
 func validateBackupTaskResult(ack *agentpb.TaskAck) error {
 	result := ack.GetBackupResult()
+	if err := validateTaskFailure(ack, result.GetFailure()); err != nil {
+		return err
+	}
 	if result == nil || result.RecoveryRequired == nil || executionplan.RejectUnknown(ack) != nil ||
 		ack.AssignmentGeneration == 0 ||
 		len(ack.ReleaseRecoveryRecordSha256) != 0 || len(ack.ComponentRecoveryRecordSha256) != 0 {
@@ -25,6 +28,7 @@ func durableBackupTaskResult(ack *agentpb.TaskAck) taskjournal.TaskResultRecord 
 	return taskjournal.TaskResultRecord{
 		Kind: taskjournal.TaskResultBackup, ExitCode: ack.ExitCode,
 		FailedStepID:           ack.GetBackupResult().GetFailedStepId(),
+		Failure:                durableTaskFailure(ack.GetBackupResult().GetFailure()),
 		Diagnostic:             taskjournal.TaskResultDiagnosticNone,
 		ReconciliationRequired: ack.GetBackupResult().GetRecoveryRequired(),
 		ExecutionEpoch:         ack.ExecutionEpoch, AssignmentGeneration: ack.AssignmentGeneration,

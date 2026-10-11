@@ -346,6 +346,7 @@ func (session *Session) RecordLogEvent(event *agentpb.LogEvent) (bool, error) {
 		!utf8.ValidString(event.GetContainerName()) || !utf8.ValidString(event.GetLine()) ||
 		(event.GetSlot() != agentpb.LogSlot_LOG_SLOT_BLUE &&
 			event.GetSlot() != agentpb.LogSlot_LOG_SLOT_GREEN &&
+			event.GetSlot() != agentpb.LogSlot_LOG_SLOT_ROLLING &&
 			event.GetSlot() != agentpb.LogSlot_LOG_SLOT_SINGLETON) ||
 		(event.GetStream() != agentpb.LogStream_LOG_STREAM_STDOUT &&
 			event.GetStream() != agentpb.LogStream_LOG_STREAM_STDERR) {

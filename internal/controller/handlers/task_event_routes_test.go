@@ -71,7 +71,7 @@ func TestTaskEventRouteStreamsTypedSequenceFrames(t *testing.T) {
 		Identity: testtaskjournal.TaskEventIdentity{
 			TaskID: taskEventRouteTestTaskID, StepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", Attempt: 2, Ordinal: 7,
 		},
-		State: testtaskjournal.TaskEventStateRunning, ReceivedAt: receivedAt,
+		State: testtaskjournal.TaskEventStateRunning, ReceivedAt: receivedAt, Payload: json.RawMessage(`{}`),
 	}}}}
 	server := taskEventRouteTestServer(t, opener, io.Discard)
 	response := requestTaskEventStream(t, server.URL, "3")
@@ -130,6 +130,7 @@ func TestTaskEventRouteDisconnectsSafelyAfterHeaders(t *testing.T) {
 				TaskID: taskEventRouteTestTaskID, StepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", Attempt: 1, Ordinal: 1,
 			},
 			State:      testtaskjournal.TaskEventStateRunning,
+			Payload:    json.RawMessage(`{}`),
 			ReceivedAt: time.Date(2026, time.August, 23, 4, 30, 0, 0, time.UTC),
 		}},
 		err: errs.New(errs.KindInternal, "secret Agent diagnostic"),

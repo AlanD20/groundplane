@@ -6,7 +6,12 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 )
 
@@ -17,15 +22,26 @@ func TestBlueprintProxyConfigSealsFirstAndSuccessor(t *testing.T) {
 		ServiceName:     "api",
 		ReleaseID:       ids.New(ids.KindDeployment),
 		CandidateTarget: domain.WorkloadSingleton,
+		Projection:      blueprintProxyTestProjection(t),
 	}
 	if err := configureBlueprintProxy(&render, []string{"9090", "8080/tcp"}); err != nil {
 		t.Fatal(err)
 	}
 	if render.ProxyGeneration != 1 || render.PriorProxyGeneration != 0 || render.PriorProxyDigest != "" ||
-		!slices.Equal(render.ProxyPorts, []uint16{8080, 9090}) {
+		!slices.Equal(
+			render.ProxyPorts,
+			[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}, {Port: 9090, Protocol: serviceports.TCP}},
+		) {
 		t.Fatalf("first proxy authority = %+v", render)
 	}
-	first, err := domain.RenderProxyConfig("api", render.ReleaseID, domain.WorkloadSingleton, 1, render.ProxyPorts)
+	first, err := domain.RenderProxyConfig(
+		serviceproxy.Caddy,
+		"api",
+		render.ReleaseID,
+		domain.WorkloadSingleton,
+		1,
+		render.ProxyPorts,
+	)
 	if err != nil || render.ProxyConfigDigest != hex.EncodeToString(first.SHA256[:]) {
 		t.Fatalf("first config digest = %q, %v", render.ProxyConfigDigest, err)
 	}
@@ -37,10 +53,24 @@ func TestBlueprintProxyConfigSealsFirstAndSuccessor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if render.ProxyGeneration != 2 || render.PriorProxyGeneration != 1 || render.PriorProxyDigest != priorDigest ||
-		!slices.Equal(render.ProxyPorts, []uint16{8081}) ||
+		!slices.Equal(render.ProxyPorts, []domain.ProxyPort{{Port: 8081, Protocol: serviceports.TCP}}) ||
 		render.ProxyConfigDigest == priorDigest {
 		t.Fatalf("successor rewrote historical config = %+v", render)
 	}
+}
+
+func blueprintProxyTestProjection(t *testing.T) projectionrecord.EnvironmentComposeProjection {
+	t.Helper()
+	projection := projectionrecord.EnvironmentComposeProjection{EnvironmentID: ids.New(ids.KindEnvironment)}
+	for _, kind := range []core.ComponentKind{core.ComponentKindIngressCaddy, core.ComponentKindEdgeCloudflare} {
+		record, err := componentrecord.NewRecord(core.Component{ID: ids.New(ids.KindComponent),
+			Owner: core.ComponentOwnerEnvironment, OwnerID: projection.EnvironmentID, Kind: kind})
+		if err != nil {
+			t.Fatal(err)
+		}
+		projection.Components = append(projection.Components, record)
+	}
+	return projection
 }
 
 // Rationale: unsupported addressability transitions must not invent a prior

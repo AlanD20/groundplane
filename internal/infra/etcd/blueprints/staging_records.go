@@ -28,6 +28,7 @@ const (
 	environmentBlueprintPrivatePrefix    = "/v1/private/blueprint-staging/"
 	EnvironmentBlueprintDescriptorPrefix = environmentBlueprintPrivatePrefix + "descriptors/"
 	environmentBlueprintLocatorPrefix    = environmentBlueprintPrivatePrefix + "locators/"
+	EnvironmentBlueprintCleanupCursorKey = environmentBlueprintPrivatePrefix + "cleanup-cursor"
 	environmentBlueprintRevisionRoot     = "/v1/records/environment-blueprint-revisions/"
 )
 
@@ -47,6 +48,7 @@ const (
 	EnvironmentBlueprintStagePublished
 	EnvironmentBlueprintStageAbandoned
 	EnvironmentBlueprintStageMetadata
+	EnvironmentBlueprintStagePublishedMetadata
 )
 
 // EnvironmentBlueprintSeal is the immutable integrity root selected by an

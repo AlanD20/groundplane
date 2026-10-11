@@ -215,6 +215,7 @@ func (service *MutationService) mutateComponent(
 		)
 	}
 	if component.Record.Desired.Kind != core.ComponentKindIngressCaddy &&
+		component.Record.Desired.Kind != core.ComponentKindIngressEnvoy &&
 		component.Record.Desired.Kind != core.ComponentKindEdgeCloudflare {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
@@ -304,14 +305,10 @@ func mutateComponentBlueprint(
 }
 
 func environmentComponentCapability(kind core.ComponentKind) (core.ComponentCapability, error) {
-	switch kind {
-	case core.ComponentKindIngressCaddy:
-		return core.ComponentCapabilityHTTPRouter, nil
-	case core.ComponentKindEdgeCloudflare:
-		return core.ComponentCapabilityEdgeTunnel, nil
-	default:
-		return "", errs.New(errs.KindStateConflict, "Component action is unsupported for this kind")
+	if capability, ok := kind.EnvironmentCapability(); ok {
+		return capability, nil
 	}
+	return "", errs.New(errs.KindStateConflict, "Component action is unsupported for this kind")
 }
 
 func yamlMappingValue(mapping *yaml.Node, key string) *yaml.Node {

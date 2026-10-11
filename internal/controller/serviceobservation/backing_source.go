@@ -69,7 +69,8 @@ func captureBacking(
 	}
 	return source{
 		target: &agentpb.ServiceObservationTarget{EnvironmentId: environmentID, ServiceId: serviceID,
-			PlanId: planID, RenderGeneration: generation, ComposeName: workload.ComposeName, RuntimeRole: "backing"},
+			Workloads: []*agentpb.ServiceWorkloadObservation{{PlanId: planID, RenderGeneration: generation,
+				ComposeName: workload.ComposeName}}, RuntimeRole: "backing"},
 		expected: workload.ExpectedReplicas, runtimeRevision: servicerecord.ServiceRuntimeRevision(service),
 		projectionRevision: applied.Revision,
 	}, true
@@ -92,13 +93,14 @@ func capturePostgres(ctx context.Context, releases Releases,
 	if err != nil {
 		return source{}, false
 	}
+	member := &agentpb.ServiceWorkloadObservation{ComposeName: workload.ComposeName}
 	target := &agentpb.ServiceObservationTarget{EnvironmentId: applied.Record.EnvironmentID,
-		ServiceId: applied.Record.ServiceID, ComposeName: workload.ComposeName}
+		ServiceId: applied.Record.ServiceID, Workloads: []*agentpb.ServiceWorkloadObservation{member}}
 	if receipt := applied.Record.Provisioning; receipt != nil {
-		target.PlanId, target.RenderGeneration, target.RuntimeRole = receipt.PlanID, receipt.RenderGeneration, "backing"
+		member.PlanId, member.RenderGeneration, target.RuntimeRole = receipt.PlanID, receipt.RenderGeneration, "backing"
 	} else {
 		receipt := applied.Record.Deployment
-		target.PlanId, target.RenderGeneration, target.RuntimeRole = receipt.PlanID, receipt.RenderGeneration, "singleton"
+		member.PlanId, member.RenderGeneration, target.RuntimeRole = receipt.PlanID, receipt.RenderGeneration, "singleton"
 		target.ReleaseId = applied.Record.DeploymentReleaseID
 	}
 	return source{target: target, expected: workload.ExpectedReplicas,

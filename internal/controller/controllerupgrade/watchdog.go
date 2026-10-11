@@ -8,6 +8,7 @@ import (
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,6 +16,7 @@ type RecoveryJournal interface {
 	Current(context.Context) (upgrade.Journal, bool, error)
 	Activate(context.Context, string) error
 	Advance(context.Context, string, upgrade.Phase, upgrade.Phase) (upgrade.Journal, error)
+	BeginRollback(context.Context, string, upgrade.Phase, *taskprogress.Failure) (upgrade.Journal, error)
 	Rollback(context.Context, string) error
 }
 
@@ -71,7 +73,7 @@ func (watchdog *Watchdog) Run(ctx context.Context, taskID string) error {
 		switch journal.Phase {
 		case upgrade.PhaseActivating, upgrade.PhaseTrial:
 			if !watchdog.now().Before(journal.CandidateDeadline()) {
-				if err := watchdog.requestRollback(ctx, taskID); err != nil {
+				if err := watchdog.requestRollback(ctx, taskID, context.DeadlineExceeded); err != nil {
 					return err
 				}
 				continue
@@ -80,14 +82,14 @@ func (watchdog *Watchdog) Run(ctx context.Context, taskID string) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				if err := watchdog.requestRollback(ctx, taskID); err != nil {
+				if err := watchdog.requestRollback(ctx, taskID, err); err != nil {
 					return err
 				}
 			}
 			continue
 		case upgrade.PhaseStarting:
 			if !watchdog.now().Before(journal.CandidateDeadline()) {
-				if err := watchdog.requestRollback(ctx, taskID); err != nil {
+				if err := watchdog.requestRollback(ctx, taskID, context.DeadlineExceeded); err != nil {
 					return err
 				}
 				continue
@@ -148,7 +150,7 @@ func (watchdog *Watchdog) activate(ctx context.Context, journal upgrade.Journal)
 	return watchdog.unit.Start(ctx)
 }
 
-func (watchdog *Watchdog) requestRollback(ctx context.Context, taskID string) error {
+func (watchdog *Watchdog) requestRollback(ctx context.Context, taskID string, cause error) error {
 	journal, current, err := watchdog.current(ctx, taskID)
 	if err != nil || !current {
 		return err
@@ -159,7 +161,7 @@ func (watchdog *Watchdog) requestRollback(ctx context.Context, taskID string) er
 	}
 	// Acquire rollback authority before Stop: qualification can win this CAS,
 	// in which case there is no permission to interrupt the healthy process.
-	_, err = watchdog.journal.Advance(ctx, taskID, journal.Phase, upgrade.PhaseRollingBack)
+	_, err = watchdog.journal.BeginRollback(ctx, taskID, journal.Phase, taskprogress.CaptureControllerFailure(cause))
 	if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		return nil
 	}

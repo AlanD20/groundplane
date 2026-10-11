@@ -19,9 +19,10 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { CoreDnsSettings } from "./coredns-settings";
 import { DNSRecordSettings } from "./dns-record-settings";
+import { DNSCheckPanel } from "./dns-check-panel";
 import { coreDNSConfigInput, type CoreDNSDraft } from "./core-dns-config";
 import type { DNSRecord } from "@/lib/types";
-import { SoftwareIdentity } from "@/features/image-delivery/software-identity";
+import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-identity";
 const kindIcon: Record<string, React.ReactNode> = {
   coredns: <Network className="size-4 text-muted-foreground" />,
 };
@@ -304,7 +305,8 @@ export default function PlatformComponentPage() {
           <DetailRow
             label="Installed software"
             value={
-              <SoftwareIdentity
+              <ContainerSoftwareIdentity
+                software={component.software}
                 unavailable="Identity not reported by the Controller"
               />
             }
@@ -331,6 +333,21 @@ export default function PlatformComponentPage() {
           />
           <DetailRow label="Runtime" value={component.runtime} />
         </ResourcePanel>
+        <DNSCheckPanel
+          key={component.id}
+          componentId={component.id}
+          open={tab === "overview"}
+          disabled={
+            !platform.dns.enabled ||
+            (managedConfigComponentId === component.id && !!managedConfigTaskId)
+          }
+          domains={[
+            ...editableDNSConfig.forwarders.map(
+              (forwarder) => forwarder.domain,
+            ),
+            ...(editableDNSConfig.tailnetDelegation ? ["ts.net"] : []),
+          ]}
+        />
         <ResourcePanel
           title="Custom DNS records"
           actions={

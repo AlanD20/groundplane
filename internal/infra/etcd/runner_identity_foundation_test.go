@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -107,8 +108,21 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 		t.Fatalf("slug collision = %v, %v, %v", outcome, conflict, classifyErr)
 	}
 
-	ready := testrunners.CloneRunnerRecord(resolved.Record)
-	ready.ProvisioningState = testrunners.RunnerProvisioningReady
+	ready, err := testrunners.BindRunnerContainerID(
+		resolved.Record,
+		resolved.Record.CreateTaskID,
+		strings.Repeat("a", testrunners.RunnerContainerIDEncodedLength),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err = testrunners.CompleteRunnerProvisioning(ready, ready.CreateTaskID, true,
+		buildversion.ContainerIdentity{
+			Image: ready.Desired.ImageRef, ConfigDigest: "sha256:" + strings.Repeat("b", 64),
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
 	readyValue, err := testrunners.EncodeRunnerLifecycleRecord(ready.RunnerLifecycleRecord)
 	if err != nil {
 		t.Fatal(err)

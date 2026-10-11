@@ -153,10 +153,18 @@ func EnvironmentOwnerKey(environmentID string, componentID string) string {
 	return EnvironmentOwnerPrefix(environmentID) + componentID
 }
 
-func EnvironmentKindKey(environmentID string, kind core.ComponentKind) string {
-	return "/v1/indexes/components/by-kind/environment/" + environmentID + "/" + recordcodec.EncodeKeySegment(
-		string(kind),
+func EnvironmentCapabilityKey(environmentID string, capability core.ComponentCapability) string {
+	return "/v1/indexes/components/by-capability/environment/" + environmentID + "/" + recordcodec.EncodeKeySegment(
+		string(capability),
 	)
+}
+
+// EnvironmentSingletonKey is used with validated Environment-owned records.
+// An implementation change retains this slot and the Component id, so the store
+// cannot publish Caddy and Envoy as two independent routers in one Environment.
+func EnvironmentSingletonKey(desired DesiredRecord) string {
+	capability, _ := desired.Kind.EnvironmentCapability()
+	return EnvironmentCapabilityKey(desired.OwnerID, capability)
 }
 
 func ValidateRecord(record Record) error {

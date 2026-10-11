@@ -350,15 +350,16 @@ func TestRunnerObservationAndRemovalFinalizer(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask(remove) found/error = %v/%v", found, err)
 	}
 	terminal, err := taskRepository.AcknowledgeControllerTask(
-		ctx, removeTask.ID, testtaskjournal.TaskStatusCompleted, removeTask.CreatedAt.Add(2*time.Second),
-	)
+		ctx, removeTask.ID, testtaskjournal.TaskStatusCompleted, nil,
+		removeTask.CreatedAt.Add(2*time.Second))
+
 	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask(remove) = %#v, %v", terminal, err)
 	}
 	assertRunnerTerminalAggregate(t, store, terminal, removeMarker, desired.ID)
 	if _, err := taskRepository.AcknowledgeControllerTask(
-		ctx, removeTask.ID, testtaskjournal.TaskStatusCompleted, removeTask.CreatedAt.Add(2*time.Second),
-	); err != nil {
+		ctx, removeTask.ID, testtaskjournal.TaskStatusCompleted, nil,
+		removeTask.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(remove replay) error = %v", err)
 	}
 	if _, err := repository.GetRunner(ctx, desired.ID); !errors.Is(err, errs.New(errs.KindRunnerNotFound, "")) {
@@ -434,8 +435,9 @@ func TestRunnerRemovalFailureTimeoutAbortAndRetryRetainAllocations(t *testing.T)
 		t.Fatalf("ClaimNextControllerTask(remove) found/error = %v/%v", found, err)
 	}
 	failed, err := tasks.AcknowledgeControllerTask(
-		ctx, removeTask.ID, testtaskjournal.TaskStatusFailed, removeTask.CreatedAt.Add(2*time.Second),
-	)
+		ctx, removeTask.ID, testtaskjournal.TaskStatusFailed, nil,
+		removeTask.CreatedAt.Add(2*time.Second))
+
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
 	}
@@ -638,8 +640,8 @@ func TestRunnerCreationTerminalizationRequiresEveryAllocationFence(t *testing.T)
 			}
 			connectorDeletionDeleteKey(t, store, test.key(current.Record))
 			if _, err := tasks.AcknowledgeControllerTask(
-				ctx, task.ID, test.status, task.CreatedAt.Add(2*time.Second),
-			); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+				ctx, task.ID, test.status, nil,
+				task.CreatedAt.Add(2*time.Second)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 			}
 			retained, err := repository.GetRunner(ctx, desired.ID)
@@ -692,8 +694,8 @@ func TestRunnerCreationTerminalizationCASFencesAllocationRace(t *testing.T) {
 				runnerTestRecordReadinessProof(t, repository, task)
 			}
 			if _, err := tasks.AcknowledgeControllerTask(
-				ctx, task.ID, status, task.CreatedAt.Add(2*time.Second),
-			); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+				ctx, task.ID, status, nil,
+				task.CreatedAt.Add(2*time.Second)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Fatalf("AcknowledgeControllerTask(race) error = %v", err)
 			}
 			retained, err := repository.GetRunner(ctx, desired.ID)

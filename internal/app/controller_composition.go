@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/app/controllerbackup"
+	"github.com/AlanD20/groundplane/internal/app/hostplatform"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/attachplanning"
@@ -95,7 +96,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		execution.scriptArtifacts,
 		execution.scriptSourceReferences,
 		authority.agents,
-		imageSelections,
+		imageSelections, agentRuntime.Registry,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -106,8 +107,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)
 	}
-	runnerComposition, err := newControllerRunnerComposition(
-		cfg,
+	runnerComposition, err := newControllerRunnerComposition(cfg, store,
 		authority.runnerRecords,
 		authority.tasks,
 		authority.hierarchyRecords,
@@ -146,7 +146,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		execution.scriptArtifacts,
 		releaseExecutionTimeout,
 		authority.agents,
-		imageSelections,
+		imageSelections, agentRuntime.Registry,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -518,11 +518,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, err
 	}
-	platform, err := newControllerPlatform(ctx, controllerPlatformDependencies{
+	platform, err := hostplatform.New(ctx, hostplatform.Dependencies{
 		Config: cfg, Key: authority.controllerKey, Store: store, Agents: authority.agents, Tasks: authority.tasks,
 		Intents: authority.intentCoordinator, Idempotency: authority.idempotency, Channel: agentRuntime,
 		EtcdEndpoints: bootstrap.etcdEndpoints, Tick: bootstrap.tick, Logger: bootstrap.logger,
 		EtcdLifecycle: bootstrap.etcdLifecycle,
+		Protector:     authority.intentProtector,
 	})
 	if err != nil {
 		_ = store.Close()
@@ -540,22 +541,15 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, err
 	}
-	software, softwareTasks, err := newControllerSoftwareRuntime(
-		bootstrap, authority, platform, backingZoneCascades, imageDelivery, runnerComposition,
-	)
+	software, controllerTaskRunner, err := platform.NewExecution(ctx, hostplatform.ExecutionDependencies{
+		BackingZones: backingZoneCascades, Images: imageDelivery,
+		RunnerChecks: runnerComposition.checkExecutor, RunnerLifecycle: runnerComposition.lifecycle,
+		Keys: backups.keys, Hierarchy: hierarchyDeletions,
+	})
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
 		return nil, err
-	}
-	controllerTaskRunner, err := newControllerTaskRuntime(
-		ctx, authority.tasks, softwareTasks, backups.keys, hierarchyDeletions,
-		platform.agents, agentRuntime.Registry, platform.native, bootstrap.tick, bootstrap.logger,
-	)
-	if err != nil {
-		_ = platform.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Controller Task runner: %w", err)
 	}
 	wired, err := newControllerHTTPComposition(controllerHTTPDependencies{
 		bootstrap:               bootstrap,
@@ -595,6 +589,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	keepEtcdLifecycle = true
 	wired.runners = runnerComposition.maintenance
-	wired.resolverListener = resolverComposition.listener
+	wired.resolverConfiguration = resolverComposition.configuration
 	return wired, nil
 }

@@ -113,6 +113,43 @@ Backup Policy, any Recovery Point, or orphan authority that still retains the
 Connector. Failed or uncertain remote cleanup must retain the credential and
 reference authority needed for retry and diagnosis.
 
+### Test a Connector
+
+**Test connection** checks storage permissions independently of Save. It is
+available in the Connector create/edit form and saved details. The CLI offers
+`connector check NAME`, `--changes-file PATH|-` for unsaved JSON edits, or
+`--draft-file PATH|-` for an unsaved creation draft. A draft check does not create
+or edit a Connector. Direct credential values remain write-only inputs.
+
+The Controller captures the selected settings and credential versions when it
+accepts the check. It writes a small, uniquely owned object, reads and verifies
+it, exercises multipart upload, then deletes/aborts its temporary content and
+verifies cleanup. It never reads or removes existing Backup objects. The probe
+and cleanup have separate bounded deadlines; provider failure does not block Save.
+
+Follow the returned Task to see individual stages, safe failure reasons, tested
+settings, execution location and timestamps. Saved details retain the latest
+saved check while its Task is retained; draft checks do not replace it. A settings
+or credential-version change marks the result stale. A passing result records
+access at that time, not ongoing availability or Backup/Restore qualification.
+Read an exact result with `connector check-result TASK_ID`, or use
+`connector check-result --latest NAME` for the latest saved attempt.
+
+If cleanup is incomplete, the result lists the owned object keys and multipart
+upload ids. GP retains the captured encrypted credentials and exact Secret pins,
+blocking their deletion until cleanup finishes. **Retry cleanup only** (CLI:
+`task retry TASK_ID`) transfers that cleanup to a new Task; it never repeats the
+probe or certifies permissions. Cleanup of an older failure does not replace a
+newer check. An interrupted check is not automatically rerun. Start a new
+**Test connection** when you want a fresh permission check.
+
+An active check or pending cleanup also blocks removal of its Environment and
+containing hierarchy. This includes unsaved drafts: removing their parent must
+not strand temporary remote content or prevent cleanup retry.
+
+These actions are implemented locally but have not yet been qualified against
+a live provider in the current implementation batch.
+
 ## Security and availability
 
 Values are encrypted with the Controller's age protector. Credential delivery is

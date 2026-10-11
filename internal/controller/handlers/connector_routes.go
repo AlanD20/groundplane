@@ -82,6 +82,7 @@ type connectorMutationOutput struct {
 }
 
 func (s *Server) registerConnectors() {
+	s.registerConnectorChecks()
 	s.registerConnectorEditing()
 	connectorSchema := s.API.OpenAPI().Components.Schemas.Schema(
 		reflect.TypeFor[apiTypes.Connector](),

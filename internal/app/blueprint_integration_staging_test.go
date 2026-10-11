@@ -26,6 +26,21 @@ func stageEnvironmentBlueprintForPublicationTest(
 	if err != nil {
 		t.Fatal(err)
 	}
+	return stageEnvironmentBlueprintWithDependencyDigestForPublicationTest(
+		t, store, expectedHeadRevision, revision, projection, marker, dependencyDigest,
+	)
+}
+
+func stageEnvironmentBlueprintWithDependencyDigestForPublicationTest(
+	t *testing.T,
+	store testkeyvalue.Store,
+	expectedHeadRevision int64,
+	revision testblueprints.EnvironmentBlueprintRevision,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+	marker testidempotency.IdempotencyMarker,
+	dependencyDigest [sha256.Size]byte,
+) testblueprints.EnvironmentBlueprintStageClaim {
+	t.Helper()
 	claim := testblueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID:  strings.TrimPrefix(marker.TaskID, "task_"),
 		EnvironmentID: revision.EnvironmentID, RevisionID: revision.RevisionID,

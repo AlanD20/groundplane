@@ -90,7 +90,10 @@ func (repository *TaskRepository) prepareBlueprintChildAssignmentEpoch(
 		return blueprintunits.MutationPlan{}, nil
 	}
 	if epoch == 0 || epoch == math.MaxUint32 {
-		return blueprintunits.MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint child assignment epoch is exhausted")
+		return blueprintunits.MutationPlan{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint child assignment epoch is exhausted",
+		)
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {
@@ -106,17 +109,29 @@ func (repository *TaskRepository) prepareBlueprintChildAssignmentEpoch(
 			continue
 		}
 		if current.TaskID != task.ID || current.ParentTaskID != task.Params[taskjournal.TaskBlueprintParentParam] ||
-			current.Epoch != int64(epoch) || current.State != blueprintunits.Running && current.State != blueprintunits.Draining ||
+			current.Epoch != int64(
+				epoch,
+			) || current.State != blueprintunits.Running && current.State != blueprintunits.Draining ||
 			!recovery && (current.State != blueprintunits.Running || snapshot.HeadTaskID != current.ParentTaskID) {
-			return blueprintunits.MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint child assignment no longer matches its resource claim")
+			return blueprintunits.MutationPlan{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint child assignment no longer matches its resource claim",
+			)
 		}
 		current.Epoch++
 		if recovery {
 			current.State = blueprintunits.Draining
 		}
-		return blueprintunits.PrepareMutation(snapshot, nil, []blueprintunits.ExecutionChange{{PlanID: task.PlanID, Next: &current}})
+		return blueprintunits.PrepareMutation(
+			snapshot,
+			nil,
+			[]blueprintunits.ExecutionChange{{PlanID: task.PlanID, Next: &current}},
+		)
 	}
-	return blueprintunits.MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint child resource claim is unavailable")
+	return blueprintunits.MutationPlan{}, errs.New(
+		errs.KindStateConflict,
+		"Blueprint child resource claim is unavailable",
+	)
 }
 
 // blueprintChildHeadAtRevision is only a queue-scan hint. The assignment

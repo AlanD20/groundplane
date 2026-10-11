@@ -83,6 +83,7 @@ func newAttachCmd() *cobra.Command {
 	}
 	fact.Flags().StringVar(&grant, "grant", "", "select another Attach granted to the owning Attach")
 	cmd.AddCommand(fact)
+	cmd.AddCommand(newAttachCheckCmd(), newAttachCheckResultCmd())
 	return cmd
 }
 

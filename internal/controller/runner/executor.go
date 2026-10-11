@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -38,6 +39,7 @@ type executionRepository interface {
 	RecordRunnerReadinessProof(
 		context.Context,
 		string,
+		buildversion.ContainerIdentity,
 	) (etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord], error)
 	DeleteRunnerRuntimeOwnershipAfterCleanup(
 		context.Context,
@@ -165,7 +167,7 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 	if err != nil {
 		return err
 	}
-	_, err = executor.repository.RecordRunnerReadinessProof(ctx, task.ID)
+	_, err = executor.repository.RecordRunnerReadinessProof(ctx, task.ID, evidence.Software)
 	return err
 }
 

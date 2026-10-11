@@ -23,9 +23,9 @@ func TestCoordinatorExpiredPreparedJournalHandsOffRecovery(t *testing.T) {
 	if err := coordinator.Restore(ctx, h.claim); err != nil {
 		t.Fatal(err)
 	}
-	status, err := coordinator.Execute(ctx, h.claim.Task.Record, h.expected.Deadline)
-	if !errors.Is(err, context.Canceled) || status != "" || h.store.current().Phase != upgrade.PhaseRollingBack {
-		t.Fatalf("expired preparation = %s, %v, journal %s", status, err, h.store.current().Phase)
+	status, err := coordinator.Execute(ctx, h.claim.Task.Record, h.expected.Deadline, h.progress(ctx))
+	if !errors.Is(err, context.Canceled) || status.Status != "" || h.store.current().Phase != upgrade.PhaseRollingBack {
+		t.Fatalf("expired preparation = %s, %v, journal %s", status.Status, err, h.store.current().Phase)
 	}
 }
 
@@ -41,10 +41,11 @@ func TestCoordinatorRejectsCandidateWithPredecessorProcessIdentity(t *testing.T)
 	if err := coordinator.Restore(ctx, h.claim); err != nil {
 		t.Fatal(err)
 	}
-	status, err := coordinator.Execute(ctx, h.claim.Task.Record, h.expected.Deadline)
-	if !errors.Is(err, context.Canceled) || status != "" || h.store.current().Phase != upgrade.PhaseRollingBack ||
+	status, err := coordinator.Execute(ctx, h.claim.Task.Record, h.expected.Deadline, h.progress(ctx))
+	if !errors.Is(err, context.Canceled) || status.Status != "" ||
+		h.store.current().Phase != upgrade.PhaseRollingBack ||
 		len(h.agents.goals) != 0 {
-		t.Fatalf("wrong process qualification = %s, %v", status, err)
+		t.Fatalf("wrong process qualification = %s, %v", status.Status, err)
 	}
 }
 
@@ -61,10 +62,11 @@ func TestCoordinatorStorageReadinessFailureDoesNotMutateAgent(t *testing.T) {
 	if err := coordinator.Restore(ctx, h.claim); err != nil {
 		t.Fatal(err)
 	}
-	status, err := coordinator.Execute(ctx, h.claim.Task.Record, h.expected.Deadline)
-	if !errors.Is(err, context.Canceled) || status != "" || h.store.current().Phase != upgrade.PhaseRollingBack ||
+	status, err := coordinator.Execute(ctx, h.claim.Task.Record, h.expected.Deadline, h.progress(ctx))
+	if !errors.Is(err, context.Canceled) || status.Status != "" ||
+		h.store.current().Phase != upgrade.PhaseRollingBack ||
 		len(h.agents.goals) != 0 {
-		t.Fatalf("unready qualification = %s, %v", status, err)
+		t.Fatalf("unready qualification = %s, %v", status.Status, err)
 	}
 }
 
@@ -80,10 +82,15 @@ func TestCoordinatorHealthyReplayCompletesAfterDeadline(t *testing.T) {
 	if err := coordinator.Restore(context.Background(), h.claim); err != nil {
 		t.Fatal(err)
 	}
-	status, err := coordinator.Execute(context.Background(), h.claim.Task.Record, h.expected.Deadline)
-	if err != nil || status != testtaskjournal.TaskStatusCompleted || h.unit.launches != 0 ||
+	status, err := coordinator.Execute(
+		context.Background(),
+		h.claim.Task.Record,
+		h.expected.Deadline,
+		h.progress(context.Background()),
+	)
+	if err != nil || status.Status != testtaskjournal.TaskStatusCompleted || h.unit.launches != 0 ||
 		h.store.current().Phase != upgrade.PhaseHealthy {
-		t.Fatalf("healthy replay = %s, %v", status, err)
+		t.Fatalf("healthy replay = %s, %v", status.Status, err)
 	}
 }
 
@@ -105,10 +112,16 @@ func TestCoordinatorChangedPredecessorFailsWithoutActivation(t *testing.T) {
 			if err := coordinator.Restore(context.Background(), h.claim); err != nil {
 				t.Fatal(err)
 			}
-			status, err := coordinator.Execute(context.Background(), h.claim.Task.Record, h.expected.Deadline)
-			if err != nil || status != testtaskjournal.TaskStatusFailed || h.store.found || h.unit.launches != 0 ||
+			status, err := coordinator.Execute(
+				context.Background(),
+				h.claim.Task.Record,
+				h.expected.Deadline,
+				h.progress(context.Background()),
+			)
+			if err != nil || status.Status != testtaskjournal.TaskStatusFailed || h.store.found ||
+				h.unit.launches != 0 ||
 				len(h.agents.goals) != 0 {
-				t.Fatalf("changed predecessor = %s, %v", status, err)
+				t.Fatalf("changed predecessor = %s, %v", status.Status, err)
 			}
 		})
 	}

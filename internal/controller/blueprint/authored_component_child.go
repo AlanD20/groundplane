@@ -35,27 +35,45 @@ import (
 // workload. Authored Services provide routing context, never mutation authority.
 // The sealed recipe is published with its candidate rather than rebuilt from
 // whichever Environment projection happens to exist when the Agent dispatches.
-func (service *Service) prepareAuthoredComponentChild(ctx context.Context, parent etcd.TaskRecord, unit blueprintunits.Unit, timeoutSeconds int64) (blueprintcoordinator.PreparedChild, error) {
+func (service *Service) prepareAuthoredComponentChild(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	unit blueprintunits.Unit,
+	snapshot blueprintunits.Snapshot,
+	timeoutSeconds int64,
+) (blueprintcoordinator.PreparedChild, error) {
 	source, err := service.loadAuthoredRuntimeProjectionSource(ctx, parent)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	capability, spec, found := authoredComponentSpec(source.identities.Record.Components, source.desired.Record.Input.Components, unit.Target.ID)
+	capability, spec, found := authoredComponentSpec(
+		source.identities.Record.Components,
+		source.desired.Record.Input.Components,
+		unit.Target.ID,
+	)
 	if !found && !unit.Removal || found && unit.Removal {
-		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint Component is absent from the sealed input")
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component is absent from the sealed input",
+		)
 	}
-	currentSet, err := service.listBlueprintComponents(ctx, parent.Owner.EnvironmentID)
+	currentSet, err := service.repository.ReadEnvironmentBlueprintRuntimeComponents(
+		ctx, parent.Owner.EnvironmentID, snapshot.ReadRevision,
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	var current keyvalue.Versioned[componentrecord.Record]
 	for _, selected := range currentSet {
-		if selected.Record.Desired.ID == unit.Target.ID {
-			current = selected
+		if selected.Component.Record.Desired.ID == unit.Target.ID {
+			current = selected.Component
 		}
 	}
 	if current.Revision <= 0 {
-		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint Component singleton is unavailable")
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component singleton is unavailable",
+		)
 	}
 	active, err := componentrecord.ProjectRecord(current.Record)
 	if err != nil {
@@ -67,16 +85,28 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 			return blueprintcoordinator.PreparedChild{}, err
 		}
 	}
-	changes, err := taskplanning.ReconcileBlueprintComponent(capability, spec, active, func(kind ids.Kind) string { return ids.New(kind) })
+	changes, err := taskplanning.ReconcileBlueprintComponent(
+		capability,
+		spec,
+		active,
+		func(kind ids.Kind) string { return ids.New(kind) },
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	if len(changes.Effective) != 1 {
-		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint Component projection is not a singleton")
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component projection is not a singleton",
+		)
 	}
 	candidate := changes.Effective[0]
 	candidate.PinnedIPv4, candidate.Healthy = "", false
-	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, source.desired.Record, source.identities.Record)
+	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
+		ctx,
+		source.desired.Record,
+		source.identities.Record,
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
@@ -101,23 +131,46 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		if err != nil {
 			return blueprintcoordinator.PreparedChild{}, err
 		}
-		zoneVersions[index] = keyvalue.Versioned[zonerecord.Record]{Record: record, Revision: source.desired.Revision, ReadRevision: current.ReadRevision}
+		zoneVersions[index] = keyvalue.Versioned[zonerecord.Record]{
+			Record:       record,
+			Revision:     source.desired.Revision,
+			ReadRevision: current.ReadRevision,
+		}
 		zoneChanges[index] = blueprints.EnvironmentBlueprintZoneChange{Current: &zoneVersions[index], Record: record}
 	}
-	head, found, err := service.repository.GetEnvironmentBlueprintHead(ctx, parent.Owner.EnvironmentID)
+	if snapshot.HeadTaskID != parent.ID || current.ReadRevision != snapshot.ReadRevision {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component parent was superseded",
+		)
+	}
+	authority, err := service.repository.PrepareFrozenComponentUnitAuthority(
+		ctx,
+		componentplanning.FrozenProjectionAuthorityInput{
+			EnvironmentID: parent.Owner.EnvironmentID, ReadRevision: current.ReadRevision,
+			DesiredHeadRevision: snapshot.HeadRevision, DesiredRevisionID: parent.ID,
+			DesiredZones: zoneVersions, RuntimeSourceAuthority: componentplanning.ManagedRuntimeSourceAuthorityApplied,
+		},
+		current,
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	if !found || head.Record.RevisionID != parent.ID {
-		return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint Component parent was superseded")
-	}
-	authority, err := service.repository.PrepareFrozenComponentUnitAuthority(ctx, componentplanning.FrozenProjectionAuthorityInput{
-		EnvironmentID: parent.Owner.EnvironmentID, ReadRevision: current.ReadRevision,
-		DesiredHeadRevision: head.Revision, DesiredRevisionID: parent.ID,
-		DesiredZones: zoneVersions, RuntimeSourceAuthority: componentplanning.ManagedRuntimeSourceAuthorityApplied,
-	}, current)
+	services, err := taskplanning.ProjectServiceProjection(
+		project,
+		identities,
+		source.desired.Record.Input.ServiceExtensions,
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
+	}
+	// Engine replacement needs complete Service capture. A same-engine Route
+	// or router configuration edit does not replace those Service proxies.
+	if candidate.Kind != current.Record.Desired.Kind && candidate.Kind.IsEnvironmentProxy() {
+		authority, err = service.prepareAuthoredProxyServiceCapture(ctx, parent, candidate.Kind, authority, services)
+		if err != nil {
+			return blueprintcoordinator.PreparedChild{}, err
+		}
 	}
 	predecessorZones, err := authority.ComponentPredecessorZones()
 	if err != nil {
@@ -129,7 +182,10 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		}) {
 			continue
 		}
-		zoneChanges = append(zoneChanges, blueprints.EnvironmentBlueprintZoneChange{Current: &prior, Record: prior.Record})
+		zoneChanges = append(
+			zoneChanges,
+			blueprints.EnvironmentBlueprintZoneChange{Current: &prior, Record: prior.Record},
+		)
 	}
 	createdAt := service.now().UTC()
 	child := etcd.TaskRecord{
@@ -145,17 +201,22 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		TimeoutSeconds: timeoutSeconds, Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
-	preparation, err := service.repository.PrepareEnvironmentComponentTask(ctx, child.ID, parent.Owner.EnvironmentID, zoneChanges,
-		[]componentplanning.EnvironmentComponentCandidateInput{{Current: current, Candidate: candidate}}, createdAt, authority)
+	preparation, err := service.repository.PrepareEnvironmentComponentTask(
+		ctx,
+		child.ID,
+		parent.Owner.EnvironmentID,
+		zoneChanges,
+		[]componentplanning.EnvironmentComponentCandidateInput{
+			{Current: current, Candidate: candidate},
+		},
+		createdAt,
+		authority,
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	candidateRecord := preparation.Intent.Candidates[0].Candidate
 	candidate, err = componentrecord.ProjectRecord(candidateRecord)
-	if err != nil {
-		return blueprintcoordinator.PreparedChild{}, err
-	}
-	services, err := taskplanning.ProjectServiceProjection(project, identities, source.desired.Record.Input.ServiceExtensions)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
@@ -171,7 +232,14 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	environment := blueprintComponentEnvironment(source.environment.Record, zones, services, routes, []core.Component{candidate}, entries)
+	environment := blueprintComponentEnvironment(
+		source.environment.Record,
+		zones,
+		services,
+		routes,
+		[]core.Component{candidate},
+		entries,
+	)
 	projected, err := composerender.ProjectEnvironmentComponents(project, environment, service.componentCatalog)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
@@ -195,8 +263,19 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	allocate := func(kind ids.Kind, name string) string { return ids.DeriveAt(kind, createdAt, child.PlanID, name) }
-	materializations, steps, err := service.environmentComponentMaterializations(ctx, parent.Owner.EnvironmentID, source.project.Record.ID,
-		parent.ID, artifactID, uint64(parent.RenderGeneration), allocate, nil, projected, nil, entries)
+	materializations, steps, err := service.environmentComponentMaterializations(
+		ctx,
+		parent.Owner.EnvironmentID,
+		source.project.Record.ID,
+		parent.ID,
+		artifactID,
+		uint64(parent.RenderGeneration),
+		allocate,
+		nil,
+		projected,
+		nil,
+		entries,
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
@@ -217,21 +296,38 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 	child.ManagedComponentTeardownSources = preparation.ManagedComponentTeardownSources()
 	for index := len(child.ManagedComponentTeardownSources) - 1; index >= 0; index-- {
 		if child.ManagedComponentTeardownSources[index].ComponentID != unit.Target.ID {
-			child.ManagedComponentTeardownSources = append(child.ManagedComponentTeardownSources[:index], child.ManagedComponentTeardownSources[index+1:]...)
+			child.ManagedComponentTeardownSources = append(
+				child.ManagedComponentTeardownSources[:index],
+				child.ManagedComponentTeardownSources[index+1:]...)
 		}
 	}
 	// Reuse the existing exact predecessor decoder during sealing only. Dispatch
 	// consumes the resulting complete sealed recipe, including source artifacts.
-	projection := projectionrecord.EnvironmentComposeProjection{EnvironmentID: parent.Owner.EnvironmentID, RevisionID: parent.ID, RenderGeneration: uint64(parent.RenderGeneration)}
+	projection := projectionrecord.EnvironmentComposeProjection{
+		EnvironmentID:    parent.Owner.EnvironmentID,
+		RevisionID:       parent.ID,
+		RenderGeneration: uint64(parent.RenderGeneration),
+	}
 	pinnedSources := map[string]projectionrecord.EnvironmentComposeProjection{}
 	if len(child.ManagedComponentTeardownSources) != 0 {
 		predecessor, found := authority.ComponentPredecessor()
 		if !found || predecessor.EnvironmentID != parent.Owner.EnvironmentID {
-			return blueprintcoordinator.PreparedChild{}, errs.New(errs.KindStateConflict, "Blueprint Component predecessor is unavailable")
+			return blueprintcoordinator.PreparedChild{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Component predecessor is unavailable",
+			)
 		}
 		pinnedSources[unit.Target.ID] = predecessor
 	}
-	teardown, err := service.plans.BlueprintManagedComponentTeardown(ctx, child, projection, artifact, prerequisite, false, pinnedSources)
+	teardown, err := service.plans.BlueprintManagedComponentTeardown(
+		ctx,
+		child,
+		projection,
+		artifact,
+		prerequisite,
+		false,
+		pinnedSources,
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
@@ -244,12 +340,14 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		return blueprintcoordinator.PreparedChild{}, err
 	}
 	steps = append(steps, managedSteps...)
-	componentSteps, _, err := taskplanning.BuildEnvironmentComponentTaskContribution(taskplanning.EnvironmentComponentTaskContributionInput{
-		Apply: taskplanning.EnvironmentManagedConfigApplyInput{
-			RevisionID: parent.ID, RenderGeneration: uint64(parent.RenderGeneration), Components: []componentrecord.Record{candidateRecord},
-			ComponentCatalog: service.componentCatalog, Materializations: materializations, Artifact: artifact,
-		}, AllocateStep: func() string { return allocate(ids.KindStep, "component-config-activate") }, TimeoutSeconds: uint32(timeoutSeconds),
-	})
+	componentSteps, _, err := taskplanning.BuildEnvironmentComponentTaskContribution(
+		taskplanning.EnvironmentComponentTaskContributionInput{
+			Apply: taskplanning.EnvironmentManagedConfigApplyInput{
+				RevisionID: parent.ID, RenderGeneration: uint64(parent.RenderGeneration), Components: []componentrecord.Record{candidateRecord},
+				ComponentCatalog: service.componentCatalog, Materializations: materializations, Artifact: artifact,
+			}, AllocateStep: func() string { return allocate(ids.KindStep, "component-config-activate") }, TimeoutSeconds: uint32(timeoutSeconds),
+		},
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
@@ -260,9 +358,19 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	plan, err := taskplan.Build(taskplan.BuildInput{VolumeRoot: service.volumeRoot, PlanID: child.PlanID, RenderGeneration: uint64(child.RenderGeneration),
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, TargetID: child.Target, Artifacts: teardown.Artifacts,
-		Steps: steps, ManagedComponentProcedure: teardown.Procedure, ComponentRecoveryProcedure: componentRecovery})
+	plan, err := taskplan.Build(
+		taskplan.BuildInput{
+			VolumeRoot:                 service.volumeRoot,
+			PlanID:                     child.PlanID,
+			RenderGeneration:           uint64(child.RenderGeneration),
+			Operation:                  agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+			TargetID:                   child.Target,
+			Artifacts:                  teardown.Artifacts,
+			Steps:                      steps,
+			ManagedComponentProcedure:  teardown.Procedure,
+			ComponentRecoveryProcedure: componentRecovery,
+		},
+	)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
@@ -275,26 +383,29 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 	for index, step := range plan.GetSteps() {
 		child.Steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: step.GetStepId()}
 	}
-	child.Steps = taskjournal.CaptureStepDescriptions(child.Steps, plan.GetSteps())
+	child.Steps = taskjournal.CaptureStepDescriptions(child.Steps, plan)
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(plan)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(encoded)
-	publication, err := service.repository.PrepareComponentTaskPublication(ctx, source.environment, componentplanning.TaskIdentity{
-		ID: child.ID, Target: child.Target, Executor: child.Executor, Type: child.Type, CreatedAt: child.CreatedAt,
-	}, zoneChanges, preparation)
-	if err != nil {
-		return blueprintcoordinator.PreparedChild{}, err
+	record := componentplanning.ChildExecution{
+		TaskID:           child.ID,
+		ParentTaskID:     parent.ID,
+		EnvironmentID:    parent.Owner.EnvironmentID,
+		Component:        candidateRecord,
+		Plan:             encoded,
+		Configuration:    taskconfiguration.CloneTaskConfiguration(child.Configuration),
+		Materializations: taskmaterialization.Clone(child.Materializations),
 	}
-	record := componentplanning.ChildExecution{TaskID: child.ID, ParentTaskID: parent.ID, EnvironmentID: parent.Owner.EnvironmentID,
-		Component: candidateRecord, Plan: encoded, Configuration: taskconfiguration.CloneTaskConfiguration(child.Configuration),
-		Materializations: taskmaterialization.Clone(child.Materializations)}
 	for _, zone := range zoneVersions {
 		record.Zones = append(record.Zones, zone.Record)
 	}
 	for _, prior := range predecessorZones {
-		if !slices.ContainsFunc(record.Zones, func(zone zonerecord.Record) bool { return zone.Desired.ID == prior.Record.Desired.ID }) {
+		if !slices.ContainsFunc(
+			record.Zones,
+			func(zone zonerecord.Record) bool { return zone.Desired.ID == prior.Record.Desired.ID },
+		) {
 			record.Zones = append(record.Zones, prior.Record)
 		}
 	}
@@ -307,6 +418,71 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 		}
 		return 0
 	})
+	if len(authority.ProxyReplacementServices()) != 0 {
+		candidateInput, err := service.prepareAuthoredProxyCandidateInput(ctx, parent, source, snapshot, record)
+		if err != nil {
+			return blueprintcoordinator.PreparedChild{}, err
+		}
+		stored, err := service.repository.StageBlueprintProxyCandidateInput(
+			ctx,
+			record,
+			candidateInput,
+			source.desired.Revision,
+		)
+		if err != nil {
+			return blueprintcoordinator.PreparedChild{}, err
+		}
+		preparation, err = preparation.WithProxyCandidateInput(stored)
+		if err != nil {
+			return blueprintcoordinator.PreparedChild{}, err
+		}
+		preflight, captured := authority.ProxyServiceCapture()
+		if !captured {
+			return blueprintcoordinator.PreparedChild{}, errs.New(
+				errs.KindStateConflict,
+				"router preparation lost its captured Service membership",
+			)
+		}
+		rollouts, err := service.prepareAuthoredProxyServiceRollouts(
+			ctx,
+			parent,
+			authoredProxyRolloutOwner{
+				ID:             child.ID,
+				CreatedAt:      child.CreatedAt,
+				TimeoutSeconds: child.TimeoutSeconds,
+			},
+			candidateInput,
+			stored.Record,
+			preflight,
+		)
+		if err != nil {
+			return blueprintcoordinator.PreparedChild{}, err
+		}
+		preparation, err = preparation.WithProxyServiceRollouts(rollouts)
+		if err != nil {
+			return blueprintcoordinator.PreparedChild{}, err
+		}
+		preparation, err = service.blueprintReleases.PrepareProxySourceHold(ctx, parent, rollouts, preparation)
+		if err != nil {
+			return blueprintcoordinator.PreparedChild{}, err
+		}
+	}
+	publication, err := service.repository.PrepareComponentTaskPublication(
+		ctx,
+		source.environment,
+		componentplanning.TaskIdentity{
+			ID:        child.ID,
+			Target:    child.Target,
+			Executor:  child.Executor,
+			Type:      child.Type,
+			CreatedAt: child.CreatedAt,
+		},
+		zoneChanges,
+		preparation,
+	)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
 	sealedPublication, err := publication.WithChildExecution(record, child.PlanID, child.PlanHash)
 	if err != nil {
 		publication.Clear()
@@ -315,7 +491,11 @@ func (service *Service) prepareAuthoredComponentChild(ctx context.Context, paren
 	return blueprintcoordinator.PreparedChild{Task: child, ComponentPublication: sealedPublication}, nil
 }
 
-func authoredComponentSpec(identities []projectionrecord.OwnedIdentity, specs map[string]core.ComponentSpec, componentID string) (core.ComponentCapability, core.ComponentSpec, bool) {
+func authoredComponentSpec(
+	identities []projectionrecord.OwnedIdentity,
+	specs map[string]core.ComponentSpec,
+	componentID string,
+) (core.ComponentCapability, core.ComponentSpec, bool) {
 	for _, identity := range identities {
 		if identity.ID == componentID {
 			spec, found := specs[identity.Name]
@@ -326,14 +506,12 @@ func authoredComponentSpec(identities []projectionrecord.OwnedIdentity, specs ma
 }
 
 func omittedComponentSelection(record componentrecord.Record) (core.ComponentCapability, core.ComponentSpec, error) {
-	var capability core.ComponentCapability
-	switch record.Desired.Kind {
-	case core.ComponentKindIngressCaddy:
-		capability = core.ComponentCapabilityHTTPRouter
-	case core.ComponentKindEdgeCloudflare:
-		capability = core.ComponentCapabilityEdgeTunnel
-	default:
-		return "", core.ComponentSpec{}, errs.New(errs.KindStateConflict, "omitted Component is not an Environment singleton")
+	capability, supported := record.Desired.Kind.EnvironmentCapability()
+	if !supported {
+		return "", core.ComponentSpec{}, errs.New(
+			errs.KindStateConflict,
+			"omitted Component is not an Environment singleton",
+		)
 	}
 	return capability, core.ComponentSpec{Implementation: record.Desired.Kind, Enabled: false}, nil
 }

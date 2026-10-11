@@ -75,6 +75,11 @@ func (repository *TaskRepository) acknowledgeTask(
 		); err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
+		if err := repository.validateCompletedManagedNetworkReport(
+			ctx, task, assignment, terminalStatus, result, primaryAndAssignment.ReadRevision,
+		); err != nil {
+			return etcdstore.Versioned[TaskRecord]{}, err
+		}
 		terminalAt, err = nextTaskControllerTimestamp(task.UpdatedAt, terminalAt)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -329,7 +334,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			mutations = append(mutations, releaseGroupChange.mutations...)
 		}
 		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
-			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
+			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision, assignment,
 		)
 		if err != nil {
 			journal.clearPrimary()
@@ -357,8 +362,12 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, serviceChange.conditions...)
 			mutations = append(mutations, serviceChange.mutations...)
 		}
+		zoneEffectStatus := terminalStatus
+		if recoveryAcknowledgement.final && recoveredAuthoredZoneAbsence(terminal, assignment) {
+			zoneEffectStatus = taskjournal.TaskStatusCompleted
+		}
 		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
-			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
+			ctx, task, zoneEffectStatus, terminalAt, primaryAndAssignment.ReadRevision, assignment,
 		)
 		if err != nil {
 			journal.clearPrimary()
@@ -439,8 +448,8 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, hostResolutionChange.conditions[hostResolutionBaseConditionCount:]...)
 			mutations = append(mutations, hostResolutionChange.mutations...)
 		}
-		connectorChange, err := repository.prepareConnectorTaskAcknowledgement(
-			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		connectorChange, err := repository.prepareResourceTaskAcknowledgement(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision, terminal.UpdatedAt,
 		)
 		if err != nil {
 			journal.clearPrimary()
@@ -471,7 +480,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			clearConnectorTaskChange(connectorChange)
+			clearResourceTaskChange(connectorChange)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if runnerChange.applies {
@@ -499,7 +508,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			clearConnectorTaskChange(connectorChange)
+			clearResourceTaskChange(connectorChange)
 			clearRunnerTaskChange(runnerChange)
 		}
 		conditions, mutations, err = mergeBlueprintCandidateTerminalChange(

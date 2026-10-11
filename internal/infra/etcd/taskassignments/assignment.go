@@ -31,6 +31,8 @@ type TaskAssignmentRecord struct {
 	RestorationAuthoritySHA256       string
 	ComponentRecoveryProcedureSHA256 string
 	ServiceAbsenceProcedureSHA256    string
+	ManagedNetworkProcedureSHA256    string
+	AttachRemovalAuthoritySHA256     string
 	ReleaseRecoveryRecordSHA256      string
 	BackupAuthorityFence             *BackupAuthorityFence
 }
@@ -61,6 +63,8 @@ type taskAssignmentJSON struct {
 	RestorationAuthoritySHA256       string                       `json:"restoration_authority_sha256,omitempty"`
 	ComponentRecoveryProcedureSHA256 string                       `json:"component_recovery_procedure_sha256,omitempty"`
 	ServiceAbsenceProcedureSHA256    string                       `json:"service_absence_procedure_sha256,omitempty"`
+	ManagedNetworkProcedureSHA256    string                       `json:"managed_network_procedure_sha256,omitempty"`
+	AttachRemovalAuthoritySHA256     string                       `json:"attach_removal_authority_sha256,omitempty"`
 	ReleaseRecoveryRecordSHA256      string                       `json:"release_recovery_record_sha256,omitempty"`
 	BackupAuthorityFence             *BackupAuthorityFence        `json:"backup_authority_fence,omitempty"`
 }
@@ -70,7 +74,7 @@ func EncodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(taskAssignmentJSON{
-		Schema: 3, AssignmentID: record.AssignmentID, TaskID: record.TaskID,
+		Schema: 4, AssignmentID: record.AssignmentID, TaskID: record.TaskID,
 		Executor: record.Executor, AgentID: record.AgentID,
 		AgentGeneration: record.AgentGeneration, ClaimedTaskRevision: record.ClaimedTaskRevision,
 		AssignedAt:       record.AssignedAt.Format(time.RFC3339Nano),
@@ -87,6 +91,8 @@ func EncodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 		RestorationAuthoritySHA256:       record.RestorationAuthoritySHA256,
 		ComponentRecoveryProcedureSHA256: record.ComponentRecoveryProcedureSHA256,
 		ServiceAbsenceProcedureSHA256:    record.ServiceAbsenceProcedureSHA256,
+		ManagedNetworkProcedureSHA256:    record.ManagedNetworkProcedureSHA256,
+		AttachRemovalAuthoritySHA256:     record.AttachRemovalAuthoritySHA256,
 		ReleaseRecoveryRecordSHA256:      record.ReleaseRecoveryRecordSHA256,
 		BackupAuthorityFence:             cloneBackupAuthorityFence(record.BackupAuthorityFence),
 	})
@@ -99,7 +105,7 @@ func DecodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data taskAssignmentJSON
-	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil || data.Schema != 3 {
+	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil || data.Schema != 4 {
 		return TaskAssignmentRecord{}, CorruptTaskAssignment()
 	}
 	assignedAt, err := recordcodec.ParseCanonicalTimestamp(data.AssignedAt)
@@ -131,6 +137,8 @@ func DecodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 		RestorationAuthoritySHA256:       data.RestorationAuthoritySHA256,
 		ComponentRecoveryProcedureSHA256: data.ComponentRecoveryProcedureSHA256,
 		ServiceAbsenceProcedureSHA256:    data.ServiceAbsenceProcedureSHA256,
+		ManagedNetworkProcedureSHA256:    data.ManagedNetworkProcedureSHA256,
+		AttachRemovalAuthoritySHA256:     data.AttachRemovalAuthoritySHA256,
 		ReleaseRecoveryRecordSHA256:      data.ReleaseRecoveryRecordSHA256,
 		BackupAuthorityFence:             cloneBackupAuthorityFence(data.BackupAuthorityFence),
 	}
@@ -185,12 +193,18 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 	}
 	component := record.ComponentRecoveryProcedureSHA256 != ""
 	serviceAbsence := record.ServiceAbsenceProcedureSHA256 != ""
+	managedNetwork := record.ManagedNetworkProcedureSHA256 != ""
+	attachRemoval := record.AttachRemovalAuthoritySHA256 != ""
 	if component && !recordcodec.ValidSHA256(record.ComponentRecoveryProcedureSHA256) ||
 		serviceAbsence && !recordcodec.ValidSHA256(record.ServiceAbsenceProcedureSHA256) ||
-		component && serviceAbsence ||
+		managedNetwork && !recordcodec.ValidSHA256(record.ManagedNetworkProcedureSHA256) ||
+		attachRemoval && (!recordcodec.ValidSHA256(record.AttachRemovalAuthoritySHA256) || component ||
+			serviceAbsence || managedNetwork || record.RestorationAuthority != nil || record.BackupAuthorityFence != nil) ||
+		component && (serviceAbsence || managedNetwork) || serviceAbsence && managedNetwork ||
 		component && record.RestorationAuthority != nil ||
 		serviceAbsence && record.RestorationAuthority != nil ||
-		record.ExecutionMode == TaskExecutionModeRecoveryOnly && !component && !serviceAbsence &&
+		managedNetwork && record.RestorationAuthority != nil ||
+		record.ExecutionMode == TaskExecutionModeRecoveryOnly && !component && !serviceAbsence && !managedNetwork && !attachRemoval &&
 			record.RestorationAuthority == nil {
 		return CorruptTaskAssignment()
 	}

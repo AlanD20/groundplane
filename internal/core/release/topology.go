@@ -14,6 +14,7 @@ const (
 	WorkloadSingleton WorkloadTarget = "singleton"
 	WorkloadBlue      WorkloadTarget = "blue"
 	WorkloadGreen     WorkloadTarget = "green"
+	WorkloadRolling   WorkloadTarget = "rolling"
 )
 
 // TopologyTransition closes the strategy-change decisions sealed into a
@@ -47,7 +48,8 @@ func NewTopologyTransition(
 }
 
 func (transition TopologyTransition) RequiresPriorArtifact() bool {
-	return transition.CandidateStrategy == StrategyRecreate || transition.CandidateStrategy != transition.PriorStrategy
+	return transition.CandidateStrategy == StrategyRecreate || transition.CandidateStrategy == StrategyRolling ||
+		transition.CandidateStrategy != transition.PriorStrategy
 }
 
 func (transition TopologyTransition) RemovePriorBeforeApply() bool {
@@ -55,7 +57,7 @@ func (transition TopologyTransition) RemovePriorBeforeApply() bool {
 }
 
 func (transition TopologyTransition) RemovePriorAfterSwitch() bool {
-	return transition.CandidateStrategy == StrategyBlueGreen && transition.PriorStrategy == StrategyRecreate
+	return transition.CandidateStrategy == StrategyBlueGreen && transition.PriorStrategy != StrategyBlueGreen
 }
 
 func (transition TopologyTransition) RestorePriorDuringCompensation() bool {
@@ -69,6 +71,11 @@ func TargetFor(strategy Strategy, slot Slot) (WorkloadTarget, error) {
 			return "", errs.New(errs.KindValidationFailed, "recreate workload target cannot have a slot")
 		}
 		return WorkloadSingleton, nil
+	case StrategyRolling:
+		if slot != "" {
+			return "", errs.New(errs.KindValidationFailed, "rolling workload target cannot have a slot")
+		}
+		return WorkloadRolling, nil
 	case StrategyBlueGreen:
 		switch slot {
 		case SlotBlue:
@@ -94,10 +101,8 @@ func DeploymentStrategy(requested, declared string) (Strategy, error) {
 		selected = string(StrategyRecreate)
 	}
 	switch Strategy(selected) {
-	case StrategyBlueGreen, StrategyRecreate:
+	case StrategyBlueGreen, StrategyRecreate, StrategyRolling:
 		return Strategy(selected), nil
-	case "rolling":
-		return "", errs.New(errs.KindStrategyNotImplemented, "rolling release strategy is not implemented in the MVP")
 	default:
 		return "", errs.New(errs.KindValidationFailed, "release strategy must be selected or declared by the Service")
 	}
@@ -115,7 +120,7 @@ func InactiveSlot(strategy Strategy, serving Slot) Slot {
 
 func (target WorkloadTarget) Validate() error {
 	switch target {
-	case WorkloadSingleton, WorkloadBlue, WorkloadGreen:
+	case WorkloadSingleton, WorkloadBlue, WorkloadGreen, WorkloadRolling:
 		return nil
 	default:
 		return errs.New(errs.KindValidationFailed, "workload target is invalid")
@@ -134,7 +139,8 @@ func (target WorkloadTarget) Slot() Slot {
 }
 
 func WorkloadComposeName(serviceName string, target WorkloadTarget) (string, error) {
-	if serviceName == "" || strings.ContainsAny(serviceName, "/\\\x00") || target.Validate() != nil {
+	if serviceName == "" || strings.ContainsAny(serviceName, "/\\\x00") || target.Validate() != nil ||
+		target == WorkloadRolling {
 		return "", errs.New(errs.KindValidationFailed, "workload Compose identity is invalid")
 	}
 	return serviceName + "--" + string(target), nil

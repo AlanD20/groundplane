@@ -107,7 +107,7 @@ Current source: [composition](../../internal/app),
 
 ## Registered Components
 
-The MVP registry is closed at build time. Caddy provides `http-router`,
+The MVP registry is closed at build time. Caddy and Envoy provide `http-router`,
 Cloudflare Tunnel provides `edge-tunnel`, and CoreDNS provides `dns-resolver`.
 Controller and Agent are runtime resources, not Component registrations. There
 is no runtime registration, plugin upload, plugin subprocess, remote planner,
@@ -144,13 +144,23 @@ A new effect requires a reviewed generic Agent capability.
 
 Routes remain generic Environment resources. The enabled `http-router`
 provider is selected by capability; a Route without a provider remains valid
-and unserved. Caddy is the sole MVP implementation. Tunnel lifecycle and
+and unserved. The compiled providers share the typed Route and Zone projection;
+the Environment owns the exclusive choice. Caddy remains the available operator
+choice until protected Envoy selection is implemented. Tunnel lifecycle and
 network selection remain independent of router placement. Component-managed
 resources retain normal product ownership but are managed only through their
 owning Component surface.
 
 Blueprint Components are keyed by capability, with portable settings and a
-strict implementation-specific configuration variant. The former broad
+strict implementation-specific configuration variant. The Environment's
+persisted singleton index is also capability-owned: Caddy and Envoy occupy the
+same `http-router` slot and retain one Component identity. Separate per-engine
+indexes would permit two competing routers and force a switch to change resource
+identity. Configuration on the human API has a mandatory implementation
+discriminator rather than inferring the engine from overlapping settings.
+These boundaries do not authorize switching an active runtime without its
+captured predecessor and affected Service-proxy transition.
+The former broad
 registry, untyped maps, implementation switches in generic modules,
 technology-specific persistence, and arbitrary Agent procedures are migration
 sources to remove, not compatibility surfaces.

@@ -6,6 +6,7 @@ import { tablePageSizes } from "@/lib/console-preferences";
 import { useStore } from "@/lib/store";
 import { Settings } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
+import { HostTerminalSettings } from "@/features/host-terminal/terminal-settings";
 
 export function SettingsContent({
   workspace,
@@ -26,9 +27,12 @@ export function SettingsContent({
         eyebrow={
           workspace === "platform" ? "Platform" : `Tenant · ${workspace}`
         }
-        title="Console preferences"
+        title={
+          workspace === "platform" ? "Platform settings" : "Console preferences"
+        }
         icon={<Settings />}
       />
+      {workspace === "platform" ? <HostTerminalSettings /> : null}
       <ResourcePanel title="Visualization">
         <div>
           <SettingsRow title="Appearance">

@@ -9,6 +9,7 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,6 +19,7 @@ import (
 func (repository *RunnerRepository) RecordRunnerReadinessProof(
 	ctx context.Context,
 	taskID string,
+	software buildversion.ContainerIdentity,
 ) (etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, err
@@ -27,6 +29,9 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 			errs.KindValidationFailed,
 			"runner readiness task id is invalid",
 		)
+	}
+	if err := software.Validate(); err != nil {
+		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, err
 	}
 	keys := []string{
 		taskjournal.TaskStorageKey(taskID),
@@ -85,13 +90,14 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 	}
 	if runner.Desired.ID != task.Target || runner.CreateTaskID != task.ID ||
 		runner.ProvisioningState != runnerrecord.RunnerProvisioningProvisioning || runner.ContainerID == "" ||
-		ownership.RunnerID != runner.Desired.ID || ownership.RuntimeEpoch != runner.RuntimeEpoch {
+		ownership.RunnerID != runner.Desired.ID || ownership.RuntimeEpoch != runner.RuntimeEpoch || software.Image != runner.Desired.ImageRef {
 		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"runner readiness evidence does not match its lifecycle",
 		)
 	}
 	proof := runnerrecord.RunnerReadinessProofRecord{
+		Software:                 software,
 		RunnerID:                 runner.Desired.ID,
 		TaskID:                   task.ID,
 		RuntimeEpoch:             runner.RuntimeEpoch,
@@ -163,6 +169,7 @@ func runnerReadinessProofMatches(
 	ownership *etcdstore.KeyValue,
 ) bool {
 	return ownership != nil && proof.RunnerID == runner.Desired.ID && proof.TaskID == task.ID &&
+		proof.Software.Image == runner.Desired.ImageRef &&
 		proof.RuntimeEpoch == runner.RuntimeEpoch && proof.ContainerID == runner.ContainerID &&
 		proof.RuntimeOwnershipRevision == ownership.ModRevision &&
 		proof.RuntimeOwnershipSHA256 == runnerrecord.RunnerRuntimeOwnershipSHA256(ownership.Value)

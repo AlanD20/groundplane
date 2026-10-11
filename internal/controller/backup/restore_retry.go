@@ -53,6 +53,6 @@ func (service *RestoreService) RetryRestoreTask(ctx context.Context,
 		return etcd.IdempotencyTransactionResult{}, err
 	}
 	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed.Steps)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, sealed)
 	return prepared.Publication.Publish(ctx, task, sealed, marker)
 }

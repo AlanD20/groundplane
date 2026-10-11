@@ -17,6 +17,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	commandrunner "github.com/AlanD20/groundplane/internal/common/runner"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/internal/infra/registryconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
@@ -133,6 +134,8 @@ func (operation *dockerOperation) buildAgent(
 		"--platform", source.Platform.OS+"/"+source.Platform.Architecture,
 		"--provenance=false", "--progress=plain", "--file", "Dockerfile.agent",
 		"--build-arg", "AGENT_VERSION="+version,
+		"--build-arg", "SOURCE_KIND="+string(source.SourceKind),
+		"--build-arg", "SOURCE_COMMIT="+source.ResolvedSHA,
 		"--build-arg", "SOURCE_DATE_EPOCH="+strconv.FormatInt(source.CommitTime.Unix(), 10),
 		"--label", "org.opencontainers.image.revision="+source.ResolvedSHA,
 		"--tag", tag, "--output", "type=docker,rewrite-timestamp=true", ".",
@@ -144,7 +147,8 @@ func (operation *dockerOperation) buildAgent(
 	if err != nil {
 		return "", err
 	}
-	if inspection.Config.Labels["org.opencontainers.image.revision"] != source.ResolvedSHA {
+	if inspection.Config.Labels["org.opencontainers.image.revision"] != source.ResolvedSHA ||
+		inspection.Config.Labels["com.groundplane.source-kind"] != string(source.SourceKind) {
 		return "", errs.New(errs.KindStateConflict, "prepared Agent image revision label is invalid")
 	}
 	return tag, nil
@@ -169,6 +173,8 @@ func (operation *dockerOperation) buildController(
 		"--platform", source.Platform.OS+"/"+source.Platform.Architecture,
 		"--provenance=false", "--progress=plain", "--file", "Dockerfile.build",
 		"--build-arg", "VERSION="+version,
+		"--build-arg", "SOURCE_KIND="+string(source.SourceKind),
+		"--build-arg", "SOURCE_COMMIT="+source.ResolvedSHA,
 		"--build-arg", "POSTGRES16_RELEASE_BASE64="+base64.StdEncoding.EncodeToString(catalog),
 		"--build-arg", "SOURCE_DATE_EPOCH="+strconv.FormatInt(source.CommitTime.Unix(), 10),
 		"--output", "type=local,dest="+payload, ".",
@@ -176,7 +182,11 @@ func (operation *dockerOperation) buildController(
 	if err != nil {
 		return "", controllerDigests{}, err
 	}
-	digests, err := validateControllerPayload(payload, version)
+	digests, err := validateControllerPayload(
+		payload,
+		version,
+		buildversion.BuildProvenance{Kind: string(source.SourceKind), Commit: source.ResolvedSHA},
+	)
 	if err != nil {
 		return "", controllerDigests{}, err
 	}

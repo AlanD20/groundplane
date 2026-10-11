@@ -11,6 +11,9 @@ NODE_VERSION := 24.19.0
 NPM_VERSION := 11.17.0
 AGENT_IMAGE ?= groundplane-agent:dev
 AGENT_VERSION ?= dev
+SOURCE_KIND ?=
+SOURCE_COMMIT ?=
+BUILD_PROVENANCE_FLAGS = -X github.com/AlanD20/groundplane/internal/common/version.SourceKind=$(SOURCE_KIND) -X github.com/AlanD20/groundplane/internal/common/version.SourceCommit=$(SOURCE_COMMIT)
 RUNNER_IMAGE ?= groundplane-runner:dev
 RUNNER_VERSION ?= $(shell cat .runner-version)
 POSTGRES16_RELEASE_BASE64 ?=
@@ -26,23 +29,23 @@ $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
 cli: | $(BIN_DIR)
-	go build -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION)" -o $(BIN_DIR)/groundplane ./cmd/groundplane
+	go build -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION) $(BUILD_PROVENANCE_FLAGS)" -o $(BIN_DIR)/groundplane ./cmd/groundplane
 
 controller: console
 	$(MAKE) controller-binary
 
 controller-binary: | $(BIN_DIR)
-	go build -trimpath -buildvcs=false -tags groundplane_console -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION) -X github.com/AlanD20/groundplane/internal/common/postgres16protocol.releaseIndexBase64=$(POSTGRES16_RELEASE_BASE64)" -o $(BIN_DIR)/controller ./cmd/controller
-	go run ./internal/releasemeta -controller $(BIN_DIR)/controller -version "$(VERSION)" -output $(BIN_DIR)/controller-release.json
+	go build -trimpath -buildvcs=false -tags groundplane_console -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION) $(BUILD_PROVENANCE_FLAGS) -X github.com/AlanD20/groundplane/internal/common/postgres16protocol.releaseIndexBase64=$(POSTGRES16_RELEASE_BASE64)" -o $(BIN_DIR)/controller ./cmd/controller
+	go run ./internal/releasemeta -controller $(BIN_DIR)/controller -version "$(VERSION)" -source-kind "$(SOURCE_KIND)" -source-commit "$(SOURCE_COMMIT)" -output $(BIN_DIR)/controller-release.json
 
 controller-dev: | $(BIN_DIR)
 	go build -o $(BIN_DIR)/controller-dev ./cmd/controller
 
 agent: | $(BIN_DIR)
-	go build -o $(BIN_DIR)/agent ./cmd/agent
+	go build -ldflags="-X github.com/AlanD20/groundplane/internal/common/version.Value=$(AGENT_VERSION) $(BUILD_PROVENANCE_FLAGS)" -o $(BIN_DIR)/agent ./cmd/agent
 
 agent-image:
-	$(DOCKER) build --pull --file Dockerfile.agent --build-arg AGENT_VERSION="$(AGENT_VERSION)" --tag "$(AGENT_IMAGE)" .
+	$(DOCKER) build --pull --file Dockerfile.agent --build-arg AGENT_VERSION="$(AGENT_VERSION)" --build-arg SOURCE_KIND="$(SOURCE_KIND)" --build-arg SOURCE_COMMIT="$(SOURCE_COMMIT)" --tag "$(AGENT_IMAGE)" .
 
 agent-image-smoke: agent-image
 	@set -eu; \
@@ -56,7 +59,7 @@ agent-image-smoke: agent-image
 		test "$$compose_version" = '2.40.3'
 
 runner-image:
-	$(DOCKER) build --pull --file Dockerfile.runner --build-arg RUNNER_VERSION="$(RUNNER_VERSION)" --build-arg VERSION="$(VERSION)" --tag "$(RUNNER_IMAGE)" .
+	$(DOCKER) build --pull --file Dockerfile.runner --build-arg RUNNER_VERSION="$(RUNNER_VERSION)" --build-arg VERSION="$(VERSION)" --build-arg SOURCE_KIND="$(SOURCE_KIND)" --build-arg SOURCE_COMMIT="$(SOURCE_COMMIT)" --tag "$(RUNNER_IMAGE)" .
 
 runner-image-smoke: runner-image
 	@set -eu; \

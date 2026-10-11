@@ -81,7 +81,12 @@ export default function PlatformAgentPage() {
               label="Installed software"
               value={
                 <SoftwareIdentity
+                  artifactReference={agent.installedImage}
+                  sourceBuild={agent.source?.kind === "source_ref"}
+                  sourceCommit={agent.source?.commit}
+                  artifactLabel="Installed image"
                   version={agent.version}
+                  showReferences={false}
                   unavailable="Version not reported"
                 />
               }
@@ -90,6 +95,10 @@ export default function PlatformAgentPage() {
               label="Installed image"
               value={
                 <SoftwareIdentity
+                  artifactReference={agent.installedImage}
+                  sourceBuild={agent.source?.kind === "source_ref"}
+                  sourceCommit={agent.source?.commit}
+                  artifactLabel="Installed image"
                   unavailable="Image identity not reported by the Controller"
                 />
               }

@@ -18,6 +18,7 @@ import (
 
 type servingInventory struct {
 	candidates        []string
+	predecessors      []string
 	proxyID           string
 	proxyNeedsRestore bool
 }
@@ -37,6 +38,7 @@ func inspectServingInventory(
 			"container",
 			"ls",
 			"--all",
+			"--no-trunc",
 			"--filter",
 			"label=com.docker.compose.project=" + predecessor.ProjectName,
 			"--format",
@@ -94,9 +96,12 @@ func inspectServingInventory(
 			result.proxyID, result.proxyNeedsRestore = id, isCandidate
 		} else if isCandidate {
 			result.candidates = append(result.candidates, id)
+		} else if !proxy {
+			result.predecessors = append(result.predecessors, id)
 		}
 	}
 	slices.Sort(result.candidates)
+	slices.Sort(result.predecessors)
 	return result, nil
 }
 

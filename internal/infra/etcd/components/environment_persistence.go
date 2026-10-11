@@ -47,7 +47,7 @@ func (repository *Repository) CreateEnvironmentComponent(
 			},
 			{
 				Type:  etcdstore.MutationPut,
-				Key:   EnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind),
+				Key:   EnvironmentSingletonKey(record.Desired),
 				Value: []byte(record.Desired.ID),
 			},
 			WriteFenceMutation(record.Desired.ID),
@@ -176,7 +176,7 @@ func (repository *Repository) replace(
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			EnvironmentOwnerKey(current.Record.Desired.OwnerID, current.Record.Desired.ID),
-			EnvironmentKindKey(current.Record.Desired.OwnerID, current.Record.Desired.Kind),
+			EnvironmentSingletonKey(current.Record.Desired),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -227,20 +227,20 @@ func componentWriteConditions(
 	record Record,
 	current *etcdstore.Versioned[Record],
 	ownerRevision int64,
-	kindRevision int64,
+	capabilityRevision int64,
 ) []etcdstore.Condition {
 	primary := etcdstore.Condition{Key: RecordKey(record.Desired.ID)}
 	owner := etcdstore.Condition{Key: EnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID)}
-	kind := etcdstore.Condition{Key: EnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind)}
+	capability := etcdstore.Condition{Key: EnvironmentSingletonKey(record.Desired)}
 	if current != nil {
 		primary.ModRevision = current.Revision
 		owner.ModRevision = ownerRevision
-		kind.ModRevision = kindRevision
+		capability.ModRevision = capabilityRevision
 	}
 	return []etcdstore.Condition{
 		primary,
 		owner,
-		kind,
+		capability,
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletions.TombstoneKey("component", record.Desired.ID)},
@@ -302,7 +302,7 @@ func classifyComponentWriteConflict(
 			return errs.New(errs.KindStateConflict, "Component stable identity is already in use")
 		}
 		if values[2] != nil {
-			return errs.New(errs.KindNameConflict, "Component kind already exists for this Environment")
+			return errs.New(errs.KindNameConflict, "Component capability already exists for this Environment")
 		}
 	} else {
 		if values[0] == nil {

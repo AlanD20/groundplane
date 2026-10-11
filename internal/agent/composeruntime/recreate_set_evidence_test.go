@@ -266,7 +266,7 @@ func TestObservedRecreateProbeAcceptsSealedBlueGreenPrior(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	result, err := runtime.ExecuteStep(ctx, assignment, step)
+	result, err := runtime.ExecuteStep(ctx, assignment, step, nil)
 	if err != nil || result.RecreateEvidence.GetTarget() != "blue" ||
 		result.RecreateEvidence.GetArtifactId() != prior.ArtifactId || !result.RecreateEvidence.GetCompensated() {
 		t.Fatalf("blue predecessor evidence = %#v, error = %v", result.RecreateEvidence, err)
@@ -326,7 +326,7 @@ func TestObservedRecreateProbeUsesEachSealedArtifact(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	result, err := runtime.ExecuteStep(ctx, assignment, step)
+	result, err := runtime.ExecuteStep(ctx, assignment, step, nil)
 	if err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}
@@ -370,7 +370,7 @@ func TestObservedRecreateProbeRejectsInvalidAuthorityBeforeObservation(t *testin
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			result, err := runtime.ExecuteStep(ctx, assignment, step)
+			result, err := runtime.ExecuteStep(ctx, assignment, step, nil)
 			if err == nil || !result.ReconciliationRequired || result.RecreateEvidence != nil ||
 				observer.restorationArtifact != nil || len(observer.calls) != 0 {
 				t.Fatalf("invalid authority reached observation or produced evidence: result=%#v, err=%v", result, err)

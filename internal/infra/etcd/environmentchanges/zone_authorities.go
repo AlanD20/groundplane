@@ -1,6 +1,8 @@
 package environmentchanges
 
 import (
+	"bytes"
+
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
@@ -22,7 +24,15 @@ func ZoneRemovalAppliedEvidenceMatches(intent ZoneRemovalIntent, value *etcdstor
 		return validZoneRemovalAppliedProjection(intent)
 	}
 	applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(value.Value)
-	return err == nil && SameServiceRemovalProjection(applied, intent.AppliedProjection)
+	if err != nil || !SameServiceRemovalProjection(applied, intent.AppliedProjection) {
+		return false
+	}
+	want, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(intent.AppliedProjection)
+	if err != nil {
+		return false
+	}
+	defer clear(want)
+	return bytes.Equal(want, value.Value)
 }
 
 func validZoneRemovalAppliedProjection(intent ZoneRemovalIntent) bool {

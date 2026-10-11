@@ -12,6 +12,8 @@ type TaskAssignment struct {
 	ReleaseRecovery        *taskassignments.ReleaseRecoveryDirective
 	ComponentRecovery      *taskassignments.ReleaseRecoveryDirective
 	ServiceAbsenceRecovery *taskassignments.ReleaseRecoveryDirective
+	ManagedNetworkRecovery *taskassignments.ReleaseRecoveryDirective
+	AttachRemovalRecovery  *taskassignments.ReleaseRecoveryDirective
 	// RecoveryProofRequired is private lifecycle state. It is true only after
 	// the immutable recovery deadline expired without exact restoration proof.
 	RecoveryProofRequired bool

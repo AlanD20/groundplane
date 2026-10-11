@@ -18,6 +18,7 @@ function resolverList(value: string): string[] {
 
 export function coreDNSConfigInput(config: CoreDNSDraft) {
   return {
+    implementation: "coredns" as const,
     upstream_auto: config.upstreamAuto,
     upstream_resolvers: config.upstreamAuto
       ? []

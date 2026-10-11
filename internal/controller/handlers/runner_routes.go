@@ -87,6 +87,7 @@ func (s *Server) registerRunners() {
 	s.registerRunnerProvisioning()
 	s.registerRunnerEdit()
 	s.registerRunnerRemove()
+	s.registerRunnerChecks()
 }
 
 func (s *Server) listRunners(
@@ -104,7 +105,7 @@ func (s *Server) listRunners(
 	}
 	items := make([]apiTypes.Runner, len(page.Items))
 	for index, item := range page.Items {
-		projection, err := s.runnerProjection(ctx, item.Record)
+		projection, err := s.runnerProjection(ctx, item)
 		if err != nil {
 			return nil, normalizeProjectError(err)
 		}
@@ -126,14 +127,18 @@ func (s *Server) showRunner(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	projection, err := s.runnerProjection(ctx, runner.Record)
+	projection, err := s.runnerProjection(ctx, runner)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
 	return &runnerOutput{Body: projection}, nil
 }
 
-func (s *Server) runnerProjection(ctx context.Context, record runnerrecord.RunnerRecord) (apiTypes.Runner, error) {
+func (s *Server) runnerProjection(
+	ctx context.Context,
+	versioned etcdstore.Versioned[runnerrecord.RunnerRecord],
+) (apiTypes.Runner, error) {
+	record := versioned.Record
 	observation, observed, err := s.runners.GetRunnerObservation(ctx, record.Desired.ID)
 	if err != nil {
 		return apiTypes.Runner{}, err
@@ -150,5 +155,10 @@ func (s *Server) runnerProjection(ctx context.Context, record runnerrecord.Runne
 	if deleting {
 		tombstoneRecord = &tombstone.Record
 	}
-	return runnercapability.PublicProjection(record, observationRecord, tombstoneRecord)
+	projection, err := runnercapability.PublicProjection(record, observationRecord, tombstoneRecord)
+	if err != nil {
+		return apiTypes.Runner{}, err
+	}
+	projection.Revision = versioned.Revision
+	return projection, nil
 }

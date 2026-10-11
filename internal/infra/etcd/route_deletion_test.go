@@ -131,7 +131,7 @@ func TestRouteRemovalCompletionPromotesStagedCandidate(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask() = %#v/%v/%v", claim, found, err)
 	}
 	terminalAt := task.CreatedAt.Add(2 * time.Second)
-	terminal, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt)
+	terminal, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, terminalAt)
 	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask() = %#v/%v", terminal, err)
 	}
@@ -150,7 +150,7 @@ func TestRouteRemovalCompletionPromotesStagedCandidate(t *testing.T) {
 	if err != nil || found {
 		t.Fatalf("GetRouteRemovalIntent(completed) found/error = %v/%v", found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
 	currentHead, err := testidempotency.EncodeTaskReference(projection.Record.RevisionID)
@@ -164,7 +164,7 @@ func TestRouteRemovalCompletionPromotesStagedCandidate(t *testing.T) {
 	if err != nil || !corruptReplay.Succeeded {
 		t.Fatalf("replace completed replay head = %#v/%v", corruptReplay, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt); !isKind(
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, terminalAt); !isKind(
 		err,
 		errs.KindStateConflict,
 	) {
@@ -256,15 +256,16 @@ func TestRouteRemovalFailureRetryAndAbortPreserveAppliedState(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	failed, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-	)
+		ctx, task.ID, testtaskjournal.TaskStatusFailed, nil,
+		task.CreatedAt.Add(2*time.Second))
+
 	if err != nil || failed.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeControllerTask(failed) = %#v/%v", failed, err)
 	}
 	assertRouteRemovalRetained(t, repository, store, current, projection)
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, testtaskjournal.TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-	); err != nil {
+		ctx, task.ID, testtaskjournal.TaskStatusFailed, nil,
+		task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(failed replay) error = %v", err)
 	}
 

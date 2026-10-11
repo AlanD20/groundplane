@@ -10,8 +10,9 @@ import (
 )
 
 type cloudflareTunnelConfigFile struct {
-	ZoneIDs    []string                                 `json:"zone_ids"`
-	Credential apiTypes.CloudflareTunnelCredentialInput `json:"credential"`
+	Implementation string                                   `json:"implementation"`
+	ZoneIDs        []string                                 `json:"zone_ids"`
+	Credential     apiTypes.CloudflareTunnelCredentialInput `json:"credential"`
 }
 
 func decodeCloudflareTunnelConfigFile(
@@ -36,6 +37,11 @@ func decodeCloudflareTunnelConfigFile(
 		return apiTypes.ComponentConfigMutationInput{}, fmt.Errorf(
 			"component config file must contain one JSON object: %w",
 			err,
+		)
+	}
+	if file.Implementation != "cloudflare-tunnel" {
+		return apiTypes.ComponentConfigMutationInput{}, fmt.Errorf(
+			"cloudflare tunnel config requires implementation: cloudflare-tunnel",
 		)
 	}
 	if err := file.Credential.Validate(); err != nil {

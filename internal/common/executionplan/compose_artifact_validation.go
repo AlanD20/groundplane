@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"strconv"
@@ -186,10 +187,18 @@ func validateLabels(
 			}
 			return errs.New(errs.KindValidationFailed, "expected slot label is invalid")
 		case labelRuntimeRole:
-			if value == "slot" || value == "proxy" || value == "singleton" {
+			if value == "slot" || value == "proxy" || value == "singleton" || value == "replica" {
 				continue
 			}
 			return errs.New(errs.KindValidationFailed, "expected runtime role label is invalid")
+		case labelReplicaOrdinal:
+			ordinal, err := strconv.ParseUint(value, 10, 32)
+			if err != nil || ordinal == 0 || ordinal > rollingrelease.MaximumReplicas ||
+				strconv.FormatUint(ordinal, 10) != value ||
+				values[labelRuntimeRole] != "replica" {
+				return errs.New(errs.KindValidationFailed, "expected rolling replica ordinal label is invalid")
+			}
+			continue
 		default:
 			continue
 		}

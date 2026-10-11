@@ -74,7 +74,8 @@ type Zone struct {
 	Subnet string `yaml:"subnet,omitempty" json:"subnet,omitempty"`
 	// Internal marks the zone as having no route to the host's default
 	// gateway (e.g. prod_identity_private_net's "no host egress").
-	Internal bool `yaml:"internal,omitempty" json:"internal,omitempty"`
+	Internal   bool `yaml:"internal,omitempty" json:"internal,omitempty"`
+	AllowGPDNS bool `yaml:"allow_gp_dns,omitempty" json:"allow_gp_dns,omitempty"`
 	// OwnerKind and OwnerID are Controller-derived stable ownership. A
 	// tenant Environment owns its ordinary Zones; a backing Project owns
 	// its adapter-created Zone. Consumers only join it as external.
@@ -118,15 +119,13 @@ type Mount struct {
 	RO     bool   `yaml:"ro,omitempty"     json:"ro,omitempty"`
 }
 
-// Strategy is a deploy strategy. "rolling" is declared-deferred (rejected
-// with errs.CodeStrategyNotImplemented). See mvp.md, "Release strategy
-// rules (locked in)".
+// Strategy selects how a new workload replaces the current serving runtime.
 type Strategy string
 
 const (
 	StrategyBlueGreen Strategy = "blue-green"
 	StrategyRecreate  Strategy = "recreate"
-	StrategyRolling   Strategy = "rolling" // declared, not implemented
+	StrategyRolling   Strategy = "rolling"
 )
 
 // OnFailure decides what a failed post-switch deploy step does to
@@ -158,10 +157,11 @@ type Service struct {
 	ID   string `yaml:"id"   json:"id"`   // svc_<ulid>
 	Name string `yaml:"name" json:"name"` // unique within the environment; the Compose service key for `recreate` strategy, or the logical-service prefix for blue-green slots (`<name>__blue`, `<name>__green`)
 
-	Image     string    `yaml:"image"                json:"image"`
-	Zones     []string  `yaml:"zones,omitempty"      json:"zones,omitempty"`
-	Strategy  Strategy  `yaml:"strategy,omitempty"   json:"strategy,omitempty"`   // declared default; overridden per-deploy
-	OnFailure OnFailure `yaml:"on_failure,omitempty" json:"on_failure,omitempty"` // declared default (switch_back); overridden per-deploy
+	Image                        string    `yaml:"image"                json:"image"`
+	Zones                        []string  `yaml:"zones,omitempty"      json:"zones,omitempty"`
+	Strategy                     Strategy  `yaml:"strategy,omitempty"   json:"strategy,omitempty"`   // declared default; overridden per-deploy
+	OnFailure                    OnFailure `yaml:"on_failure,omitempty" json:"on_failure,omitempty"` // declared default (switch_back); overridden per-deploy
+	RollingReplicaTimeoutSeconds uint32    `yaml:"rolling_replica_timeout_seconds,omitempty" json:"rolling_replica_timeout_seconds,omitempty"`
 
 	Healthcheck Healthcheck `yaml:"healthcheck,omitempty" json:"healthcheck,omitempty"`
 	Resources   Resources   `yaml:"resources,omitempty"   json:"resources,omitempty"`
@@ -307,15 +307,12 @@ type Grant struct {
 	AttachID string `yaml:"attach_id" json:"attach_id"`
 }
 
-// ComponentKind namespaces component kinds by category: "ingress.*" (Caddy),
-// "edge.*" (Cloudflare Tunnel), and future kinds (e.g. "ingress.traefik")
-// register the same way. See blueprint.md, "x-gp-components": "Adding
-// Traefik later is an component package and registration, not a new router
-// architecture."
+// ComponentKind identifies one build-time registered implementation.
 type ComponentKind string
 
 const (
 	ComponentKindIngressCaddy   ComponentKind = "caddy"
+	ComponentKindIngressEnvoy   ComponentKind = "envoy"
 	ComponentKindEdgeCloudflare ComponentKind = "cloudflare-tunnel"
 	ComponentKindCoreDNS        ComponentKind = "coredns"
 )
@@ -370,12 +367,13 @@ type CoreDNSComponentConfig struct {
 // MVP Component catalog. Exactly one branch may be present.
 type ComponentConfig struct {
 	Caddy            *CaddyComponentConfig            `yaml:"caddy,omitempty" json:"caddy,omitempty"`
+	Envoy            *EnvoyComponentConfig            `yaml:"envoy,omitempty" json:"envoy,omitempty"`
 	CloudflareTunnel *CloudflareTunnelComponentConfig `yaml:"cloudflare_tunnel,omitempty" json:"cloudflare_tunnel,omitempty"`
 	CoreDNS          *CoreDNSComponentConfig          `yaml:"coredns,omitempty" json:"coredns,omitempty"`
 }
 
 func (config ComponentConfig) Empty() bool {
-	return config.Caddy == nil && config.CloudflareTunnel == nil && config.CoreDNS == nil
+	return config.Caddy == nil && config.Envoy == nil && config.CloudflareTunnel == nil && config.CoreDNS == nil
 }
 
 // SecretReferences returns opaque references required by the selected
@@ -393,6 +391,11 @@ func CloneComponentConfig(config ComponentConfig) ComponentConfig {
 		value := *config.Caddy
 		value.ZoneIDs = append([]string(nil), value.ZoneIDs...)
 		clone.Caddy = &value
+	}
+	if config.Envoy != nil {
+		value := *config.Envoy
+		value.ZoneIDs = append([]string(nil), value.ZoneIDs...)
+		clone.Envoy = &value
 	}
 	if config.CloudflareTunnel != nil {
 		value := *config.CloudflareTunnel
@@ -426,7 +429,7 @@ type Component struct {
 	Enabled           bool            `yaml:"enabled"                      json:"enabled"`
 	Config            ComponentConfig `yaml:"config,omitempty"             json:"config,omitempty"`
 	GeneratedServices []string        `yaml:"generated_services,omitempty" json:"generated_services,omitempty"` // stable Service ids allocated for this component
-	PinnedIPv4        string          `yaml:"pinned_ipv4,omitempty"        json:"pinned_ipv4,omitempty"`        // Caddy only; derived durable state, never authored
+	PinnedIPv4        string          `yaml:"pinned_ipv4,omitempty"        json:"pinned_ipv4,omitempty"`        // HTTP router only; derived durable state, never authored
 	Healthy           bool            `yaml:"healthy"                      json:"healthy"`
 }
 

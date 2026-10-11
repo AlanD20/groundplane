@@ -14,6 +14,7 @@ import (
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -45,6 +46,23 @@ func (store *Store) Advance(
 	taskID string,
 	from, to upgrade.Phase,
 ) (upgrade.Journal, error) {
+	if to == upgrade.PhaseRollingBack {
+		return upgrade.Journal{}, phaseConflict()
+	}
+	return store.advance(ctx, taskID, from, to, nil)
+}
+
+// BeginRollback records the first observed candidate failure with the recovery
+// transition. Later recovery attempts cannot replace it with their own errors.
+func (store *Store) BeginRollback(ctx context.Context, taskID string, from upgrade.Phase,
+	failure *taskprogress.Failure,
+) (upgrade.Journal, error) {
+	return store.advance(ctx, taskID, from, upgrade.PhaseRollingBack, taskprogress.CloneFailure(failure))
+}
+
+func (store *Store) advance(ctx context.Context, taskID string, from, to upgrade.Phase,
+	failure *taskprogress.Failure,
+) (upgrade.Journal, error) {
 	unlock, err := store.lock(ctx)
 	if err != nil {
 		return upgrade.Journal{}, err
@@ -64,6 +82,9 @@ func (store *Store) Advance(
 		return upgrade.Journal{}, phaseConflict()
 	}
 	current.Phase = to
+	if to == upgrade.PhaseRollingBack {
+		current.Failure = failure
+	}
 	if err := store.writeJournal(ctx, current); err != nil {
 		return upgrade.Journal{}, err
 	}

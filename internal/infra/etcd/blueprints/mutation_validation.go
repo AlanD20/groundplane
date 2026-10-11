@@ -164,6 +164,9 @@ func validateEnvironmentServiceMutationAudit(value EnvironmentServiceMutationAud
 	if request.Command != nil {
 		desired.Command = append([]string(nil), (*request.Command)...)
 	}
+	if request.RollingReplicaTimeoutSeconds != nil {
+		desired.RollingReplicaTimeoutSeconds = *request.RollingReplicaTimeoutSeconds
+	}
 	if request.Entrypoint != nil {
 		desired.Entrypoint = append([]string(nil), (*request.Entrypoint)...)
 	}
@@ -202,7 +205,8 @@ func validateEnvironmentZoneMutationAudit(value EnvironmentZoneMutationAudit) er
 	request := value.Request
 	if zonerecord.ValidateRecord(zonerecord.Record{EnvironmentID: request.EnvironmentID, Desired: core.Zone{
 		ID: value.ZoneID, Name: request.Name, Subnet: request.Subnet, Internal: request.Internal,
-		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: request.EnvironmentID,
+		AllowGPDNS: request.AllowGPDNS,
+		OwnerKind:  core.ZoneOwnerEnvironment, OwnerID: request.EnvironmentID,
 	}}) != nil {
 		return errs.New(errs.KindValidationFailed, "Zone create audit request is invalid")
 	}

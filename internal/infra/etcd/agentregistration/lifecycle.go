@@ -3,6 +3,8 @@ package agentregistration
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -16,6 +18,7 @@ func (repository *Repository) MarkReady(
 	generation uint64,
 	revision int64,
 	readyAt time.Time,
+	build buildversion.BuildIdentity,
 ) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error) {
 	if err := recordcodec.ValidateTimestamp("local Agent ready_at", readyAt); err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
@@ -29,6 +32,7 @@ func (repository *Repository) MarkReady(
 		localagentrecord.LocalAgentPhaseReady,
 		false,
 		readyAt,
+		build,
 	)
 }
 
@@ -40,10 +44,18 @@ func (repository *Repository) ReplaceGeneration(
 	image string,
 	encryptedToken []byte,
 	tokenDigest string,
+	failure *taskprogress.Failure,
 	updatedAt time.Time,
 ) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
+	}
+	if err := failure.Validate(); err != nil {
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
+	}
+	if failure != nil && (current.Record.Generation < 2 || failure.ExitCode != 0) {
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(errs.KindValidationFailed,
+			"agent replacement failure must describe a failed candidate generation")
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
 		current.Record.ID == "" || !imageref.IsDigestPinned(image) ||
@@ -87,6 +99,7 @@ func (repository *Repository) ReplaceGeneration(
 	}
 
 	replacement := localagentrecord.CloneLocalAgentRecord(evidence.record)
+	replacement.ReplacementFailure = taskprogress.CloneFailure(failure)
 	replacement.Image = image
 	replacement.Generation++
 	replacement.Phase = localagentrecord.LocalAgentPhaseUpdating
@@ -136,6 +149,7 @@ func (repository *Repository) MarkReplacementReady(
 	agentID string,
 	generation uint64,
 	revision int64,
+	build buildversion.BuildIdentity,
 ) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error) {
 	return repository.transitionPhase(
 		ctx,
@@ -146,6 +160,7 @@ func (repository *Repository) MarkReplacementReady(
 		localagentrecord.LocalAgentPhaseReady,
 		true,
 		time.Time{},
+		build,
 	)
 }
 
@@ -158,8 +173,12 @@ func (repository *Repository) transitionPhase(
 	next localagentrecord.LocalAgentPhase,
 	idempotent bool,
 	readyAt time.Time,
+	build buildversion.BuildIdentity,
 ) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
+	}
+	if err := build.Validate(); err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
@@ -174,6 +193,12 @@ func (repository *Repository) transitionPhase(
 		)
 	}
 	if idempotent && evidence.record.Phase == next {
+		if evidence.record.Build != build {
+			return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"local Agent accepted build identity changed",
+			)
+		}
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
 			Record: evidence.record, Revision: evidence.primaryRevision,
 			ReadRevision: evidence.readRevision,
@@ -187,6 +212,7 @@ func (repository *Repository) transitionPhase(
 	}
 	replacement := localagentrecord.CloneLocalAgentRecord(evidence.record)
 	replacement.Phase = next
+	replacement.Build = build
 	if expected != localagentrecord.LocalAgentPhaseUpdating {
 		replacement.ReadyAt = readyAt
 	}

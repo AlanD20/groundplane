@@ -5,7 +5,9 @@ function hasCompleteRouterProjection(
   project: NonNullable<Project["environments"]>[number],
 ) {
   return (
-    project.components.some((component) => component.kind === "caddy") &&
+    project.components.filter(
+      (component) => component.kind === "caddy" || component.kind === "envoy",
+    ).length === 1 &&
     project.components.some(
       (component) => component.kind === "cloudflare-tunnel",
     )
@@ -22,7 +24,7 @@ export function environmentPlatformIngress(projects: Project[]) {
         continue;
       }
       const router = routerProjection(environment);
-      if (router.caddy.enabled && router.tunnel.enabled) {
+      if (router.proxy.enabled && router.tunnel.enabled) {
         hostnames.push(
           ...environment.routes
             .filter((route) => route.exposure === "public")

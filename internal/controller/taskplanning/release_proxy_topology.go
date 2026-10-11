@@ -19,8 +19,20 @@ func validateReleaseProxyTopology(
 	candidate, prior *agentpb.ComposeArtifact,
 	serviceID string,
 ) error {
-	if strategy != domain.StrategyBlueGreen || prior == nil {
+	if (strategy != domain.StrategyBlueGreen && strategy != domain.StrategyRolling) || prior == nil {
 		return nil
+	}
+	if strategy == domain.StrategyRolling {
+		hasProxy := false
+		for _, artifact := range []*agentpb.ComposeArtifact{candidate, prior} {
+			for _, service := range artifact.GetServices() {
+				hasProxy = hasProxy || service.GetServiceId() == serviceID &&
+					service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY
+			}
+		}
+		if !hasProxy {
+			return nil
+		}
 	}
 	shape := func(artifact *agentpb.ComposeArtifact) ([]byte, error) {
 		var name string
@@ -65,7 +77,7 @@ func validateReleaseProxyTopology(
 	if !bytes.Equal(before, after) {
 		return errs.New(
 			errs.KindValidationFailed,
-			"blue-green cannot change the serving proxy's Zones, aliases, ports or restart policy; keep those settings or explicitly select recreate",
+			"a live traffic switch cannot change the serving proxy's Zones, aliases, ports or restart policy; keep those settings or explicitly select recreate",
 		)
 	}
 	return nil

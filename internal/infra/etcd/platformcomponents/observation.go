@@ -35,6 +35,8 @@ func ValidatePlatformComponentRecord(record componentrecord.Record) error {
 // ComponentObservationRecord is replaceable Agent evidence, separate from desired state.
 type ComponentObservationRecord struct {
 	DNSRecords          []core.DNSRecord                                `json:"dns_records,omitempty"`
+	ResolvedDNSHosts    []PlatformDNSHost                               `json:"resolved_dns_hosts,omitempty"`
+	EnvironmentDNS      []EnvironmentDNSCapture                         `json:"environment_dns,omitempty"`
 	ComponentID         string                                          `json:"component_id"`
 	ServiceID           string                                          `json:"service_id"`
 	PlanID              string                                          `json:"plan_id"`
@@ -81,6 +83,15 @@ func ValidateComponentObservation(record ComponentObservationRecord) error {
 		return errs.New(errs.KindValidationFailed, "Component observation identity or generation is invalid")
 	}
 	if record.Enabled {
+		if err := ValidateEnvironmentDNS(record.EnvironmentDNS, record.ResolvedDNSHosts); err != nil {
+			return err
+		}
+		if len(record.ResolvedDNSHosts) == 0 || validateDNSHosts(record.ResolvedDNSHosts) != nil {
+			return errs.New(
+				errs.KindValidationFailed,
+				"enabled resolver observation requires its exact acknowledged DNS answers",
+			)
+		}
 		if !recordcodec.ValidSHA256(record.CorefileSHA256) || !recordcodec.ValidSHA256(record.InputSHA256) ||
 			record.DNSResolverProof == nil || taskjournal.ValidateTaskResult(taskjournal.TaskResultRecord{
 			Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
@@ -97,7 +108,7 @@ func ValidateComponentObservation(record ComponentObservationRecord) error {
 		) {
 			return errs.New(errs.KindValidationFailed, "enabled Component observation digests are invalid")
 		}
-	} else if record.CorefileSHA256 != "" && !recordcodec.ValidSHA256(record.CorefileSHA256) ||
+	} else if len(record.EnvironmentDNS) != 0 || len(record.ResolvedDNSHosts) != 0 || record.CorefileSHA256 != "" && !recordcodec.ValidSHA256(record.CorefileSHA256) ||
 		record.InputSHA256 != "" || record.DNSResolverProof != nil || record.ComposeArtifact != nil {
 		return errs.New(errs.KindValidationFailed, "disabled Component observation carries rendered digests")
 	}

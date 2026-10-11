@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 	"time"
 
@@ -21,7 +22,10 @@ func TestTaskDescriptionsSurviveCompletionAndRetryWithoutCredentials(t *testing.
 		AttachId: ids.New(ids.KindAttach), Password: []byte("private-procedure-password")}
 	step := &agentpb.ExecutionStep{StepId: task.Steps[0].ID, TimeoutSeconds: 45,
 		Payload: &agentpb.ExecutionStep_AdapterProcedure{AdapterProcedure: procedure}}
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps[:1], []*agentpb.ExecutionStep{step})
+	task.Steps = taskjournal.CaptureStepDescriptions(
+		task.Steps[:1],
+		&agentpb.ExecutionPlan{Steps: []*agentpb.ExecutionStep{step}},
+	)
 	procedure.AdapterKey, procedure.AttachId = "mutated-adapter", ids.New(ids.KindAttach)
 	step.TimeoutSeconds = 99
 	task, err := TransitionTaskStatus(
@@ -61,7 +65,7 @@ func TestTaskDescriptionsSurviveCompletionAndRetryWithoutCredentials(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retry.TargetName != restored.TargetName || retry.Steps[0] != restored.Steps[0] {
+	if retry.TargetName != restored.TargetName || !reflect.DeepEqual(retry.Steps[0], restored.Steps[0]) {
 		t.Fatal("retry lost captured presentation")
 	}
 }

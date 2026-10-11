@@ -16,7 +16,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/serviceremovalreferences"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -65,7 +64,7 @@ func (publication BlueprintServiceRemovalPublication) prepare(
 		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Service removal publication changed")
 	}
 	keys := []string{
-		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
+		environmentchanges.ServiceRemovalProjectionKey(intent),
 		servicerecord.ServiceRuntimeKey(intent.ServiceID), serviceruntimerecord.Key(intent.ServiceID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
@@ -89,6 +88,13 @@ func (publication BlueprintServiceRemovalPublication) prepare(
 	}
 	applied := keyvalue.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: appliedRecord, Revision: read.Values[0].ModRevision, ReadRevision: revision,
+	}
+	definitionGuards, err := repository.declaredServiceRemovalAppliedAbsence(ctx, intent, revision)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(definitionGuards) != 0 && definitionGuards[0].ModRevision != intent.Authored.AppliedProjectionRevision {
+		return nil, nil, errs.New(errs.KindStateConflict, "Service applied projection changed after source capture")
 	}
 	current, err := servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{
 		Services: applied.Record.DesiredServices, Revision: applied.Revision, ReadRevision: revision,
@@ -117,7 +123,7 @@ func (publication BlueprintServiceRemovalPublication) prepare(
 	} else if read.Values[2] != nil {
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Service acknowledged runtime appeared")
 	}
-	guards, err := serviceremovalreferences.Validate(ctx, repository.store, current, applied)
+	referenceConditions, err := repository.authoredServiceRemovalReferenceGuards(ctx, intent, current, applied)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -164,7 +170,8 @@ func (publication BlueprintServiceRemovalPublication) prepare(
 		{Key: keys[4]}, {Key: keys[5]}, {Key: keys[6]},
 		{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)},
 	}
-	conditions = append(conditions, guards.Conditions()...)
+	conditions = append(conditions, referenceConditions...)
+	conditions = append(conditions, definitionGuards...)
 	conditions = append(conditions, dnsConditions...)
 	conditions = append(conditions, scriptConditions...)
 	conditions = append(conditions, fence.TransactionConditions()...)

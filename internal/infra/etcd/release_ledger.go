@@ -69,6 +69,8 @@ type ReleasePublicationEvidence struct {
 	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor
 	Plan                       *agentpb.ExecutionPlan
 	Hooks                      []ReleaseHookExecutionPublication
+	NetworkTask                *TaskRecord
+	NetworkPlan                *agentpb.ExecutionPlan
 	PublishedAt                time.Time
 }
 
@@ -119,6 +121,11 @@ func (ledger *ReleaseLedger) Publish(
 		return ReleasePublicationResult{}, err
 	}
 	defer clearReleaseTaskPublicationFragment(fragment)
+	networkFragment, networkTaskID, err := ledger.tasks.prepareReleaseNetworkPublication(evidence)
+	if err != nil {
+		return ReleasePublicationResult{}, err
+	}
+	defer clearReleaseHookPublicationFragment(networkFragment)
 	hookFragment, err := prepareReleaseHookPublicationFragment(evidence)
 	if err != nil {
 		return ReleasePublicationResult{}, err
@@ -143,6 +150,7 @@ func (ledger *ReleaseLedger) Publish(
 		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
 		ExecutedComposeArtifact:    executedArtifact,
 		PreparedRuntimes:           runtimes,
+		NetworkPreparationTaskID:   networkTaskID,
 		PublishedAt:                evidence.PublishedAt,
 	})
 	if err != nil {
@@ -179,6 +187,7 @@ func (ledger *ReleaseLedger) Publish(
 		fragment.condition,
 	}
 	conditions = append(conditions, hookFragment.conditions...)
+	conditions = append(conditions, networkFragment.conditions...)
 	proxyConditions := evidence.ProxyAddresses.Conditions()
 	conditions = append(conditions, proxyConditions...)
 	configurationCondition, hasConfiguration, err := taskConfigurationCondition(evidence.Task)
@@ -244,6 +253,7 @@ func (ledger *ReleaseLedger) Publish(
 	)
 	mutations = append(mutations, cloneReleaseTaskMutations(fragment)...)
 	mutations = append(mutations, hookFragment.mutations...)
+	mutations = append(mutations, networkFragment.mutations...)
 	mutations = append(
 		mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
@@ -254,8 +264,26 @@ func (ledger *ReleaseLedger) Publish(
 		},
 	)
 	operations := len(conditions) + len(mutations) + len(pinChange.conditions) + len(pinChange.mutations)
-	if len(conditions) != 11+len(hookFragment.conditions)+len(proxyConditions)+configurationConditions ||
-		len(mutations) != len(evidence.Manifest.Record.Members)*2+11+len(hookFragment.mutations)+len(proxyMutations) ||
+	if len(
+		conditions,
+	) != 11+len(
+		hookFragment.conditions,
+	)+len(
+		networkFragment.conditions,
+	)+len(
+		proxyConditions,
+	)+configurationConditions ||
+		len(
+			mutations,
+		) != len(
+			evidence.Manifest.Record.Members,
+		)*2+11+len(
+			hookFragment.mutations,
+		)+len(
+			networkFragment.mutations,
+		)+len(
+			proxyMutations,
+		) ||
 		operations > etcdstore.MaximumOperations {
 		return ReleasePublicationResult{}, errs.New(
 			errs.KindInternal,

@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,16 +20,43 @@ func (repository *TaskRepository) validateBlueprintReleaseChildPublication(
 	revision int64,
 ) error {
 	manifestKey := releases.ReleaseManifestStagingKey(child.Params[releaserender.TaskReleasePublicationParam])
+	rolloutKey := BlueprintServiceRolloutKey(
+		child.Owner.EnvironmentID,
+		child.Params[taskjournal.TaskBlueprintParentParam],
+		child.ID,
+	)
 	manifestRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{manifestKey}, Revision: revision,
+		Keys: []string{manifestKey, rolloutKey}, Revision: revision,
 	})
 	if err != nil {
 		return err
 	}
-	if manifestRead == nil || len(manifestRead.Values) != 1 || manifestRead.Values[0] == nil {
-		return errs.New(errs.KindStateConflict, "Blueprint child Release manifest is missing")
+	if manifestRead == nil || manifestRead.ReadRevision != revision || len(manifestRead.Values) != 2 ||
+		manifestRead.Values[0] == nil || manifestRead.Values[1] == nil {
+		return errs.New(errs.KindStateConflict, "Blueprint child Release manifest or native rollout is missing")
 	}
 	defer keyvalue.ClearValues(manifestRead.Values)
+	if manifestRead.Values[0].Key != manifestKey || manifestRead.Values[1].Key != rolloutKey {
+		return errs.New(errs.KindInternal, "Blueprint child Release source storage identity is invalid")
+	}
+	capture, err := releaserender.DecodeBlueprintServiceRolloutCapture(manifestRead.Values[1].Value)
+	if err != nil {
+		return err
+	}
+	if err := validateBlueprintServiceRolloutTask(capture, child); err != nil {
+		return err
+	}
+	native, err := releaserender.OpenBlueprintServiceRolloutCapture(capture)
+	if err != nil {
+		return err
+	}
+	if native.CandidateReleaseProcedure.Members[0].ServiceId != unit.Target.ID ||
+		!slices.Contains(
+			publication.conditions,
+			keyvalue.Condition{Key: rolloutKey, ModRevision: manifestRead.Values[1].ModRevision},
+		) {
+		return errs.New(errs.KindStateConflict, "Blueprint Service native rollout is not fenced for its unit")
+	}
 	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
 		manifestRead.Values[0].Value, "release-staged-manifest",
 	)
@@ -48,8 +76,8 @@ func (repository *TaskRepository) validateBlueprintReleaseChildPublication(
 	}
 	publicationMutations := 0
 	for _, mutation := range publication.mutations {
-		if mutation.Key == manifestKey {
-			return errs.New(errs.KindStateConflict, "Blueprint child Release fragment changes its manifest")
+		if mutation.Key == manifestKey || mutation.Key == rolloutKey {
+			return errs.New(errs.KindStateConflict, "Blueprint child Release fragment changes its immutable source")
 		}
 		if mutation.Key != publicationKey {
 			continue

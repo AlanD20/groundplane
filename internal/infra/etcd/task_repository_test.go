@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -90,7 +89,7 @@ func TestTaskRepositoryAppendIsRestartSafeAndDeduplicated(t *testing.T) {
 	}
 
 	mismatch := input
-	mismatch.Payload = json.RawMessage(`{"message":"different"}`)
+	mismatch.Payload = changedTaskReadinessPayload()
 	if _, err := restarted.AppendTaskEvent(
 		ctx,
 		mismatch,
@@ -379,7 +378,7 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 	}
 	revisionBefore := store.currentRevision()
 	changedPayload := input
-	changedPayload.Payload = json.RawMessage(`{"message":"changed"}`)
+	changedPayload.Payload = changedTaskReadinessPayload()
 	changedAssignment := input
 	changedAssignment.Identity.AssignmentID = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	for _, changed := range []testtaskjournal.TaskEventInput{changedPayload, changedAssignment} {

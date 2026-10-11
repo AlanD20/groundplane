@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -59,6 +61,7 @@ const (
 )
 
 type ComposeReleaseIdentity struct {
+	ProxyImplementation    serviceproxy.Implementation
 	ProxyAddresses         map[string]string
 	ProxyImage             *domain.ProxyImage
 	ReleaseID              string
@@ -67,7 +70,9 @@ type ComposeReleaseIdentity struct {
 	ServingReleaseID       string
 	ServingTarget          domain.WorkloadTarget
 	ServingProxyGeneration uint64
+	ServingProxyConfig     *domain.ProxyConfig
 	Strategy               domain.Strategy
+	Rolling                *rollingrelease.Plan
 }
 
 // RenderCompose converts one parsed, normalized owned-resource project into the Agent's immutable artifact.
@@ -211,7 +216,14 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 		Networks:            networks,
 		Volumes:             volumes,
 	}
-	return RetainEnvironmentComponentRuntime(artifact, input.RetainedComponentRuntime)
+	artifact, err = RetainEnvironmentComponentRuntime(artifact, input.RetainedComponentRuntime)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateRenderedRollingReplicas(input, artifact); err != nil {
+		return nil, err
+	}
+	return artifact, nil
 }
 
 func validateComposeRenderInput(input ComposeRenderInput) error {
@@ -249,6 +261,22 @@ func validateComposeRenderInput(input ComposeRenderInput) error {
 		return errs.New(errs.KindInternal, "compose authorized volume directory is invalid")
 	}
 	for serviceID, release := range input.Releases {
+		if release.ServingProxyConfig != nil &&
+			(release.Strategy != domain.StrategyBlueGreen || release.ServingTarget != domain.WorkloadRolling) {
+			return errs.New(
+				errs.KindInternal,
+				"captured initial proxy configuration requires a rolling-to-blue-green transition",
+			)
+		}
+		if release.Strategy == domain.StrategyRolling {
+			if err := validateRollingRenderIdentity(input, serviceID, release); err != nil {
+				return err
+			}
+			continue
+		}
+		if release.Rolling != nil {
+			return errs.New(errs.KindInternal, "non-rolling release carries a rolling procedure")
+		}
 		if ids.Validate(ids.KindService, serviceID) != nil ||
 			(release.ReleaseID != "" && ids.Validate(ids.KindDeployment, release.ReleaseID) != nil) ||
 			(release.Strategy != domain.StrategyBlueGreen && release.Strategy != domain.StrategyRecreate) ||

@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 )
 
 // Rationale: journal phases are recovery authority; a stale helper cannot
@@ -51,7 +52,7 @@ func TestJournalValidation(t *testing.T) {
 		"predecessor": func(value *Journal) { value.PreviousController = "" },
 		"phase":       func(value *Journal) { value.Phase = "future" },
 		"deadline":    func(value *Journal) { value.Deadline = value.StartedAt.Add(601 * time.Second) },
-		"schema":      func(value *Journal) { value.Schema = 2 },
+		"schema":      func(value *Journal) { value.Schema = 1 },
 		"agent":       func(value *Journal) { value.Agent = &AgentPredecessor{ID: "other"} },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -67,12 +68,15 @@ func TestJournalValidation(t *testing.T) {
 func validJournal(t *testing.T) Journal {
 	t.Helper()
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
-	return Journal{Schema: 1, TaskID: ids.NewAt(ids.KindTask, now, 1), Phase: PhasePrepared,
+	return Journal{Schema: 2, TaskID: ids.NewAt(ids.KindTask, now, 1), Phase: PhasePrepared,
 		Release: Hash([]byte("release")), PreviousController: Hash([]byte("previous")),
 		Manifest: Manifest{
-			Schema:            1,
+			Schema:            ManifestSchema,
 			ControllerSHA256:  Hash([]byte("candidate")),
 			ControllerVersion: "0.1.0",
+			ControllerSource: buildversion.BuildProvenance{
+				Kind: "release", Commit: strings.Repeat("c", 40),
+			},
 			AgentImage: "registry.example/agent@sha256:" + strings.Repeat(
 				"a",
 				64,

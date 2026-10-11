@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -108,7 +111,8 @@ func TestValidateReleaseRenderInputRejectsMismatchedDependencyAuthority(t *testi
 		Strategy: domain.StrategyBlueGreen, PriorStrategy: domain.StrategyBlueGreen,
 		Slot: domain.SlotGreen, PriorSlot: domain.SlotBlue,
 		CandidateTarget: domain.WorkloadGreen, PriorTarget: domain.WorkloadBlue,
-		ProxyGeneration: 2, PriorProxyGeneration: 1, ProxyPorts: []uint16{8080},
+		ProxyImplementation: serviceproxy.Caddy,
+		ProxyGeneration:     2, PriorProxyGeneration: 1, ProxyPorts: []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
 		ProxyImage: releaseProxyImageFixture(),
 		PriorArtifactID: ids.NewAt(
 			ids.KindConfig,
@@ -123,6 +127,7 @@ func TestValidateReleaseRenderInputRejectsMismatchedDependencyAuthority(t *testi
 	}
 	input.Projection = testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 9), RenderGeneration: 1,
+		Components: releaseRenderProxyComponents(now, input.EnvironmentID),
 		DesiredServices: []testservices.EnvironmentServiceProjection{
 			{
 				EnvironmentID: input.EnvironmentID,
@@ -187,7 +192,8 @@ func TestValidateReleaseRenderInputAcceptsAddressableRecreateWithoutDurableSlot(
 	input.PriorSlot = domain.SlotBlue
 	input.CandidateTarget, input.PriorTarget = domain.WorkloadSingleton, domain.WorkloadBlue
 	input.ProxyGeneration, input.PriorProxyGeneration = 2, 1
-	input.ProxyPorts = []uint16{8080}
+	input.ProxyPorts = []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}}
+	input.ProxyImplementation = serviceproxy.Caddy
 	input.ProxyImage = releaseProxyImageFixture()
 	input.ProxyConfigDigest, input.PriorProxyDigest = "candidate", "prior"
 	input.PriorArtifactID = ids.NewAt(ids.KindConfig, time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC), 12)
@@ -203,7 +209,10 @@ func TestValidateReleaseRenderInputAcceptsAddressableRecreateWithoutDurableSlot(
 func TestFirstBlueGreenRenderPublicationRoundTrip(t *testing.T) {
 	input := portlessReleaseRenderInput(domain.StrategyBlueGreen)
 	input.Slot, input.CandidateTarget = domain.SlotBlue, domain.WorkloadBlue
-	input.ProxyGeneration, input.ProxyPorts, input.ProxyConfigDigest = 2, []uint16{8080}, "candidate"
+	input.ProxyImplementation = serviceproxy.Caddy
+	input.ProxyGeneration, input.ProxyPorts, input.ProxyConfigDigest = 2, []domain.ProxyPort{
+		{Port: 8080, Protocol: serviceports.TCP},
+	}, "candidate"
 	input.ProxyImage = releaseProxyImageFixture()
 	encoded, err := testreleaserender.EncodeReleaseRenderInput(input)
 	if err != nil {
@@ -250,6 +259,7 @@ func portlessReleaseRenderInput(strategy domain.Strategy) testreleaserender.Rele
 	}
 	input.Projection = testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 8), RenderGeneration: 1,
+		Components: releaseRenderProxyComponents(now, input.EnvironmentID),
 		DesiredServices: []testservices.EnvironmentServiceProjection{{
 			EnvironmentID: input.EnvironmentID,
 			Desired: core.Service{
@@ -262,4 +272,21 @@ func portlessReleaseRenderInput(strategy domain.Strategy) testreleaserender.Rele
 	}
 	input.Projection = withTestEnvironmentComposeArtifact(input.Projection)
 	return input
+}
+
+func releaseRenderProxyComponents(now time.Time, environmentID string) []testcomponents.Record {
+	return []testcomponents.Record{
+		{
+			Desired: testcomponents.DesiredRecord{
+				ID: ids.NewAt(ids.KindComponent, now, 20), Owner: core.ComponentOwnerEnvironment,
+				OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy,
+			},
+		},
+		{
+			Desired: testcomponents.DesiredRecord{
+				ID: ids.NewAt(ids.KindComponent, now, 21), Owner: core.ComponentOwnerEnvironment,
+				OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare,
+			},
+		},
+	}
 }

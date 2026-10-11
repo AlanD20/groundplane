@@ -134,6 +134,7 @@ func newEnvironmentCmd() *cobra.Command {
 	cmd.AddCommand(rename)
 
 	cmd.AddCommand(newEnvironmentBlueprintCmd())
+	cmd.AddCommand(newEnvironmentDNSCmd())
 
 	var tail uint32
 	var follow bool

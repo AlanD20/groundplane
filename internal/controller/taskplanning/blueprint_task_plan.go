@@ -67,16 +67,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			return nil, errs.New(errs.KindInternal, "durable Blueprint Service selection is invalid")
 		}
 	}
-	parentID, blueprintChild := task.Params[taskjournal.TaskBlueprintParentParam]
-	serviceOnly := blueprintChild || task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam] != ""
-	if blueprintChild {
-		expectedParams++
-		if ids.Validate(ids.KindTask, parentID) != nil || parentID == task.ID ||
-			parentID != task.Params[blueprints.EnvironmentDesiredRevisionParam] ||
-			task.Actor != taskjournal.TaskActorSystem {
-			return nil, errs.New(errs.KindInternal, "durable Blueprint child parent identity is invalid")
-		}
-	}
+	serviceOnly := task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam] != ""
 	resourceStepIDs, resourceParams, err := blueprintReleaseResourceStepIDs(task)
 	if err != nil {
 		return nil, err
@@ -101,10 +92,6 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != expectedParams ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
-	}
-	if blueprintChild && (!hasBlueprintReleases || len(blueprintReleases.Members) != 1 ||
-		len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 || backingCreation.enabled) {
-		return nil, errs.New(errs.KindInternal, "durable Blueprint Service child shape is invalid")
 	}
 	if selected := task.Params[taskcontract.EnvironmentBlueprintSelectedServiceParam]; selected != "" {
 		if len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 || backingCreation.enabled ||
@@ -345,6 +332,9 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		)
 		if stepErr != nil {
 			return nil, stepErr
+		}
+		if err := resolver.bindContainerConfigTransition(ctx, task, managedConfigStep.GetComponentApply()); err != nil {
+			return nil, err
 		}
 		steps = append(steps, managedConfigStep)
 		stepIndex++

@@ -129,9 +129,13 @@ type ResolverInput struct {
 	Baseline        ResolverBaseline
 	HostResolution  HostResolutionProjection
 	PrivateListener netip.Addr
+	ZoneListeners   []netip.Addr
 }
 
 func (input ResolverInput) Validate() error {
+	if err := ValidateZoneListeners(input.ZoneListeners); err != nil {
+		return err
+	}
 	if input.PrivateListener.IsValid() && (!input.PrivateListener.Is4() || !input.PrivateListener.IsPrivate()) {
 		return fmt.Errorf("dns resolver: additional listener must be private IPv4")
 	}
@@ -139,6 +143,21 @@ func (input ResolverInput) Validate() error {
 		return err
 	}
 	return input.HostResolution.Validate()
+}
+
+// ValidateZoneListeners keeps the additional bridge listeners bounded and
+// canonical. The Controller owns the proof that each address belongs to an
+// opted-in, materialized Zone; registered planners receive only that result.
+func ValidateZoneListeners(addresses []netip.Addr) error {
+	if len(addresses) > 256 {
+		return fmt.Errorf("dns resolver: at most 256 internal Zone listeners are supported")
+	}
+	for index, address := range addresses {
+		if !address.Is4() || !address.IsPrivate() || index > 0 && addresses[index-1].Compare(address) >= 0 {
+			return fmt.Errorf("dns resolver: Zone listeners must be unique private IPv4 addresses in ascending order")
+		}
+	}
+	return nil
 }
 
 func validHostAddress(address netip.Addr) bool {

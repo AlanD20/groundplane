@@ -2,6 +2,7 @@ package composerender
 
 import (
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -11,10 +12,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-)
-
-const (
-	serviceProxyConfigPath = serviceproxy.InitialConfigPath
 )
 
 func renderServiceProxyTopology(
@@ -34,6 +31,9 @@ func renderServiceProxyTopology(
 		if !active {
 			authored = input.Project.DisabledServices[name]
 		}
+		if err := applyZoneDNS(&authored, input.Project.Networks); err != nil {
+			return nil, err
+		}
 		serviceID := identities[name]
 		exposures := make([]string, len(authored.Expose))
 		for index, exposure := range authored.Expose {
@@ -41,7 +41,11 @@ func renderServiceProxyTopology(
 		}
 		for _, published := range authored.Ports {
 			if published.Target != 0 {
-				exposures = append(exposures, fmt.Sprint(published.Target))
+				exposure := fmt.Sprint(published.Target)
+				if published.Protocol != "" {
+					exposure += "/" + published.Protocol
+				}
+				exposures = append(exposures, exposure)
 			}
 		}
 		for _, resource := range input.Identities.Services {
@@ -85,18 +89,28 @@ func renderServiceProxyTopology(
 			result = append(result, service)
 			continue
 		}
-		if identity.Strategy == domain.StrategyBlueGreen && !ProjectServiceHealthcheck(authored.HealthCheck).Enabled() {
+		if (identity.Strategy == domain.StrategyBlueGreen || identity.Strategy == domain.StrategyRolling) &&
+			!ProjectServiceHealthcheck(authored.HealthCheck).Enabled() {
 			return nil, errs.Newf(
 				errs.KindValidationFailed,
-				"Service %q: blue-green requires an enabled healthcheck with an explicit command; configure one or select recreate",
+				"Service %q: %s requires an enabled healthcheck with an explicit command; configure one or select recreate",
 				name,
+				identity.Strategy,
 			)
 		}
 		if len(exposures) == 0 {
+			if identity.Strategy == domain.StrategyRolling {
+				replicas, err := renderRollingReplicas(project, input, authored, serviceID, identity, active)
+				if err != nil {
+					return nil, err
+				}
+				result = append(result, replicas...)
+				continue
+			}
 			if identity.Strategy == domain.StrategyBlueGreen {
 				return nil, errs.New(
 					errs.KindValidationFailed,
-					"blue-green release requires an addressable TCP service",
+					"blue-green requires an exposed container TCP port; configure expose or select recreate for a portless Service",
 				)
 			}
 			if identity.Strategy == domain.StrategyRecreate {
@@ -149,6 +163,10 @@ func renderServiceProxyTopology(
 		if err != nil {
 			return nil, err
 		}
+		capturedImplementation, err := executionplan.SealProxyImplementation(identity.ProxyImplementation)
+		if err != nil {
+			return nil, err
+		}
 		if identity.Strategy == domain.StrategyBlueGreen && authored.GetScale() != 1 {
 			return nil, errs.New(errs.KindValidationFailed, "blue-green release requires exactly one replica")
 		}
@@ -164,7 +182,25 @@ func renderServiceProxyTopology(
 		if identity.ServingProxyGeneration != 0 {
 			activeGeneration = identity.ServingProxyGeneration
 		}
-		proxyConfig, err := domain.RenderProxyConfig(name, activeRelease, activeTarget, activeGeneration, ports)
+		var proxyConfig domain.ProxyConfig
+		if identity.ServingProxyConfig != nil {
+			if identity.ServingProxyConfig.Implementation != identity.ProxyImplementation {
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"Service proxy implementation differs from its captured predecessor",
+				)
+			}
+			proxyConfig = *identity.ServingProxyConfig
+			proxyConfig.JSON = slices.Clone(proxyConfig.JSON)
+		} else if identity.Strategy == domain.StrategyRolling {
+			proxyConfig, err = domain.RenderRollingInitialProxyConfig(identity.ProxyImplementation, *identity.Rolling, activeGeneration, ports)
+		} else {
+			proxyConfig, err = domain.RenderProxyConfig(identity.ProxyImplementation, name, activeRelease, activeTarget, activeGeneration, ports)
+		}
+		if err != nil {
+			return nil, err
+		}
+		runtimeSource, err := serviceproxy.PrepareRuntimeSource(identity.ProxyImplementation, proxyConfig.JSON)
 		if err != nil {
 			return nil, err
 		}
@@ -176,17 +212,17 @@ func renderServiceProxyTopology(
 			)
 		}
 		project.Configs[configName] = composetypes.ConfigObjConfig(
-			composetypes.FileObjectConfig{Content: string(proxyConfig.JSON)},
+			composetypes.FileObjectConfig{Content: string(runtimeSource.Content)},
 		)
 
 		proxy := composetypes.ServiceConfig{
 			Name: name, Networks: cloneProxyNetworks(authored.Networks),
 			Ports: slices.Clone(authored.Ports), Expose: slices.Clone(authored.Expose), Restart: authored.Restart,
 			Profiles: slices.Clone(authored.Profiles),
-			Command:  composetypes.ShellCommand{"sh", "-ec", serviceproxy.Startup},
+			Command:  composetypes.ShellCommand{"sh", "-ec", runtimeSource.Startup},
 			Configs: []composetypes.ServiceConfigObjConfig{
 				composetypes.ServiceConfigObjConfig(
-					composetypes.FileReferenceConfig{Source: configName, Target: serviceProxyConfigPath},
+					composetypes.FileReferenceConfig{Source: configName, Target: runtimeSource.Path},
 				),
 			},
 		}
@@ -218,7 +254,8 @@ func renderServiceProxyTopology(
 			return nil, err
 		}
 		proxyService := &agentpb.ComposeService{
-			ServiceId: serviceID, ComposeName: name, ExpectedLabels: proxyExpected,
+			ProxyImplementation: capturedImplementation,
+			ServiceId:           serviceID, ComposeName: name, ExpectedLabels: proxyExpected,
 			OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 			ExpectedReplicas: expectedRuntimeReplicas(active, 1),
 			Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
@@ -229,6 +266,14 @@ func renderServiceProxyTopology(
 		}
 		project.Services[name] = proxy
 		result = append(result, proxyService)
+		if identity.Strategy == domain.StrategyRolling {
+			replicas, err := renderRollingReplicas(project, input, authored, serviceID, identity, active)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, replicas...)
+			continue
+		}
 
 		targets := []domain.WorkloadTarget{domain.WorkloadSingleton}
 		if identity.Strategy == domain.StrategyBlueGreen {

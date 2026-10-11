@@ -19,6 +19,10 @@ type idempotencyPruning interface {
 	PruneExpired(context.Context, time.Time) (int, error)
 }
 
+type blueprintRevisionCleanup interface {
+	CleanupEnvironmentBlueprintStaging(context.Context, time.Time, int) (int, error)
+}
+
 type staleAgentExpiration interface {
 	ExpireStaleAgentTasks(context.Context, time.Time) (int, error)
 }
@@ -49,19 +53,20 @@ type mutationAdmission interface {
 // cost nothing extra, no per-policy timer/unit churn. See mvp.md,
 // "systemd timers (backup, cleanup) -> the Controller scheduler".
 type Scheduler struct {
-	logger          *slog.Logger
-	admission       mutationAdmission
-	Interval        time.Duration
-	tasks           taskExpiration
-	idempotency     idempotencyPruning
-	agents          staleAgentExpiration
-	backupSchedules BackupScheduleRunner
-	backupRetention backupRetentionDispatcher
-	retentionCursor string
-	backupOrphans   backupOrphanReconciler
-	orphanCursor    string
-	now             func() time.Time
-	nextPrune       time.Time
+	logger             *slog.Logger
+	admission          mutationAdmission
+	Interval           time.Duration
+	tasks              taskExpiration
+	idempotency        idempotencyPruning
+	blueprintRevisions blueprintRevisionCleanup
+	agents             staleAgentExpiration
+	backupSchedules    BackupScheduleRunner
+	backupRetention    backupRetentionDispatcher
+	retentionCursor    string
+	backupOrphans      backupOrphanReconciler
+	orphanCursor       string
+	now                func() time.Time
+	nextPrune          time.Time
 }
 
 func New(
@@ -70,6 +75,7 @@ func New(
 	interval time.Duration,
 	tasks *etcd.TaskRepository,
 	idempotency idempotencyPruning,
+	blueprintRevisions blueprintRevisionCleanup,
 	agents staleAgentExpiration,
 	backupSchedules BackupScheduleRunner,
 	backupRetention backupRetentionDispatcher,
@@ -77,7 +83,8 @@ func New(
 ) *Scheduler {
 	return &Scheduler{
 		logger: logger, admission: admission, Interval: interval, tasks: tasks, idempotency: idempotency, agents: agents,
-		backupSchedules: backupSchedules, backupRetention: backupRetention, backupOrphans: backupOrphans, now: time.Now,
+		blueprintRevisions: blueprintRevisions,
+		backupSchedules:    backupSchedules, backupRetention: backupRetention, backupOrphans: backupOrphans, now: time.Now,
 	}
 }
 
@@ -103,7 +110,8 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.agents == nil || sch.now == nil {
+	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.blueprintRevisions == nil || sch.agents == nil ||
+		sch.now == nil {
 		return errs.New(errs.KindInternal, "scheduler task maintenance is not configured")
 	}
 	if sch.admission != nil {
@@ -122,6 +130,9 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 		return err
 	}
 	if _, err := sch.tasks.ResumeTaskSourceReleases(ctx); err != nil {
+		return err
+	}
+	if _, err := sch.blueprintRevisions.CleanupEnvironmentBlueprintStaging(ctx, now, 16); err != nil {
 		return err
 	}
 	if sch.backupSchedules != nil {

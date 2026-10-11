@@ -45,10 +45,22 @@ type RouteSettler interface {
 	SettleRouteOmission(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
 }
 
-// DormantServiceSettler acknowledges desired configuration when a Service's
-// separate runtime intent forbids a host Release.
-type DormantServiceSettler interface {
-	TrySettleDormantService(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
+// DNSSettler settles from the shared resolver's exact acknowledgement. False
+// means waiting for that real Task, never dispatching an extra Agent child.
+type DNSSettler interface {
+	TrySettleDNS(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
+}
+
+// ServiceConfigurationSettler acknowledges configuration without a host Release
+// for stopped/absent Services, disabled profiles and explicit Release Group members.
+type ServiceConfigurationSettler interface {
+	TrySettleServiceConfiguration(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
+}
+
+// ServiceOmissionSettler retires an unexecuted declaration only with positive
+// birth and ledger authority. False retains the protected Agent removal path.
+type ServiceOmissionSettler interface {
+	TrySettleServiceOmission(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
 }
 
 // DisabledComponentSettler acknowledges an explicitly authored Component only
@@ -67,7 +79,7 @@ type DisabledComponentSettler interface {
 // use the parent's immutable desired revision rather than the current head as
 // a substitute for that revision.
 type ChildPreparer interface {
-	Prepare(context.Context, etcd.TaskRecord, blueprintunits.Unit) (PreparedChild, error)
+	Prepare(context.Context, etcd.TaskRecord, blueprintunits.Unit, blueprintunits.Snapshot) (PreparedChild, error)
 }
 
 type PreparedChild struct {
@@ -76,6 +88,8 @@ type PreparedChild struct {
 	ComponentPublication      componentplanning.Publication
 	EntryRemovalPublication   etcd.BlueprintEntryRemovalPublication
 	ServiceRemovalPublication etcd.BlueprintServiceRemovalPublication
+	ZoneRemovalPublication    etcd.BlueprintZoneRemovalPublication
+	AttachRemovalPublication  *etcd.BlueprintAttachRemovalPublication
 }
 
 // Clear releases prepared publication bytes after publication.
@@ -87,6 +101,8 @@ func (prepared *PreparedChild) Clear() {
 	prepared.ComponentPublication.Clear()
 	prepared.EntryRemovalPublication.Clear()
 	prepared.ServiceRemovalPublication.Clear()
+	prepared.ZoneRemovalPublication.Clear()
+	prepared.AttachRemovalPublication.Clear()
 }
 
 type taskStore interface {
@@ -106,12 +122,15 @@ type taskStore interface {
 		componentplanning.Publication,
 		etcd.BlueprintEntryRemovalPublication,
 		etcd.BlueprintServiceRemovalPublication,
+		etcd.BlueprintZoneRemovalPublication,
+		*etcd.BlueprintAttachRemovalPublication,
 	) (keyvalue.Versioned[etcd.TaskRecord], error)
 	AbortPendingTask(context.Context, string, time.Time) (keyvalue.Versioned[etcd.TaskRecord], error)
 	GetTask(context.Context, string) (keyvalue.Versioned[etcd.TaskRecord], error)
 	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
 	RequestBlueprintParentAbort(context.Context, string, time.Time) error
 	RequestBlueprintParentTimeout(context.Context, string, time.Time) error
+	RequestBlueprintForwardFailure(context.Context, string, blueprintunits.Snapshot, string, errs.Code, time.Time) error
 	BlueprintParentStopRequested(context.Context, string) (taskjournal.TaskStatus, error)
 	FailBlueprintParent(
 		context.Context,

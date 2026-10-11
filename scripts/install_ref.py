@@ -35,7 +35,7 @@ def present(image: str) -> bool:
 
 
 def build(source: Path, output: Path, version: str, identity: str,
-          *, source_epoch: int, include_runner: bool = True,
+          *, source_epoch: int, source_commit: str, include_runner: bool = True,
           include_agent: bool = True, include_controller: bool = True) -> tuple[str, str]:
     """Only this builder owns its cache; never prune the host's shared cache."""
     builder = f"groundplane-ref-{identity}"
@@ -58,7 +58,9 @@ def build(source: Path, output: Path, version: str, identity: str,
             "--driver-opt", f"image={BUILDKIT_IMAGE},restart-policy=no")
         created = True
         common = [*command, "build", "--builder", builder, "--provenance=false",
-                  "--build-arg", f"SOURCE_DATE_EPOCH={source_epoch}"]
+                  "--build-arg", f"SOURCE_DATE_EPOCH={source_epoch}",
+                  "--build-arg", "SOURCE_KIND=source_ref",
+                  "--build-arg", f"SOURCE_COMMIT={source_commit}"]
         if include_controller:
             postgres_release = install_postgres16.build_release(source, common, command, identity)
             run(*common, "--file", "Dockerfile.build", "--build-arg", f"VERSION={version}",
@@ -96,7 +98,7 @@ def build(source: Path, output: Path, version: str, identity: str,
 
 def install(source: Path, output: Path, version: str, identity: str,
             listen_ip: str, stage_only: bool, config: str | None, source_epoch: int,
-            scope: str = "both") -> None:
+            scope: str, *, source_commit: str) -> None:
     mode = Layout(RELEASE_ROOT, GUARD, UNIT, 0).mode()
     if scope == "agent" and mode != "native":
         raise ValueError("Agent-only installation requires an existing native Controller")
@@ -119,7 +121,7 @@ def install(source: Path, output: Path, version: str, identity: str,
         if mode != "native":
             (output / "setup-host.sh").write_text(deploy.REMOTE_SETUP)
             run("sh", str(output / "setup-host.sh"))
-        build(source, output, version, identity, source_epoch=source_epoch,
+        build(source, output, version, identity, source_epoch=source_epoch, source_commit=source_commit,
               include_runner=mode != "native" and scope != "agent",
               include_agent=scope != "controller", include_controller=scope != "agent")
         if scope == "agent":
@@ -208,7 +210,8 @@ def main() -> None:
     for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
         signal.signal(sig, interrupted)
     install(source, output, version, identity, args.listen_ip, args.stage_only, args.config,
-            source_epoch, "agent" if args.agent_only else "controller" if args.controller_only else "both")
+            source_epoch, "agent" if args.agent_only else "controller" if args.controller_only else "both",
+            source_commit=args.commit)
 
 
 if __name__ == "__main__":

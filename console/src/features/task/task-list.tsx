@@ -147,6 +147,7 @@ export function TaskList({
                 "fetch",
                 "prepare",
                 "apply",
+                "check",
               ].map((value) => ({
                 value,
                 label:

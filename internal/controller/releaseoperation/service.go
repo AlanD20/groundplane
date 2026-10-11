@@ -2,7 +2,6 @@ package releaseoperation
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/backingcatalog"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/rollingpredecessor"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -38,6 +38,7 @@ type localAgentReader interface {
 type Service struct {
 	agents      localAgentReader
 	images      workloadseal.Resolver
+	observer    rollingpredecessor.Observer
 	ledger      *etcd.ReleaseLedger
 	services    *etcd.ServiceRepository
 	groups      *etcdrg.Store
@@ -76,9 +77,10 @@ func NewService(
 	timeout time.Duration,
 	agents *agentregistration.Repository,
 	images workloadseal.Resolver,
+	observer rollingpredecessor.Observer,
 ) (*Service, error) {
 	if ledger == nil || services == nil || groups == nil || idempotency == nil || coordinator == nil ||
-		plans == nil || scripts == nil || artifacts == nil || agents == nil || images == nil {
+		plans == nil || scripts == nil || artifacts == nil || agents == nil || images == nil || observer == nil {
 		return nil, errs.New(errs.KindInternal, "release operation dependencies are not configured")
 	}
 	if timeout == 0 {
@@ -95,7 +97,7 @@ func NewService(
 		return nil, err
 	}
 	return &Service{
-		agents: agents, images: images,
+		agents: agents, images: images, observer: observer,
 		ledger: ledger, services: services, groups: groups, idempotency: idempotency,
 		coordinator: coordinator, plans: plans, scripts: scripts, preparation: preparation,
 		timeout: timeout, now: time.Now,
@@ -485,49 +487,15 @@ func (service *Service) deployCandidate(
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
-	strategy, err := domain.DeploymentStrategy(requestedStrategy, string(planning.Service.Record.Desired.Strategy))
+	execution, err := selectReleaseExecution(planning, image, requestedStrategy, requestedFailure, hasServing)
 	if err != nil {
 		return releaseCandidateInput{}, err
-	}
-	if strategy == domain.StrategyBlueGreen && !planning.Service.Record.Desired.Healthcheck.Enabled() {
-		return releaseCandidateInput{}, errs.Newf(
-			errs.KindValidationFailed,
-			"Service %q: blue-green requires an enabled healthcheck with an explicit command; configure one or select recreate",
-			planning.Service.Record.Desired.Name,
-		)
-	}
-	onFailure, err := releaseFailurePolicy(requestedFailure, planning.Service.Record.Desired.OnFailure)
-	if err != nil {
-		return releaseCandidateInput{}, err
-	}
-	replicas := planning.Service.Record.Desired.Replicas
-	// ADR 0052: normalize native Compose omission at the direct-input boundary.
-	if replicas == 0 {
-		replicas = 1
-	}
-	if replicas < 1 || uint64(replicas) > uint64(^uint32(0)) {
-		return releaseCandidateInput{}, errs.New(errs.KindValidationFailed, "release replica count is invalid")
-	}
-	if planning.Service.Record.BackingNetworkID != "" {
-		backing := planning.Service.Record.Desired
-		if !backingcatalog.ValidImage(backing.Adapter, backing.AdapterVersion, image) ||
-			strategy != domain.StrategyRecreate || replicas != 1 ||
-			(backing.Adapter == "postgres" && planning.Service.Record.Runtime.PostgresToolsImage == "") {
-			return releaseCandidateInput{}, errs.New(
-				errs.KindValidationFailed,
-				"Backing image Deploy requires an upstream image matching its selected server version and singleton recreate",
-			)
-		}
-		if !hasServing && onFailure != domain.OnFailureLeaveActive {
-			return releaseCandidateInput{}, errs.New(errs.KindValidationFailed,
-				"first Backing image Deploy requires leave_active; no previous Deployment exists for switch-back")
-		}
 	}
 	return releaseCandidateInput{
-		planning: planning, selection: workloadseal.Selection{Requested: &workloadseal.Requested{Reference: image, Replicas: uint32(replicas)}}, tag: tag,
+		planning: planning, selection: workloadseal.Selection{Requested: &workloadseal.Requested{Reference: image, Replicas: execution.replicas}}, tag: tag,
 		priorWorkload: releasePriorWorkload(serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
-		strategy: strategy, priorStrategy: releasePriorStrategy(serving, hasServing),
-		slot: domain.InactiveSlot(strategy, planning.Projection.ServingSlot), onFailure: onFailure,
+		strategy: execution.strategy, priorStrategy: releasePriorStrategy(serving, hasServing),
+		slot: domain.InactiveSlot(execution.strategy, planning.Projection.ServingSlot), onFailure: execution.onFailure,
 	}, nil
 }
 
@@ -548,16 +516,26 @@ func (service *Service) rollbackCandidate(
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
-	onFailure := selection.Source.OnFailure
-	if overrideFailure != "" {
-		onFailure = overrideFailure
+	execution, err := selectReleaseExecution(
+		planning,
+		selection.Source.CandidateWorkload.RequestedReference,
+		"",
+		overrideFailure,
+		hasServing,
+	)
+	if err != nil {
+		return releaseCandidateInput{}, err
 	}
+	// Rollback changes only the image. Its immutable image id comes from history;
+	// replica count, strategy and failure policy come from current Service intent.
+	workload := selection.Source.CandidateWorkload
+	workload.ReplicaCount = execution.replicas
 	return releaseCandidateInput{
-		planning: planning, selection: workloadseal.Selection{Historical: &selection.Source.CandidateWorkload}, tag: selection.Source.Tag,
-		strategy:      selection.Source.Strategy,
+		planning: planning, selection: workloadseal.Selection{Historical: &workload}, tag: selection.Source.Tag,
+		strategy:      execution.strategy,
 		priorWorkload: releasePriorWorkload(serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
 		priorStrategy: releasePriorStrategy(serving, hasServing),
-		slot:          domain.InactiveSlot(selection.Source.Strategy, planning.Projection.ServingSlot),
-		onFailure:     onFailure, rollbackSource: selection.Source.ID,
+		slot:          domain.InactiveSlot(execution.strategy, planning.Projection.ServingSlot),
+		onFailure:     execution.onFailure, rollbackSource: selection.Source.ID,
 	}, nil
 }

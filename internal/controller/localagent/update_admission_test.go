@@ -3,6 +3,7 @@ package localagent
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"testing"
 	"time"
 
@@ -146,10 +147,15 @@ type uncertainReplacementRepository struct {
 }
 
 func (repository *uncertainReplacementRepository) BeginReplacement(
-	ctx context.Context, current StoredRecord, image string, credential Credential, at time.Time,
+	ctx context.Context,
+	current StoredRecord,
+	image string,
+	credential Credential,
+	failure *taskprogress.Failure,
+	at time.Time,
 ) (StoredRecord, error) {
 	if repository.committed {
-		if _, err := repository.fakeRepository.BeginReplacement(ctx, current, image, credential, at); err != nil {
+		if _, err := repository.fakeRepository.BeginReplacement(ctx, current, image, credential, failure, at); err != nil {
 			return StoredRecord{}, err
 		}
 	}

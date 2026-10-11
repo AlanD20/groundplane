@@ -74,6 +74,9 @@ func ValidateEnvironmentDesiredInput(value EnvironmentDesiredInput) error {
 	if err := validateDesiredRoutes(input.Routes); err != nil {
 		return err
 	}
+	if err := core.ValidateBlueprintDNSNames(input.DNS, input.Routes); err != nil {
+		return err
+	}
 	if err := validateDesiredScripts(input.Scripts); err != nil {
 		return err
 	}
@@ -145,6 +148,7 @@ func validateDesiredServiceExtensions(values map[string]core.ServiceExtensionSpe
 			probe := core.Service{
 				ID: "desired", Name: service, Image: "desired",
 				Strategy: extension.Release.DefaultStrategy, OnFailure: extension.Release.OnFailure,
+				RollingReplicaTimeoutSeconds: extension.Release.RollingReplicaTimeoutSeconds,
 			}
 			if extension.Release.DefaultStrategy == "" ||
 				extension.Release.OnFailure != extension.Release.OnFailure.WithDefault() || probe.Validate() != nil {
@@ -260,30 +264,8 @@ func validateDesiredComponents(values map[string]core.ComponentSpec) error {
 		return errs.New(errs.KindValidationFailed, "Environment desired Components exceed the supported bound")
 	}
 	for capability, component := range values {
-		switch core.ComponentCapability(capability) {
-		case core.ComponentCapabilityHTTPRouter:
-			if component.Implementation != core.ComponentKindIngressCaddy || component.Settings.SecretID != "" ||
-				(component.Enabled && len(component.Settings.ZoneIDs) == 0) {
-				return errs.New(errs.KindValidationFailed, "Environment desired HTTP router Component is invalid")
-			}
-		case core.ComponentCapabilityEdgeTunnel:
-			if component.Implementation != core.ComponentKindEdgeCloudflare ||
-				component.ImplementationConfig.CaddyfileTemplate != "" || component.Settings.Alias != "" ||
-				(component.Enabled && (component.Settings.SecretID == "" || len(component.Settings.ZoneIDs) == 0)) {
-				return errs.New(errs.KindValidationFailed, "Environment desired edge tunnel Component is invalid")
-			}
-		default:
-			return errs.New(errs.KindValidationFailed, "Environment desired Component capability is invalid")
-		}
-		seenZones := make(map[string]struct{}, len(component.Settings.ZoneIDs))
-		for _, zoneID := range component.Settings.ZoneIDs {
-			if recordcodec.ValidateID(ids.KindNetwork, zoneID) != nil {
-				return errs.New(errs.KindValidationFailed, "Environment desired Component Zone is invalid")
-			}
-			if _, duplicate := seenZones[zoneID]; duplicate {
-				return errs.New(errs.KindValidationFailed, "Environment desired Component Zone is duplicated")
-			}
-			seenZones[zoneID] = struct{}{}
+		if err := component.Validate(core.ComponentCapability(capability)); err != nil {
+			return errs.New(errs.KindValidationFailed, err.Error())
 		}
 	}
 	return nil

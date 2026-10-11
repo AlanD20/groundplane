@@ -17,6 +17,7 @@ const validCoreDNSComponentJSON = `{
 	"kind":"coredns",
 	"enabled":true,
 	"config":{
+		"implementation":"coredns",
 		"corefile_template":".:53 {\\n    forward . {groundplane}\\n}",
 		"upstream_auto":true,
 		"upstream_resolvers":[],
@@ -107,6 +108,7 @@ func TestComponentClientRejectsMalformedCoreDNSListResponse(t *testing.T) {
 			"kind":"coredns",
 			"enabled":true,
 			"config":{
+				"implementation":"coredns",
 				"upstream_auto":true,
 				"upstream_resolvers":[],
 				"forwarders":[],

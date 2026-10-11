@@ -46,19 +46,29 @@ func PrepareAttachRuntimes(
 		if artifact == nil {
 			return nil, invalidAttachRuntime("selected artifact is absent")
 		}
+		groups := make(map[string][]*agentpb.ComposeService)
+		var serviceIDs []string
 		for _, name := range names {
 			workload, workloadErr := attachRuntimeSelectedWorkload(artifact, name)
 			if workloadErr != nil {
 				return nil, workloadErr
 			}
-			if seen[workload.GetServiceId()] {
+			if len(groups[workload.GetServiceId()]) == 0 {
+				serviceIDs = append(serviceIDs, workload.GetServiceId())
+			}
+			groups[workload.GetServiceId()] = append(groups[workload.GetServiceId()], workload)
+		}
+		slices.Sort(serviceIDs)
+		for _, serviceID := range serviceIDs {
+			workloads := groups[serviceID]
+			if seen[serviceID] {
 				return nil, invalidAttachRuntime("selected workload is ambiguous")
 			}
-			seen[workload.GetServiceId()] = true
+			seen[serviceID] = true
 
-			prior, priorArtifact, priorWorkload, priorProxy, priorErr := selectAttachRuntimePredecessor(
+			prior, priorArtifact, priorProxy, priorErr := selectAttachRuntimePredecessor(
 				artifact,
-				workload,
+				workloads,
 				previous,
 			)
 			if priorErr != nil {
@@ -66,9 +76,8 @@ func PrepareAttachRuntimes(
 			}
 			current, projectionErr := projectAttachRuntimeArtifact(
 				artifact,
-				workload,
+				workloads,
 				priorArtifact,
-				priorWorkload,
 				priorProxy,
 				prior.ReleaseID,
 				prior.Target,
@@ -137,39 +146,40 @@ func attachRuntimeSelectedWorkload(
 
 func selectAttachRuntimePredecessor(
 	source *agentpb.ComposeArtifact,
-	selected *agentpb.ComposeService,
+	selected []*agentpb.ComposeService,
 	previous []CandidateRuntime,
-) (CandidateRuntime, *agentpb.ComposeArtifact, *agentpb.ComposeService, *agentpb.ComposeService, error) {
+) (CandidateRuntime, *agentpb.ComposeArtifact, *agentpb.ComposeService, error) {
+	if len(selected) == 0 {
+		return CandidateRuntime{}, nil, nil, invalidAttachRuntime("selection is empty")
+	}
+	serviceID := selected[0].GetServiceId()
 	var prior *CandidateRuntime
 	for index := range previous {
-		if previous[index].ServiceID != selected.GetServiceId() {
+		if previous[index].ServiceID != serviceID {
 			continue
 		}
 		if prior != nil {
-			return CandidateRuntime{}, nil, nil, nil, invalidAttachRuntime("predecessor is ambiguous")
+			return CandidateRuntime{}, nil, nil, invalidAttachRuntime("predecessor is ambiguous")
 		}
 		prior = &previous[index]
 	}
 	if prior == nil || ValidateNativePredecessorWitness(
 		source.GetOwnerId(),
-		selected.GetServiceId(),
+		serviceID,
 		prior.CurrentArtifact,
 		prior.RetainedPriorArtifact,
 	) != nil {
-		return CandidateRuntime{}, nil, nil, nil, invalidAttachRuntime("predecessor is absent or invalid")
+		return CandidateRuntime{}, nil, nil, invalidAttachRuntime("predecessor is absent or invalid")
 	}
 	artifact, err := openNativePredecessorArtifact(source.GetOwnerId(), prior.CurrentArtifact)
 	if err != nil {
-		return CandidateRuntime{}, nil, nil, nil, invalidAttachRuntime("predecessor artifact is invalid")
+		return CandidateRuntime{}, nil, nil, invalidAttachRuntime("predecessor artifact is invalid")
 	}
-	workload, proxy, err := nativePredecessorServices(artifact, selected.GetServiceId())
-	if err != nil || workload == nil || prior.ReleaseID != nativePredecessorReleaseID(selected) ||
-		prior.ReleaseID != nativePredecessorReleaseID(workload) || prior.Target != attachRuntimeTarget(selected) ||
-		prior.Target != attachRuntimeTarget(workload) || workload.GetComposeName() != selected.GetComposeName() ||
-		!validAttachRuntimeProxy(prior, proxy) {
-		return CandidateRuntime{}, nil, nil, nil, invalidAttachRuntime("predecessor identity does not match selection")
+	_, proxy, err := nativePredecessorServices(artifact, serviceID)
+	if err != nil || !validAttachRuntimeProxy(prior, proxy) {
+		return CandidateRuntime{}, nil, nil, invalidAttachRuntime("predecessor identity does not match selection")
 	}
-	return *prior, artifact, workload, proxy, nil
+	return *prior, artifact, proxy, nil
 }
 
 func attachRuntimeTarget(service *agentpb.ComposeService) string {
@@ -179,6 +189,9 @@ func attachRuntimeTarget(service *agentpb.ComposeService) string {
 	if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
 		return "singleton"
 	}
+	if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA {
+		return "rolling"
+	}
 	return ""
 }
 
@@ -187,7 +200,11 @@ func validAttachRuntimeProxy(runtime *CandidateRuntime, proxy *agentpb.ComposeSe
 		return runtime.ProxyGeneration == 0 && len(runtime.ProxyConfigSHA256) == 0
 	}
 	digest := sha256.Sum256(proxy.GetProxyConfigJson())
-	generation, err := ProxyConfigGeneration(proxy.GetProxyConfigJson(), runtime.ReleaseID)
+	generation, err := ProxyConfigGeneration(
+		proxy.GetProxyImplementation(),
+		proxy.GetProxyConfigJson(),
+		runtime.ReleaseID,
+	)
 	return err == nil && generation == runtime.ProxyGeneration &&
 		bytes.Equal(digest[:], runtime.ProxyConfigSHA256) &&
 		bytes.Equal(digest[:], proxy.GetProxyConfigSha256())
@@ -195,23 +212,29 @@ func validAttachRuntimeProxy(runtime *CandidateRuntime, proxy *agentpb.ComposeSe
 
 func projectAttachRuntimeArtifact(
 	source *agentpb.ComposeArtifact,
-	selected *agentpb.ComposeService,
+	selected []*agentpb.ComposeService,
 	previous *agentpb.ComposeArtifact,
-	previousWorkload *agentpb.ComposeService,
 	previousProxy *agentpb.ComposeService,
 	releaseID, target string,
 ) (*agentpb.ComposeArtifact, error) {
+	if err := validateRuntimeWorkloadReplacement(previous, selected, releaseID, target); err != nil {
+		return nil, err
+	}
 	hybrid := proto.CloneOf(previous)
 	hybrid.ArtifactId = source.GetArtifactId()
-	hybrid.Services = []*agentpb.ComposeService{proto.CloneOf(selected)}
+	hybrid.Services = nil
+	names := make([]string, len(selected))
+	for index, workload := range selected {
+		hybrid.Services = append(hybrid.Services, proto.CloneOf(workload))
+		names[index] = workload.GetComposeName()
+	}
 	if previousProxy != nil {
 		hybrid.Services = append(hybrid.Services, proto.CloneOf(previousProxy))
 	}
 	canonical, references, err := attachRuntimeYAML(
 		source,
-		selected.GetComposeName(),
+		names,
 		previous,
-		previousWorkload.GetComposeName(),
 	)
 	if err != nil {
 		return nil, err
@@ -227,22 +250,17 @@ func projectAttachRuntimeArtifact(
 	if err != nil {
 		return nil, err
 	}
-	projected, _, _, err := projectCandidateRuntimeArtifact(
-		hybrid,
-		selected.GetServiceId(),
-		releaseID,
-		target,
-		previousProxy != nil,
-		nil,
-	)
-	return projected, err
+	projected := proto.CloneOf(hybrid)
+	if err := sealCandidateRuntimeProjection(hybrid, projected, previousProxy, previousProxy.GetProxyConfigJson()); err != nil {
+		return nil, err
+	}
+	return projected, nil
 }
 
 func attachRuntimeYAML(
 	source *agentpb.ComposeArtifact,
-	selectedName string,
+	selectedNames []string,
 	previous *agentpb.ComposeArtifact,
-	previousName string,
 ) ([]byte, map[string]map[string]bool, error) {
 	var sourceDocument, previousDocument yaml.Node
 	if yaml.Unmarshal(source.GetCanonicalYaml(), &sourceDocument) != nil ||
@@ -251,29 +269,36 @@ func attachRuntimeYAML(
 		return nil, nil, invalidAttachRuntime("Compose YAML is invalid")
 	}
 	sourceRoot, previousRoot := sourceDocument.Content[0], previousDocument.Content[0]
-	sourceService, err := attachRuntimeYAMLService(sourceRoot, selectedName)
-	if err != nil {
-		return nil, nil, err
-	}
 	previousServices := candidateRuntimeMappingValue(previousRoot, "services")
-	previousIndex, err := attachRuntimeYAMLMappingIndex(previousServices, previousName)
-	if err != nil || previousIndex < 0 {
-		return nil, nil, invalidAttachRuntime("predecessor workload YAML is absent or ambiguous")
+	replacements := make(map[int]*yaml.Node, len(selectedNames))
+	for _, name := range selectedNames {
+		sourceService, err := attachRuntimeYAMLService(sourceRoot, name)
+		if err != nil {
+			return nil, nil, err
+		}
+		previousIndex, err := attachRuntimeYAMLMappingIndex(previousServices, name)
+		if err != nil || previousIndex < 0 || replacements[previousIndex] != nil {
+			return nil, nil, invalidAttachRuntime("predecessor workload YAML is absent or ambiguous")
+		}
+		replacements[previousIndex] = sourceService
 	}
 	preserved := make(map[string]map[string]bool, 4)
 	for offset := 0; offset+1 < len(previousServices.Content); offset += 2 {
-		if offset == previousIndex {
+		if replacements[offset] != nil {
 			continue
 		}
 		if err := candidateRuntimeResourceReferences(previousServices.Content[offset+1], preserved); err != nil {
 			return nil, nil, err
 		}
 	}
-	previousServices.Content[previousIndex+1] = sourceService
-
 	references := make(map[string]map[string]bool, 4)
-	if err := candidateRuntimeResourceReferences(sourceService, references); err != nil {
-		return nil, nil, err
+	for offset := 0; offset+1 < len(previousServices.Content); offset += 2 {
+		if replacement := replacements[offset]; replacement != nil {
+			previousServices.Content[offset+1] = replacement
+			if err := candidateRuntimeResourceReferences(replacement, references); err != nil {
+				return nil, nil, err
+			}
+		}
 	}
 	for _, section := range []string{"networks", "volumes", "configs", "secrets"} {
 		for _, name := range attachRuntimeSortedNames(references[section]) {

@@ -32,6 +32,8 @@ type AttachCredential struct {
 // pending -> provisioning -> ready, with terminal failed and
 // detaching -> detached paths.
 type Attach struct {
+	// Revision is present on saved list snapshots, not pre-publication mutation responses.
+	Revision             int64            `json:"revision,omitempty"`
 	ID                   string           `json:"id"`
 	Name                 string           `json:"name"`
 	ServiceID            string           `json:"service_id"`

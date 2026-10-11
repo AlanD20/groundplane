@@ -52,7 +52,7 @@ func validateLogEvent(event apiTypes.LogEvent) error {
 		event.ContainerID == "" || event.ContainerName == "" || event.Timestamp.IsZero() ||
 		!utf8.ValidString(event.ServiceName) || !utf8.ValidString(event.ContainerID) ||
 		!utf8.ValidString(event.ContainerName) || !utf8.ValidString(event.Line) ||
-		(event.Slot != "blue" && event.Slot != "green" && event.Slot != "singleton") ||
+		(event.Slot != "blue" && event.Slot != "green" && event.Slot != "singleton" && event.Slot != "rolling") ||
 		(event.Stream != "stdout" && event.Stream != "stderr") {
 		return errs.New(errs.KindInternal, "apiclient: log event data is invalid")
 	}

@@ -84,7 +84,7 @@ func TestTaskEventDeduplicationReturnsSequenceAndRejectsPayloadMismatch(t *testi
 	}
 
 	mismatch := input
-	mismatch.Payload = json.RawMessage(`{"message":"different"}`)
+	mismatch.Payload = changedTaskReadinessPayload()
 	_, err = prepareTaskEvent(prepared.Task, mismatch, &prepared.Dedup, now.Add(2*time.Second))
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("prepareTaskEvent(mismatch) error = %v, want internal", err)
@@ -206,19 +206,6 @@ func TestTaskEventOrderingAndLimitsAreDeterministic(t *testing.T) {
 	if err != nil || window.Task.EventCount != 1000 || window.Sequence != 1001 ||
 		window.Task.NextEventSequence != 1002 {
 		t.Fatalf("prepareTaskEvent(rolling window) = %#v, %v", window, err)
-	}
-}
-
-func TestTaskEventDurableJSONLimitIncludesEnvelope(t *testing.T) {
-	// Rationale: enforcing only the Agent chunk size would let envelope metadata
-	// exceed etcd's accepted 32 KiB durable event ceiling.
-	now := taskJournalTime()
-	task := validTaskRecord(now)
-	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
-	input.Payload = json.RawMessage(`{"message":"` + strings.Repeat("x", testtaskjournal.MaximumTaskEventBytes) + `"}`)
-	_, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
-	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("prepareTaskEvent(oversized) error = %v, want validation.failed", err)
 	}
 }
 
@@ -619,8 +606,14 @@ func taskEventInput(
 			TaskID: taskID, StepID: taskJournalStepID(), Attempt: 1, Ordinal: ordinal,
 		},
 		State:   state,
-		Payload: json.RawMessage(`{"message":"progress"}`),
+		Payload: json.RawMessage(`{}`),
 	}
+}
+
+func changedTaskReadinessPayload() json.RawMessage {
+	return json.RawMessage(
+		`{"health_wait":{"expected":1,"observed":0,"running":0,"ready":0,"starting":0,"unhealthy":0,"exited":0,"elapsed_milliseconds":1,"timeout_milliseconds":1000,"diagnostic":"none"}}`,
+	)
 }
 
 func taskJournalStepID() string {

@@ -164,9 +164,9 @@ func validateBlueprintCandidateAttemptAuthorityRecord(
 		len(record.Attempts) == 0 || len(record.Attempts) > 33 ||
 		(task.RetryOf == "" && len(record.Attempts) != 1) ||
 		(task.RetryOf != "" && len(record.Attempts) < 2) ||
-		validateTaskMaterializationWriter(taskMaterializationWriter(
+		validateTaskMaterializationWriterForTask(taskMaterializationWriter(
 			task, task.Owner.EnvironmentID, &record.AppliedPredecessor,
-		)) != nil {
+		), task, task.Owner.EnvironmentID) != nil {
 		return releases.CorruptReleaseRecord()
 	}
 	for index, attempt := range record.Attempts {
@@ -325,7 +325,12 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 	appliedPredecessorMatches := writer.BlueprintAppliedPredecessor != nil &&
 		writer.BlueprintAppliedPredecessor.Present &&
 		epochRevision == writer.BlueprintAppliedPredecessor.KeyRevision
-	if !markerOrAttemptMatches && !readyGateMatches && !appliedPredecessorMatches {
+	// A private child is admitted by prepareBlueprintChildClaim's exact parent,
+	// head and resource execution compares in this same assignment transaction.
+	// Its independent Release publication need not own the Environment-wide epoch.
+	// The epoch CAS below still serializes its captured shared-file writer.
+	if !taskjournal.IsBlueprintChild(task.Params) &&
+		!markerOrAttemptMatches && !readyGateMatches && !appliedPredecessorMatches {
 		return etcdstore.Condition{}, etcdstore.Mutation{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint claim mutation epoch changed",
@@ -441,7 +446,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
 	observedPredecessor, predecessorErr := taskMaterializationAppliedPredecessorFromValue(
-		read.Values[5], task.Owner.EnvironmentID, task.RenderGeneration,
+		read.Values[5], task.Owner.EnvironmentID, task,
 	)
 	if predecessorErr != nil || observedPredecessor != appliedPredecessor {
 		return blueprintCandidateAuthoritySnapshot{}, errs.New(

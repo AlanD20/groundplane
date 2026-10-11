@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 )
 
 // RUN-10: caller mutation, changed nonces and a new boot cannot mint a second
@@ -143,6 +144,10 @@ func TestJournalSealsCompleteLifecycleAndReplaysPinnedResult(t *testing.T) {
 				t.Fatal(err)
 			}
 			owner := runnerallocation.RunnerRuntimeEvidence{
+				Software: buildversion.ContainerIdentity{
+					Image:        "registry.example/runner@sha256:" + strings.Repeat("a", 64),
+					ConfigDigest: "sha256:" + strings.Repeat("b", 64),
+				},
 				ContainerID: strings.Repeat(
 					"c",
 					64,

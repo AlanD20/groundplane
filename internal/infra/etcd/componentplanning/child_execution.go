@@ -31,17 +31,37 @@ type ChildExecution struct {
 	Plan             []byte                               `json:"plan"`
 	Configuration    *taskconfiguration.TaskConfiguration `json:"configuration,omitempty"`
 	Materializations []taskmaterialization.Record         `json:"materializations,omitempty"`
+	ProxyPreflight   *ProxyServicePreflight               `json:"proxy_preflight,omitempty"`
 }
 
-func ChildExecutionKey(taskID string) string {
-	return "/v1/records/blueprint-component-executions/" + taskID
+const ChildExecutionPrefix = "/v1/records/blueprint-component-executions/"
+
+func ChildExecutionKey(taskID string) string { return ChildExecutionPrefix + taskID }
+
+func DecodeChildExecution(value []byte) (ChildExecution, error) {
+	record, err := recordcodec.Decode[ChildExecution](value, "blueprint-component-execution")
+	if err != nil {
+		return ChildExecution{}, err
+	}
+	if _, err := record.ExecutionPlan(); err != nil {
+		return ChildExecution{}, err
+	}
+	return record, nil
 }
 
-func (repository *Planner) GetBlueprintComponentExecution(ctx context.Context, taskID string) (keyvalue.Versioned[ChildExecution], error) {
+func (repository *Planner) GetBlueprintComponentExecution(
+	ctx context.Context,
+	taskID string,
+) (keyvalue.Versioned[ChildExecution], error) {
 	return ReadChildExecution(ctx, repository.store, taskID, 0)
 }
 
-func (publication Publication) ValidateChildExecution(taskID, parentID, planID, planHash string, generation uint64, configuration *taskconfiguration.TaskConfiguration, materializations []taskmaterialization.Record) error {
+func (publication Publication) ValidateChildExecution(
+	taskID, parentID, planID, planHash string,
+	generation uint64,
+	configuration *taskconfiguration.TaskConfiguration,
+	materializations []taskmaterialization.Record,
+) error {
 	for _, mutation := range publication.mutations {
 		if mutation.Key != ChildExecutionKey(taskID) || mutation.Type != keyvalue.MutationPut {
 			continue
@@ -74,6 +94,23 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 		record.Component.Desired.OwnerID != record.EnvironmentID || len(record.Plan) == 0 ||
 		len(record.Plan) > executionplan.MaximumPlanBytes {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Component execution authority is invalid")
+	}
+	if record.ProxyPreflight != nil {
+		if err := record.ProxyPreflight.validate(); err != nil {
+			return nil, err
+		}
+		if record.ProxyPreflight.EnvironmentID != record.EnvironmentID ||
+			record.ProxyPreflight.ParentTaskID != record.ParentTaskID ||
+			string(record.ProxyPreflight.Implementation) != string(record.Component.Desired.Kind) {
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint router Service capture belongs to another execution",
+			)
+		}
+		if input := record.ProxyPreflight.CandidateInput; input != nil &&
+			(input.SourceOwner != ProxyInputAgentTask || input.SourceID != record.TaskID || input.ComponentID != record.Component.Desired.ID) {
+			return nil, errs.New(errs.KindStateConflict, "prepared router input differs from its execution recipe")
+		}
 	}
 	decoded := &agentpb.ExecutionPlan{}
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(record.Plan, decoded); err != nil {
@@ -118,7 +155,8 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 	}
 	previousZone := ""
 	for _, zone := range record.Zones {
-		if zonerecord.ValidateRecord(zone) != nil || zone.EnvironmentID != record.EnvironmentID || zone.Desired.ID <= previousZone {
+		if zonerecord.ValidateRecord(zone) != nil || zone.EnvironmentID != record.EnvironmentID ||
+			zone.Desired.ID <= previousZone {
 			return nil, errs.New(errs.KindStateConflict, "Blueprint Component Zone authority is invalid")
 		}
 		previousZone = zone.Desired.ID
@@ -185,7 +223,10 @@ func (record ChildExecution) ExecutionPlan() (*agentpb.ExecutionPlan, error) {
 
 // Task Secret pins are activated during publication. They cannot alter the
 // candidate or predecessor file-source references already sealed in this recipe.
-func (record ChildExecution) ValidateTaskInputs(configuration *taskconfiguration.TaskConfiguration, materializations []taskmaterialization.Record) error {
+func (record ChildExecution) ValidateTaskInputs(
+	configuration *taskconfiguration.TaskConfiguration,
+	materializations []taskmaterialization.Record,
+) error {
 	if !taskmaterialization.EqualRecords(record.Materializations, materializations) {
 		return errs.New(errs.KindStateConflict, "Blueprint Component Task file sources changed")
 	}
@@ -199,7 +240,10 @@ func (record ChildExecution) ValidateTaskInputs(configuration *taskconfiguration
 	if sealed.Current != configuration.Current || sealed.PriorRevision != configuration.PriorRevision ||
 		(sealed.Prior == nil) != (configuration.Prior == nil) ||
 		sealed.Prior != nil && *sealed.Prior != *configuration.Prior || configuration.BackingHookInputs != nil {
-		return errs.New(errs.KindStateConflict, "Blueprint Component Task file-source selection differs from its recipe")
+		return errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component Task file-source selection differs from its recipe",
+		)
 	}
 	return nil
 }
@@ -211,32 +255,56 @@ func ReadChildExecution(ctx context.Context, store interface {
 		return keyvalue.Versioned[ChildExecution]{}, err
 	}
 	if store == nil || ids.Validate(ids.KindTask, taskID) != nil || revision < 0 {
-		return keyvalue.Versioned[ChildExecution]{}, errs.New(errs.KindValidationFailed, "Blueprint Component execution lookup is invalid")
+		return keyvalue.Versioned[ChildExecution]{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Component execution lookup is invalid",
+		)
 	}
-	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{ChildExecutionKey(taskID)}, Revision: revision})
+	read, err := store.GetMany(
+		ctx,
+		keyvalue.GetManyRequest{Keys: []string{ChildExecutionKey(taskID)}, Revision: revision},
+	)
 	if err != nil {
 		return keyvalue.Versioned[ChildExecution]{}, err
 	}
-	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return keyvalue.Versioned[ChildExecution]{}, errs.New(errs.KindStateConflict, "Blueprint Component execution authority is unavailable")
+	if read == nil || read.ReadRevision <= 0 || revision > 0 && read.ReadRevision != revision ||
+		len(read.Values) != 1 ||
+		read.Values[0] == nil {
+		return keyvalue.Versioned[ChildExecution]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component execution authority is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(read.Values)
-	record, err := recordcodec.Decode[ChildExecution](read.Values[0].Value, "blueprint-component-execution")
+	record, err := DecodeChildExecution(read.Values[0].Value)
 	if err != nil {
 		return keyvalue.Versioned[ChildExecution]{}, err
 	}
 	if record.TaskID != taskID {
-		return keyvalue.Versioned[ChildExecution]{}, errs.New(errs.KindStateConflict, "Blueprint Component execution identity changed")
+		return keyvalue.Versioned[ChildExecution]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Component execution identity changed",
+		)
 	}
-	if _, err := record.ExecutionPlan(); err != nil {
-		return keyvalue.Versioned[ChildExecution]{}, err
-	}
-	return keyvalue.Versioned[ChildExecution]{Record: record, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision}, nil
+	return keyvalue.Versioned[ChildExecution]{
+		Record:       record,
+		Revision:     read.Values[0].ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }
 
 // WithChildExecution joins the recipe to the same CAS publication as the
 // Component intent, address claims and hidden Task. It cannot be written later.
 func (publication Publication) WithChildExecution(record ChildExecution, planID, planHash string) (Publication, error) {
+	// The caller cannot construct source comparisons. Only the frozen storage
+	// preflight may supply them to the immutable execution and publication.
+	if record.ProxyPreflight != nil {
+		return Publication{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint router preflight must come from its publication",
+		)
+	}
+	record.ProxyPreflight = cloneProxyServicePreflight(publication.preparation.proxyServicePreflight)
 	plan, err := record.ExecutionPlan()
 	if err != nil {
 		return Publication{}, err
@@ -245,14 +313,20 @@ func (publication Publication) WithChildExecution(record ChildExecution, planID,
 		publication.preparation.Intent.EnvironmentID != record.EnvironmentID ||
 		!componentrecord.EqualRecord(publication.preparation.Intent.Candidates[0].Candidate, record.Component) ||
 		plan.GetPlanId() != planID || hex.EncodeToString(plan.GetPlanHash()) != planHash {
-		return Publication{}, errs.New(errs.KindValidationFailed, "Blueprint Component recipe differs from its publication")
+		return Publication{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Component recipe differs from its publication",
+		)
 	}
 	value, err := recordcodec.Encode("blueprint-component-execution", record)
 	if err != nil {
 		return Publication{}, err
 	}
 	publication.conditions = append(publication.conditions, keyvalue.Condition{Key: ChildExecutionKey(record.TaskID)})
-	publication.mutations = append(publication.mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ChildExecutionKey(record.TaskID), Value: value})
+	publication.mutations = append(
+		publication.mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ChildExecutionKey(record.TaskID), Value: value},
+	)
 	publication.values = append(publication.values, value)
 	return publication, nil
 }

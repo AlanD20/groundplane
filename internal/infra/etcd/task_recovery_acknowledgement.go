@@ -23,7 +23,46 @@ func (repository *TaskRepository) transitionAcknowledgementToRecovery(
 		assignment.ExecutionMode != taskassignments.TaskExecutionModeForward {
 		return keyvalue.Versioned[TaskRecord]{}, false, false, nil
 	}
-	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+	if assignment.AttachRemovalAuthoritySHA256 != "" {
+		authority, _, found, err := repository.attachRemovalRecoveryAuthorityAtRevision(ctx, task, revision)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, false, false, err
+		}
+		if !found {
+			return keyvalue.Versioned[TaskRecord]{}, false, false, taskassignments.CorruptTaskAssignment()
+		}
+		evidence, err := repository.attachRemovalMutationEvidenceAtRevision(ctx, task, assignment, authority, revision)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, false, false, err
+		}
+		if len(evidence) == 0 {
+			// Native Detach effects cannot run before their durable start.
+			result.ReconciliationRequired = false
+			return keyvalue.Versioned[TaskRecord]{}, false, false, nil
+		}
+		transitioned, processed, err := repository.transitionAttachRemovalAcknowledgementToRecovery(
+			ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue, status, *result, revision,
+		)
+		return transitioned, true, processed, err
+	}
+	if assignment.ManagedNetworkProcedureSHA256 != "" {
+		required, err := repository.managedNetworkRecoveryRequiredAtRevision(ctx, task, assignment, revision)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, false, false, err
+		}
+		if !required {
+			// The Agent must durably publish running before invoking the helper.
+			// Without that event this assignment cannot have affected the bridge.
+			result.ReconciliationRequired = false
+			return keyvalue.Versioned[TaskRecord]{}, false, false, nil
+		}
+		transitioned, processed, err := repository.transitionManagedNetworkAcknowledgementToRecovery(
+			ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
+			status, *result, revision,
+		)
+		return transitioned, true, processed, err
+	}
+	if componentRecoveryTask(task) {
 		transitioned, processed, err := repository.transitionComponentAcknowledgementToRecovery(
 			ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue, status, *result, revision,
 		)

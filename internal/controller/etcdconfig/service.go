@@ -209,9 +209,9 @@ type Dispatcher struct {
 func (s *Service) Dispatcher(fallback controllertask.Handler) controllertask.Handler {
 	return &Dispatcher{service: s, fallback: fallback}
 }
-func (d *Dispatcher) Execute(ctx context.Context, task etcd.TaskRecord) error {
+func (d *Dispatcher) Execute(ctx context.Context, task etcd.TaskRecord, progress *controllertask.Progress) error {
 	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEtcd {
-		return d.fallback.Execute(ctx, task)
+		return d.fallback.Execute(ctx, task, progress)
 	}
 	hash := sha256.Sum256([]byte(task.Params[inputParam]))
 	if task.Executor != taskjournal.TaskExecutorController || task.Owner != taskjournal.PlatformTaskOwner() ||
@@ -229,5 +229,7 @@ func (d *Dispatcher) Execute(ctx context.Context, task etcd.TaskRecord) error {
 			return errs.Wrap(errs.KindValidationFailed, err)
 		}
 	}
-	return d.service.runtime.Apply(ctx, task.ID, frozen.Candidate, frozen.Previous)
+	return progress.Run(ctx, "etcd_apply", func(ctx context.Context) error {
+		return d.service.runtime.Apply(ctx, task.ID, frozen.Candidate, frozen.Previous)
+	})
 }

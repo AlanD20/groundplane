@@ -181,7 +181,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	}
 	defer clear(intentValue)
 	dnsConditions, err := dnsrecords.NewReader(repository.store).
-		RequireDNSUnreferenced(ctx, current.Record.Desired.ID, "", projection.ReadRevision)
+		PrepareServiceWithdrawal(ctx, current.Record.Desired.ID, projection.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

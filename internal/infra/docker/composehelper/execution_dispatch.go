@@ -54,6 +54,9 @@ func execute(
 	if ensure := step.GetManagedNetworkEnsure(); ensure != nil {
 		return executeManagedNetworkEnsure(ctx, taskRunner, owned.TimeoutSeconds, artifact, ensure)
 	}
+	if probe := step.GetManagedNetworkPreparationProbe(); probe != nil {
+		return executeManagedNetworkPreparationProbe(ctx, taskRunner, owned.TimeoutSeconds, artifact, probe)
+	}
 	if ensure := step.GetManagedVolumeEnsure(); ensure != nil {
 		return executeManagedVolumeEnsure(ctx, taskRunner, owned.TimeoutSeconds, artifact, ensure)
 	}
@@ -74,6 +77,18 @@ func execute(
 		return executeComponentContainerConfigAction(
 			ctx, taskRunner, owned.TimeoutSeconds, artifact, apply, recipe,
 		)
+	}
+	if step.GetComponentRestorationProbe() != nil {
+		return componentConfigurationRestorationResponse(ctx, taskRunner, owned, artifact, catalog, false)
+	}
+	if step.GetRollingTrafficSwitch() != nil || step.GetRollingReleaseAcknowledge() != nil {
+		return executeRollingProxy(ctx, taskRunner, owned, artifact, step)
+	}
+	if step.GetComposeWorkloadRemove() != nil {
+		response, handled, err := executeCapturedRollingRemoval(ctx, taskRunner, owned, artifact, step)
+		if handled || err != nil {
+			return response, err
+		}
 	}
 	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyProbe() != nil ||
 		step.GetServiceProxyCompensate() != nil {
@@ -131,6 +146,10 @@ func execute(
 		Schema:     SchemaVersion,
 		Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+	}
+	if step.GetComponentRestorationCompensate() != nil &&
+		executionplan.ComponentConfigurationProofRequired(owned.GetPlan()) {
+		return componentConfigurationRestorationResponse(executionCtx, taskRunner, owned, artifact, catalog, true)
 	}
 	if compensate := step.GetServiceRecreateCompensate(); compensate != nil {
 		response.RecreateEvidence = &agentpb.ServiceRecreateEvidence{

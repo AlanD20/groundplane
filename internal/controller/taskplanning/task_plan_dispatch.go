@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
@@ -29,7 +30,7 @@ type TaskPlanResolver struct {
 	services              attachPlanServiceReader
 	attachIdentities      attachPlanIdentityResolver
 	componentCatalog      []componentrender.EnvironmentComponentRegistration
-	serviceProxyImage     *releasedomain.ProxyImage
+	serviceProxyImages    map[serviceproxy.Implementation]*releasedomain.ProxyImage
 	routeState            routeProviderStateReader
 	releases              *etcd.ReleaseLedger
 	backupRuns            backupRunPlanReader
@@ -86,7 +87,11 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		}
 		return resolver.scriptPlans.GetScriptExecutionPlan(ctx, task)
 	}
-	if taskjournal.IsBlueprintChild(task.Params) && task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != "" {
+	if task.Params[taskjournal.TaskReleaseNetworkParentParam] != "" {
+		return resolver.resolveReleaseNetworkPlan(ctx, task)
+	}
+	if task.Type != taskjournal.TaskRemove && taskjournal.IsBlueprintChild(task.Params) &&
+		task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != "" {
 		return resolver.resolveBlueprintNetworkUnitPlan(ctx, task)
 	}
 	if taskjournal.IsBlueprintChild(task.Params) && task.Params[taskjournal.TaskBlueprintVolumeUnitParam] != "" {

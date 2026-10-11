@@ -1,10 +1,40 @@
 package dnsresolver
 
 import (
+	"context"
+	"net/netip"
 	"testing"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+type noZoneDNSListeners struct{}
+
+func (noZoneDNSListeners) ResolveZoneDNSCandidates(
+	context.Context,
+	int64,
+) ([]zonedns.Candidate, []keyvalue.Condition, error) {
+	return nil, nil, nil
+}
+
+func (noZoneDNSListeners) Capture(_ context.Context, candidates []zonedns.Candidate) ([]netip.Addr, error) {
+	if len(candidates) != 0 {
+		return nil, errs.New(errs.KindInternal, "fixture has no Zone DNS networks")
+	}
+	return nil, nil
+}
+
+func testZoneListenerSource(t *testing.T) *ZoneListenerSource {
+	t.Helper()
+	source, err := NewZoneListenerSource(noZoneDNSListeners{}, noZoneDNSListeners{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return source
+}
 
 func testResolverDefinition(t *testing.T) componentsdk.Definition {
 	t.Helper()

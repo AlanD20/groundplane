@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -29,7 +28,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
-	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/agentstagingjournal"
 	"github.com/AlanD20/groundplane/internal/infra/agentterminaljournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -86,6 +84,9 @@ type Client struct {
 	scriptRuntime          ScriptRuntime
 	images                 WorkloadImageResolver
 	observer               ServiceObserver
+	backingAccess          BackingAccessChecker
+	dnsChecks              DNSConnectionChecker
+	edgeChecks             EdgeConnectionChecker
 	logs                   *logstream.Subscriptions
 	terminalJournal        *agentterminaljournal.Journal
 	stagingJournal         *agentstagingjournal.Journal
@@ -353,7 +354,7 @@ func (c *Client) sendTaskEvent(stream agentStream, progress TaskProgress) error 
 			AssignmentId: progress.AssignmentID,
 			TaskId:       progress.TaskID, PlanHash: append([]byte(nil), progress.PlanHash[:]...),
 			StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
-			State: state, Chunk: append([]byte(nil), progress.Chunk...),
+			State: state, Chunk: append([]byte(nil), progress.Chunk...), HealthWait: progress.HealthWait, Failure: progress.Failure,
 		},
 	}})
 }
@@ -368,30 +369,6 @@ func (c *Client) takeToken() ([agentprotocol.RawTokenBytes]byte, error) {
 	token := c.token
 	clear(c.token[:])
 	return token, nil
-}
-
-func (c *Client) sendReady(stream agentStream) error {
-	clean, err := c.terminalDeliveryClean()
-	if err != nil {
-		return err
-	}
-	clean = clean && c.staging != nil && c.staging.ready && !c.staging.reinspect.Load()
-	capacity := c.pool.Capacity()
-	if !clean {
-		capacity = 0
-	}
-	variant := ""
-	if runtime.GOARCH == "arm64" {
-		variant = "v8"
-	}
-	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Ready{
-		Ready: &agentpb.Ready{
-			Capacity: int32(capacity), Version: version.Value,
-			TerminalDeliveryClean: &clean,
-			OperatingSystem:       runtime.GOOS, Architecture: runtime.GOARCH,
-			ArchitectureVariant: variant,
-		},
-	}})
 }
 
 func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {

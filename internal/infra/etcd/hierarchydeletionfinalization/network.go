@@ -68,7 +68,7 @@ func (repository *Preparer) prepareHierarchyDeletionComponentFinalizer(
 	}
 	keys := []string{
 		componentrecord.EnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID),
-		componentrecord.EnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind),
+		componentrecord.EnvironmentSingletonKey(record.Desired),
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
 	if err != nil {

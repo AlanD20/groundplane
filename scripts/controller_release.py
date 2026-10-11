@@ -18,7 +18,7 @@ RELEASE_ROOT = Path("/var/lib/groundplane/controller-updates")
 MAX_BINARY = 256 << 20
 MAX_METADATA = 4096
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
-BUILD_FIELDS = {"schema", "controller_sha256", "controller_version", "storage_epoch", "channel_schema"}
+BUILD_FIELDS = {"schema", "controller_sha256", "controller_version", "controller_source", "storage_epoch", "channel_schema"}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
 
@@ -90,11 +90,21 @@ def build_metadata(raw: bytes) -> dict:
     for key in ("schema", "storage_epoch", "channel_schema"):
         if type(metadata[key]) is not int or not 1 <= metadata[key] <= 2147483647:
             raise ValueError("release compatibility metadata is invalid")
+    if metadata["schema"] != 2:
+        raise ValueError("release build metadata schema is unsupported")
     if not isinstance(metadata["controller_sha256"], str) or not DIGEST.fullmatch(metadata["controller_sha256"]):
         raise ValueError("release Controller digest is invalid")
     version = metadata["controller_version"]
     if not isinstance(version, str) or not re.fullmatch(r"[A-Za-z0-9._+/-]{1,128}", version):
         raise ValueError("release Controller version is invalid")
+    source = metadata["controller_source"]
+    if not isinstance(source, dict) or set(source) != {"kind", "commit"}:
+        raise ValueError("release Controller source fields are invalid")
+    if source != {"kind": "", "commit": ""} and (
+            source["kind"] not in ("release", "source_ref")
+            or not isinstance(source["commit"], str)
+            or not re.fullmatch(r"[0-9a-f]{40}", source["commit"])):
+        raise ValueError("release Controller source requires its exact resolved commit")
     return metadata
 
 

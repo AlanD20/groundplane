@@ -10,6 +10,7 @@ import (
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	zonednsruntime "github.com/AlanD20/groundplane/internal/infra/docker/zonedns"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
@@ -21,7 +22,7 @@ type controllerResolverComposition struct {
 	renderer         componentdns.Renderer
 	renderPlanner    *controllerdns.PlatformRenderPlanner
 	executionPlanner *controllerdns.PlatformExecutionPlanner
-	listener         *controllerdns.ListenerReconciler
+	configuration    *controllerdns.ConfigurationReconciler
 }
 
 func newControllerResolverComposition(
@@ -43,6 +44,10 @@ func newControllerResolverComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize registered Component action catalog: %w", err)
 	}
+	zoneListeners, err := controllerdns.NewZoneListenerSource(componentRecords, zonednsruntime.Inspector{})
+	if err != nil {
+		return nil, fmt.Errorf("controller: initialize Zone DNS listeners: %w", err)
+	}
 	platformRenderPlanner, err := controllerdns.NewPlatformRenderPlanner(
 		resolutionProjections,
 		componentRecords,
@@ -54,6 +59,7 @@ func newControllerResolverComposition(
 		actionCatalog,
 		componentregistration.ManagedConfigActivateAction,
 		imagefetch.RegistryAddress(cfg.Listen.HTTP),
+		zoneListeners,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize platform Component render planner: %w", err)
@@ -80,13 +86,19 @@ func newControllerResolverComposition(
 	if err := planResolver.EnableComponentPlans(platformComponentExecution); err != nil {
 		return nil, fmt.Errorf("controller: initialize Platform Component plan resolver: %w", err)
 	}
-	listener, err := controllerdns.NewListenerReconciler(tasks, imagefetch.RegistryAddress(cfg.Listen.HTTP), logger)
+	configuration, err := controllerdns.NewConfigurationReconciler(
+		tasks,
+		resolutionProjections,
+		zoneListeners,
+		imagefetch.RegistryAddress(cfg.Listen.HTTP),
+		logger,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("controller: initialize resolver listener reconciliation: %w", err)
+		return nil, fmt.Errorf("controller: initialize resolver configuration reconciliation: %w", err)
 	}
 	return &controllerResolverComposition{
 		renderer: coreDNSRenderer, renderPlanner: platformRenderPlanner,
 		executionPlanner: platformComponentExecution,
-		listener:         listener,
+		configuration:    configuration,
 	}, nil
 }

@@ -102,13 +102,13 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 		environmentPlanner,
 		renderPlannerCatalog{definition: definition},
 		"activate-config",
-		netip.MustParseAddr("127.0.0.1"),
-	)
+		netip.MustParseAddr("127.0.0.1"), testZoneListenerSource(t))
+
 	if err != nil {
 		t.Fatalf("NewPlatformRenderPlanner() error = %v", err)
 	}
 	task := startupResolverTask(componentID, now, true)
-	current := testkeyvalue.Versioned[testcomponents.Record]{Record: record}
+	current := testkeyvalue.Versioned[testcomponents.Record]{Record: record, ReadRevision: 42}
 	input, err := renderPlanner.PrepareBootstrapConfigTaskAtProjection(
 		context.Background(), current, desired, task, projection,
 	)

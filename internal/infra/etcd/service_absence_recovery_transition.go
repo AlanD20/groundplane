@@ -245,7 +245,8 @@ func (repository *TaskRepository) serviceAbsenceRecoveryAcknowledgementAtRevisio
 	procedure, intent, sourceConditions, found, err := repository.serviceAbsenceProcedureAtRevision(ctx, task, revision)
 	digest, digestErr = serviceAbsenceAuthorityDigest(procedure)
 	_, applicableErr := serviceAbsenceApplicableCompensation(procedure, record.MutationEvidence)
-	if err != nil || !found || digestErr != nil || digest != assignment.ServiceAbsenceProcedureSHA256 || applicableErr != nil ||
+	if err != nil || !found || digestErr != nil || digest != assignment.ServiceAbsenceProcedureSHA256 ||
+		applicableErr != nil ||
 		record.Phase != taskassignments.ReleaseRecoveryPhaseProven ||
 		int(record.Cursor) != len(record.RecoveryStepIDs) ||
 		validateServiceAbsenceRecoveryProof(intent, procedure, result) != nil {
@@ -280,7 +281,9 @@ func validateServiceAbsenceRecoveryProof(
 	if evidence == nil || !evidence.AbsenceProven || evidence.ServiceID != procedure.GetServiceId() ||
 		evidence.ArtifactID != procedure.GetArtifactId() || evidence.ComposeProjectName == "" ||
 		result.CandidateAbsenceEvidence != nil || result.ComponentRestorationEvidence != nil ||
-		len(result.ProxyEvidence) != 0 || len(result.RecreateEvidence) != 0 || len(result.BackingObservations) != 0 ||
+		len(
+			result.ProxyEvidence,
+		) != 0 || len(result.RecreateEvidence) != 0 || len(result.RollingEvidence) != 0 || len(result.BackingObservations) != 0 ||
 		result.DNSResolverCandidateObservation != nil || result.DNSResolverRollbackObservation != nil ||
 		len(result.Projects) != 1 || result.Projects[0].ProjectName != evidence.ComposeProjectName ||
 		result.Projects[0].CollisionCount != 0 {

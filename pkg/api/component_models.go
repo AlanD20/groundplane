@@ -1,42 +1,47 @@
 package api
 
-import "github.com/AlanD20/groundplane/internal/common/dnsrecords"
+import (
+	"github.com/AlanD20/groundplane/internal/common/dnsrecords"
+	"github.com/AlanD20/groundplane/internal/common/version"
+)
 
-// Component is the generic environment-component record. Caddy and Cloudflare
-// Tunnel are component KINDS ("caddy", "cloudflare-tunnel"),
-// not bespoke resources — see blueprint.md, "x-gp-components".
+// Component is the generic component record; implementation is not resource identity.
 type Component struct {
-	ID                string           `json:"id"`
-	Owner             string           `json:"owner" enum:"environment,platform"`
-	OwnerID           string           `json:"owner_id,omitempty"`
-	EnvironmentID     string           `json:"environment_id"`
-	Kind              string           `json:"kind"`
-	Enabled           bool             `json:"enabled"`
-	Config            *ComponentConfig `json:"config"`
-	GeneratedServices []string         `json:"generated_services,omitempty"`
-	PinnedIPv4        string           `json:"pinned_ipv4,omitempty"`
-	Healthy           bool             `json:"healthy"`
-	Status            string           `json:"status" enum:"disabled,pending,healthy,degraded,unknown"`
+	Software          *version.ContainerIdentity `json:"software,omitempty"`
+	ID                string                     `json:"id"`
+	Revision          int64                      `json:"revision"`
+	Owner             string                     `json:"owner" enum:"environment,platform"`
+	OwnerID           string                     `json:"owner_id,omitempty"`
+	EnvironmentID     string                     `json:"environment_id"`
+	Kind              string                     `json:"kind"`
+	Enabled           bool                       `json:"enabled"`
+	Config            *ComponentConfig           `json:"config"`
+	GeneratedServices []string                   `json:"generated_services,omitempty"`
+	PinnedIPv4        string                     `json:"pinned_ipv4,omitempty"`
+	Healthy           bool                       `json:"healthy"`
+	Status            string                     `json:"status" enum:"disabled,pending,healthy,degraded,unknown"`
 }
 
 // Router is the READ-ONLY projection grouping ingress components — GET
 // only, never PUT (api-cli.md: "router | GET /environments/{id}/router
 // read-only projection grouping ingress components").
 type Router struct {
-	Caddy  *ComponentProjection `json:"caddy,omitempty"`
+	Proxy  *ComponentProjection `json:"proxy,omitempty"`
 	Tunnel *ComponentProjection `json:"tunnel,omitempty"`
 }
 
 type ComponentProjection struct {
-	ComponentID string `json:"component_id"`
-	Enabled     bool   `json:"enabled"`
-	PinnedIPv4  string `json:"pinned_ipv4,omitempty"`
+	Implementation string `json:"implementation"`
+	ComponentID    string `json:"component_id"`
+	Enabled        bool   `json:"enabled"`
+	PinnedIPv4     string `json:"pinned_ipv4,omitempty"`
 }
 
 // ComponentConfig is the complete desired configuration singleton for one
 // Component. Runtime and secret material are deliberately absent.
 type ComponentConfig struct {
 	Caddy            *CaddyComponentConfig            `json:"-"`
+	Envoy            *EnvoyComponentConfig            `json:"-"`
 	CloudflareTunnel *CloudflareTunnelComponentConfig `json:"-"`
 	CoreDNS          *CoreDNSComponentConfig          `json:"-"`
 }
@@ -64,6 +69,11 @@ type CaddyComponentConfig struct {
 	CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
 }
 
+type EnvoyComponentConfig struct {
+	Alias   string   `json:"alias,omitempty"`
+	ZoneIDs []string `json:"zone_ids"`
+}
+
 type CloudflareTunnelComponentConfig struct {
 	ZoneIDs  []string `json:"zone_ids"`
 	SecretID string   `json:"secret_id"`
@@ -89,6 +99,7 @@ type ComponentConfigMutationRequest struct {
 
 type ComponentConfigMutationInput struct {
 	Caddy            *CaddyComponentConfigMutationInput            `json:"-"`
+	Envoy            *EnvoyComponentConfigMutationInput            `json:"-"`
 	CloudflareTunnel *CloudflareTunnelComponentConfigMutationInput `json:"-"`
 	CoreDNS          *CoreDNSComponentConfigMutationInput          `json:"-"`
 }
@@ -97,6 +108,11 @@ type CaddyComponentConfigMutationInput struct {
 	Alias             string   `json:"alias,omitempty"`
 	ZoneIDs           []string `json:"zone_ids"`
 	CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
+}
+
+type EnvoyComponentConfigMutationInput struct {
+	Alias   string   `json:"alias,omitempty"`
+	ZoneIDs []string `json:"zone_ids"`
 }
 
 type CloudflareTunnelComponentConfigMutationInput struct {

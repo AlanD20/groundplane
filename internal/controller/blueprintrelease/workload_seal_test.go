@@ -6,45 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
-
-// Rationale: the Blueprint contract selects changed running logical Services
-// regardless of authored replicas, while group deployment remains explicit.
-func TestSelectCandidatesIncludesReplicatedService(t *testing.T) {
-	memberships, err := BuildNormalizedServiceMemberships(
-		nil,
-		&composetypes.Project{Services: composetypes.Services{"api": {}}},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	change := testblueprints.EnvironmentBlueprintServiceChange{Record: testservices.ServiceRecord{
-		Desired: core.Service{ID: "service", Name: "api", Image: "app:v1", Replicas: 2},
-	}}
-	change.Record.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
-	selected, err := selectCandidates(
-		testenvironmentprojection.EnvironmentComposeProjection{},
-		[]testblueprints.EnvironmentBlueprintServiceChange{change},
-		nil,
-		memberships,
-	)
-	if err != nil || len(selected) != 1 || selected[0].Record.Desired.Replicas != 2 {
-		t.Fatalf("replicated candidate selection: %v, %v", selected, err)
-	}
-	selected, err = selectCandidates(
-		testenvironmentprojection.EnvironmentComposeProjection{},
-		[]testblueprints.EnvironmentBlueprintServiceChange{change},
-		map[string]core.ReleaseGroupSpec{"selected": {Services: []string{"api"}}},
-		memberships,
-	)
-	if err != nil || len(selected) != 0 {
-		t.Fatal("Blueprint implicitly deployed group member")
-	}
-}
 
 // Rationale: a pre-claim resolution cannot authorize changed candidate input
 // after identity allocation or subsequent catalog reads.

@@ -230,7 +230,7 @@ func TestImageRemovalFencesSelectionsAndResumesUncertainDeletion(t *testing.T) {
 	if err := service.Execute(ctx, claim.Task.Record); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, accepted.TaskID, taskjournal.TaskStatusCompleted, time.Now().UTC()); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, accepted.TaskID, taskjournal.TaskStatusCompleted, nil, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	conditions := keyvalue.ImageSelectionConditions(stale, nil)

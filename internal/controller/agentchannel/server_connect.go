@@ -88,10 +88,22 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	}()
 
 	observations := &observationExchange{}
+	backingAccess := &backingAccessExchange{}
+	dnsChecks := &dnsCheckExchange{}
+	edgeChecks := &edgeCheckExchange{}
 	staging := &backupStagingSession{}
 	controlBurst := 0
 	for {
-		event := nextConnectEvent(session, observations, received, payloads, controlBurst)
+		event := nextConnectEvent(
+			session,
+			observations,
+			backingAccess,
+			dnsChecks,
+			edgeChecks,
+			received,
+			payloads,
+			controlBurst,
+		)
 		controlBurst = min(controlBurst+1, maximumControlBurst)
 		switch event.kind {
 		case connectEnded:
@@ -110,6 +122,30 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		case connectObservationCommand:
 			command := event.observation
 			if err := observations.send(session.ctx, stream, session, command); err != nil {
+				return err
+			}
+		case connectBackingAccessExpired:
+			if err := backingAccess.cancel(session.ctx, stream); err != nil {
+				return err
+			}
+		case connectBackingAccessCommand:
+			if err := backingAccess.send(session.ctx, stream, session, event.backingAccess); err != nil {
+				return err
+			}
+		case connectDNSCheckExpired:
+			if err := dnsChecks.cancel(session.ctx, stream); err != nil {
+				return err
+			}
+		case connectDNSCheckCommand:
+			if err := dnsChecks.send(session.ctx, stream, session, event.dnsCheck); err != nil {
+				return err
+			}
+		case connectEdgeCheckExpired:
+			if err := edgeChecks.cancel(session.ctx, stream); err != nil {
+				return err
+			}
+		case connectEdgeCheckCommand:
+			if err := edgeChecks.send(session.ctx, stream, session, event.edgeCheck); err != nil {
 				return err
 			}
 		case connectImageCommand:
@@ -239,6 +275,30 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				session.acceptImageResult(result.message)
 				continue
 			}
+			if result.message.GetEdgeConnectionResult() != nil {
+				session.acceptEdgeCheckResult(result.message)
+				if edgeChecks.active != nil &&
+					result.message.GetEdgeConnectionResult().RequestId == edgeChecks.active.request.RequestId {
+					edgeChecks.active = nil
+				}
+				continue
+			}
+			if result.message.GetDnsConnectionResult() != nil {
+				session.acceptDNSCheckResult(result.message)
+				if dnsChecks.active != nil &&
+					result.message.GetDnsConnectionResult().RequestId == dnsChecks.active.request.RequestId {
+					dnsChecks.active = nil
+				}
+				continue
+			}
+			if result.message.GetBackingAccessResult() != nil {
+				session.acceptBackingAccessResult(result.message)
+				if backingAccess.active != nil &&
+					result.message.GetBackingAccessResult().RequestId == backingAccess.active.request.RequestId {
+					backingAccess.active = nil
+				}
+				continue
+			}
 			if result.message.GetServiceObservationResult() != nil {
 				session.acceptObservationResult(session.ctx, result.message)
 				if observations.active != nil &&
@@ -285,6 +345,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if err := validateReady(ready.Capacity, ready.Version); err != nil {
 					return status.Error(codes.InvalidArgument, "agent Ready is invalid")
 				}
+				source, err := readyBuildProvenance(ready.GetSource())
+				if err != nil {
+					return status.Error(codes.InvalidArgument, "agent Ready build provenance is invalid")
+				}
 				if ready.Capacity > authorization.Config.MaxConcurrentTasks {
 					return status.Error(
 						codes.InvalidArgument,
@@ -297,7 +361,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					}
 					continue
 				}
-				if err := session.RecordReady(s.now(), ready.Capacity, ready.Version); err != nil {
+				if err := session.RecordReady(s.now(), ready.Capacity, ready.Version, source); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
 				}
 				currentConfig, err := s.auth.Configuration(
@@ -419,9 +483,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if s.tasks == nil {
 					return status.Error(codes.Internal, "agent task store is not configured")
 				}
-				if err := s.recordTaskEvent(
+				acknowledgement, err := s.recordTaskEvent(
 					stream.Context(), authenticate.AgentId, authorization.Generation, event,
-				); err != nil {
+				)
+				if err != nil {
 					slog.Error(
 						"controller: record Agent Task event",
 						slog.String("task_id", event.TaskId),
@@ -432,11 +497,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					return taskStoreStatus(err)
 				}
 				if err := stream.Send(&agentpb.ControllerMessage{
-					Payload: &agentpb.ControllerMessage_TaskEventAck{TaskEventAck: &agentpb.TaskEventAck{
-						TaskId: event.GetTaskId(), AssignmentId: event.GetAssignmentId(),
-						PlanHash: append([]byte(nil), event.GetPlanHash()...), StepId: event.GetStepId(),
-						ExecutionEpoch: event.GetExecutionEpoch(), Ordinal: event.GetOrdinal(), State: event.GetState(),
-					}},
+					Payload: &agentpb.ControllerMessage_TaskEventAck{TaskEventAck: acknowledgement},
 				}); err != nil {
 					return err
 				}

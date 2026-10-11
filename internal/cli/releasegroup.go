@@ -185,7 +185,7 @@ func newReleaseGroupCmd() *cobra.Command {
 	var rollbackTag string
 	rollback := &cobra.Command{
 		Use:   "rollback <name>",
-		Short: "Roll back every member service under one task lock",
+		Short: "Deploy previous images for every member using their current configuration and strategy",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID, err := resolveReleaseGroupTarget(cmd, args[0])

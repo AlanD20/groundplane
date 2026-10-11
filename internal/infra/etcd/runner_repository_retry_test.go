@@ -8,6 +8,7 @@ import (
 	time "time"
 
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/version"
 	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -150,8 +151,9 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 				t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 			}
 			failed, err := tasks.AcknowledgeControllerTask(
-				ctx, removeTask.ID, testtaskjournal.TaskStatusFailed, removeTask.CreatedAt.Add(2*time.Second),
-			)
+				ctx, removeTask.ID, testtaskjournal.TaskStatusFailed, nil,
+				removeTask.CreatedAt.Add(2*time.Second))
+
 			if err != nil {
 				t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 			}
@@ -202,8 +204,9 @@ func runnerTestFinishCreate(
 		runnerTestRecordReadinessProof(t, repository, task)
 	}
 	terminal, err := taskRepository.AcknowledgeControllerTask(
-		ctx, task.ID, status, task.CreatedAt.Add(2*time.Second),
-	)
+		ctx, task.ID, status, nil,
+		task.CreatedAt.Add(2*time.Second))
+
 	if err != nil || terminal.Record.Status != status {
 		t.Fatalf("AcknowledgeControllerTask(create) = %#v, %v", terminal, err)
 	}
@@ -213,8 +216,8 @@ func runnerTestFinishCreate(
 		t.Fatalf("validateRunnerTaskAcknowledgementReplay(create) error = %v", err)
 	}
 	if _, err := taskRepository.AcknowledgeControllerTask(
-		ctx, task.ID, status, task.CreatedAt.Add(2*time.Second),
-	); err != nil {
+		ctx, task.ID, status, nil,
+		task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(create replay) error = %v", err)
 	}
 	finished, err := repository.GetRunner(ctx, task.Target)
@@ -242,7 +245,9 @@ func runnerTestRecordReadinessProof(
 			t.Fatalf("AttestRunnerRuntimeOwnership(readiness) error = %v", err)
 		}
 	}
-	proof, err := repository.RecordRunnerReadinessProof(ctx, task.ID)
+	proof, err := repository.RecordRunnerReadinessProof(ctx, task.ID, version.ContainerIdentity{
+		Image: current.Record.Desired.ImageRef, ConfigDigest: "sha256:" + strings.Repeat("b", 64),
+	})
 	if err != nil {
 		t.Fatalf("RecordRunnerReadinessProof() error = %v", err)
 	}

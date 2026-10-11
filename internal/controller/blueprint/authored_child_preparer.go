@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -31,11 +33,14 @@ func (service *Service) Prepare(
 	ctx context.Context,
 	parent etcd.TaskRecord,
 	unit blueprintunits.Unit,
+	snapshot blueprintunits.Snapshot,
 ) (blueprintcoordinator.PreparedChild, error) {
 	if service == nil || ctx == nil || parent.Executor != taskjournal.TaskExecutorBlueprint ||
+		validateAuthoredRuntimeProjectionParent(parent, snapshot) != nil ||
 		parent.Status != taskjournal.TaskStatusRunning || unit.Removal &&
 		(unit.Target.Kind != ids.KindComponent && unit.Target.Kind != ids.KindEnvEntry &&
-			unit.Target.Kind != ids.KindService) {
+			unit.Target.Kind != ids.KindService && unit.Target.Kind != ids.KindNetwork &&
+			unit.Target.Kind != ids.KindAttach) {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindValidationFailed, "Blueprint child request is invalid",
 		)
@@ -59,16 +64,22 @@ func (service *Service) Prepare(
 		)
 	}
 	if unit.Target.Kind == ids.KindNetwork {
+		if unit.Removal {
+			return service.prepareAuthoredZoneRemovalChild(ctx, parent, unit, timeoutSeconds)
+		}
 		return service.prepareAuthoredNetworkChild(ctx, parent, unit, timeoutSeconds)
 	}
 	if unit.Target.Kind == ids.KindVolume {
 		return service.prepareAuthoredVolumeChild(ctx, parent, unit, timeoutSeconds)
 	}
 	if unit.Target.Kind == ids.KindAttach {
+		if unit.Removal {
+			return service.prepareAuthoredAttachRemovalChild(ctx, parent, unit, timeoutSeconds)
+		}
 		return service.prepareAuthoredAttachChild(ctx, parent, unit, timeoutSeconds)
 	}
 	if unit.Target.Kind == ids.KindComponent {
-		return service.prepareAuthoredComponentChild(ctx, parent, unit, timeoutSeconds)
+		return service.prepareAuthoredComponentChild(ctx, parent, unit, snapshot, timeoutSeconds)
 	}
 	if unit.Target.Kind == ids.KindEnvEntry && unit.Removal {
 		return service.prepareAuthoredEntryRemovalChild(ctx, parent, unit, timeoutSeconds)
@@ -82,6 +93,32 @@ func (service *Service) Prepare(
 		)
 	}
 	input, err := service.loadAuthoredParentInput(ctx, parent)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	projectInput, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, input.desired, input.identities)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	serviceName := ""
+	for _, identity := range input.identities.Services {
+		if identity.ID == unit.Target.ID {
+			serviceName = identity.Name
+			break
+		}
+	}
+	selectedService, found := projectInput.Services[serviceName]
+	if !found {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Service child authored definition is unavailable",
+		)
+	}
+	upstreams, err := zonedns.Upstreams(selectedService, projectInput.Networks)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	dnsActivation, err := service.repository.ReadZoneDNSActivation(ctx, upstreams)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
@@ -176,6 +213,10 @@ func (service *Service) Prepare(
 	publication, err := prepared.Publication.WithRequirementGate(
 		requirementGate, prepared.Task, projection.Record,
 	)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, errors.Join(err, prepared.Abandon(ctx))
+	}
+	publication, err = publication.WithZoneDNSActivation(dnsActivation)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, errors.Join(err, prepared.Abandon(ctx))
 	}

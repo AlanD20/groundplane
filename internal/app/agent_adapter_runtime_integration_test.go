@@ -176,6 +176,16 @@ func runAdapterProcedure(
 	for {
 		select {
 		case output := <-pool.Outputs():
+			if progress := output.Progress; progress != nil && progress.State == agent.TaskProgressRunning {
+				if err := pool.AcceptTaskEventAck(ctx, &agentpb.TaskEventAck{
+					TaskId: progress.TaskID, AssignmentId: progress.AssignmentID,
+					StepId: progress.StepID, PlanHash: progress.PlanHash[:],
+					ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
+					State: agentpb.TaskState_TASK_STATE_RUNNING,
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if output.Result != nil {
 				return *output.Result
 			}

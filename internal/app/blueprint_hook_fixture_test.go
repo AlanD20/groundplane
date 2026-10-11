@@ -220,11 +220,12 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 	failedStore := &scriptSourceReferenceFailureStore{
 		releasePlanningTestStore: fixture.store,
 		failAt:                   2,
+		rootKey:                  testscriptsourceevidence.ScriptSourceRootKey(task.OperationID),
 	}
 	event := testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 		AssignmentID: claim.Assignment.Record.AssignmentID, AgentID: agentID, AgentGeneration: 1,
 		TaskID: task.ID, StepID: task.Steps[0].ID, Attempt: claim.Assignment.Record.ExecutionEpoch, Ordinal: 1,
-	}, State: testtaskjournal.TaskEventStateRunning, Payload: []byte(`{"message":"progress before closure"}`)}
+	}, State: testtaskjournal.TaskEventStateRunning, Payload: []byte(`{}`)}
 	if _, err := fixture.Tasks.AppendTaskEvent(ctx, event, task.CreatedAt.Add(10*time.Second)); err != nil {
 		t.Fatal(err)
 	}
@@ -242,11 +243,21 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 		t.Fatal(err)
 	}
 	terminalAt := task.CreatedAt.Add(time.Minute)
-	if _, err := interrupted.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result, terminalAt); !errors.Is(
-		err,
+	_, interruptedErr := interrupted.AcknowledgeTask(
+		ctx,
+		agentID,
+		1,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		result,
+		terminalAt,
+	)
+	if !errors.Is(
+		interruptedErr,
 		errs.New(errs.KindInternal, ""),
 	) {
-		t.Fatalf("actual interrupted hook completion: %v", err)
+		t.Fatalf("actual interrupted hook completion: %v", interruptedErr)
 	}
 	after, err := fixture.Tasks.GetTaskAssignment(ctx, task.ID)
 	if err != nil || after.Task.Revision != before.Task.Revision ||
@@ -260,7 +271,13 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 	root, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(rootRead.Entry.Value)
 	if err != nil || root.Phase != testscriptsourceevidence.ScriptOperationSourceReleasing ||
 		root.ReleasePath != testscriptsourceevidence.ScriptSourceReleaseNormal {
-		t.Fatalf("interruption did not reach normal source release: %v", err)
+		t.Fatalf(
+			"interruption did not reach normal source release: phase=%s path=%s decode=%v acknowledgement=%v",
+			root.Phase,
+			root.ReleasePath,
+			err,
+			interruptedErr,
+		)
 	}
 	report, reportValue := readIntegrationClosingReport(t, fixture.store, task.ID)
 	if reportValue == nil || reportValue.ModRevision != rootRead.Entry.ModRevision ||
@@ -305,7 +322,7 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 		testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 			AssignmentID: claim.Assignment.Record.AssignmentID, AgentID: agentID, AgentGeneration: 1,
 			TaskID: task.ID, StepID: task.Steps[0].ID, Attempt: claim.Assignment.Record.ExecutionEpoch, Ordinal: 2,
-		}, State: testtaskjournal.TaskEventStateRunning, Payload: []byte(`{"message":"late event after closure"}`)},
+		}, State: testtaskjournal.TaskEventStateRunning, Payload: []byte(`{}`)},
 		task.CreatedAt.Add(2*time.Minute),
 	)
 	if !errors.Is(lateErr, errs.New(errs.KindStateConflict, "")) || fixture.store.revision != beforeMismatch {
@@ -370,6 +387,7 @@ type scriptSourceReferenceFailureStore struct {
 	*releasePlanningTestStore
 	transacts int
 	failAt    int
+	rootKey   string
 }
 
 func (store *scriptSourceReferenceFailureStore) Transact(
@@ -377,9 +395,14 @@ func (store *scriptSourceReferenceFailureStore) Transact(
 	conditions []testkeyvalue.Condition,
 	mutations []testkeyvalue.Mutation,
 ) (testkeyvalue.TransactionResult, error) {
-	store.transacts++
-	if store.transacts == store.failAt {
-		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "injected source release failure")
+	for _, mutation := range mutations {
+		if mutation.Key == store.rootKey {
+			store.transacts++
+			if store.transacts == store.failAt {
+				return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "injected source release failure")
+			}
+			break
+		}
 	}
 	return store.releasePlanningTestStore.Transact(ctx, conditions, mutations)
 }

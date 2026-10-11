@@ -13,6 +13,7 @@ SCRIPT = REPOSITORY_ROOT / "scripts" / "release-agent.sh"
 IMAGE = "registry.example.test/groundplane-agent:1.2.3"
 DIGEST = "sha256:" + "a" * 64
 OLD_DIGEST = "sha256:" + "b" * 64
+SOURCE_COMMIT = "c" * 40
 
 
 class ReleaseAgentTest(unittest.TestCase):
@@ -36,6 +37,17 @@ class ReleaseAgentTest(unittest.TestCase):
             printf '%s\\n' "$*" >> "$FAKE_MAKE_LOG"
         """))
         make.chmod(0o755)
+
+        git = self.bin / "git"
+        git.write_text(textwrap.dedent(f"""\
+            #!/bin/sh
+            case "$*" in
+                "status --porcelain --untracked-files=normal") exit 0 ;;
+                "rev-parse HEAD") printf '%s\\n' "{SOURCE_COMMIT}" ;;
+                *) printf 'unexpected git invocation: %s\\n' "$*" >&2; exit 2 ;;
+            esac
+        """))
+        git.chmod(0o755)
 
         docker = self.bin / "docker"
         docker.write_text(textwrap.dedent("""\

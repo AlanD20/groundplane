@@ -107,12 +107,14 @@ trust and execution design.
 An Environment Blueprint declares operator-managed resources. Removing an Entry
 key removes that Entry from the Environment on Apply. Directly created Entries
 appear in canonical export too. Persistent Volumes are different: omitting one
-is rejected until its protected Remove action completes. Current Validate and
-Apply also reject omission of existing Services, Zones, Attaches and Routes.
-Use their explicit dependency-checked Remove or Detach actions first, then export
-and edit the updated Blueprint. Omission is not a shortcut around protected
-removal. Other removal and recovery variants remain
-[not fully qualified](issues/runtime-qualification.md#incomplete-features).
+is rejected until its protected Remove action completes. Full Apply reconciles
+other omitted Environment resources through their protected removal paths;
+optional Components are disabled. A shared Backing Zone with external Attaches
+requires a separate impact-approved removal first. Selected-Service Apply
+preserves unrelated resources. See the
+[removal guide](features/blueprints.md#removal-and-identity) for consequences and
+the current qualification limits; omission never bypasses dependency or recovery
+checks.
 
 Omitted native Compose `configs` and `secrets` definitions are not copied from
 the prior Blueprint. Companion file bytes are carried forward only when the
@@ -266,8 +268,11 @@ Groundplane adds these restrictions to native Compose:
 
 Service `expose` entries use container ports such as `80`, `80/tcp`, `53/udp`
 or an inclusive range such as `8000-8002/tcp`. Host-address, published-port and
-Service-name prefixes are rejected. The current Service proxy still requires
-individual TCP ports; accepting a UDP declaration does not enable UDP deployment.
+Service-name prefixes are rejected. Proxy planning expands ranges and removes
+duplicate port/protocol pairs, with at most 32 listeners per Service. The current
+Envoy Service proxy supports UDP with Recreate; Caddy remains HTTP-only, and
+blue-green/rolling reject UDP before effects. Malformed and unsupported declarations fail Deploy
+and Blueprint preflight before workload execution.
 
 | Compose input | Groundplane consequence |
 | --- | --- |
@@ -283,12 +288,15 @@ individual TCP ports; accepting a UDP declaration does not enable UDP deployment
 | YAML anchors and aliases | Parsing conveniences only; they cannot bypass validation and are absent from canonical export. |
 | interpolation | Uses only the submitted non-secret map. There is no ambient environment or `.env`. |
 | `profiles` | Preserved; Groundplane does not silently activate a profile. |
-| rolling release | Declared but deferred in the MVP. `x-gp-release.default_strategy: rolling` is rejected. |
+| rolling release | `x-gp-release.default_strategy: rolling` requires an explicit enabled healthcheck and 1–16 replicas. Backing Services cannot use it. |
 | runtime intent | Controller-owned operational state; it is not authored here. |
 
 **Current Validate and Apply limits:** native `configs` and Compose `secrets`,
 including external definitions, are rejected after parsing. Use Entries for configuration.
-External networks and network extensions are unavailable. Volumes must be
+External networks are unavailable. Network extensions are limited to
+`x-gp-allow-dns`; its resolver activation is locally implemented but unqualified, as explained in
+[internal-Zone DNS](features/components.md#internal-zone-dns).
+Volumes must be
 GP-managed: `external` Volumes, non-`local` drivers and any `driver_opts` are rejected, including
 read-only local bind Volume definitions that satisfy the accepted grammar.
 Service-level read-only binds from bundle files remain a separate supported
@@ -309,6 +317,12 @@ multiple containers. Use one `ipam.config` item with only
 options, attachable mode or IPv6. If Compose would create an implicit `default`
 network, declare that network with its explicit subnet too.
 
+An internal network may declare `x-gp-allow-dns: true` to select shared GP DNS.
+The default is false. This decision is editable in the Blueprint without changing
+the network's identity or subnet. It requires a private IPv4 subnet and cannot
+be combined with a Service-level `dns` override on a member Service. Export keeps
+the boolean decision, not the generated resolver address.
+
 ## Groundplane extension overview
 
 Extension scope is strict. Unknown fields, known fields in the wrong scope, and
@@ -321,6 +335,8 @@ Controller-generated fields in authored input are rejected.
 | `x-gp-attachments` | Environment root | consumer-to-Backing-Service bindings |
 | `x-gp-entry` | Environment root | scoped environment variables and files |
 | `x-gp-routes` | Environment root | provider-neutral HTTP routes |
+| `x-gp-dns` | Environment root | scoped DNS record intention on shared CoreDNS |
+| `x-gp-allow-dns` | native Compose network | opt-in shared resolver for an internal Zone |
 | `x-gp-scripts` | Environment root | manual and Release-hook Scripts |
 | `x-gp-components` | Environment root | registered Component Capability choices |
 | `x-gp-backup` | Environment root | backup policy and source selection |
@@ -353,12 +369,11 @@ services:
 Healthchecks remain native Compose input: `CMD` with executable/arguments,
 `CMD-SHELL` with one shell command, or `NONE` to disable. Timing fields also
 include `start_period`, `start_interval` and `retries`; direct Service editing
-uses this same representation. Blue-green requires an enabled explicit check.
+uses this same representation. Blue-green and rolling require an enabled explicit check.
 
-When authored, `default_strategy` is `blue-green` or `recreate`; `rolling`
-remains deferred.
+When authored, `default_strategy` is `blue-green`, `recreate` or `rolling`.
 When the extension is present, `default_strategy` is required. Blue-green supports one
-replica; use recreate for more than one. `deploy.replicas` defaults to one.
+replica; rolling supports 1–16. `deploy.replicas` defaults to one.
 `on_failure` is `switch_back` or `leave_active` and defaults to
 `switch_back`. The standard Compose `image` field is the requested image
 reference. Selection, local image resolution, immutable Release records,
@@ -366,9 +381,15 @@ serving state, and retry checkpoints are Controller-owned; see
 [Services and releases](features/services-and-releases.md) and
 [Release packaging](decisions/release-packaging.md).
 
+`rolling_replica_timeout_seconds` under `x-gp-release` is an integer from 0
+through 86400; omission or 0 selects the 300-second default. It budgets one
+replica's startup, healthcheck, traffic switch, drain and removal, not the entire
+rollout, and cannot extend the Task deadline. It does not change recreate or
+blue-green timing. Backing Services reject it.
+
 Blueprint Apply and an explicit Deploy without a strategy override both use this
 declaration. Disruptive changes follow the selected release strategy; GP never
-silently substitutes recreate for blue-green. See
+silently substitutes recreate for blue-green or rolling. See
 [single-Service Apply](features/blueprints.md#apply-one-service) for operation
 scope; selection is request metadata, not a YAML desired-state field.
 
@@ -646,6 +667,44 @@ the target. Routes do not publish host ports. See
 [Components](features/components.md) and the
 [router template contract](features/router-template.md).
 
+### `x-gp-dns`
+
+Parsing, canonical export, Apply and direct edits share the same DNS intention.
+Resolver acknowledgement, not Blueprint publication, proves an answer is active
+or withdrawn. The implementation is local and not behavior-qualified; see
+[Environment DNS](features/components.md#environment-dns).
+
+The map key is one lowercase DNS label. Each record selects either an explicit
+IPv4 `address`, or a same-Environment `service` name and a declared `zone` network:
+
+```yaml
+x-gp-dns:
+  api:
+    service: api
+    zone: application
+    namespace:
+      scope: environment
+      tenant: acme
+      project: storefront
+      environment: production
+```
+
+The example declares `api.production.storefront.acme.internal`. Namespace scope
+is `environment` (default), `project`, or `tenant`; the shorter forms omit the
+Environment label, or both Environment and Project labels. If all namespace
+labels are omitted, parsing captures the relevant envelope labels. Explicit
+labels must be complete for their scope. Canonical export includes the captured
+labels so owner renames do not change DNS names. A new or changed namespace must
+match the current owner; an unchanged record may retain its pre-rename labels.
+
+There may be at most 256 records. Service targets require a declared Zone; an
+existing enabled Service must join it and expose a TCP port. A missing Service
+is valid waiting intention, not an active answer. Stable ids and observed proxy
+addresses are not authored fields. Selected-Service Apply cannot change DNS.
+An Environment DNS hostname cannot also be declared by a Route in the same
+Blueprint, even when both are new. The managed registry hostname is reserved,
+including when a Service-targeted record would otherwise wait without an answer.
+
 ### `x-gp-components`
 
 The map key is a Component Capability. `implementation` selects a registered,
@@ -670,7 +729,14 @@ Current Environment choices are:
 | Map key | `implementation` | Settings while enabled |
 | --- | --- | --- |
 | `http-router` | `caddy` | Nonempty ordered `zone_ids`; optional `alias`; optional `implementation_config.caddyfile_template` |
+| `http-router` | `envoy` | Nonempty ordered `zone_ids`; optional `alias`; no Caddy template |
 | `edge-tunnel` | `cloudflare-tunnel` | Nonempty ordered `zone_ids` and `secret_id`; no alias or Caddy template |
+
+Both implementations retain the same router identity. An engine change captures
+the affected Service rollouts and requires Recreate when replacing a running
+Service proxy; there is no implicit conversion to Caddy or silent strategy change.
+The coordinated switch is locally implemented, not behavior-qualified. See
+[proxy selection](features/components.md#routes-and-the-http-router).
 
 `enabled` is a boolean and defaults to false. Zone references are existing stable
 ids, not Compose network names; use the Zone list to obtain them. The first Zone

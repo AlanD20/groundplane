@@ -126,7 +126,12 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintScript(
 		}
 		conditions = append(conditions, keyvalue.Condition{Key: bodyKey, ModRevision: bodyRead.Values[0].ModRevision})
 	}
-	receipt, err := blueprintunits.PrepareControllerScriptSettlement(snapshot, unit, ids.New(ids.KindOperation), read.Values[2].ModRevision)
+	receipt, err := blueprintunits.PrepareControllerScriptSettlement(
+		snapshot,
+		unit,
+		ids.New(ids.KindOperation),
+		read.Values[2].ModRevision,
+	)
 	if err != nil {
 		return err
 	}

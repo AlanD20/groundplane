@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/core/blueprintreconcile"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -125,7 +126,7 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 
 	desired, err := runner.planner.Plan(ctx, parent, snapshot)
 	if err != nil {
-		return false, err
+		return runner.forwardFailed(ctx, parent, snapshot, "planning", err)
 	}
 	published, err := runner.tasks.PublishBlueprintDesiredPlan(ctx, parent.ID, desired)
 	if err != nil {
@@ -158,7 +159,8 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 	}
 	selection, err := blueprintunits.Select(snapshot)
 	if err != nil {
-		return planChanged, err
+		progressed, failureErr := runner.forwardFailed(ctx, parent, snapshot, "selection", err)
+		return planChanged || progressed, failureErr
 	}
 
 	if len(selection.CancelPending) != 0 {
@@ -188,114 +190,33 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 		}
 		return true, nil
 	}
-	if len(selection.Ready) != 0 {
-		unit, found := desiredUnit(snapshot, selection.Ready[0])
+	for _, target := range selection.Ready {
+		unit, found := desiredUnit(snapshot, target)
 		if !found {
 			return planChanged, errs.New(errs.KindInternal, "ready Blueprint unit is absent from its desired plan")
 		}
-		if unit.Target.Kind == ids.KindScript {
-			settler, ok := runner.planner.(ScriptSettler)
-			if !ok {
-				return planChanged, errs.New(errs.KindInternal, "Blueprint Script settler is not configured")
-			}
-			if err := settler.SettleScript(ctx, parent, unit); err != nil {
-				if isStateRace(err) {
-					return true, nil
-				}
-				return planChanged, err
-			}
-			return true, nil
-		}
-		if unit.Target.Kind == ids.KindEnvEntry && unit.Removal {
-			settler, ok := runner.planner.(EntryOmissionSettler)
-			if !ok {
-				return planChanged, errs.New(errs.KindInternal, "Blueprint Entry omission settler is not configured")
-			}
-			settled, err := settler.TrySettleEntryOmission(ctx, parent, unit)
-			if err != nil {
-				if isStateRace(err) {
-					return true, nil
-				}
-				return planChanged, err
-			}
-			if settled {
-				return true, nil
-			}
-		}
-		if unit.Target.Kind == ids.KindEnvEntry && !unit.Removal {
-			settler, ok := runner.planner.(EntrySettler)
-			if !ok {
-				return planChanged, errs.New(errs.KindInternal, "Blueprint Entry settler is not configured")
-			}
-			if err := settler.SettleEntry(ctx, parent, unit, snapshot); err != nil {
-				if isStateRace(err) {
-					return true, nil
-				}
-				return planChanged, err
-			}
-			return true, nil
-		}
-		if unit.Target.Kind == ids.KindRoute {
-			settler, ok := runner.planner.(RouteSettler)
-			if !ok {
-				return planChanged, errs.New(errs.KindInternal, "Blueprint Route settler is not configured")
-			}
-			var err error
-			if unit.Removal {
-				err = settler.SettleRouteOmission(ctx, parent, unit)
-			} else {
-				err = settler.SettleRoute(ctx, parent, unit)
-			}
-			if err != nil {
-				if isStateRace(err) {
-					return true, nil
-				}
-				return planChanged, err
-			}
-			return true, nil
-		}
-		if unit.Target.Kind == ids.KindService && !unit.Removal {
-			settler, ok := runner.planner.(DormantServiceSettler)
-			if !ok {
-				return planChanged, errs.New(errs.KindInternal, "Blueprint dormant Service settler is not configured")
-			}
-			settled, err := settler.TrySettleDormantService(ctx, parent, unit)
-			if err != nil {
-				if isStateRace(err) {
-					return true, nil
-				}
-				return planChanged, err
-			}
-			if settled {
-				return true, nil
-			}
-		}
-		if unit.Target.Kind == ids.KindComponent {
-			settler, ok := runner.planner.(DisabledComponentSettler)
-			if !ok {
-				return planChanged, errs.New(
-					errs.KindInternal,
-					"Blueprint disabled Component settler is not configured",
-				)
-			}
-			settled, err := settler.TrySettleDisabledComponent(ctx, parent, unit, snapshot)
-			if err != nil {
-				if isStateRace(err) {
-					return true, nil
-				}
-				return planChanged, err
-			}
-			if settled {
-				return true, nil
-			}
-		}
-		prepared, err := runner.children.Prepare(ctx, parent, unit)
+		settlementContext := imagefence.WithScope(ctx)
+		settled, err := runner.tryControllerSettlement(settlementContext, parent, unit, snapshot)
 		if err != nil {
-			return planChanged, err
+			progressed, failureErr := runner.forwardFailed(ctx, parent, snapshot, "settlement", err)
+			return planChanged || progressed, failureErr
+		}
+		if settled == settlementWaiting {
+			// A shared resolver update must not starve independent ready units.
+			continue
+		}
+		if settled == settlementComplete {
+			return true, nil
+		}
+		childContext := imagefence.WithScope(ctx)
+		prepared, err := runner.children.Prepare(childContext, parent, unit, snapshot)
+		if err != nil {
+			progressed, failureErr := runner.forwardFailed(ctx, parent, snapshot, "child", err)
+			return planChanged || progressed, failureErr
 		}
 		defer prepared.Clear()
 		if _, err := runner.tasks.PublishBlueprintChild(
-			ctx,
+			childContext,
 			parent.ID,
 			prepared.Task,
 			unit,
@@ -303,6 +224,8 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 			prepared.ComponentPublication,
 			prepared.EntryRemovalPublication,
 			prepared.ServiceRemovalPublication,
+			prepared.ZoneRemovalPublication,
+			prepared.AttachRemovalPublication,
 		); err != nil {
 			if !unknownBlueprintChildPublication(err) {
 				if cleanupErr := prepared.ReleasePublication.Abandon(ctx); cleanupErr != nil {

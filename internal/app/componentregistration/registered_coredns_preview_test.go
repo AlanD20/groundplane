@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
+	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/core"
 	testhostresolution "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -16,6 +18,13 @@ import (
 
 type registeredCoreDNSPreviewRecords struct {
 	projection testhostresolution.HostResolutionProjectionRecord
+}
+
+func (registeredCoreDNSPreviewRecords) ResolveEnvironmentDNS(
+	context.Context,
+	int64,
+) (testplatformcomponents.EnvironmentDNSResolution, []testkeyvalue.Condition, error) {
+	return testplatformcomponents.EnvironmentDNSResolution{}, nil, nil
 }
 
 func (registeredCoreDNSPreviewRecords) ResolveDNSRecords(
@@ -54,7 +63,17 @@ func TestRegisteredCoreDNSManagedConfigProjectorUsesCompiledRenderer(t *testing.
 		t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 	}
 	records := registeredCoreDNSPreviewRecords{projection: projection}
-	projector, err := NewDNSManagedConfigProjector(records, records, records, netip.MustParseAddr("127.0.0.1"))
+	listeners, err := controllerdns.NewZoneListenerSource(records, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projector, err := NewDNSManagedConfigProjector(
+		records,
+		records,
+		records,
+		netip.MustParseAddr("127.0.0.1"),
+		listeners,
+	)
 	if err != nil {
 		t.Fatalf("NewDNSManagedConfigProjector() error = %v", err)
 	}
@@ -73,4 +92,21 @@ func TestRegisteredCoreDNSManagedConfigProjectorUsesCompiledRenderer(t *testing.
 		!strings.Contains(files[0].Rendered, "forward . 1.1.1.1") {
 		t.Fatalf("ProjectManagedConfigFiles() = %#v", files)
 	}
+}
+
+func (registeredCoreDNSPreviewRecords) ResolveZoneDNSCandidates(
+	context.Context,
+	int64,
+) ([]zonedns.Candidate, []testkeyvalue.Condition, error) {
+	return nil, nil, nil
+}
+
+func (registeredCoreDNSPreviewRecords) Capture(
+	_ context.Context,
+	candidates []zonedns.Candidate,
+) ([]netip.Addr, error) {
+	if len(candidates) != 0 {
+		return nil, errs.New(errs.KindInternal, "preview fixture has no Zone DNS networks")
+	}
+	return nil, nil
 }

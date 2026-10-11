@@ -8,6 +8,7 @@ export type ServicePatch = {
   zones: string[];
   strategy: Service["strategy"];
   onFailure: "switch_back" | "leave_active";
+  rollingReplicaTimeoutSeconds?: number;
   healthcheck: Service["healthcheck"];
   resources: { mem: string; cpus: string };
   expose: string[];

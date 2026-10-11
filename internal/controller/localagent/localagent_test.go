@@ -5,6 +5,8 @@ import (
 	base64 "encoding/base64"
 	json "encoding/json"
 	errors "errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	strings "strings"
 	sync "sync"
 	testing "testing"
@@ -303,6 +305,7 @@ func TestHealthRequiresCurrentNonStaleReadyGeneration(t *testing.T) {
 		Online:     true,
 		LastReady:  testNow,
 		Capacity:   2,
+		Version:    "test",
 	}
 	harness.sessions.hasSnapshot = true
 	health, err := harness.manager.Health(context.Background(), testAgentID)
@@ -560,8 +563,10 @@ func seededRepository(trace *traceLog, phase Phase) *fakeRepository {
 	credential := testCredential()
 	request := testRequest(testAgentID)
 	readyAt := time.Time{}
+	build := buildversion.BuildIdentity{}
 	if phase != PhaseProvisioning {
 		readyAt = testNow
+		build.Version = "test"
 	}
 	if phase == PhaseDeleting {
 		credential.Digest = ""
@@ -580,6 +585,7 @@ func seededRepository(trace *traceLog, phase Phase) *fakeRepository {
 				Credential:       credential,
 				CreatedAt:        testNow,
 				ReadyAt:          readyAt,
+				Build:            build,
 			},
 			Revision: 1,
 		},
@@ -599,6 +605,7 @@ func (repository *fakeRepository) BeginReplacement(
 	current StoredRecord,
 	image string,
 	credential Credential,
+	failure *taskprogress.Failure,
 	_ time.Time,
 ) (StoredRecord, error) {
 	if err := ctx.Err(); err != nil {
@@ -611,6 +618,7 @@ func (repository *fakeRepository) BeginReplacement(
 		repository.record.Record.Phase != current.Record.Phase {
 		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
 	}
+	repository.record.Record.ReplacementFailure = taskprogress.CloneFailure(failure)
 	repository.record.Record.Image = image
 	repository.record.Record.Generation++
 	repository.record.Record.Phase = PhaseUpdating
@@ -627,6 +635,7 @@ func (repository *fakeRepository) MarkReplacementReady(
 	id string,
 	generation uint64,
 	revision int64,
+	build buildversion.BuildIdentity,
 ) (StoredRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return StoredRecord{}, err
@@ -637,8 +646,28 @@ func (repository *fakeRepository) MarkReplacementReady(
 	if !repository.matches(id, generation, revision) || repository.record.Record.Phase != PhaseUpdating {
 		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
 	}
+	repository.record.Record.Build = build
 	repository.record.Record.Phase = PhaseReady
 	repository.record.Revision++
+	return cloneStored(repository.record), nil
+}
+
+func (repository *fakeRepository) RecordReplacementFailure(ctx context.Context,
+	current StoredRecord, failure *taskprogress.Failure,
+) (StoredRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return StoredRecord{}, err
+	}
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if !repository.matches(current.Record.ID, current.Record.Generation, current.Revision) ||
+		repository.record.Record.Phase != current.Record.Phase {
+		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
+	}
+	if repository.record.Record.ReplacementFailure == nil {
+		repository.record.Record.ReplacementFailure = taskprogress.CloneFailure(failure)
+		repository.record.Revision++
+	}
 	return cloneStored(repository.record), nil
 }
 
@@ -701,6 +730,7 @@ func (repository *fakeRepository) MarkReady(
 	generation uint64,
 	revision int64,
 	readyAt time.Time,
+	build buildversion.BuildIdentity,
 ) (StoredRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return StoredRecord{}, err
@@ -711,6 +741,7 @@ func (repository *fakeRepository) MarkReady(
 	if !repository.matches(id, generation, revision) || repository.record.Record.Phase != PhaseProvisioning {
 		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
 	}
+	repository.record.Record.Build = build
 	repository.record.Record.Phase = PhaseReady
 	repository.record.Record.ReadyAt = readyAt
 	repository.record.Revision++

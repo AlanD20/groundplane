@@ -41,7 +41,7 @@ func (resolver *TaskPlanResolver) PrepareReleaseTask(
 	}
 	prepared := task
 	prepared.RenderGeneration = int32(input.Members[0].Render.Projection.RenderGeneration)
-	if prepared.RenderGeneration <= 0 || len(prepared.Steps) < len(input.Members)*5 {
+	if prepared.RenderGeneration <= 0 {
 		return etcd.TaskRecord{}, nil, errs.New(errs.KindValidationFailed, "release Task procedure is invalid")
 	}
 	plan, err := resolver.buildReleasePlan(ctx, prepared, input)
@@ -49,7 +49,7 @@ func (resolver *TaskPlanResolver) PrepareReleaseTask(
 		return etcd.TaskRecord{}, nil, err
 	}
 	prepared.PlanHash = hex.EncodeToString(plan.PlanHash)
-	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan.Steps)
+	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan)
 	return prepared, plan, nil
 }
 
@@ -81,9 +81,12 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	task etcd.TaskRecord,
 	input etcd.ReleaseTaskRenderInput,
 ) (*agentpb.ExecutionPlan, error) {
-	if task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(input.Members) == 0 ||
-		len(task.Steps) < len(input.Members)*5 {
+	if task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(input.Members) == 0 {
 		return nil, errs.New(errs.KindInternal, "durable release Task shape is invalid")
+	}
+	layouts, baseCount, err := ordinaryReleaseStepLayouts(task.Steps, input.Members)
+	if err != nil {
+		return nil, err
 	}
 	first := input.Members[0].Render
 	expectedPhase := core.ServiceLifecycleDeploy
@@ -118,13 +121,25 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			return nil, errs.New(errs.KindInternal, "ordinary release predecessor authority is partial")
 		}
 		images[member.Render.ServiceName] = member.Render.CandidateWorkload
+		initialProxy, err := capturedInitialProxyConfig(member)
+		if err != nil {
+			return nil, err
+		}
 		labels[member.Render.ServiceID] = composerender.ComposeReleaseIdentity{
-			ProxyAddresses: member.Render.ProxyAddresses,
-			ProxyImage:     member.Render.ProxyImage,
-			ReleaseID:      member.Render.ReleaseID, Target: member.Render.CandidateTarget, Image: member.Render.CandidateWorkload.LocalImageID,
+			ProxyAddresses:      member.Render.ProxyAddresses,
+			ProxyImage:          member.Render.ProxyImage,
+			ProxyImplementation: member.Render.ProxyImplementation,
+			ReleaseID:           member.Render.ReleaseID, Target: member.Render.CandidateTarget, Image: member.Render.CandidateWorkload.LocalImageID,
 			ServingReleaseID:       member.Intent.PriorServingReleaseID,
 			ServingTarget:          member.Render.PriorTarget,
 			ServingProxyGeneration: member.Render.PriorProxyGeneration, Strategy: member.Render.Strategy,
+			Rolling:            member.Render.Rolling,
+			ServingProxyConfig: initialProxy,
+		}
+		if member.Render.Rolling != nil {
+			identity := labels[member.Render.ServiceID]
+			identity.Target = ""
+			labels[member.Render.ServiceID] = identity
 		}
 		if member.Render.Strategy == domain.StrategyRecreate {
 			// Recreate applies the proxy with the candidate workload; unlike
@@ -223,9 +238,19 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	if task.Type == taskjournal.TaskRollback {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
 	}
-	steps, err := buildReleaseMemberSteps(task, input, priorArtifacts)
-	if err != nil {
-		return nil, err
+	steps := []*agentpb.ExecutionStep{}
+	memberProcedures := make([]releaseMemberProcedure, len(input.Members))
+	for index, member := range input.Members {
+		procedure, err := buildReleaseMemberProcedure(task, input, member, layouts[index], artifacts, priorArtifacts)
+		if err != nil {
+			return nil, err
+		}
+		if index > 0 {
+			prior := layouts[index-1].Forward
+			procedure.Steps[0].PrerequisiteStepId = prior[len(prior)-1]
+		}
+		memberProcedures[index] = procedure
+		steps = append(steps, procedure.Steps...)
 	}
 	totalPre, totalPost, totalFailure := 0, 0, 0
 	for _, member := range input.Members {
@@ -240,7 +265,6 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			}
 		}
 	}
-	baseCount := len(input.Members) * 5
 	if len(task.Steps) != baseCount+totalPre+totalPost+totalFailure {
 		return nil, errs.New(errs.KindInternal, "release hook Task steps do not match selection")
 	}
@@ -276,11 +300,15 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		if task.Type == taskjournal.TaskRollback {
 			hookOperation = domain.OperationRollback
 		}
+		anchor, err := releasePostHookIndex(member.Render)
+		if err != nil {
+			return nil, err
+		}
 		hooks, err := BuildReleaseHookPlan(ReleaseHookPlanInput{
 			Operation: hookOperation, CandidateReleaseID: member.Intent.ID,
 			FailureReleaseID:     domain.FailureHookTargetReleaseID(member.Intent),
-			PostHookAnchorStepID: releasePostHookAnchorStepID(task, memberIndex, member.Render.Strategy),
-			CompensationStepID:   task.Steps[memberIndex*5+4].ID,
+			PostHookAnchorStepID: layouts[memberIndex].Forward[anchor],
+			CompensationStepID:   layouts[memberIndex].Compensate,
 			PreStepIDs:           preIDs, PostStepIDs: postIDs, FailureStepIDs: failureIDs,
 			Hooks: member.Render.Hooks,
 		})
@@ -314,20 +342,21 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		}
 	}
 	for index, member := range input.Members {
-		base := index * 5
+		layout := layouts[index]
 		procedureMember := executionplan.CandidateReleaseMemberInput{
 			ServiceID: member.Render.ServiceID, CandidateReleaseID: member.Intent.ID,
 			CandidateArtifactID: first.ArtifactID,
-			ForwardStepIDs:      []string{task.Steps[base].ID, task.Steps[base+1].ID, task.Steps[base+2].ID},
+			ForwardStepIDs:      layout.Forward,
+			Rolling:             memberProcedures[index].Rolling,
 		}
 		if member.Intent.PriorServingReleaseID == "" {
 			procedureMember.CandidateAbsence = &executionplan.CandidateAbsenceInput{
 				ComposeProjectName: artifact.GetProjectName(), Services: candidateServices,
-				ProbeStepID: task.Steps[base+3].ID, CompensateStepID: task.Steps[base+4].ID,
+				ProbeStepID: layout.Probe, CompensateStepID: layout.Compensate,
 			}
 		} else {
 			procedureMember.ServingPredecessor = &executionplan.ServingPredecessorInput{
-				ProbeStepID: task.Steps[base+3].ID, CompensateStepID: task.Steps[base+4].ID,
+				ProbeStepID: layout.Probe, CompensateStepID: layout.Compensate,
 				PriorArtifactID: member.Render.PriorArtifactID,
 				PriorReleaseID:  member.Intent.PriorServingReleaseID,
 				PriorTarget:     string(member.Render.PriorTarget),
@@ -355,14 +384,6 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		ScriptRunnerSnapshots: snapshots, ScriptRunnerProjections: projections,
 		ScriptBodyArtifacts: bodies, Steps: steps, CandidateReleaseProcedure: procedure,
 	})
-}
-
-func releasePostHookAnchorStepID(task etcd.TaskRecord, memberIndex int, strategy domain.Strategy) string {
-	offset := 0
-	if strategy == domain.StrategyRecreate {
-		offset = 1
-	}
-	return task.Steps[memberIndex*5+offset].ID
 }
 
 // releaseWorkloadProjection narrows a Service release to durable workload

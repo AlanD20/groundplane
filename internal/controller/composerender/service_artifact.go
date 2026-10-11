@@ -51,10 +51,11 @@ type ServiceArtifactSettingsMutation struct {
 }
 
 type ServiceArtifactZone struct {
-	ID       string
-	Name     string
-	Subnet   string
-	Internal bool
+	ID         string
+	Name       string
+	Subnet     string
+	Internal   bool
+	AllowGPDNS bool
 }
 
 func MutateEnvironmentServiceArtifact(
@@ -345,6 +346,9 @@ func ensureServiceZoneNetworks(
 			setMappingTypedScalar(network, "internal", "!!bool", "true")
 		} else {
 			RemoveMappingValue(network, "internal")
+		}
+		if zone.AllowGPDNS {
+			setMappingTypedScalar(network, "x-gp-allow-dns", "!!bool", "true")
 		}
 		config := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		AppendMappingValue(config, "subnet", scalarNode(zone.Subnet))

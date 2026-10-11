@@ -22,6 +22,8 @@ func newComponentCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "component", Short: "Manage environment- and platform-owned components"}
 	var platform bool
 	cmd.PersistentFlags().BoolVar(&platform, "platform", false, "target platform-owned components")
+	cmd.AddCommand(newComponentDNSCheckCmd(), newComponentDNSCheckResultCmd())
+	cmd.AddCommand(newComponentTunnelCheckCmd(), newComponentTunnelCheckResultCmd())
 	cmd.AddCommand(
 		&cobra.Command{
 			Use:   "list",
@@ -126,8 +128,12 @@ func newComponentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if componentAlias && component.Kind != "caddy" {
-				return fmt.Errorf("--alias is valid only for Caddy")
+			component, err = componentProxySelection(cmd, component)
+			if err != nil {
+				return err
+			}
+			if componentAlias && component.Kind != "caddy" && component.Kind != "envoy" {
+				return fmt.Errorf("--alias is valid only for Caddy or Envoy")
 			}
 			if componentZone && component.EnvironmentID == "" {
 				return fmt.Errorf("zone placement requires an environment-owned Component")
@@ -168,8 +174,17 @@ func newComponentCmd() *cobra.Command {
 				}
 				coreDNS.CorefileTemplate = &value
 				body.CoreDNS = &coreDNS
-			} else if componentFile || componentZone || componentAlias {
-				if component.Kind == "caddy" {
+			} else if componentFile || componentZone || componentAlias || cmd.Flags().Changed("implementation") {
+				if component.Kind == "envoy" {
+					if flagConfig {
+						return fmt.Errorf("envoy config accepts only --file, --zone and --alias")
+					}
+					input, err := componentEnvoyConfig(cmd, component, configFile, zoneIDs)
+					if err != nil {
+						return err
+					}
+					body = *input
+				} else if component.Kind == "caddy" {
 					if flagConfig {
 						return fmt.Errorf("config for Caddy accepts only --file and --zone")
 					}
@@ -283,6 +298,7 @@ func newComponentCmd() *cobra.Command {
 		BoolVar(&upstreamAuto, "upstream-auto", false, "derive upstream resolvers from the authoritative host baseline")
 	set.Flags().StringArrayVar(&upstreamResolvers, "upstream", nil, "repeatable upstream resolver endpoint")
 	set.Flags().StringArrayVar(&forwarders, "forward", nil, "repeatable DOMAIN=RESOLVER[,RESOLVER...]")
+	set.Flags().String("implementation", "", "select caddy (HTTP) or envoy (HTTP/TCP/UDP) for the Environment router")
 	set.Flags().BoolVar(&tailnetDelegation, "tailnet-delegation", false, "delegate ts.net to the tailnet resolver")
 	set.Flags().
 		StringVar(&configFile, "file", "", "read a Caddyfile template (Caddy) or complete JSON config (other kinds) from PATH, or -")
@@ -317,12 +333,23 @@ func renderComponent(cmd *cobra.Command, component apiTypes.Component) error {
 }
 
 func componentFields(component apiTypes.Component) map[string]any {
-	return map[string]any{
+	fields := map[string]any{
 		"id": component.ID, "owner": component.Owner, "owner_id": component.OwnerID,
 		"environment_id": component.EnvironmentID, "kind": component.Kind, "enabled": component.Enabled,
 		"config": component.Config, "generated_services": component.GeneratedServices,
 		"pinned_ipv4": component.PinnedIPv4, "healthy": component.Healthy, "status": component.Status,
 	}
+	if software := component.Software; software != nil {
+		fields["installed_image"] = software.Image
+		fields["image_config_digest"] = software.ConfigDigest
+		fields["selected_tag"] = software.SelectedTag
+		fields["version"] = software.Version
+		if software.Source.Known() {
+			fields["source_kind"] = software.Source.Kind
+			fields["source_commit"] = software.Source.Commit
+		}
+	}
+	return fields
 }
 
 func parseCoreDNSForwardFlags(values []string) ([]apiTypes.ComponentDNSForwarder, error) {

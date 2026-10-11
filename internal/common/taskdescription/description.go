@@ -95,6 +95,11 @@ func Describe(step *agentpb.ExecutionStep) Description {
 			payload.ManagedNetworkRemove.GetNetworkId(),
 		)
 	case *agentpb.ExecutionStep_ComposeWorkloadApply:
+		if ordinal := payload.ComposeWorkloadApply.GetRollingReplicaOrdinal(); ordinal != 0 {
+			return projected(description, fmt.Sprintf("Start replica %d", ordinal),
+				"Start this candidate replica from its captured image and configuration without starting dependencies.",
+				payload.ComposeWorkloadApply.GetServiceId())
+		}
 		return projected(
 			description,
 			"Start workload containers",
@@ -102,12 +107,37 @@ func Describe(step *agentpb.ExecutionStep) Description {
 			payload.ComposeWorkloadApply.GetServiceId(),
 		)
 	case *agentpb.ExecutionStep_WaitWorkloadHealthy:
+		if ordinal := payload.WaitWorkloadHealthy.GetRollingReplicaOrdinal(); ordinal != 0 {
+			return projected(description, fmt.Sprintf("Wait for replica %d health", ordinal),
+				"Wait for this replica's configured healthcheck to pass before admitting traffic.",
+				payload.WaitWorkloadHealthy.GetServiceId())
+		}
 		return projected(
 			description,
 			"Wait for workload health",
 			"Wait for the candidate workload of the selected Service to pass its configured health check.",
 			payload.WaitWorkloadHealthy.GetServiceId(),
 		)
+	case *agentpb.ExecutionStep_ComposeWorkloadRemove:
+		action := "Retire workload replica"
+		if ordinal := payload.ComposeWorkloadRemove.GetRollingReplicaOrdinal(); ordinal != 0 {
+			action = fmt.Sprintf("Retire replica %d", ordinal)
+		}
+		return projected(description, action,
+			"Remove the selected predecessor replica after traffic withdrawal and draining; keep the Service proxy, other replicas and stored data.",
+			payload.ComposeWorkloadRemove.GetServiceId())
+	case *agentpb.ExecutionStep_RollingTrafficSwitch:
+		return projected(description, fmt.Sprintf("Update traffic for replica change %d", payload.RollingTrafficSwitch.GetChangeOrdinal()),
+			"Verify the ready replica set and switch the stable proxy to those replicas. Portless workers only verify readiness.",
+			payload.RollingTrafficSwitch.GetServiceId())
+	case *agentpb.ExecutionStep_RollingReplicaDrain:
+		return projected(description, fmt.Sprintf("Drain replica change %d", payload.RollingReplicaDrain.GetChangeOrdinal()),
+			"Allow existing connections to finish before removing the old replica, within the saved replica deadline.",
+			payload.RollingReplicaDrain.GetServiceId())
+	case *agentpb.ExecutionStep_RollingReleaseAcknowledge:
+		return projected(description, "Verify completed rolling deployment",
+			"Verify the final replicas, withdrawn predecessors and stable proxy before recording the new serving runtime.",
+			payload.RollingReleaseAcknowledge.GetServiceId())
 	case *agentpb.ExecutionStep_ServiceProxySwitch:
 		return projected(
 			description,
@@ -227,6 +257,11 @@ func Describe(step *agentpb.ExecutionStep) Description {
 			"Prepare the managed network for the selected Zone.",
 			payload.ManagedNetworkEnsure.GetNetworkId(),
 		)
+	case *agentpb.ExecutionStep_ManagedNetworkPreparationProbe:
+		return projected(description,
+			"Check prepared Zone network",
+			"Read Docker state to verify that the captured Zone network is absent or matches its saved ownership and configuration; do not change containers or networks.",
+			payload.ManagedNetworkPreparationProbe.GetNetworkId())
 	case *agentpb.ExecutionStep_ManagedVolumeEnsure:
 		return projected(
 			description,

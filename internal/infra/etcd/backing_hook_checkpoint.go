@@ -31,17 +31,31 @@ func (repository *AttachRepository) CheckpointBackingHook(
 			return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
 		}
 		if anchor.current != nil {
+			if input.State == backinghooks.CheckpointStarted && input.Event == "detach" &&
+				anchor.current.Event == input.Event && anchor.current.State == backinghooks.CheckpointResult &&
+				anchor.current.TaskID == input.TaskID && anchor.current.OperationID == input.OperationID &&
+				anchor.current.AssignmentID == input.AssignmentID && anchor.current.PlanHash == input.PlanHash &&
+				anchor.current.StepID == input.StepID && anchor.current.AttachID == input.AttachID &&
+				anchor.current.ExecutionEpoch <= input.ExecutionEpoch {
+				return etcdstore.Versioned[backinghooks.CheckpointRecord]{Record: *anchor.current,
+					Revision: anchor.checkpointRevision, ReadRevision: anchor.readRevision}, true, nil
+			}
 			if backinghooks.SameCheckpoint(*anchor.current, input) {
 				return etcdstore.Versioned[backinghooks.CheckpointRecord]{
 					Record: *anchor.current, Revision: anchor.checkpointRevision, ReadRevision: anchor.readRevision,
 				}, true, nil
 			}
-			if input.State != backinghooks.CheckpointResult || anchor.current.State != backinghooks.CheckpointStarted {
+			if !anchor.authorizedRetry &&
+				(input.State != backinghooks.CheckpointResult || anchor.current.State != backinghooks.CheckpointStarted) {
 				return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false,
 					errs.New(errs.KindStateConflict, "Backing hook checkpoint already exists with different evidence")
 			}
 		}
-		next, err := backinghooks.AdvanceCheckpoint(anchor.current, input)
+		previous := anchor.current
+		if anchor.authorizedRetry {
+			previous = nil
+		}
+		next, err := backinghooks.AdvanceCheckpoint(previous, input)
 		if err != nil {
 			return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
 		}
@@ -49,9 +63,29 @@ func (repository *AttachRepository) CheckpointBackingHook(
 		if err != nil {
 			return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
 		}
-		transaction, err := repository.store.Transact(ctx, anchor.conditions, []etcdstore.Mutation{{
+		mutations := []etcdstore.Mutation{{
 			Type: etcdstore.MutationPut, Key: backinghooks.CheckpointKey(input.TaskID, input.StepID), Value: value,
-		}})
+		}}
+		var archived []byte
+		if anchor.authorizedRetry {
+			archived, err = recordcodec.Encode("backing-hook-checkpoint", *anchor.current)
+			if err != nil {
+				clear(value)
+				return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
+			}
+			archiveKey := backinghooks.AttemptKey(*anchor.current)
+			anchor.conditions = append(anchor.conditions, etcdstore.Condition{Key: archiveKey})
+			mutations = append(
+				mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: archiveKey, Value: archived},
+				etcdstore.Mutation{
+					Type: etcdstore.MutationDelete,
+					Key:  backinghooks.RetryAuthorizationKey(input.TaskID, input.StepID),
+				},
+			)
+		}
+		transaction, err := repository.store.Transact(ctx, anchor.conditions, mutations)
+		clear(archived)
 		clear(value)
 		etcdstore.ClearValues(transaction.FailureReads)
 		if err != nil {
@@ -68,6 +102,7 @@ func (repository *AttachRepository) CheckpointBackingHook(
 }
 
 type backingHookCheckpointAnchor struct {
+	authorizedRetry    bool
 	current            *backinghooks.CheckpointRecord
 	checkpointRevision int64
 	readRevision       int64
@@ -152,5 +187,29 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		anchor.conditions,
 		etcdstore.Condition{Key: checkpointKey, ModRevision: primary.Values[2].ModRevision},
 	)
+	if input.State == backinghooks.CheckpointStarted && input.Event == "detach" &&
+		assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly &&
+		assignment.AttachRemovalAuthoritySHA256 != "" {
+		key := backinghooks.RetryAuthorizationKey(input.TaskID, input.StepID)
+		read, readErr := repository.store.GetMany(
+			ctx,
+			etcdstore.GetManyRequest{Keys: []string{key}, Revision: primary.ReadRevision},
+		)
+		if readErr != nil {
+			return backingHookCheckpointAnchor{}, readErr
+		}
+		if read == nil || read.ReadRevision != primary.ReadRevision || len(read.Values) != 1 {
+			return backingHookCheckpointAnchor{}, errs.New(
+				errs.KindInternal,
+				"Detach hook retry authorization read is incomplete",
+			)
+		}
+		defer etcdstore.ClearValues(read.Values)
+		if value := read.Values[0]; value != nil &&
+			backinghooks.AllowsRetry(value.Value, record, anchor.checkpointRevision, input) {
+			anchor.authorizedRetry = true
+			anchor.conditions = append(anchor.conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
+		}
+	}
 	return anchor, nil
 }

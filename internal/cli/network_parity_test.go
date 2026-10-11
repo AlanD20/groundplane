@@ -27,7 +27,7 @@ func TestZoneAddUsesCanonicalCreateOperation(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/v1/zones",
-		`{"environment_id":"`+c07EnvironmentID+`","internal":true,"name":"frontend","subnet":"10.40.1.0/24"}`,
+		`{"allow_gp_dns":false,"environment_id":"`+c07EnvironmentID+`","internal":true,"name":"frontend","subnet":"10.40.1.0/24"}`,
 		http.StatusCreated,
 		`{"id":"`+c07ZoneID+`","environment_id":"`+c07EnvironmentID+`","name":"frontend","subnet":"10.40.1.0/24","internal":true,"owner_kind":"environment","owner_id":"`+c07EnvironmentID+`"}`,
 	)

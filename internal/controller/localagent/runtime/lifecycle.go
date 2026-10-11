@@ -43,6 +43,7 @@ func (adapter *localAgentSessionsAdapter) Snapshot(agentID string) (localagent.S
 		LastReady:  snapshot.LastReady,
 		Capacity:   snapshot.Capacity,
 		Version:    snapshot.Version,
+		Source:     snapshot.Source,
 	}, true
 }
 

@@ -121,6 +121,30 @@ func (service *Service) TrySettleDisabledComponent(
 	if !identityFound {
 		return false, errs.New(errs.KindStateConflict, "Blueprint Component identity changed")
 	}
+	if record.Desired.Kind != spec.Implementation {
+		selection.ProxyAuthority, err = service.prepareDisabledProxyServiceCapture(
+			ctx,
+			parent,
+			snapshot,
+			source,
+			*current,
+			spec.Implementation,
+		)
+		if err != nil {
+			return false, err
+		}
+		selection.ProxyAuthority, err = service.prepareDisabledProxyRollouts(
+			ctx,
+			parent,
+			snapshot,
+			source,
+			effective,
+			selection.ProxyAuthority,
+		)
+		if err != nil {
+			return false, err
+		}
+	}
 	if err := settler.SettleBlueprintDisabledComponent(ctx, parent, unit, selection); err != nil {
 		return false, err
 	}

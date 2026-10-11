@@ -162,6 +162,21 @@ func (store *backingCreationStore) TransactEnvironmentBlueprint(
 	return store.Transact(ctx, conditions, mutations)
 }
 
+func (store *backingCreationStore) TransactBlueprintChild(
+	ctx context.Context, envelope etcd.BlueprintChildTransaction,
+) (testkeyvalue.TransactionResult, error) {
+	conditions, mutations, err := envelope.Operations()
+	if err != nil {
+		return testkeyvalue.TransactionResult{}, err
+	}
+	defer func() {
+		for _, mutation := range mutations {
+			clear(mutation.Value)
+		}
+	}()
+	return store.Transact(ctx, conditions, mutations)
+}
+
 func (store *backingCreationStore) TransactBackingService(
 	ctx context.Context,
 	conditions []testkeyvalue.Condition,

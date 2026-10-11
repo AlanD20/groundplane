@@ -2,6 +2,7 @@ package localagent
 
 import (
 	"context"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -54,6 +55,7 @@ type Agent struct {
 	ID               string
 	EnrollmentTaskID string
 	Image            string
+	Build            buildversion.BuildIdentity
 	Generation       uint64
 	Phase            Phase
 	Config           Config
@@ -70,6 +72,7 @@ type Health struct {
 	StaleAfter time.Time
 	Capacity   int32
 	Version    string
+	Source     buildversion.BuildProvenance
 }
 
 // New validates and constructs the local Agent lifecycle module.

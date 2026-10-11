@@ -26,14 +26,16 @@ const (
 	ContainerName = "groundplane-etcd"
 	DataDirectory = "/var/lib/groundplane/etcd"
 	Image         = "gcr.io/etcd-development/etcd@sha256:a491baeaa0cb0c9cd89c0062ac44ece53886e3e5bddad18d2daf36678ce665b6"
+	imageTag      = "v3.6.14"
 
 	dockerHost        = "unix:///var/run/docker.sock"
 	endpoint          = "127.0.0.1:2379"
 	reconcileInterval = 2 * time.Second
 	startupTimeout    = 30 * time.Second
 
-	labelManaged = "com.groundplane.managed"
-	labelKind    = "com.groundplane.kind"
+	labelManaged          = "com.groundplane.managed"
+	labelKind             = "com.groundplane.kind"
+	labelImageSelectedTag = "com.groundplane.image-selected-tag"
 )
 
 var command = []string{
@@ -58,6 +60,7 @@ type engineClient interface {
 	ContainerStop(context.Context, string, client.ContainerStopOptions) (client.ContainerStopResult, error)
 	ContainerRemove(context.Context, string, client.ContainerRemoveOptions) (client.ContainerRemoveResult, error)
 	ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error)
+	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
 	Close() error
 }
 
@@ -220,8 +223,9 @@ func createOptions(cfg config.EtcdConfig) client.ContainerCreateOptions {
 			Entrypoint: []string{"/usr/local/bin/etcd"},
 			Cmd:        append(append([]string(nil), command...), cfg.Arguments()...),
 			Labels: map[string]string{
-				labelManaged: "true",
-				labelKind:    "etcd",
+				labelManaged:          "true",
+				labelKind:             "etcd",
+				labelImageSelectedTag: imageTag,
 			},
 		},
 		HostConfig: &container.HostConfig{

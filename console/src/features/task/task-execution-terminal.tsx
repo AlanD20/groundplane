@@ -4,7 +4,12 @@ import type { ActivityEntry, TaskStep } from "@/lib/types";
 import { ChevronDown, Terminal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { parseTaskEvent, type TaskEventResponse } from "./journal-model";
-import { TaskExecutionSummary, taskDuration } from "./task-execution-summary";
+import { TaskExecutionSummary } from "./task-execution-summary";
+import { TaskFailureDetails } from "./task-failure-details";
+import { TaskAttemptHistory } from "./task-attempt-history";
+import { TaskConfiguredHealthchecks } from "./task-configured-healthchecks";
+import { taskDuration } from "./task-duration";
+import { TaskReadinessDetails, readinessSummary } from "./task-readiness";
 
 type StreamState =
   "connecting" | "live" | "reconnecting" | "history" | "unavailable";
@@ -94,7 +99,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
           <span>Recorded execution</span>
           <span>
-            {events.length} {events.length === 1 ? "transition" : "transitions"}
+            {events.length} {events.length === 1 ? "event" : "events"}
           </span>
         </div>
         <div
@@ -121,7 +126,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
               · Task {task.status.replaceAll("_", " ")}
               {task.status === "pending"
                 ? " · waiting for an executor"
-                : " · no retained step transitions"}
+                : " · no retained execution events"}
             </p>
           )}
           {(events[0]?.sequence ?? 1) > 1 && (
@@ -133,7 +138,8 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
             const step = steps.find(
               (candidate) => candidate.label === event.step_id,
             );
-            const name = step?.action || "Action not recorded";
+            const name =
+              event.controller_operation?.name || step?.action || "Action not recorded";
             return (
               <div
                 key={event.sequence}
@@ -151,7 +157,20 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
                 </span>
                 <span className="col-span-2 min-w-0 break-words [overflow-wrap:anywhere] sm:col-span-1">
                   {name}
+                  {event.health_wait && (
+                    <span className="block text-slate-400">
+                      {readinessSummary(event.health_wait)}
+                    </span>
+                  )}
                   {event.attempt > 1 ? ` | attempt ${event.attempt}` : ""}
+                  {event.failure && (
+                    <span className="block text-rose-300">
+                      {event.failure.summary}
+                      {event.failure.exit_code !== undefined
+                        ? ` (exit ${event.failure.exit_code})`
+                        : ""}
+                    </span>
+                  )}
                 </span>
               </div>
             );
@@ -169,7 +188,8 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
         </div>
       </div>
 
-      <Disclosure
+      {task.attemptHistory && <TaskAttemptHistory task={task} history={task.attemptHistory} />}
+      {steps.length > 0 && <Disclosure
         summary={`Execution stages · ${steps.length}`}
         className="rounded-lg border border-border"
         summaryClassName="p-3 text-sm font-medium"
@@ -195,7 +215,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
             </p>
           )}
         </div>
-      </Disclosure>
+      </Disclosure>}
     </section>
   );
 }
@@ -209,8 +229,17 @@ function TaskStepDetails({
   step: TaskStep;
   events: TaskEventResponse[];
 }) {
-  const latest = events.at(-1);
+  const latest = events.reduce<TaskEventResponse | undefined>(
+    (current, event) =>
+      !current ||
+      event.attempt > current.attempt ||
+      (event.attempt === current.attempt && event.ordinal > current.ordinal)
+        ? event
+        : current,
+    undefined,
+  );
   const state = latest?.state ?? stepState(step);
+  const failure = latest ? latest.failure : step.failure;
   const [expanded, setExpanded] = useState(false);
   const lastEventAt = latest?.received_at;
   const highestAttempt = events.reduce(
@@ -224,7 +253,7 @@ function TaskStepDetails({
     .filter(
       (event) => event.attempt === latest?.attempt && event.state === "running",
     )
-    .at(-1);
+    .at(0);
   const ended =
     latest && terminalStatuses.includes(latest.state) ? latest : undefined;
   const interval =
@@ -273,6 +302,20 @@ function TaskStepDetails({
         <p className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
           {description}
         </p>
+        {step.healthWait && (
+          <TaskReadinessDetails
+            value={step.healthWait}
+            receivedAt={step.healthWaitReceivedAt}
+          />
+        )}
+        <TaskConfiguredHealthchecks checks={step.healthchecks} />
+        {failure && failureStates.includes(state) && (
+          <TaskFailureDetails
+            failure={failure}
+            steps={[step]}
+            label="Recorded failure"
+          />
+        )}
         <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
           <StepDatum label="Action" value={step.action || "Not recorded"} />
           <StepDatum label="Target" value={step.target || "Not recorded"} />
@@ -316,7 +359,7 @@ function TaskStepDetails({
         </dl>
         {events.length ? (
           <div className="space-y-2">
-            <p className="text-xs font-medium">Retained transitions</p>
+            <p className="text-xs font-medium">Retained events</p>
             <ol className="space-y-1 text-xs text-muted-foreground">
               {events.map((event) => (
                 <li
@@ -328,6 +371,16 @@ function TaskStepDetails({
                   </time>
                   <span>· {eventStateLabel(event.state)}</span>
                   <span>· attempt {event.attempt}</span>
+                  {event.failure && (
+                    <span className="basis-full text-destructive">
+                      {event.failure.summary}
+                    </span>
+                  )}
+                  {event.health_wait && (
+                    <span className="basis-full">
+                      {readinessSummary(event.health_wait)}
+                    </span>
+                  )}
                 </li>
               ))}
             </ol>

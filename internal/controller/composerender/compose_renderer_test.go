@@ -21,7 +21,9 @@ import (
 func TestRenderComposePortlessRecreateGroupMemberIsSingleton(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 31)
 	project := &composetypes.Project{
-		Services: composetypes.Services{"worker": composetypes.ServiceConfig{Image: "example/worker:previous"}},
+		Services: composetypes.Services{
+			"worker": composetypes.ServiceConfig{Image: "example/worker:previous"},
+		},
 	}
 	input := composeRenderTestInput(project)
 	input.Identities.Services = []composeidentity.Resource{{ID: serviceID, Name: "worker"}}
@@ -53,19 +55,25 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 	serviceID := composeIdentityTestID(ids.KindService, 33)
 	project := &composetypes.Project{
 		Services: composetypes.Services{
-			"api": composetypes.ServiceConfig{Image: "example/api:previous", Expose: []string{"8080"}},
+			"api": composetypes.ServiceConfig{
+				Image:  "example/api:previous",
+				Expose: []string{"8080"},
+			},
 		},
 	}
 	input := composeRenderTestInput(project)
 	input.Identities.Services = []composeidentity.Resource{{ID: serviceID, Name: "api"}}
+	releaseID := composeIdentityTestID(ids.KindDeployment, 34)
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
-		ReleaseID: composeIdentityTestID(
-			ids.KindDeployment,
-			34,
-		), Image: "example/api:next", Strategy: domain.StrategyRecreate,
-		ProxyImage: testServiceProxyImage(),
-		Target:     domain.WorkloadSingleton, ServingTarget: domain.WorkloadBlue,
-		ServingReleaseID: "baseline", ServingProxyGeneration: 1,
+		ProxyImplementation:    testServiceProxyImplementation(),
+		ReleaseID:              releaseID,
+		Image:                  "example/api:next",
+		Strategy:               domain.StrategyRecreate,
+		ProxyImage:             testServiceProxyImage(),
+		Target:                 domain.WorkloadSingleton,
+		ServingTarget:          domain.WorkloadSingleton,
+		ServingReleaseID:       releaseID,
+		ServingProxyGeneration: 1,
 	}}
 	addReservedProxyNetwork(&input, serviceID)
 	artifact, err := RenderCompose(input)
@@ -95,7 +103,11 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 	}
 	wantCommand := []string{"sh", "-ec", serviceproxy.Startup}
 	if !reflect.DeepEqual(rendered.Services["api"].Command, wantCommand) {
-		t.Fatalf("stable proxy command = %#v, want %#v", rendered.Services["api"].Command, wantCommand)
+		t.Fatalf(
+			"stable proxy command = %#v, want %#v",
+			rendered.Services["api"].Command,
+			wantCommand,
+		)
 	}
 	assertReservedProxyNetwork(t, artifact)
 }
@@ -105,15 +117,26 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 func TestRenderComposeSealsBlueGreenWorkloadImages(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 39)
 	project := &composetypes.Project{Services: composetypes.Services{"api": {
-		Image: "example/api:previous", Expose: []string{"8080"}, HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}},
+		Image:  "example/api:previous",
+		Expose: []string{"8080"},
+		HealthCheck: &composetypes.HealthCheckConfig{
+			Test: composetypes.HealthCheckTest{"CMD", "true"},
+		},
 	}}}
 	input := composeRenderTestInput(project)
 	input.Identities.Services = []composeidentity.Resource{{ID: serviceID, Name: "api"}}
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
-		ReleaseID: composeIdentityTestID(ids.KindDeployment, 40), Image: "example/api:next",
-		ProxyImage: testServiceProxyImage(),
-		Strategy:   domain.StrategyBlueGreen, Target: domain.WorkloadBlue,
-		ServingTarget: domain.WorkloadGreen, ServingReleaseID: composeIdentityTestID(ids.KindDeployment, 41),
+		ProxyImplementation: testServiceProxyImplementation(),
+		ReleaseID: composeIdentityTestID(
+			ids.KindDeployment,
+			40,
+		),
+		Image:                  "example/api:next",
+		ProxyImage:             testServiceProxyImage(),
+		Strategy:               domain.StrategyBlueGreen,
+		Target:                 domain.WorkloadBlue,
+		ServingTarget:          domain.WorkloadGreen,
+		ServingReleaseID:       composeIdentityTestID(ids.KindDeployment, 41),
 		ServingProxyGeneration: 1,
 	}}
 	addReservedProxyNetwork(&input, serviceID)
@@ -185,9 +208,11 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 		Name: "authored-name",
 		Services: composetypes.Services{
 			"api": composetypes.ServiceConfig{
-				Image:       "example/api:1",
-				Labels:      composetypes.Labels{"example.owner": "operator"},
-				HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}},
+				Image:  "example/api:1",
+				Labels: composetypes.Labels{"example.owner": "operator"},
+				HealthCheck: &composetypes.HealthCheckConfig{
+					Test: composetypes.HealthCheckTest{"CMD", "true"},
+				},
 			},
 		},
 		DisabledServices: composetypes.Services{
@@ -202,12 +227,17 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 			"shared":   composetypes.NetworkConfig{External: true, Name: "operator-supplied"},
 		},
 		Volumes: composetypes.Volumes{
-			"data": composetypes.VolumeConfig{Labels: composetypes.Labels{"example.storage": "persistent"}},
+			"data": composetypes.VolumeConfig{
+				Labels: composetypes.Labels{"example.storage": "persistent"},
+			},
 		},
 	}
 	input := composeRenderTestInput(project)
 	input.Identities = composeidentity.Snapshot{
-		Services: []composeidentity.Resource{{ID: apiID, Name: "api"}, {ID: workerID, Name: "worker"}},
+		Services: []composeidentity.Resource{
+			{ID: apiID, Name: "api"},
+			{ID: workerID, Name: "worker"},
+		},
 		Networks: []composeidentity.Resource{{ID: networkID, Name: "frontend"}},
 		Volumes:  []composeidentity.Resource{{ID: volumeID, Name: "data"}},
 	}
@@ -220,14 +250,20 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 	if artifact.ProjectName != "gp-"+composeRenderTestEnvironmentIDLower {
 		t.Fatalf("project name = %q, want stable environment-derived name", artifact.ProjectName)
 	}
-	if artifact.OwnerId != composeRenderTestEnvironmentID || artifact.ArtifactId != composeRenderTestArtifactID {
-		t.Fatalf("artifact identity = (%q, %q), want environment and config ids", artifact.OwnerId, artifact.ArtifactId)
+	if artifact.OwnerId != composeRenderTestEnvironmentID ||
+		artifact.ArtifactId != composeRenderTestArtifactID {
+		t.Fatalf(
+			"artifact identity = (%q, %q), want environment and config ids",
+			artifact.OwnerId,
+			artifact.ArtifactId,
+		)
 	}
 	digest := sha256.Sum256(artifact.CanonicalYaml)
 	if !reflect.DeepEqual(artifact.YamlSha256, digest[:]) {
 		t.Fatal("artifact YAML digest does not match canonical YAML")
 	}
-	if len(artifact.Services) != 2 || artifact.Services[0].ServiceId > artifact.Services[1].ServiceId {
+	if len(artifact.Services) != 2 ||
+		artifact.Services[0].ServiceId > artifact.Services[1].ServiceId {
 		t.Fatalf("services are not complete and sorted by stable id: %#v", artifact.Services)
 	}
 	services := make(map[string]renderedServiceProjection, len(artifact.Services))
@@ -239,7 +275,8 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 			Labels:           labelPairMap(service.ExpectedLabels),
 		}
 	}
-	if services["api"].ID != apiID || services["api"].ExpectedReplicas != 1 || !services["api"].HasHealthcheck {
+	if services["api"].ID != apiID || services["api"].ExpectedReplicas != 1 ||
+		!services["api"].HasHealthcheck {
 		t.Fatalf("api artifact projection = %#v", services["api"])
 	}
 	if services["worker"].ID != workerID || services["worker"].ExpectedReplicas != 0 {
@@ -249,7 +286,8 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 	if len(artifact.Networks) != 1 || artifact.Networks[0].DockerName != "gp_net_"+networkID {
 		t.Fatalf("network artifact projection = %#v", artifact.Networks)
 	}
-	if len(artifact.Volumes) != 1 || artifact.Volumes[0].DockerName != "gp_vol_"+strings.ToLower(volumeID) {
+	if len(artifact.Volumes) != 1 ||
+		artifact.Volumes[0].DockerName != "gp_vol_"+strings.ToLower(volumeID) {
 		t.Fatalf("volume artifact projection = %#v", artifact.Volumes)
 	}
 	for kind, labels := range map[string]map[string]string{
@@ -276,21 +314,28 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 		t.Fatalf("rendered document lost project or native service fields: %#v", document)
 	}
 	if !reflect.DeepEqual(document.Services["worker"].Profiles, []string{"batch"}) {
-		t.Fatalf("worker profiles = %#v, want batch profile preserved", document.Services["worker"].Profiles)
+		t.Fatalf(
+			"worker profiles = %#v, want batch profile preserved",
+			document.Services["worker"].Profiles,
+		)
 	}
 	if document.Services["api"].Labels["example.owner"] != "operator" {
 		t.Fatalf("operator label was not preserved: %#v", document.Services["api"].Labels)
 	}
-	if document.Services["api"].Resource.ID != apiID || document.Services["api"].Resource.Kind != "service" {
+	if document.Services["api"].Resource.ID != apiID ||
+		document.Services["api"].Resource.Kind != "service" {
 		t.Fatalf("generated service resource metadata = %#v", document.Services["api"].Resource)
 	}
-	if document.Networks["frontend"].Name != "gp_net_"+networkID || !document.Networks["frontend"].Internal {
+	if document.Networks["frontend"].Name != "gp_net_"+networkID ||
+		!document.Networks["frontend"].Internal {
 		t.Fatalf("rendered network = %#v", document.Networks["frontend"])
 	}
-	if document.Networks["shared"].Name != "gp_net_"+externalNetworkID || !document.Networks["shared"].External {
+	if document.Networks["shared"].Name != "gp_net_"+externalNetworkID ||
+		!document.Networks["shared"].External {
 		t.Fatalf("rendered external network = %#v", document.Networks["shared"])
 	}
-	if len(document.Networks["shared"].Labels) != 0 || document.Networks["shared"].Resource.ID != "" {
+	if len(document.Networks["shared"].Labels) != 0 ||
+		document.Networks["shared"].Resource.ID != "" {
 		t.Fatalf("consumer claimed ownership of external network: %#v", document.Networks["shared"])
 	}
 	volume := document.Volumes["data"]
@@ -364,8 +409,12 @@ func TestRenderComposePersistentResourceLabelsExcludeExecutionIdentity(t *testin
 	input := composeRenderTestInput(project)
 	input.Identities = composeidentity.Snapshot{
 		Services: []composeidentity.Resource{{ID: serviceID, Name: "api"}},
-		Networks: []composeidentity.Resource{{ID: composeIdentityTestID(ids.KindNetwork, 35), Name: "private"}},
-		Volumes:  []composeidentity.Resource{{ID: composeIdentityTestID(ids.KindVolume, 36), Name: "data"}},
+		Networks: []composeidentity.Resource{
+			{ID: composeIdentityTestID(ids.KindNetwork, 35), Name: "private"},
+		},
+		Volumes: []composeidentity.Resource{
+			{ID: composeIdentityTestID(ids.KindVolume, 36), Name: "data"},
+		},
 	}
 
 	artifact, err := RenderCompose(input)
@@ -401,7 +450,9 @@ func TestRenderComposePersistentResourceLabelsExcludeExecutionIdentity(t *testin
 
 // Rationale: renderer input comes from durable Controller records, so incomplete identity coverage is corruption.
 func TestRenderComposeRejectsIdentityCoverageMismatch(t *testing.T) {
-	project := &composetypes.Project{Services: composetypes.Services{"api": composetypes.ServiceConfig{}}}
+	project := &composetypes.Project{
+		Services: composetypes.Services{"api": composetypes.ServiceConfig{}},
+	}
 	_, err := RenderCompose(composeRenderTestInput(project))
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("RenderCompose() error = %v, want %q", err, errs.CodeInternal)
@@ -411,7 +462,9 @@ func TestRenderComposeRejectsIdentityCoverageMismatch(t *testing.T) {
 // Rationale: operator-authored labels cannot occupy the Controller's closed ownership namespace.
 func TestRenderComposeRejectsAuthoredOwnershipLabel(t *testing.T) {
 	project := &composetypes.Project{Services: composetypes.Services{
-		"api": composetypes.ServiceConfig{Labels: composetypes.Labels{"com.groundplane.managed": "false"}},
+		"api": composetypes.ServiceConfig{
+			Labels: composetypes.Labels{"com.groundplane.managed": "false"},
+		},
 	}}
 	input := composeRenderTestInput(project)
 	input.Identities.Services = []composeidentity.Resource{
@@ -441,7 +494,9 @@ func TestRenderComposeRejectsUndefinedResourceContracts(t *testing.T) {
 	cases := map[string]*composetypes.Project{
 		"network ownership extension": {
 			Networks: composetypes.Networks{"shared": composetypes.NetworkConfig{
-				Extensions: composetypes.Extensions{"x-gp-network": map[string]string{"id": "net_pending"}},
+				Extensions: composetypes.Extensions{
+					"x-gp-network": map[string]string{"id": "net_pending"},
+				},
 			}},
 		},
 	}
@@ -459,8 +514,11 @@ func TestRenderComposeRejectsUndefinedResourceContracts(t *testing.T) {
 // not be rewritten as Groundplane-managed local data.
 func TestRenderComposeRejectsUnresolvedVolumeRuntime(t *testing.T) {
 	cases := map[string]composetypes.VolumeConfig{
-		"external":    {External: true},
-		"driver opts": {Driver: "local", DriverOpts: composetypes.Options{"type": "none", "o": "bind"}},
+		"external": {External: true},
+		"driver opts": {
+			Driver:     "local",
+			DriverOpts: composetypes.Options{"type": "none", "o": "bind"},
+		},
 		"custom driver": {
 			Driver: "custom",
 		},

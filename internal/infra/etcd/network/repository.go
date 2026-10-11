@@ -8,6 +8,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -43,6 +44,12 @@ type Repository struct {
 	idempotency *etcd.IdempotencyRepository
 	desired     *desiredrevisionstore.Repository
 	facts       RemovalDatabaseResolver
+}
+
+func (repository *Repository) GetRouteProviderRuntimeAtRevision(
+	ctx context.Context, componentID string, revision int64,
+) (etcdstore.Versioned[componentplanning.Runtime], bool, error) {
+	return repository.routes.GetRouteProviderRuntimeAtRevision(ctx, componentID, revision)
 }
 
 func (repository *Repository) EnableDesiredRevisions(desired *desiredrevisionstore.Repository) error {

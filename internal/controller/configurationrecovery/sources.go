@@ -45,26 +45,13 @@ func (sources *Sources) Prepare(ctx context.Context, task etcd.TaskRecord) (Prep
 	if len(task.Materializations) == 0 {
 		return Prepared{}, nil
 	}
-	if ctx == nil || sources == nil || sources.snapshots == nil || task.Configuration == nil ||
-		task.CreatedAt.IsZero() || ids.Validate(ids.KindTask, task.ID) != nil ||
-		ids.Validate(ids.KindPlan, task.PlanID) != nil || task.RenderGeneration <= 0 {
-		return Prepared{}, errs.New(errs.KindStateConflict, "Task configuration recovery authority is missing")
+	previous, err := sources.priorSnapshot(ctx, task)
+	if err != nil {
+		return Prepared{}, err
 	}
 	configuration := task.Configuration
-	if runtimeconfiguration.ValidateReference(configuration.Current) != nil ||
-		configuration.Current.EnvironmentID != task.Owner.EnvironmentID ||
-		configuration.Current.Generation > uint64(task.RenderGeneration) ||
-		(configuration.Prior == nil) != (configuration.PriorRevision == 0) || configuration.PriorRevision < 0 {
-		return Prepared{}, errs.New(errs.KindStateConflict, "Task configuration recovery authority is inconsistent")
-	}
 	procedure := &agentpb.ConfigurationRestoration{}
-	var previous *runtimeconfiguration.Snapshot
 	if configuration.Prior != nil {
-		retained, err := sources.snapshots.LoadRetained(ctx, *configuration.Prior)
-		if err != nil {
-			return Prepared{}, err
-		}
-		previous = &retained
 		procedure.PriorSnapshotId = configuration.Prior.ID
 		procedure.PriorSnapshotSha256, err = hex.DecodeString(configuration.Prior.SHA256)
 		if err != nil {
@@ -76,24 +63,28 @@ func (sources *Sources) Prepare(ctx context.Context, task etcd.TaskRecord) (Prep
 	if err != nil {
 		return Prepared{}, err
 	}
+	planTime, err := ids.Timestamp(ids.KindPlan, task.PlanID)
+	if err != nil {
+		return Prepared{}, err
+	}
 	prepared := Prepared{Procedure: procedure, Files: make([]File, 0, len(selected))}
 	for _, selected := range selected {
 		cloned := taskmaterialization.Clone([]taskmaterialization.Record{selected.Prior, selected.Prior})
 		probe, compensate := cloned[0], cloned[1]
 		probe.StepID = ids.DeriveAt(
 			ids.KindStep,
-			task.CreatedAt,
+			planTime,
 			task.PlanID,
 			"configuration-probe/"+selected.ForwardStepID,
 		)
-		probe.MaterializationID = ids.DeriveAt(ids.KindConfig, task.CreatedAt, task.PlanID, probe.StepID)
+		probe.MaterializationID = ids.DeriveAt(ids.KindConfig, planTime, task.PlanID, probe.StepID)
 		compensate.StepID = ids.DeriveAt(
 			ids.KindStep,
-			task.CreatedAt,
+			planTime,
 			task.PlanID,
 			"configuration-restore/"+selected.ForwardStepID,
 		)
-		compensate.MaterializationID = ids.DeriveAt(ids.KindConfig, task.CreatedAt, task.PlanID, compensate.StepID)
+		compensate.MaterializationID = ids.DeriveAt(ids.KindConfig, planTime, task.PlanID, compensate.StepID)
 		procedure.Files = append(procedure.Files, &agentpb.ConfigurationFileRestoration{
 			ForwardStepId: selected.ForwardStepID, ProbeStepId: probe.StepID, CompensateStepId: compensate.StepID,
 		})

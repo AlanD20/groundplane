@@ -59,6 +59,9 @@ type ControllerConfig struct {
 	Scheduler struct {
 		TickInterval string `yaml:"tick_interval"` // e.g. "30s"
 	} `yaml:"scheduler"`
+	HostTerminal struct {
+		InputInactivity string `yaml:"input_inactivity"`
+	} `yaml:"host_terminal"`
 	Storage struct {
 		VolumeRoot string `yaml:"volume_root"`
 	} `yaml:"storage"`
@@ -102,6 +105,7 @@ func DefaultControllerConfig() ControllerConfig {
 	c.Etcd.KeyPrefix = "/groundplane/"
 	c.Listen.HTTP = []string{"127.0.0.1:8080"}
 	c.Scheduler.TickInterval = "30s"
+	c.HostTerminal.InputInactivity = "15m"
 	c.ReleaseExecutionTimeout = "15h"
 	c.Storage.VolumeRoot = environmentpath.DefaultVolumeRoot
 	c.Agent.Runtime.PullIntervalSeconds = 2
@@ -181,6 +185,9 @@ func (c ControllerConfig) Validate() error {
 	if tick <= 0 {
 		return fmt.Errorf("config: controller scheduler.tick_interval must be positive")
 	}
+	if _, err := c.ParsedHostTerminalInputInactivity(); err != nil {
+		return err
+	}
 	releaseTimeout, err := time.ParseDuration(c.ReleaseExecutionTimeout)
 	if err != nil {
 		return fmt.Errorf("config: controller release_execution_timeout: %w", err)
@@ -204,6 +211,16 @@ func (c ControllerConfig) Validate() error {
 		return fmt.Errorf("config: controller age_key_path must be absolute")
 	}
 	return validateLog("controller", c.Log)
+}
+
+// ParsedHostTerminalInputInactivity returns the operator-input-only timeout
+// for transient root PTYs. Terminal output never refreshes this bound.
+func (c ControllerConfig) ParsedHostTerminalInputInactivity() (time.Duration, error) {
+	value, err := time.ParseDuration(c.HostTerminal.InputInactivity)
+	if err != nil || value < time.Minute || value > 8*time.Hour {
+		return 0, fmt.Errorf("config: controller host_terminal.input_inactivity must be between 1m and 8h")
+	}
+	return value, nil
 }
 
 // ParsedReleaseExecutionTimeout returns the validated bound for one Release

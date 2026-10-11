@@ -392,6 +392,7 @@ func serviceArtifactZones(references servicerecord.ServiceMutationReferences) []
 		zones[index] = composerender.ServiceArtifactZone{
 			ID: zone.Record.Desired.ID, Name: zone.Record.Desired.Name,
 			Subnet: zone.Record.Desired.Subnet, Internal: zone.Record.Desired.Internal,
+			AllowGPDNS: zone.Record.Desired.AllowGPDNS,
 		}
 	}
 	return zones
@@ -491,10 +492,11 @@ func rejectComponentGeneratedServiceTarget(
 
 func setDirectServiceExtension(extensions map[string]core.ServiceExtensionSpec, service core.Service) {
 	extension := core.ServiceExtensionSpec{}
-	if service.Strategy != "" || service.OnFailure != "" {
+	if service.Strategy != "" || service.OnFailure != "" || service.RollingReplicaTimeoutSeconds != 0 {
 		extension.Release = &core.ServiceReleaseSpec{
-			DefaultStrategy: service.Strategy,
-			OnFailure:       service.OnFailure,
+			DefaultStrategy:              service.Strategy,
+			OnFailure:                    service.OnFailure,
+			RollingReplicaTimeoutSeconds: service.RollingReplicaTimeoutSeconds,
 		}
 	}
 	if len(service.DependsOn) != 0 {
@@ -523,8 +525,11 @@ func serviceMutationAuditFromCreate(input apiTypes.ServiceCreate) blueprints.Env
 		EnvironmentID: input.EnvironmentID, Name: input.Name, Image: input.Image,
 		Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
 		OnFailure: core.OnFailure(input.OnFailure), Healthcheck: serviceHealthcheckToCore(input.Healthcheck),
-		Resources: core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs},
-		Expose:    append([]string(nil), input.Expose...), Restart: input.Restart, Replicas: input.Replicas,
+		RollingReplicaTimeoutSeconds: &input.RollingReplicaTimeoutSeconds,
+		Resources:                    core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs},
+		Expose: append(
+			[]string(nil),
+			input.Expose...), Restart: input.Restart, Replicas: input.Replicas,
 	}
 }
 
@@ -585,7 +590,8 @@ func serviceMutationAuditFromEdit(input apiTypes.ServiceEdit) blueprints.Environ
 	return blueprints.EnvironmentServiceMutationRequest{
 		VolumeMounts: mounts, Command: command, Entrypoint: entrypoint,
 		WorkingDir: workingDir, User: user, Aliases: aliases, DependsOn: dependencies, Logging: logging,
-		Image: input.Image, Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
+		RollingReplicaTimeoutSeconds: input.RollingReplicaTimeoutSeconds,
+		Image:                        input.Image, Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
 		OnFailure: core.OnFailure(input.OnFailure), Healthcheck: serviceHealthcheckToCore(input.Healthcheck),
 		Resources: core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs},
 		Expose:    append([]string(nil), input.Expose...), Restart: input.Restart, Replicas: input.Replicas,

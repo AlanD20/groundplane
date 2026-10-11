@@ -93,7 +93,7 @@ func TestServingProbeRequiresDeclaredCompensationWithoutSuccessEvidence(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step, nil)
 	if err != nil {
 		t.Fatalf("owned negative probe failed before compensation: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestServingNegativeProbeRejectsWrongScopeAndContradictions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := runtime.ExecuteStep(context.Background(), assignment, step); err == nil {
+		if _, err := runtime.ExecuteStep(context.Background(), assignment, step, nil); err == nil {
 			t.Fatal("wrong negative probe scope accepted")
 		}
 	}

@@ -1,9 +1,7 @@
 package composehelper
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -25,19 +23,17 @@ func executeServingPredecessor(
 	candidate *agentpb.ComposeArtifact,
 	step *agentpb.ExecutionStep,
 ) (*agentpb.ComposeHelperResponse, error) {
-	predecessor, service, releaseID, target, err := openServingPredecessor(request, candidate, step)
+	serving, err := openServingPredecessor(request, candidate, step)
 	if err != nil {
 		return nil, err
 	}
 	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
-	proxy, err := servingPredecessorProxy(predecessor, service.GetServiceId())
-	if err != nil {
-		return nil, err
-	}
+	predecessor, services, proxy := serving.Artifact, serving.Workloads, serving.Proxy
+	serviceID, releaseID, target := restorationStepServiceID(step), serving.ReleaseID, serving.Target
 	retained := &agentpb.ComposeArtifact{}
 	for _, witness := range request.GetRestorationAuthority().GetNativePredecessors() {
-		if witness.GetServiceId() == service.GetServiceId() && len(witness.GetRetainedPriorArtifact()) != 0 {
+		if witness.GetServiceId() == serviceID && len(witness.GetRetainedPriorArtifact()) != 0 {
 			if err := proto.Unmarshal(witness.GetRetainedPriorArtifact(), retained); err != nil {
 				return nil, errs.Wrap(errs.KindValidationFailed, err)
 			}
@@ -46,7 +42,7 @@ func executeServingPredecessor(
 	complete := proto.CloneOf(predecessor)
 	complete.Services = append(complete.Services, retained.GetServices()...)
 	inventory, err := inspectServingInventory(executionCtx, taskRunner, complete, candidate,
-		service.GetServiceId(), restorationStepCandidateReleaseID(step), proxy)
+		serviceID, restorationStepCandidateReleaseID(step), proxy)
 	if err != nil {
 		return failedResponse(1), nil
 	}
@@ -62,7 +58,7 @@ func executeServingPredecessor(
 			return failedResponse(1), nil
 		}
 		inventory, err = inspectServingInventory(executionCtx, taskRunner, complete, candidate,
-			service.GetServiceId(), restorationStepCandidateReleaseID(step), proxy)
+			serviceID, restorationStepCandidateReleaseID(step), proxy)
 		if err != nil || len(inventory.candidates) != 0 {
 			return failedResponse(1), nil
 		}
@@ -70,15 +66,15 @@ func executeServingPredecessor(
 	var proven bool
 	var probeErr error
 	if inventory.proxyNeedsRestore {
-		_, probeErr = servingPredecessorProven(executionCtx, taskRunner, predecessor, service)
+		_, probeErr = servingMemberProven(executionCtx, taskRunner, predecessor, services, nil)
 	} else {
-		proven, probeErr = servingMemberProven(executionCtx, taskRunner, predecessor, service, proxy)
+		proven, probeErr = servingMemberProven(executionCtx, taskRunner, predecessor, services, proxy)
 	}
 	if probeErr != nil {
 		return failedResponse(1), nil
 	}
 	if step.GetCandidateRestorationCompensate() != nil && !proven {
-		names := servingPredecessorNames(service, proxy)
+		names := servingPredecessorNames(services, proxy)
 		base := []string{
 			"compose", "--project-name", predecessor.GetProjectName(), "--project-directory",
 			composeProjectDirectory(predecessor), "--file", "-",
@@ -103,7 +99,7 @@ func executeServingPredecessor(
 				}, nil
 			}
 		}
-		proven, probeErr = servingMemberProven(executionCtx, taskRunner, predecessor, service, proxy)
+		proven, probeErr = waitServingMember(executionCtx, taskRunner, predecessor, services, proxy)
 	}
 	for _, retainedService := range retained.GetServices() {
 		retainedProven, retainedErr := servingPredecessorProven(executionCtx, taskRunner, retained, retainedService)
@@ -123,7 +119,8 @@ func executeServingPredecessor(
 					return failedResponse(1), nil
 				}
 			}
-			retainedProven, retainedErr = servingPredecessorProven(executionCtx, taskRunner, retained, retainedService)
+			retainedProven, retainedErr = waitServingMember(executionCtx, taskRunner, retained,
+				[]*agentpb.ComposeService{retainedService}, nil)
 		}
 		proven = proven && retainedProven
 		if retainedErr != nil {
@@ -137,7 +134,7 @@ func executeServingPredecessor(
 		return failedResponse(1), nil
 	}
 	inventory, err = inspectServingInventory(executionCtx, taskRunner, complete, candidate,
-		service.GetServiceId(), restorationStepCandidateReleaseID(step), proxy)
+		serviceID, restorationStepCandidateReleaseID(step), proxy)
 	if err != nil || len(inventory.candidates) != 0 || inventory.proxyNeedsRestore {
 		return failedResponse(1), nil
 	}
@@ -155,7 +152,14 @@ func executeServingPredecessor(
 		if err != nil || !proven {
 			return failedProxyResponse(), nil
 		}
-		generation, generationErr := executionplan.ProxyConfigGeneration(proxy.GetProxyConfigJson(), releaseID)
+		if serving.Rolling != nil {
+			return restoredRollingResponse(serving.Rolling), nil
+		}
+		generation, generationErr := executionplan.ProxyConfigGeneration(
+			proxy.GetProxyImplementation(),
+			proxy.GetProxyConfigJson(),
+			releaseID,
+		)
 		if generationErr != nil {
 			return nil, generationErr
 		}
@@ -163,19 +167,29 @@ func executeServingPredecessor(
 			Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 			ProxyEvidence: &agentpb.ServiceProxyEvidence{
-				ServiceId: service.GetServiceId(), Target: target, ProxyGeneration: generation,
+				ServiceId: serviceID, Target: target, ProxyGeneration: generation,
 				ConfigSha256: slices.Clone(proxy.GetProxyConfigSha256()), ReleaseId: releaseID, Compensated: true,
 			},
 		}, nil
+	}
+	if serving.Rolling != nil {
+		return restoredRollingResponse(serving.Rolling), nil
 	}
 	return &agentpb.ComposeHelperResponse{
 		Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 		RecreateEvidence: &agentpb.ServiceRecreateEvidence{
-			ServiceId: service.GetServiceId(), ReleaseId: releaseID, ArtifactId: predecessor.GetArtifactId(),
+			ServiceId: serviceID, ReleaseId: releaseID, ArtifactId: predecessor.GetArtifactId(),
 			Compensated: true, Target: target,
 		},
 	}, nil
+}
+
+func restoredRollingResponse(evidence *agentpb.RollingReleaseEvidence) *agentpb.ComposeHelperResponse {
+	return &agentpb.ComposeHelperResponse{Schema: SchemaVersion,
+		Outcome:         agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
+		Diagnostic:      agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+		RollingEvidence: proto.CloneOf(evidence)}
 }
 
 func restorationRequiredResponse() *agentpb.ComposeHelperResponse {
@@ -189,22 +203,53 @@ func servingMemberProven(
 	ctx context.Context,
 	taskRunner runner.Runner,
 	artifact *agentpb.ComposeArtifact,
-	service, proxy *agentpb.ComposeService,
+	services []*agentpb.ComposeService,
+	proxy *agentpb.ComposeService,
 ) (bool, error) {
-	proven, err := servingPredecessorProven(ctx, taskRunner, artifact, service)
-	if err != nil || proxy == nil {
-		return proven, err
+	proven := true
+	for _, service := range services {
+		ready, err := servingPredecessorProven(ctx, taskRunner, artifact, service)
+		if err != nil {
+			return false, err
+		}
+		proven = proven && ready
+	}
+	if proxy == nil {
+		return proven, nil
 	}
 	proxyProven, err := servingPredecessorProven(ctx, taskRunner, artifact, proxy)
 	return proven && proxyProven, err
 }
 
-func servingPredecessorNames(service, proxy *agentpb.ComposeService) []string {
-	names := []string{service.GetComposeName()}
+func servingPredecessorNames(services []*agentpb.ComposeService, proxy *agentpb.ComposeService) []string {
+	names := make([]string, 0, len(services)+1)
+	for _, service := range services {
+		names = append(names, service.GetComposeName())
+	}
 	if proxy != nil {
 		names = append(names, proxy.GetComposeName())
 	}
 	return names
+}
+
+// Newly restored workloads may still be starting. Readiness consumes the same
+// compensation deadline; it never starts another Compose action or renews time.
+func waitServingMember(ctx context.Context, taskRunner runner.Runner, artifact *agentpb.ComposeArtifact,
+	services []*agentpb.ComposeService, proxy *agentpb.ComposeService,
+) (bool, error) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		proven, err := servingMemberProven(ctx, taskRunner, artifact, services, proxy)
+		if err != nil || proven {
+			return proven, err
+		}
+		select {
+		case <-ctx.Done():
+			return false, errs.Wrap(errs.KindRequestFailed, ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 func servingPredecessorProxy(artifact *agentpb.ComposeArtifact, serviceID string) (*agentpb.ComposeService, error) {
@@ -226,116 +271,70 @@ func openServingPredecessor(
 	request *agentpb.ComposeHelperRequest,
 	candidate *agentpb.ComposeArtifact,
 	step *agentpb.ExecutionStep,
-) (*agentpb.ComposeArtifact, *agentpb.ComposeService, string, string, error) {
+) (executionplan.NativeServingRuntime, error) {
 	authority := request.GetRestorationAuthority()
 	serviceID := restorationStepServiceID(step)
 	if executionplan.RestorationTargetForService(
 		authority,
 		serviceID,
 	) != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor authority is incomplete")
+		return executionplan.NativeServingRuntime{}, errs.New(
+			errs.KindValidationFailed,
+			"serving predecessor authority is incomplete",
+		)
 	}
-	var encoded, expectedDigest []byte
 	var nativeWitness *agentpb.ReleaseNativePredecessorAuthority
 	for _, witness := range authority.GetNativePredecessors() {
 		if witness.GetServiceId() != serviceID {
 			continue
 		}
 		if nativeWitness != nil {
-			return nil, nil, "", "", errs.New(
+			return executionplan.NativeServingRuntime{}, errs.New(
 				errs.KindStateConflict,
 				"native serving predecessor witness is duplicated",
 			)
 		}
 		nativeWitness = witness
 	}
-	if len(authority.GetNativePredecessors()) != 0 && nativeWitness == nil {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "native serving predecessor witness is absent")
+	if nativeWitness == nil {
+		return executionplan.NativeServingRuntime{}, errs.New(
+			errs.KindValidationFailed,
+			"native serving predecessor witness is absent",
+		)
 	}
-	if nativeWitness != nil {
-		encoded = nativeWitness.GetCurrentArtifact()
-	} else if sealed := authority.GetAppliedPredecessor(); sealed != nil {
-		encoded, expectedDigest = sealed.GetComposeArtifact(), sealed.GetComposeArtifactSha256()
+	serving, err := executionplan.OpenNativeServingRuntime(authority.GetEnvironmentId(), serviceID,
+		nativeWitness.GetCurrentArtifact(), nativeWitness.GetRetainedPriorArtifact())
+	if err != nil {
+		return executionplan.NativeServingRuntime{}, err
 	}
-	if len(encoded) == 0 || (nativeWitness == nil && len(expectedDigest) != sha256.Size) {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor authority is incomplete")
-	}
-	digest := sha256.Sum256(encoded)
-	if len(expectedDigest) != 0 && !bytes.Equal(digest[:], expectedDigest) {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor artifact digest diverges")
-	}
-	predecessor := &agentpb.ComposeArtifact{}
-	if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(encoded, predecessor) != nil ||
-		executionplan.RejectUnknown(predecessor) != nil {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor artifact is invalid")
-	}
-	canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(predecessor)
-	if err != nil || !bytes.Equal(canonical, encoded) || predecessor.GetProjectName() == "" ||
-		candidate == nil || predecessor.GetProjectName() != candidate.GetProjectName() {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor artifact is not canonical")
+	if candidate == nil || serving.Artifact.GetProjectName() != candidate.GetProjectName() {
+		return executionplan.NativeServingRuntime{}, errs.New(
+			errs.KindValidationFailed,
+			"serving predecessor Compose project differs from candidate",
+		)
 	}
 	candidateReleaseID := restorationStepCandidateReleaseID(step)
 	if ids.Validate(ids.KindDeployment, candidateReleaseID) != nil {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving restoration candidate Release is invalid")
+		return executionplan.NativeServingRuntime{}, errs.New(
+			errs.KindValidationFailed,
+			"serving restoration candidate Release is invalid",
+		)
 	}
 	for _, member := range authority.GetCandidates() {
 		if member.GetServiceId() == serviceID && member.GetReleaseId() != candidateReleaseID {
-			return nil, nil, "", "", errs.New(
+			return executionplan.NativeServingRuntime{}, errs.New(
 				errs.KindValidationFailed,
 				"serving restoration candidate Release diverges",
 			)
 		}
 	}
-	if nativeWitness != nil {
-		if len(nativeWitness.GetCurrentArtifact()) == 0 {
-			return nil, nil, "", "", errs.New(errs.KindValidationFailed, "native serving predecessor witness is absent")
-		}
-		if err := executionplan.ValidateNativePredecessorWitness(
-			authority.GetEnvironmentId(), serviceID, nativeWitness.GetCurrentArtifact(),
-			nativeWitness.GetRetainedPriorArtifact(),
-		); err != nil {
-			return nil, nil, "", "", errs.New(
-				errs.KindValidationFailed,
-				"native serving predecessor witness is invalid",
-			)
-		}
-	}
-	var selected *agentpb.ComposeService
-	for _, service := range predecessor.GetServices() {
-		if service.GetServiceId() != serviceID ||
-			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-			continue
-		}
-		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT ||
-			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
-			if expectedLabel(service.GetExpectedLabels(), "com.groundplane.release-id") == "" {
-				continue
-			}
-			if selected != nil {
-				return nil, nil, "", "", errs.New(errs.KindStateConflict, "serving predecessor service is ambiguous")
-			}
-			selected = service
-		}
-	}
-	if selected == nil {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor service is absent")
-	}
-	releaseID := expectedLabel(selected.GetExpectedLabels(), "com.groundplane.release-id")
-	target := selected.GetSlot()
-	if target == "" {
-		target = "singleton"
-	}
-	if releaseID == "" || releaseID == candidateReleaseID || !validRuntimeTarget(target) {
-		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor identity is incomplete")
-	}
-	if _, roleErr := sealedServingPredecessorRuntimeRole(selected); roleErr != nil ||
-		selected.GetImageReference() == "" {
-		return nil, nil, "", "", errs.New(
+	if serving.ReleaseID == candidateReleaseID {
+		return executionplan.NativeServingRuntime{}, errs.New(
 			errs.KindValidationFailed,
-			"serving predecessor runtime identity is incomplete",
+			"serving predecessor is the candidate Release",
 		)
 	}
-	return predecessor, selected, releaseID, target, nil
+	return serving, nil
 }
 
 func restorationStepCandidateReleaseID(step *agentpb.ExecutionStep) string {
@@ -404,6 +403,10 @@ func servingPredecessorProven(
 		if labels["com.groundplane.runtime-role"] != expectedRole {
 			continue
 		}
+		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA &&
+			labels["com.docker.compose.service"] != service.GetComposeName() {
+			continue // The complete inventory separately rejects uncaptured replicas.
+		}
 		expectedSlot := expectedLabel(service.GetExpectedLabels(), "com.groundplane.slot")
 		if expectedSlot != "" && labels["com.groundplane.slot"] != expectedSlot {
 			continue
@@ -454,6 +457,8 @@ func sealedServingPredecessorRuntimeRole(service *agentpb.ComposeService) (strin
 		role = "singleton"
 	case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
 		role = "slot"
+	case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA:
+		role = "replica"
 	case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
 		role = "proxy"
 	default:

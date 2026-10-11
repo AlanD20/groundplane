@@ -39,6 +39,10 @@ func blueprintChildTerminalResultVerified(
 		return authoredBlueprintServiceRemovalTask(task) && result != nil &&
 			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
 	}
+	if task.Type == taskjournal.TaskRemove && task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != "" {
+		return authoredBlueprintZoneRemovalTask(task) && result != nil &&
+			result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired
+	}
 	if verifiedCandidate {
 		return true
 	}
@@ -103,8 +107,12 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	verifiedServiceRemovalEffect := verifiedResult && execution.Unit.Removal &&
 		execution.Unit.Target.Kind == ids.KindService && authoredBlueprintServiceRemovalTask(task) &&
 		task.Params[taskjournal.TaskBlueprintServiceUnitParam] == execution.Unit.Target.ID
+	verifiedZoneRemovalEffect := verifiedResult && execution.Unit.Removal &&
+		execution.Unit.Target.Kind == ids.KindNetwork && authoredBlueprintZoneRemovalTask(task) &&
+		task.Params[taskjournal.TaskBlueprintNetworkUnitParam] == execution.Unit.Target.ID
 	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect ||
-		verifiedAttachEffect || verifiedComponentEffect || verifiedEntryEffect || verifiedServiceRemovalEffect
+		verifiedAttachEffect || verifiedComponentEffect || verifiedEntryEffect || verifiedServiceRemovalEffect ||
+		verifiedZoneRemovalEffect
 	if status != taskjournal.TaskStatusCompleted &&
 		(!taskassignments.ValidTerminalTaskStatus(status) || !verifiedEffect) {
 		if execution.State == blueprintunits.Draining {
@@ -151,7 +159,19 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		return nil, nil, errs.New(errs.KindInternal, "Blueprint child assignment identity is invalid")
 	}
 	if status != taskjournal.TaskStatusCompleted {
-		plan, err := blueprintunits.PrepareMutation(snapshot, nil, []blueprintunits.ExecutionChange{{
+		var appliedChanges []blueprintunits.AppliedChange
+		if verifiedZoneRemovalEffect && recoveredAuthoredZoneAbsence(task, assignment) ||
+			verifiedAttachEffect && execution.Unit.Removal && recoveredAuthoredAttachAbsence(task, assignment) {
+			// Recovery proved resource absence, not success of the original
+			// attempt. Keep its failure while retiring the resource receipt.
+			absent := blueprintunits.AppliedRecord{
+				EnvironmentID: task.Owner.EnvironmentID, Target: execution.Unit.Target, State: blueprintunits.Absent,
+				ParentTaskID: execution.ParentTaskID, SourceTaskID: task.ID, SourcePlanID: task.PlanID,
+				SourceAssignment: assignment.AssignmentID, ExecutionEpoch: assignment.ExecutionEpoch,
+			}
+			appliedChanges = []blueprintunits.AppliedChange{{Target: absent.Target, Next: &absent}}
+		}
+		plan, err := blueprintunits.PrepareMutation(snapshot, appliedChanges, []blueprintunits.ExecutionChange{{
 			PlanID: task.PlanID,
 		}})
 		if err != nil {

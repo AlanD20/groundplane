@@ -138,7 +138,7 @@ func (resolver *TaskPlanResolver) PrepareBackingServiceCreationTask(
 		return etcd.TaskRecord{}, err
 	}
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
-	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
+	task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan)
 	return task, nil
 }
 

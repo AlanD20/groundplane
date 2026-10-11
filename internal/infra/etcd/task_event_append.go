@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"slices"
 	"time"
 
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -21,6 +22,24 @@ func (repository *TaskRepository) AppendTaskEvent(
 	input taskjournal.TaskEventInput,
 	receivedAt time.Time,
 ) (TaskEventAppend, error) {
+	if input.Identity.ControllerOperation() {
+		return TaskEventAppend{}, errs.New(errs.KindValidationFailed, "Agent event requires an Agent step identity")
+	}
+	return repository.appendTaskEvent(ctx, input, receivedAt, taskjournal.TaskExecutorAgent)
+}
+
+func (repository *TaskRepository) AppendControllerTaskEvent(ctx context.Context,
+	input taskjournal.TaskEventInput, receivedAt time.Time,
+) (TaskEventAppend, error) {
+	if !input.Identity.ControllerOperation() {
+		return TaskEventAppend{}, errs.New(errs.KindValidationFailed, "Controller event must be task-scoped")
+	}
+	return repository.appendTaskEvent(ctx, input, receivedAt, taskjournal.TaskExecutorController)
+}
+
+func (repository *TaskRepository) appendTaskEvent(ctx context.Context,
+	input taskjournal.TaskEventInput, receivedAt time.Time, executor taskjournal.TaskExecutor,
+) (TaskEventAppend, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return TaskEventAppend{}, err
 	}
@@ -33,7 +52,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err := ctx.Err(); err != nil {
 			return TaskEventAppend{}, err
 		}
-		claimKey := taskjournal.TaskAssignmentKey(input.Identity.AgentID, input.Identity.TaskID)
+		claimKey := taskjournal.TaskExecutionClaimKey(executor, input.Identity.AgentID, input.Identity.TaskID)
 		result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			taskjournal.TaskStorageKey(input.Identity.TaskID), taskjournal.TaskEventDedupKey(input.Identity), claimKey,
 			taskjournal.TaskAssignmentIndexKey(input.Identity.TaskID), blueprintClosingReportKey(input.Identity.TaskID),
@@ -93,7 +112,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, errs.New(errs.KindInternal, "task event assignment index is inconsistent")
 		}
 		if assignment.AssignmentID != input.Identity.AssignmentID ||
-			assignment.TaskID != input.Identity.TaskID || assignment.Executor != taskjournal.TaskExecutorAgent ||
+			assignment.TaskID != input.Identity.TaskID || assignment.Executor != executor ||
 			assignment.AgentID != input.Identity.AgentID ||
 			assignment.AgentGeneration != input.Identity.AgentGeneration ||
 			assignment.ExecutionEpoch != input.Identity.Attempt {
@@ -103,7 +122,24 @@ func (repository *TaskRepository) AppendTaskEvent(
 			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, prepared.Dedup); err != nil {
 				return TaskEventAppend{}, err
 			}
-			return TaskEventAppend{Sequence: prepared.Sequence, Revision: result.ReadRevision, Duplicate: true}, nil
+			rolling, err := repository.prepareRollingTaskEvent(
+				ctx,
+				task,
+				assignment,
+				input,
+				receivedAt,
+				result.ReadRevision,
+				true,
+			)
+			if err != nil {
+				return TaskEventAppend{}, err
+			}
+			return TaskEventAppend{
+				Sequence:      prepared.Sequence,
+				Revision:      result.ReadRevision,
+				Duplicate:     true,
+				RollingBudget: rolling.budget,
+			}, nil
 		}
 		if result.Values[4] != nil || result.Values[5] != nil || result.Values[6] != nil {
 			return TaskEventAppend{}, errs.New(
@@ -127,31 +163,72 @@ func (repository *TaskRepository) AppendTaskEvent(
 				return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
 			}
 			recoveryValue = recoveryRead.Values[0]
-			record, decodeErr := taskassignments.DecodeReleaseRecoveryRecord(recoveryValue.Value)
-			digest, digestErr := taskassignments.ReleaseRecoveryRecordSHA256(record)
-			if decodeErr != nil || digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 ||
-				record.TaskID != task.ID || record.AssignmentID != assignment.AssignmentID ||
-				record.OperationID != task.OperationID || record.PlanHash != task.PlanHash ||
-				record.RestorationAuthoritySHA256 != assignmentRecoveryAuthorityDigest(assignment) ||
-				!record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
-				return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
-			}
-			next, changed, advanceErr := taskassignments.AdvanceReleaseRecoveryRecord(
-				record,
-				input,
-				result.ReadRevision,
-			)
-			if advanceErr != nil {
-				return TaskEventAppend{}, advanceErr
-			}
-			if changed {
-				encoded, encodeErr := taskassignments.EncodeReleaseRecoveryRecord(next)
-				if encodeErr != nil {
-					return TaskEventAppend{}, encodeErr
+			if assignment.AttachRemovalAuthoritySHA256 != "" {
+				if err := repository.requireAttachRemovalRecoveryStart(ctx, task, input, result.ReadRevision); err != nil {
+					return TaskEventAppend{}, err
 				}
-				defer clear(encoded)
-				recoveryMutation = []etcdstore.Mutation{
-					{Type: etcdstore.MutationPut, Key: recoveryValue.Key, Value: encoded},
+				record, decodeErr := taskassignments.DecodeAttachRemovalRecoveryRecord(recoveryValue.Value)
+				if decodeErr != nil || record.Authority.OperationID != task.OperationID ||
+					record.Authority.PlanHash != task.PlanHash {
+					return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
+				}
+				next, changed, advanceErr := taskassignments.AdvanceAttachRemovalRecoveryRecord(
+					record,
+					assignment,
+					input,
+					result.ReadRevision,
+				)
+				if advanceErr != nil {
+					return TaskEventAppend{}, advanceErr
+				}
+				if changed {
+					encoded, encodeErr := taskassignments.EncodeAttachRemovalRecoveryRecord(next)
+					if encodeErr != nil {
+						return TaskEventAppend{}, encodeErr
+					}
+					defer clear(encoded)
+					recoveryMutation = []etcdstore.Mutation{
+						{Type: etcdstore.MutationPut, Key: recoveryValue.Key, Value: encoded},
+					}
+				}
+			} else if assignment.ManagedNetworkProcedureSHA256 != "" {
+				record, decodeErr := taskassignments.DecodeManagedNetworkRecoveryRecord(recoveryValue.Value)
+				digest, digestErr := taskassignments.ManagedNetworkRecoveryRecordSHA256(record)
+				if decodeErr != nil || digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 ||
+					record.TaskID != task.ID || record.AssignmentID != assignment.AssignmentID ||
+					record.OperationID != task.OperationID || record.PlanHash != task.PlanHash ||
+					record.ProcedureSHA256 != assignment.ManagedNetworkProcedureSHA256 ||
+					!slices.Contains(record.SettlementStepIDs, input.Identity.StepID) || record.OriginalExecutionEpoch >= assignment.ExecutionEpoch ||
+					!record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
+					return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
+				}
+			} else {
+				record, decodeErr := taskassignments.DecodeReleaseRecoveryRecord(recoveryValue.Value)
+				digest, digestErr := taskassignments.ReleaseRecoveryRecordSHA256(record)
+				if decodeErr != nil || digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 ||
+					record.TaskID != task.ID || record.AssignmentID != assignment.AssignmentID ||
+					record.OperationID != task.OperationID || record.PlanHash != task.PlanHash ||
+					record.RestorationAuthoritySHA256 != assignmentRecoveryAuthorityDigest(assignment) ||
+					!record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
+					return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
+				}
+				next, changed, advanceErr := taskassignments.AdvanceReleaseRecoveryRecord(
+					record,
+					input,
+					result.ReadRevision,
+				)
+				if advanceErr != nil {
+					return TaskEventAppend{}, advanceErr
+				}
+				if changed {
+					encoded, encodeErr := taskassignments.EncodeReleaseRecoveryRecord(next)
+					if encodeErr != nil {
+						return TaskEventAppend{}, encodeErr
+					}
+					defer clear(encoded)
+					recoveryMutation = []etcdstore.Mutation{
+						{Type: etcdstore.MutationPut, Key: recoveryValue.Key, Value: encoded},
+					}
 				}
 			}
 		} else if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward {
@@ -173,6 +250,18 @@ func (repository *TaskRepository) AppendTaskEvent(
 		}
 
 		trimConditions, trimMutations, err := repository.prepareTaskEventTrim(ctx, task, &prepared, result.ReadRevision)
+		if err != nil {
+			return TaskEventAppend{}, err
+		}
+		rolling, err := repository.prepareRollingTaskEvent(
+			ctx,
+			task,
+			assignment,
+			input,
+			receivedAt,
+			result.ReadRevision,
+			false,
+		)
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
@@ -210,6 +299,8 @@ func (repository *TaskRepository) AppendTaskEvent(
 		mutations = append(mutations, recoveryMutation...)
 		conditions = append(conditions, trimConditions...)
 		mutations = append(mutations, trimMutations...)
+		conditions = append(conditions, rolling.conditions...)
+		mutations = append(mutations, rolling.mutations...)
 		transaction, err := repository.store.Transact(
 			ctx,
 			conditions,
@@ -225,6 +316,10 @@ func (repository *TaskRepository) AppendTaskEvent(
 			}
 			continue
 		}
-		return TaskEventAppend{Sequence: prepared.Sequence, Revision: transaction.Revision}, nil
+		return TaskEventAppend{
+			Sequence:      prepared.Sequence,
+			Revision:      transaction.Revision,
+			RollingBudget: rolling.budget,
+		}, nil
 	}
 }

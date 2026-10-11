@@ -12,8 +12,8 @@ import (
 func TestComponentConfigRoundTripsMultipleZones(t *testing.T) {
 	zones := `["net_01ARZ3NDEKTSV4RRFFQ69G5FAX","net_01ARZ3NDEKTSV4RRFFQ69G5FAW"]`
 	for _, body := range []string{
-		`{"zone_ids":` + zones + `}`,
-		`{"zone_ids":` + zones + `,"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`,
+		`{"implementation":"caddy","zone_ids":` + zones + `}`,
+		`{"implementation":"cloudflare-tunnel","zone_ids":` + zones + `,"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`,
 	} {
 		t.Run(body, func(t *testing.T) {
 			var config ComponentConfig
@@ -35,8 +35,8 @@ func TestComponentConfigRoundTripsMultipleZones(t *testing.T) {
 func TestComponentConfigMutationRoundTripsMultipleZones(t *testing.T) {
 	zones := `["net_01ARZ3NDEKTSV4RRFFQ69G5FAX","net_01ARZ3NDEKTSV4RRFFQ69G5FAW"]`
 	for _, body := range []string{
-		`{"zone_ids":` + zones + `}`,
-		`{"zone_ids":` + zones + `,"credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}`,
+		`{"implementation":"caddy","zone_ids":` + zones + `}`,
+		`{"implementation":"cloudflare-tunnel","zone_ids":` + zones + `,"credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}`,
 	} {
 		var input ComponentConfigMutationInput
 		if err := json.Unmarshal([]byte(body), &input); err != nil {
@@ -55,13 +55,13 @@ func TestComponentConfigMutationRoundTripsMultipleZones(t *testing.T) {
 // superseded singular inputs instead of silently attaching a default network.
 func TestComponentZoneConfigurationRejectsInvalidSelections(t *testing.T) {
 	for _, body := range []string{
-		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
-		`{"zone_ids":null}`,
-		`{"zone_ids":[]}`,
-		`{"zone_ids":["invalid"]}`,
-		`{"zone_ids":[null]}`,
-		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX","net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}`,
-		`{"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`,
+		`{"implementation":"caddy","zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+		`{"implementation":"caddy","zone_ids":null}`,
+		`{"implementation":"caddy","zone_ids":[]}`,
+		`{"implementation":"caddy","zone_ids":["invalid"]}`,
+		`{"implementation":"caddy","zone_ids":[null]}`,
+		`{"implementation":"caddy","zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX","net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}`,
+		`{"implementation":"cloudflare-tunnel","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`,
 	} {
 		var config ComponentConfig
 		if err := json.Unmarshal([]byte(body), &config); err == nil {

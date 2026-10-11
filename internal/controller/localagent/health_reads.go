@@ -64,12 +64,14 @@ func (manager *Manager) projectHealth(record Record) Health {
 	health.LastReady = snapshot.LastReady
 	health.Capacity = snapshot.Capacity
 	health.Version = snapshot.Version
+	health.Source = snapshot.Source
 	if !snapshot.LastReady.IsZero() {
 		health.StaleAfter = snapshot.LastReady.Add(StaleWindow(record.Config.PullIntervalSeconds))
 	}
 	health.Online = record.Phase != PhaseDeleting && snapshot.Online && !snapshot.Revoked &&
 		!snapshot.LastReady.IsZero() && !manager.clock.Now().After(health.StaleAfter)
-	health.Healthy = record.Phase == PhaseReady && health.Online
+	health.Healthy = record.Phase == PhaseReady && health.Online &&
+		record.Build.Version == snapshot.Version && record.Build.Source == snapshot.Source
 	return health
 }
 

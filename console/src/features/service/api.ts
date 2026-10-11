@@ -21,6 +21,7 @@ export type ServiceMutationInput = Pick<
   | "zones"
   | "strategy"
   | "onFailure"
+  | "rollingReplicaTimeoutSeconds"
   | "healthcheck"
   | "resources"
   | "expose"
@@ -89,6 +90,7 @@ export function serviceFromAPI(service: ServiceDocument): Service {
     zones: [...(service.zones ?? [])],
     strategy,
     onFailure,
+    rollingReplicaTimeoutSeconds: service.rolling_replica_timeout_seconds ?? 0,
     healthcheck,
     resources: {
       mem: service.resources?.mem ?? "",
@@ -201,6 +203,7 @@ export function serviceMutationBody(input: ServiceMutationInput) {
     zones: input.zones,
     strategy: input.strategy,
     on_failure: input.onFailure ?? "switch_back",
+    rolling_replica_timeout_seconds: input.rollingReplicaTimeoutSeconds,
     healthcheck,
     resources: { mem: input.resources.mem, cpus: Number(input.resources.cpus) },
     expose: input.expose,

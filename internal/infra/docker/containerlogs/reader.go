@@ -331,6 +331,9 @@ func containerName(summary container.Summary) string {
 }
 
 func logSlot(target *agentpb.ServiceObservationTarget) (agentpb.LogSlot, error) {
+	if target.RuntimeRole == "replica" {
+		return agentpb.LogSlot_LOG_SLOT_ROLLING, nil
+	}
 	if target.RuntimeRole == "singleton" || target.RuntimeRole == "backing" {
 		return agentpb.LogSlot_LOG_SLOT_SINGLETON, nil
 	}

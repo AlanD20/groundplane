@@ -169,12 +169,19 @@ func evaluateSelectedComposeConvergence(
 		}
 		matching := containersForService(containers, service)
 		for _, container := range matching {
-			if !service.GetHasHealthcheck() || container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING {
+			if !service.GetHasHealthcheck() ||
+				container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING {
 				continue
 			}
 			if detail := healthcheckfailure.Detail(container.GetHealthcheckDiagnostic()); detail != "" {
 				return composeConvergence{Diagnostic: container.GetHealthcheckDiagnostic()},
-					errs.Newf(errs.KindValidationFailed, "service %s container %s: %s", service.GetComposeName(), container.GetName(), detail)
+					errs.Newf(
+						errs.KindValidationFailed,
+						"service %s container %s: %s",
+						service.GetComposeName(),
+						container.GetName(),
+						detail,
+					)
 			}
 		}
 		if len(matching) != int(service.GetExpectedReplicas()) {

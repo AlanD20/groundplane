@@ -37,7 +37,12 @@ func TestBlueprintEntryOmissionUsesSealedInputAndRequiresRuntimeAbsence(t *testi
 			parent := environmentBlueprintTestTask(t, project.Record, environment.Record, 30)
 			parent.Executor, parent.Steps = taskjournal.TaskExecutorBlueprint, nil
 			parent.Params = map[string]string{blueprints.EnvironmentDesiredRevisionParam: parent.ID}
-			parent, err = TransitionTaskStatus(parent, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, parent.CreatedAt.Add(time.Second))
+			parent, err = TransitionTaskStatus(
+				parent,
+				taskjournal.TaskStatusPending,
+				taskjournal.TaskStatusRunning,
+				parent.CreatedAt.Add(time.Second),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -60,7 +65,9 @@ func TestBlueprintEntryOmissionUsesSealedInputAndRequiresRuntimeAbsence(t *testi
 				t.Fatal(err)
 			}
 			defer clear(entryValue)
-			generationValue, err := entryvalues.EncodePlain(testPlainGeneration(environment.Record.ID, entryID, generationID, "staging", parent.CreatedAt))
+			generationValue, err := entryvalues.EncodePlain(
+				testPlainGeneration(environment.Record.ID, entryID, generationID, "staging", parent.CreatedAt),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -78,7 +85,11 @@ func TestBlueprintEntryOmissionUsesSealedInputAndRequiresRuntimeAbsence(t *testi
 			mutations := []keyvalue.Mutation{
 				{Type: keyvalue.MutationPut, Key: taskjournal.TaskStorageKey(parent.ID), Value: parentValue},
 				{Type: keyvalue.MutationPut, Key: taskjournal.BlueprintParentClaimKey(parent.ID), Value: parentRef},
-				{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), Value: parentRef},
+				{
+					Type:  keyvalue.MutationPut,
+					Key:   blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
+					Value: parentRef,
+				},
 				{Type: keyvalue.MutationPut, Key: keys[0], Value: entryValue},
 				{Type: keyvalue.MutationPut, Key: keys[1], Value: []byte(entryID)},
 				{Type: keyvalue.MutationPut, Key: keys[2], Value: []byte(environment.Record.ID)},
@@ -92,7 +103,9 @@ func TestBlueprintEntryOmissionUsesSealedInputAndRequiresRuntimeAbsence(t *testi
 				}
 				defer clear(value)
 				mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
-					Key: environmentprojection.EnvironmentComposeProjectionStorageKey(environment.Record.ID), Value: value})
+					Key: environmentprojection.EnvironmentComposeProjectionStorageKey(
+						environment.Record.ID,
+					), Value: value})
 			}
 			if result, err := store.Transact(ctx, nil, mutations); err != nil || !result.Succeeded {
 				t.Fatalf("seed Entry and parent = %#v, %v", result, err)
@@ -110,7 +123,9 @@ func TestBlueprintEntryOmissionUsesSealedInputAndRequiresRuntimeAbsence(t *testi
 			if err != nil {
 				t.Fatal(err)
 			}
-			epochValue, err := blueprintunits.EncodeEpoch(blueprintunits.EpochRecord{EnvironmentID: environment.Record.ID, Sequence: 1})
+			epochValue, err := blueprintunits.EncodeEpoch(
+				blueprintunits.EpochRecord{EnvironmentID: environment.Record.ID, Sequence: 1},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -132,10 +147,14 @@ func TestBlueprintEntryOmissionUsesSealedInputAndRequiresRuntimeAbsence(t *testi
 				t.Fatal(err)
 			}
 			defer plan.Clear()
-			if result, err := store.Transact(ctx, plan.Conditions(), plan.Mutations()); err != nil || !result.Succeeded {
+			if result, err := store.Transact(ctx, plan.Conditions(), plan.Mutations()); err != nil ||
+				!result.Succeeded {
 				t.Fatalf("publish omission = %#v, %v", result, err)
 			}
-			repository, err := newEnvironmentBlueprintRepository(store, environmentBlueprintTestTransactionStore{hierarchyStore: store})
+			repository, err := newEnvironmentBlueprintRepository(
+				store,
+				environmentBlueprintTestTransactionStore{hierarchyStore: store},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +173,8 @@ func TestBlueprintEntryOmissionUsesSealedInputAndRequiresRuntimeAbsence(t *testi
 			if appliedFiles {
 				wantState = blueprintunits.Applied
 			}
-			if err != nil || len(snapshot.Applied) != 1 || snapshot.Applied[0].Record.State != wantState || len(snapshot.Executions) != 0 {
+			if err != nil || len(snapshot.Applied) != 1 || snapshot.Applied[0].Record.State != wantState ||
+				len(snapshot.Executions) != 0 {
 				t.Fatalf("acknowledged omission = %#v, %v", snapshot, err)
 			}
 		})

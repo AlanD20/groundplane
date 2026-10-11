@@ -26,7 +26,7 @@ import {
 export type NetworkActions = {
   addZone: (
     envId: string,
-    input: { name: string; subnet: string; internal: boolean },
+    input: { name: string; subnet: string; internal: boolean; allowGPDNS?: boolean },
   ) => Promise<Zone>;
   getZone: (zoneId: string) => Promise<Zone>;
   getZoneRemovalImpact: (zoneId: string) => Promise<ZoneRemovalImpactResponse>;
@@ -101,6 +101,7 @@ export function useNetworkActions({
         name: input.name,
         subnet: input.subnet,
         internal: input.internal,
+        allow_gp_dns: input.allowGPDNS ?? false,
       };
       const zone = zoneFromAPI(
         await controllerRequest<ZoneCreateResponse>("/zones", 201, {

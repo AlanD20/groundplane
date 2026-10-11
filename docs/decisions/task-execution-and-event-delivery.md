@@ -68,6 +68,29 @@ parameters, logs or results, and owned buffers are cleared after use. Token
 authentication is the single-host MVP boundary; mutual TLS remains outside this
 decision.
 
+### Interrupted Attach removal
+
+An authored Detach captures its immutable intent, ordered procedures and original
+assignment before execution. Each mutation waits for the Controller to record
+its Running event. Recovery resumes only the unfinished suffix of the compiled
+revoke, network-withdrawal and Detach procedures; its cursor advances atomically
+with the corresponding completed event. Completed procedures are not replayed.
+The original failure remains the Task outcome even after cleanup succeeds, and
+the visible Apply fails rather than retrying the Blueprint automatically.
+
+Successful cleanup retires the exact Attach/runtime state and records absence in
+the same terminal transaction. Detach retains database data. Custom hooks retain
+their original plan but do not gain replay authority from recovery. A saved result
+is reused without rerunning the command. A STARTED hook without a result blocks
+until an operator uses Retry on the visible Apply. That action atomically advances
+the child assignment and resource-claim epoch and issues a one-use authorization
+bound to the exact checkpoint, plan and step. Starting the authorized attempt
+archives the previous checkpoint and consumes its permit atomically. Reconnect
+alone cannot grant permission to repeat an interrupted command.
+See the [capture owner](../../internal/infra/etcd/attach_removal_recovery_authority.go)
+and [executor](../../internal/agent/attach_removal_recovery.go). This integration
+is locally compiled; interruption and reconnect remain unqualified.
+
 ## Task events resume by durable sequence
 
 Task publication captures a bounded, secret-free description of each sealed
@@ -77,6 +100,55 @@ Descriptions are presentation only, never permission to execute. Missing older
 metadata stays missing; no live-state reconstruction or history rewrite is used.
 See [the safe projector](../../internal/common/taskdescription) and
 [Task journal capture](../../internal/infra/etcd/taskjournal/descriptions.go).
+
+Health-wait descriptions capture a narrow projection from the selected sealed
+artifact, with the executor's physical workload selection. Only check type,
+loopback port, replica requirement and authored timing/retries are retained.
+Arbitrary command arguments, URL paths and process patterns are excluded. Missing
+projection data is unavailable, not reconstructed from current Service settings;
+unspecified timing is not reported as an effective default. The projection shares
+the immutable step record and its retention boundary, rather than a second journal.
+
+Failure presentation reads the existing original report and recovery cursor at
+the same storage revision as the Task and its events. It must not pick the latest
+failed event as the original cause: that event may belong to restoration. After
+accepted recovery retires its execution record, the terminal Task result retains
+the original outcome and accepted recovery identity. This avoids a second recovery
+journal or live-resource reconstruction. Event completion alone cannot authorize
+the **Recovery verified** label. See the
+[recovery reader](../../internal/infra/etcd/task_recovery_observation.go) and
+[human projection](../../internal/controller/handlers/task_recovery_projection.go).
+
+Execution failures use a closed, output-free diagnostic catalog in
+[Task progress](../../internal/common/taskprogress/failure.go). Typed helper
+results and known error kinds select the code; arbitrary error text is never
+public evidence. The authenticated channel checks codes and outcome consistency
+before persistence. Step checkpoints and final results retain these observations
+within the existing journal, not a parallel logging system. Recovery may add its
+own failed-stage observation but must not replace the original failure with a
+cleanup error. This machine/storage change requires matching binaries; no
+compatibility decoder is provided.
+
+Native Controller updates persist an observed candidate cause in their existing
+handoff journal, atomically with entering rollback. The first cause survives
+watchdog and Controller restarts; later recovery attempts cannot overwrite it.
+The update executor returns a settled outcome separately from an unresolved
+execution error, so exposing a cause does not weaken restoration requirements.
+Only a settled outcome reaches the normal Task terminal transaction. A startup
+guard may restore a failed process without knowing its cause; that cause remains
+unavailable rather than inferred from the restored image. See
+[handoff persistence](../../internal/infra/controllerrelease/journal.go) and
+[settled outcome](../../internal/controller/controllerupgrade/coordinator_outcome.go).
+
+Agent replacement uses its existing aggregate for the first observed candidate
+failure. A generation-and-revision comparison saves it before rollback preparation;
+restoration carries it into the next generation. Terminal Task projection checks
+the pinned previous image and exact restored generation before reading that cause.
+A fresh forward update clears the aggregate observation, while the prior Task
+retains its own result. The observation changes neither authenticated Ready proof
+nor the recovery direction. See
+[replacement observation](../../internal/infra/etcd/agentregistration/replacement_failure.go)
+and [Task outcome](../../internal/controller/localagent/task_update_outcome.go).
 
 The public Server-Sent Events id is the canonical decimal Task-event sequence,
 never a storage revision. `Last-Event-ID` selects a suffix of one Task journal.
@@ -99,6 +171,16 @@ Agent event identity includes that epoch. Recovery advances it only after the
 preceding epoch has durable effect evidence; an eventless failed delivery may
 reuse the same next epoch. This prevents two executions from sharing one event
 identity without adding a public delivery record.
+
+Trimming raw events also updates a bounded Task-owned attempt-summary record in
+the same transaction. Keeping it outside the Task record preserves the Task's
+existing size limit without replacing per-step replay checkpoints. It retains
+only allowlisted observations and Controller receipt timing, never raw output.
+Task details combine that archive with retained events at one storage revision;
+the archive retires atomically with the Task. Summary eviction is explicit, and
+no execution or recovery consumer uses this diagnostic record as authority.
+See [attempt summaries](../../internal/infra/etcd/taskjournal/attempt_history.go)
+and [atomic trimming](../../internal/infra/etcd/task_event_retention.go).
 
 ## Consequences
 

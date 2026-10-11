@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -206,19 +209,31 @@ func testBlueprintExecutedArtifactConfigured(
 	}
 	if addressable {
 		projection.DesiredServices[0].Desired.Expose = []string{"8080"}
-		render.ProxyPorts, render.ProxyGeneration = []uint16{8080}, 1
-		config, configErr := domain.RenderProxyConfig(
+		for _, kind := range []core.ComponentKind{core.ComponentKindIngressCaddy, core.ComponentKindEdgeCloudflare} {
+			component, componentErr := testcomponents.NewRecord(core.Component{
+				ID: ids.New(ids.KindComponent), Owner: core.ComponentOwnerEnvironment,
+				OwnerID: projection.EnvironmentID, Kind: kind,
+			})
+			if componentErr != nil {
+				t.Fatal(componentErr)
+			}
+			projection.Components = append(projection.Components, component)
+		}
+		render.Projection = projection
+		render.ProxyImplementation = serviceproxy.Caddy
+		render.ProxyPorts, render.ProxyGeneration = []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}}, 1
+		config, configErr := domain.RenderProxyConfig(serviceproxy.Caddy,
 			render.ServiceName,
 			render.ReleaseID,
 			render.CandidateTarget,
 			1,
-			render.ProxyPorts,
-		)
+			render.ProxyPorts)
+
 		if configErr != nil {
 			t.Fatal(configErr)
 		}
 		render.ProxyConfigDigest = hex.EncodeToString(config.SHA256[:])
-		if err := resolver.EnableServiceProxyImage(blueprintTestProxyCatalog("b")); err != nil {
+		if err := resolver.EnableServiceProxyImages(blueprintTestProxyCatalog("b"), blueprintTestEnvoyCatalog("b")); err != nil {
 			t.Fatal(err)
 		}
 		if err := resolver.PrepareReleaseProxyImage(&render, nil); err != nil {
@@ -281,14 +296,14 @@ func testBlueprintExecutedArtifactConfigured(
 		task,
 		testtaskplanning.BlueprintReleasePlanInput{
 			Members: []testreleaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
-			ApplyStepIDs: []string{
-				ids.New(ids.KindStep),
+			MemberSteps: []testtaskplanning.ReleaseMemberStepIDs{
+				{
+					Forward:    []string{ids.New(ids.KindStep), ids.New(ids.KindStep), ids.New(ids.KindStep)},
+					Probe:      ids.New(ids.KindStep),
+					Compensate: ids.New(ids.KindStep),
+				},
 			},
-			HealthStepIDs:             []string{ids.New(ids.KindStep)},
-			SwitchStepIDs:             []string{ids.New(ids.KindStep)},
-			RecoveryProbeStepIDs:      []string{ids.New(ids.KindStep)},
-			RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)},
-			PostStepIDs:               [][]string{nil},
+			PostStepIDs: [][]string{nil},
 		},
 	)
 	if err != nil {
@@ -421,6 +436,12 @@ func testBlueprintExecutedArtifactConfigured(
 	proveRetainedBlueprintProducer(t, fixture, resolver, project, serviceID, servingRace)
 }
 
+func blueprintTestEnvoyCatalog(child string) componentsdk.OCIImage {
+	image := blueprintTestProxyCatalog(child)
+	image.Repository = "docker.io/envoyproxy/envoy"
+	return image
+}
+
 func blueprintTestProxyCatalog(child string) componentsdk.OCIImage {
 	return componentsdk.OCIImage{Repository: "docker.io/library/caddy", IndexDigest: strings.Repeat("a", 64),
 		Platforms: []componentsdk.OCIPlatform{
@@ -494,18 +515,18 @@ func proveSecondAddressableBlueprint(
 	predecessors := []etcd.BlueprintNativePredecessor{capture.Runtime()}
 	render.PriorProxyGeneration, render.PriorProxyDigest = prior.ProxyGeneration, prior.ProxyConfigDigest
 	render.ProxyGeneration = prior.ProxyGeneration + 1
-	config, err := domain.RenderProxyConfig(
+	config, err := domain.RenderProxyConfig(serviceproxy.Caddy,
 		render.ServiceName,
 		render.ReleaseID,
 		render.CandidateTarget,
 		render.ProxyGeneration,
-		render.ProxyPorts,
-	)
+		render.ProxyPorts)
+
 	if err != nil {
 		t.Fatal(err)
 	}
 	render.ProxyConfigDigest = hex.EncodeToString(config.SHA256[:])
-	if err := resolver.EnableServiceProxyImage(blueprintTestProxyCatalog("d")); err != nil {
+	if err := resolver.EnableServiceProxyImages(blueprintTestProxyCatalog("d"), blueprintTestEnvoyCatalog("d")); err != nil {
 		t.Fatal(err)
 	}
 	if err := resolver.PrepareReleaseProxyImage(&render, &prior); err != nil {
@@ -554,14 +575,14 @@ func proveSecondAddressableBlueprint(
 		testtaskplanning.BlueprintReleasePlanInput{
 			Members:            []testreleaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
 			NativePredecessors: predecessors,
-			ApplyStepIDs: []string{
-				ids.New(ids.KindStep),
+			MemberSteps: []testtaskplanning.ReleaseMemberStepIDs{
+				{
+					Forward:    []string{ids.New(ids.KindStep), ids.New(ids.KindStep), ids.New(ids.KindStep)},
+					Probe:      ids.New(ids.KindStep),
+					Compensate: ids.New(ids.KindStep),
+				},
 			},
-			HealthStepIDs:             []string{ids.New(ids.KindStep)},
-			SwitchStepIDs:             []string{ids.New(ids.KindStep)},
-			RecoveryProbeStepIDs:      []string{ids.New(ids.KindStep)},
-			RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)},
-			PostStepIDs:               [][]string{nil},
+			PostStepIDs: [][]string{nil},
 		},
 	)
 	if err != nil {

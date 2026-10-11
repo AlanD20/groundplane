@@ -36,13 +36,27 @@ func StartupServices(request *agentpb.ComposeHelperRequest) ([]*agentpb.ComposeS
 		}
 	case step.GetComposeWorkloadApply() != nil:
 		apply := step.GetComposeWorkloadApply()
-		dependencies = true
-		names = append(names, releaseWorkloadName(artifact, apply.ServiceId, apply.Target))
-		names = append(names, releaseProxyName(artifact, apply.ServiceId))
+		workload, selectErr := executionplan.ReleaseWorkloadService(
+			artifact,
+			apply.ServiceId,
+			apply.Target,
+			apply.RollingReplicaOrdinal,
+		)
+		if selectErr != nil {
+			return nil, selectErr
+		}
+		dependencies = apply.RollingReplicaOrdinal == 0
+		names = append(names, workload.GetComposeName())
+		if proxy := releaseProxyName(artifact, apply.ServiceId); proxy != "" {
+			names = append(names, proxy)
+		}
 	case step.GetServiceRecreateCompensate() != nil:
 		names = serviceNames(artifact, []string{step.GetServiceRecreateCompensate().ServiceId})
 	case step.GetComponentRestorationCompensate() != nil && owned.GetPlan().GetComponentRecoveryProcedure().GetPredecessor() != nil:
-		names = serviceNames(artifact, []string{owned.GetPlan().GetComponentRecoveryProcedure().GetPredecessor().GetServiceId()})
+		names = serviceNames(
+			artifact,
+			[]string{owned.GetPlan().GetComponentRecoveryProcedure().GetPredecessor().GetServiceId()},
+		)
 	case step.GetServiceProxyCompensate() != nil:
 		compensate := step.GetServiceProxyCompensate()
 		if !compensate.Enabled || compensate.PriorArtifactId == "" {
@@ -54,16 +68,32 @@ func StartupServices(request *agentpb.ComposeHelperRequest) ([]*agentpb.ComposeS
 		}
 		names = serviceNames(artifact, []string{compensate.ServiceId})
 	case step.GetCandidateRestorationCompensate() != nil && executionplan.RestorationTargetForService(owned.GetRestorationAuthority(), restorationStepServiceID(step)) == agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
-		var service *agentpb.ComposeService
-		artifact, service, _, _, err = openServingPredecessor(owned, artifact, step)
+		serving, err := openServingPredecessor(owned, artifact, step)
 		if err != nil {
 			return nil, err
 		}
-		proxy, proxyErr := servingPredecessorProxy(artifact, service.GetServiceId())
-		if proxyErr != nil {
-			return nil, proxyErr
+		artifact = serving.Artifact
+		names = servingPredecessorNames(serving.Workloads, serving.Proxy)
+		selected, err := startupClosure(artifact, names, false)
+		if err != nil {
+			return nil, err
 		}
-		names = servingPredecessorNames(service, proxy)
+		for _, witness := range owned.GetRestorationAuthority().GetNativePredecessors() {
+			if witness.GetServiceId() != restorationStepServiceID(step) ||
+				len(witness.GetRetainedPriorArtifact()) == 0 {
+				continue
+			}
+			retained := &agentpb.ComposeArtifact{}
+			if err := proto.Unmarshal(witness.GetRetainedPriorArtifact(), retained); err != nil {
+				return nil, errs.Wrap(errs.KindValidationFailed, err)
+			}
+			prior, err := startupClosure(retained, serviceNames(retained, []string{witness.GetServiceId()}), false)
+			if err != nil {
+				return nil, err
+			}
+			selected = append(selected, prior...)
+		}
+		return selected, nil
 	default:
 		return nil, nil
 	}

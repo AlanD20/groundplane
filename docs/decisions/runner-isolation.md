@@ -43,6 +43,13 @@ fresh registration token. Process and socket identities must be observed again;
 stale process evidence cannot establish online status. GP does not infer GitHub
 job readiness merely from successful container creation.
 
+The runtime journal captures software metadata from the exact listener image
+configuration after ownership and registration are proved. Readiness publication
+pins it, and the terminal transaction retains it in the Runner lifecycle record.
+Maintenance must observe the same installed image/build before marking it online.
+The image's GP package version and source commit are distinct from its bundled
+upstream Actions runner version; no version is guessed from an OCI digest.
+
 Removal stops the listener, then its build daemon and owned resources. Keep
 network restrictions until the Runner processes are gone. Cleanup affects only
 that Runner; shared registry content and hosted application images survive.

@@ -38,6 +38,12 @@ func validateEnvironmentServiceExtensions(
 			return errs.New(errs.KindValidationFailed, "Environment Service extension target is absent")
 		}
 		if extension.Release != nil {
+			if extension.Release.RollingReplicaTimeoutSeconds > 86400 {
+				return errs.New(
+					errs.KindValidationFailed,
+					"Environment Service rolling replica timeout exceeds 86400 seconds",
+				)
+			}
 			switch extension.Release.DefaultStrategy {
 			case "", core.StrategyBlueGreen, core.StrategyRecreate:
 			default:

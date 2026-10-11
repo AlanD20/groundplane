@@ -13,16 +13,19 @@ import (
 )
 
 type controllerRunnerComposition struct {
-	pools        config.AllocationPools
-	lifecycle    *runnercapability.Executor
-	maintenance  *runnercapability.Maintenance
-	provisioning *runnercapability.ProvisioningService
-	mutations    *runnercapability.MutationService
-	removals     *runnercapability.RemovalService
+	pools         config.AllocationPools
+	lifecycle     *runnercapability.Executor
+	maintenance   *runnercapability.Maintenance
+	provisioning  *runnercapability.ProvisioningService
+	mutations     *runnercapability.MutationService
+	removals      *runnercapability.RemovalService
+	checks        *runnercapability.ConnectionCheckService
+	checkExecutor *runnercapability.ConnectionCheckExecutor
 }
 
 func newControllerRunnerComposition(
 	cfg config.ControllerConfig,
+	store etcd.EnvironmentBlueprintStore,
 	runnerRecords *etcd.RunnerRepository,
 	tasks *etcd.TaskRepository,
 	hierarchyRecords *etcd.HierarchyRepository,
@@ -60,8 +63,20 @@ func newControllerRunnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
 	}
+	checks, checkExecutor, err := newControllerRunnerChecks(
+		store,
+		runnerRecords,
+		tasks,
+		idempotency,
+		intentCoordinator,
+		lifecycle,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("controller: initialize Runner connection checks: %w", err)
+	}
 	return &controllerRunnerComposition{
 		pools: runnerPools, lifecycle: lifecycle, maintenance: maintenance, provisioning: runnerProvisioning,
-		mutations: runnerMutations, removals: runnerRemovals,
+		mutations: runnerMutations, removals: runnerRemovals, checks: checks, checkExecutor: checkExecutor,
 	}, nil
 }

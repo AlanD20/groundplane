@@ -16,7 +16,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
-	"github.com/AlanD20/groundplane/internal/common/slug"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -273,8 +272,18 @@ func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
 		ReconciliationRequired: task.ReconciliationRequired,
 		TargetName:             valueOrEmpty(task.TargetName), ResourceKind: valueOrEmpty(task.ResourceKind),
 		Executor: string(task.Executor), TimeoutSeconds: task.TimeoutSeconds,
-		FailureSummary: valueOrEmpty(task.FailureSummary), ResultSummary: valueOrEmpty(task.ResultSummary),
+		Failure: taskFailureFromGenerated(task.Failure), Recovery: taskRecoveryFromGenerated(task.Recovery),
+		ResultSummary: valueOrEmpty(task.ResultSummary),
 	}
+	result.Preparation = taskPreparationFromGenerated(task.Preparation)
+	if retry := task.InterruptedDetachRetry; retry != nil {
+		result.InterruptedDetachRetry = &apiTypes.TaskDetachRetry{AttachID: retry.AttachId, StepID: retry.StepId}
+	}
+	history, err := taskAttemptHistoryFromGenerated(task.AttemptHistory)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
+	result.AttemptHistory = history
 	if task.RetryOf != nil {
 		result.RetryOf = *task.RetryOf
 	}
@@ -314,41 +323,6 @@ func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
 			}
 			result.Steps[index] = converted
 		}
-	}
-	return result, nil
-}
-
-func taskStepFromGenerated(step generated.TaskStep) (apiTypes.TaskStep, error) {
-	if !step.Kind.Valid() {
-		return apiTypes.TaskStep{}, errs.New(errs.KindInternal, "apiclient: Task response has unknown step kind")
-	}
-	result := apiTypes.TaskStep{Name: step.Name, Status: apiTypes.TaskStatus(step.Status), Action: step.Action,
-		Description: valueOrEmpty(step.Description), Target: valueOrEmpty(step.Target)}
-	if step.TimeoutSeconds != nil {
-		if *step.TimeoutSeconds <= 0 {
-			return apiTypes.TaskStep{}, errs.New(errs.KindInternal, "apiclient: Task step has an invalid timeout")
-		}
-		result.TimeoutSeconds = uint32(*step.TimeoutSeconds)
-	}
-	switch step.Kind {
-	case generated.TaskStepKindOperation:
-		if step.ScriptId != nil || step.ScriptSlug != nil {
-			return apiTypes.TaskStep{}, errs.New(
-				errs.KindInternal, "apiclient: operation Task step has Script identity",
-			)
-		}
-		result.Kind = apiTypes.TaskStepOperation
-	case generated.TaskStepKindScript:
-		if step.ScriptId == nil || step.ScriptSlug == nil ||
-			ids.Validate(ids.KindScript, valueOrEmpty(step.ScriptId)) != nil ||
-			!slug.Valid(valueOrEmpty(step.ScriptSlug)) {
-			return apiTypes.TaskStep{}, errs.New(
-				errs.KindInternal, "apiclient: script Task step has invalid Script identity",
-			)
-		}
-		result.Kind = apiTypes.TaskStepScript
-		result.ScriptID = *step.ScriptId
-		result.ScriptSlug = *step.ScriptSlug
 	}
 	return result, nil
 }
@@ -549,10 +523,30 @@ func decodeTaskEventFrame(path string, frameID string, data string) (uint64, api
 	if err := decodeSingleJSON(http.MethodGet, path, strings.NewReader(data), &event); err != nil {
 		return 0, apiTypes.TaskEvent{}, err
 	}
-	if event.Sequence != sequence || event.StepID == "" ||
+	if event.Sequence != sequence || (event.StepID == "") != (event.ControllerOperation != nil) ||
 		event.Attempt == 0 || event.Ordinal == 0 || event.ReceivedAt.IsZero() ||
 		!validPublicTaskStatus(event.State) {
 		return 0, apiTypes.TaskEvent{}, errs.New(errs.KindInternal, "apiclient: Task event data is invalid")
+	}
+	if operation := event.ControllerOperation; operation != nil {
+		if operation.Stage == "" || len(operation.Stage) > 128 || operation.Name == "" ||
+			len(operation.Name) > 256 || event.HealthWait != nil {
+			return 0, apiTypes.TaskEvent{}, errs.New(errs.KindInternal, "apiclient: Controller operation is invalid")
+		}
+	}
+	if event.HealthWait.Validate() != nil ||
+		event.HealthWait != nil && (event.State != apiTypes.TaskRunning || event.Ordinal < 2) {
+		return 0, apiTypes.TaskEvent{}, errs.New(errs.KindInternal, "apiclient: Task health observation is invalid")
+	}
+	if failure := event.Failure; failure != nil {
+		if failure.Status != string(event.State) || failure.StepID != event.StepID ||
+			!terminalPublicTaskStatus(event.State) || event.State == apiTypes.TaskCompleted ||
+			failure.Summary == "" || len(failure.Summary) > 1024 || len(failure.Code) > 128 || event.HealthWait != nil {
+			return 0, apiTypes.TaskEvent{}, errs.New(
+				errs.KindInternal,
+				"apiclient: Task failure observation is invalid",
+			)
+		}
 	}
 	return sequence, event, nil
 }

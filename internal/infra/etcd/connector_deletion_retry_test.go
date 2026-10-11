@@ -80,8 +80,9 @@ func TestConnectorDeletionNonDeletingTerminalStatusesReleaseCleanupWithReference
 			switch terminalStatus {
 			case testtaskjournal.TaskStatusFailed:
 				terminal, err = tasks.AcknowledgeControllerTask(
-					ctx, task.ID, terminalStatus, task.CreatedAt.Add(2*time.Second),
-				)
+					ctx, task.ID, terminalStatus, nil,
+					task.CreatedAt.Add(2*time.Second))
+
 			case testtaskjournal.TaskStatusTimedOut:
 				var expired int
 				expired, err = tasks.ExpireTimedOutTasks(ctx, deadline.Add(time.Second))
@@ -428,14 +429,15 @@ func TestConnectorDeletionTerminalReplayRejectsCorruptEvidence(t *testing.T) {
 			terminalAt := task.CreatedAt.Add(2 * time.Second)
 			if _, err := tasks.AcknowledgeControllerTask(
 				ctx,
-				task.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
-			); err != nil {
+				task.ID, testtaskjournal.TaskStatusCompleted, nil,
+
+				terminalAt); err != nil {
 				t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 			}
 			corrupt(t, fixture, task)
 			if _, err := tasks.AcknowledgeControllerTask(
-				ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
-			); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+				ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil,
+				terminalAt); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 				t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 			}
 		})
@@ -476,8 +478,9 @@ func TestConnectorDeletionLateRetryReplaysAfterOriginalTargetPruned(t *testing.T
 		t.Fatalf("ClaimNextControllerTask(original) found/error = %v/%v", found, err)
 	}
 	failed, err := tasks.AcknowledgeControllerTask(
-		ctx, original.ID, testtaskjournal.TaskStatusFailed, original.CreatedAt.Add(2*time.Second),
-	)
+		ctx, original.ID, testtaskjournal.TaskStatusFailed, nil,
+		original.CreatedAt.Add(2*time.Second))
+
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask(original) error = %v", err)
 	}
@@ -503,8 +506,9 @@ func TestConnectorDeletionLateRetryReplaysAfterOriginalTargetPruned(t *testing.T
 	}
 	terminalAt := retryAt.Add(2 * time.Second)
 	terminal, err := tasks.AcknowledgeControllerTask(
-		ctx, retryID, testtaskjournal.TaskStatusCompleted, terminalAt,
-	)
+		ctx, retryID, testtaskjournal.TaskStatusCompleted, nil,
+		terminalAt)
+
 	if err != nil || terminal.Record.RetryOf != original.ID {
 		t.Fatalf("AcknowledgeControllerTask(retry) = %#v/%v", terminal, err)
 	}
@@ -517,8 +521,8 @@ func TestConnectorDeletionLateRetryReplaysAfterOriginalTargetPruned(t *testing.T
 	}
 	connectorDeletionDeleteKey(t, fixture.store, connectorDeletionReplayTargetKey(t, original))
 	if _, err := tasks.AcknowledgeControllerTask(
-		ctx, retryID, testtaskjournal.TaskStatusCompleted, terminalAt,
-	); err != nil {
+		ctx, retryID, testtaskjournal.TaskStatusCompleted, nil,
+		terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(retry replay) error = %v", err)
 	}
 	if mustOptionalKey(t, fixture.store, retryMarkerKey) == nil {

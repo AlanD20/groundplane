@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -73,7 +74,11 @@ func (service *Service) Plan(
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
-	planner, err := newAuthoredUnitPlanner(ctx, input, targets, runtimeReady, attachGenerations, snapshot)
+	var sealedRuntime *projectionrecord.EnvironmentComposeProjection
+	if runtimeReady {
+		sealedRuntime = &runtime.Record
+	}
+	planner, err := newAuthoredUnitPlanner(ctx, input, targets, sealedRuntime, attachGenerations, snapshot)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
@@ -85,6 +90,7 @@ func (service *Service) Plan(
 		parent.Owner.EnvironmentID,
 		targets,
 		snapshot,
+		input.identities.PendingOmissions,
 	)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
@@ -99,6 +105,26 @@ func (service *Service) Plan(
 		}
 	}
 	for index := range omissions {
+		if omissions[index].Target.Kind == ids.KindService {
+			// Retained definitions and managed Entry files must stop referring
+			// to an omitted Service before its physical removal starts.
+			for _, candidate := range units {
+				if candidate.Target.Kind == ids.KindService || candidate.Target.Kind == ids.KindEnvEntry {
+					omissions[index].After = append(omissions[index].After, candidate.Target)
+				}
+			}
+			omissions[index].After = canonicalAuthoredUnitKeys(omissions[index].After)
+		}
+		if omissions[index].Target.Kind == ids.KindNetwork {
+			// Retained Services may be moving off an omitted Zone. Their release
+			// strategy must settle before native bridge removal is attempted.
+			for _, candidate := range units {
+				if candidate.Target.Kind == ids.KindService || candidate.Target.Kind == ids.KindComponent {
+					omissions[index].After = append(omissions[index].After, candidate.Target)
+				}
+			}
+			omissions[index].After = canonicalAuthoredUnitKeys(omissions[index].After)
+		}
 		if omissions[index].Target.Kind != ids.KindRoute {
 			continue
 		}
@@ -106,6 +132,9 @@ func (service *Service) Plan(
 		// Route absence releases a removed Service's dependency.
 		omissions[index].After = append(omissions[index].After, componentTargets...)
 		omissions[index].After = canonicalAuthoredUnitKeys(omissions[index].After)
+	}
+	if err := service.orderAuthoredDNSWithdrawal(ctx, units, omissions, snapshot); err != nil {
+		return blueprintunits.DesiredPlan{}, err
 	}
 	units = append(units, omissions...)
 	slices.SortFunc(units, func(left, right blueprintunits.Unit) int {
@@ -145,6 +174,7 @@ func orderAuthoredRemovalUnits(units []blueprintunits.Unit) []blueprintunits.Uni
 			after = append(after, byKind[ids.KindRoute]...)
 			after = append(after, byKind[ids.KindAttach]...)
 			after = append(after, byKind[ids.KindScript]...)
+			after = append(after, byKind[ids.KindEnvEntry]...)
 		case ids.KindNetwork:
 			after = append(after, byKind[ids.KindService]...)
 			after = append(after, byKind[ids.KindComponent]...)

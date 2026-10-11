@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -40,6 +41,7 @@ type Extensions struct {
 	Attachments   map[string]core.AttachmentSpec
 	Entries       map[string]core.EntrySpec
 	Routes        []core.RouteSpec
+	DNS           map[string]dnsrecords.EnvironmentSpec
 	Scripts       map[string]core.ScriptSpec
 	Components    map[string]core.ComponentSpec
 	Backup        *core.BackupSpec
@@ -57,15 +59,16 @@ type Result struct {
 
 type rootDocument struct {
 	core.Envelope `yaml:",inline"`
-	NetworkPool   string                           `yaml:"x-gp-network-pool"`
-	Requires      []core.Requirement               `yaml:"x-gp-requires,omitempty"`
-	Attachments   map[string]core.AttachmentSpec   `yaml:"x-gp-attachments,omitempty"`
-	Entries       map[string]core.EntrySpec        `yaml:"x-gp-entry,omitempty"`
-	Routes        []core.RouteSpec                 `yaml:"x-gp-routes,omitempty"`
-	Scripts       map[string]core.ScriptSpec       `yaml:"x-gp-scripts,omitempty"`
-	Components    map[string]core.ComponentSpec    `yaml:"x-gp-components,omitempty"`
-	Backup        *authoredBackupSpec              `yaml:"x-gp-backup,omitempty"`
-	ReleaseGroups map[string]core.ReleaseGroupSpec `yaml:"x-gp-release-groups,omitempty"`
+	NetworkPool   string                                `yaml:"x-gp-network-pool"`
+	Requires      []core.Requirement                    `yaml:"x-gp-requires,omitempty"`
+	Attachments   map[string]core.AttachmentSpec        `yaml:"x-gp-attachments,omitempty"`
+	Entries       map[string]core.EntrySpec             `yaml:"x-gp-entry,omitempty"`
+	Routes        []core.RouteSpec                      `yaml:"x-gp-routes,omitempty"`
+	DNS           map[string]dnsrecords.EnvironmentSpec `yaml:"x-gp-dns,omitempty"`
+	Scripts       map[string]core.ScriptSpec            `yaml:"x-gp-scripts,omitempty"`
+	Components    map[string]core.ComponentSpec         `yaml:"x-gp-components,omitempty"`
+	Backup        *authoredBackupSpec                   `yaml:"x-gp-backup,omitempty"`
+	ReleaseGroups map[string]core.ReleaseGroupSpec      `yaml:"x-gp-release-groups,omitempty"`
 }
 
 // authoredBackupSpec retains Keep presence long enough to distinguish an
@@ -83,6 +86,7 @@ type authoredBackupSpec struct {
 var rootGroundplaneFields = map[string]struct{}{
 	"kind": {}, "schema": {}, "metadata": {},
 	"x-gp-network-pool": {},
+	"x-gp-dns":          {},
 	"x-gp-requires":     {}, "x-gp-attachments": {}, "x-gp-entry": {}, "x-gp-routes": {},
 	"x-gp-scripts": {}, "x-gp-components": {}, "x-gp-backup": {}, "x-gp-release-groups": {},
 }
@@ -186,6 +190,9 @@ func Parse(ctx context.Context, scope EnvironmentScope, bundle core.BlueprintBun
 	if err := validateReleaseGroupReferences(extensions.ReleaseGroups, project); err != nil {
 		return Result{}, err
 	}
+	if err := validateDNSZoneReferences(extensions.DNS, project); err != nil {
+		return Result{}, err
+	}
 	if err := validateScriptReferences(extensions.Scripts, project, extensions.Entries); err != nil {
 		return Result{}, err
 	}
@@ -258,6 +265,13 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	if err != nil {
 		return core.Envelope{}, Extensions{}, nil, err
 	}
+	authored.DNS, err = normalizeDNS(authored.DNS, authored.Metadata)
+	if err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
+	if err := core.ValidateBlueprintDNSNames(authored.DNS, authored.Routes); err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
 	authored.Entries, err = normalizeEntries(authored.Entries)
 	if err != nil {
 		return core.Envelope{}, Extensions{}, nil, err
@@ -279,7 +293,7 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	extensions := Extensions{
 		NetworkPool: authored.NetworkPool,
 		Requires:    authored.Requires, Attachments: authored.Attachments, Entries: authored.Entries,
-		Routes: authored.Routes, Scripts: authored.Scripts, Components: authored.Components, Backup: backup,
+		Routes: authored.Routes, DNS: authored.DNS, Scripts: authored.Scripts, Components: authored.Components, Backup: backup,
 		ReleaseGroups: authored.ReleaseGroups,
 	}
 	return authored.Envelope, extensions, compose, nil

@@ -4,17 +4,15 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
-	"errors"
-	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"slices"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/common/runner"
-	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -33,6 +31,13 @@ func executeServiceProxy(
 	proxyName := releaseProxyName(artifact, serviceID)
 	if serviceID == "" || proxyName == "" {
 		return nil, errs.New(errs.KindValidationFailed, "release proxy artifact is inconsistent")
+	}
+	proxy, err := servingPredecessorProxy(artifact, serviceID)
+	if err != nil || proxy == nil {
+		return nil, errs.New(errs.KindValidationFailed, "captured Service proxy has no compiled activation procedure")
+	}
+	if _, err := executionplan.OpenProxyConfiguration(proxy); err != nil {
+		return nil, err
 	}
 	if err := os.MkdirAll(WorkDirectory, 0o700); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
@@ -100,6 +105,11 @@ func executeServiceProxy(
 		return completedResponse(), nil
 	}
 	config, digest, target, generation, releaseID, compensated, alternate := proxyStepExpectation(step)
+	if switching := step.GetServiceProxySwitch(); switching != nil && switching.GetFromTarget() == "rolling" {
+		if err := verifyRollingProxyHandoff(executionCtx, taskRunner, plan, artifact, switching); err != nil {
+			return nil, err
+		}
+	}
 	if compensate := step.GetServiceProxyCompensate(); compensate != nil && compensate.PriorArtifactId != "" {
 		prior := composeArtifactByID(plan, compensate.PriorArtifactId)
 		if prior == nil {
@@ -122,52 +132,49 @@ func executeServiceProxy(
 			return failure, err
 		}
 	}
-	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil {
-		if _, failure, err := run(config, "exec", "--no-TTY", proxyName, "sh", "-ec", serviceproxy.Activate); err != nil ||
+	priorID := proxyStepPriorArtifact(step)
+	priorArtifact := composeArtifactByID(plan, priorID)
+	if priorID != "" && priorArtifact == nil {
+		return nil, errs.New(errs.KindValidationFailed, "captured proxy predecessor artifact is missing")
+	}
+	containerID, err := ownedProxyContainer(executionCtx, taskRunner, artifact, proxy, priorArtifact)
+	if err != nil {
+		return nil, err
+	}
+	mutating := step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil
+	if mutating {
+		if failure, err := activateCapturedProxy(executionCtx, taskRunner, containerID, proxy.GetProxyImplementation(), config); err != nil ||
 			failure != nil {
 			return failure, err
 		}
 	}
-	observed, failure, err := run(
-		nil,
-		"exec",
-		"--no-TTY",
-		proxyName,
-		"wget",
-		"--quiet",
-		"--output-document=-",
-		"http://127.0.0.1:2019/config/",
-	)
-	if err != nil || failure != nil {
-		return failure, err
+	observe := observeRestorationProxy
+	if mutating {
+		observe = awaitRestorationProxy
 	}
-	actual, err := canonicalProxyJSON(observed.Stdout)
+	proven, err := observe(executionCtx, taskRunner, containerID, proxy.GetProxyImplementation(), digest)
 	if err != nil {
-		return failedProxyResponse(), nil
+		return nil, err
 	}
-	actualDigest := sha256.Sum256(actual)
-	if !bytes.Equal(actualDigest[:], digest) && alternate != nil {
+	if !proven && alternate != nil && len(alternate.config) != 0 {
 		alternateDigest := sha256.Sum256(alternate.config)
-		if bytes.Equal(actualDigest[:], alternateDigest[:]) && bytes.Equal(alternateDigest[:], alternate.digest) {
-			target, generation, releaseID, digest = alternate.target, alternate.generation, alternate.releaseID, alternate.digest
+		if bytes.Equal(alternateDigest[:], alternate.digest) {
+			proven, err = observe(
+				executionCtx,
+				taskRunner,
+				containerID,
+				proxy.GetProxyImplementation(),
+				alternate.digest,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if proven {
+				target, generation, releaseID, digest = alternate.target, alternate.generation, alternate.releaseID, alternate.digest
+			}
 		}
 	}
-	if !bytes.Equal(actualDigest[:], digest) {
-		return failedProxyResponse(), nil
-	}
-	command, failure, err := run(nil, "exec", "--no-TTY", proxyName, "cat", "/proc/1/cmdline")
-	if err != nil || failure != nil {
-		return failure, err
-	}
-	startupPath, recognized := serviceproxy.StartupConfigPath(command.Stdout)
-	if !recognized {
-		return failedProxyResponse(), nil
-	}
-	stored, failure, err := run(nil, "exec", "--no-TTY", proxyName, "cat", startupPath)
-	if err != nil || failure != nil {
-		return failure, err
-	}
-	if !proxyBytesMatch(stored.Stdout, digest) {
+	if !proven {
 		return failedProxyResponse(), nil
 	}
 	if compensate := step.GetServiceProxyCompensate(); compensate != nil {
@@ -201,20 +208,11 @@ func executeServiceProxy(
 			}
 		}
 	}
-	// Recreate-to-blue-green retires the singleton. A blue-green predecessor
+	// Non-slot predecessors retire after the switch. A blue-green predecessor
 	// stays in its slot until the next candidate replaces that inactive slot.
 	if value := step.GetServiceProxySwitch(); value != nil && value.PriorArtifactId != "" &&
-		value.FromTarget == "singleton" {
-		prior := composeArtifactByID(plan, value.PriorArtifactId)
-		if prior == nil {
-			return nil, errs.New(errs.KindValidationFailed, "release prior topology artifact is missing")
-		}
-		priorBase, cleanup, err := releaseComposeBase(prior)
-		if err != nil {
-			return nil, err
-		}
-		defer cleanup()
-		if _, failure, err := runWithComposeBase(executionCtx, taskRunner, priorBase, nil, "rm", "--stop", "--force", releaseWorkloadName(prior, serviceID, value.FromTarget)); err != nil ||
+		(value.FromTarget == "singleton" || value.FromTarget == "rolling") {
+		if failure, err := retireSwitchedPredecessor(executionCtx, taskRunner, plan, artifact, value); err != nil ||
 			failure != nil {
 			return failure, err
 		}
@@ -235,6 +233,16 @@ type proxyAlternate struct {
 	target     string
 	generation uint64
 	releaseID  string
+}
+
+func proxyStepPriorArtifact(step *agentpb.ExecutionStep) string {
+	if value := step.GetServiceProxySwitch(); value != nil {
+		return value.GetPriorArtifactId()
+	}
+	if value := step.GetServiceProxyProbe(); value != nil {
+		return value.GetPriorArtifactId()
+	}
+	return step.GetServiceProxyCompensate().GetPriorArtifactId()
 }
 
 func proxyStepExpectation(step *agentpb.ExecutionStep) ([]byte, []byte, string, uint64, string, bool, *proxyAlternate) {
@@ -361,16 +369,7 @@ func releaseProxyName(artifact *agentpb.ComposeArtifact, serviceID string) strin
 }
 
 func canonicalProxyJSON(value []byte) ([]byte, error) {
-	var decoded map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(value))
-	decoder.UseNumber()
-	if err := decoder.Decode(&decoded); err != nil {
-		return nil, err
-	}
-	if err := decoder.Decode(&struct{}{}); err == nil || !errors.Is(err, io.EOF) {
-		return nil, errors.New("release proxy JSON has trailing data")
-	}
-	return json.Marshal(decoded)
+	return jcs.Canonicalize(value)
 }
 
 func failedProxyResponse() *agentpb.ComposeHelperResponse {

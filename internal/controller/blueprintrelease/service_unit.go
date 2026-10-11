@@ -12,9 +12,12 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -51,37 +54,67 @@ func (service *Service) PrepareServiceUnit(
 	if err := exactServiceUnitProjection(scope.Compose.Record, input.Projection); err != nil {
 		return Prepared{}, err
 	}
-	expectedOwner, err := taskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
+	captured, err := service.ledger.ReadBlueprintProxyServiceRolloutReference(ctx, input.Projection.EnvironmentID,
+		input.Projection.RevisionID, input.ServiceID, scope.ReadRevision)
 	if err != nil {
 		return Prepared{}, err
 	}
+	if captured != nil {
+		return service.prepareCapturedProxyServiceUnit(ctx, input, scope, *captured)
+	}
+	replacement, err := service.ledger.ReadBlueprintProxyReplacementImage(ctx, scope.Environment.Record.ID,
+		input.Projection.RevisionID, input.ServiceID, scope.ReadRevision)
+	if err != nil {
+		return Prepared{}, err
+	}
+	preparedInput, err := service.prepareServiceUnitInput(ctx, input, scope, replacement)
+	if err != nil {
+		return Prepared{}, err
+	}
+	return service.prepareSelected(ctx, preparedInput, preparedInput.ServiceChanges)
+}
+
+// Both ordinary publication and pre-router capture use this one input owner.
+// Scope is a real fixed storage snapshot; projection selection is checked by
+// the caller against either acknowledged runtime or the inert candidate root.
+func (service *Service) prepareServiceUnitInput(ctx context.Context,
+	input PrepareServiceUnitInput, scope releasequeries.ReleasePlanningScope,
+	replacement *componentplanning.ProxyReplacementImage,
+) (prepareInput, error) {
+	expectedOwner, err := taskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
+	if err != nil {
+		return prepareInput{}, err
+	}
 	if input.Task.Owner != expectedOwner || input.Task.Target != scope.Environment.Record.ID {
-		return Prepared{}, errs.New(errs.KindStateConflict, "Blueprint Service unit hierarchy changed")
+		return prepareInput{}, errs.New(errs.KindStateConflict, "Blueprint Service unit hierarchy changed")
 	}
 	planning, err := service.ledger.LoadPlanningServices(ctx, scope, []string{input.ServiceID})
 	if err != nil {
-		return Prepared{}, err
+		return prepareInput{}, err
 	}
 	if len(planning) != 1 || planning[0].Service.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
-		return Prepared{}, errs.New(errs.KindStateConflict, "Blueprint Service unit is not runnable")
+		return prepareInput{}, errs.New(errs.KindStateConflict, "Blueprint Service unit is not runnable")
 	}
 	if err := service.validateServiceUnitScripts(ctx, scope, input.ServiceID, input.Scripts); err != nil {
-		return Prepared{}, err
+		return prepareInput{}, err
 	}
 	attaches, err := service.ledger.LoadPlanningAttaches(ctx, scope)
 	if err != nil {
-		return Prepared{}, err
+		return prepareInput{}, err
 	}
 	current := planning[0].Service
-	change := blueprints.EnvironmentBlueprintServiceChange{Current: &current, Record: current.Record}
+	change, err := serviceUnitDesiredChange(input.Projection, input.ServiceID, current)
+	if err != nil {
+		return prepareInput{}, err
+	}
 	workloads, err := service.prepareSelectedWorkloads(
 		ctx,
-		input.Projection.EnvironmentID,
+		input.Projection,
 		[]blueprints.EnvironmentBlueprintServiceChange{change},
-		[]blueprints.EnvironmentBlueprintServiceChange{change},
+		replacement,
 	)
 	if err != nil {
-		return Prepared{}, err
+		return prepareInput{}, err
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(
@@ -89,11 +122,11 @@ func (service *Service) PrepareServiceUnit(
 		artifact,
 	); err != nil || artifact.GetArtifactId() != input.Task.Params[taskcontract.EnvironmentBlueprintArtifactParam] ||
 		artifact.GetOwnerId() != input.Projection.EnvironmentID {
-		return Prepared{}, errs.New(errs.KindStateConflict, "Blueprint Service unit artifact is invalid")
+		return prepareInput{}, errs.New(errs.KindStateConflict, "Blueprint Service unit artifact is invalid")
 	}
 	task := input.Task
 	task.Params = maps.Clone(input.Task.Params)
-	preparedInput := PrepareInput{
+	preparedInput := prepareInput{
 		DesiredRevisionID: input.Projection.RevisionID,
 		IntendedAttaches:  attaches,
 		Workloads:         workloads,
@@ -110,12 +143,29 @@ func (service *Service) PrepareServiceUnit(
 		CreatedAt:         input.CreatedAt,
 	}
 	if err := service.validatePrepareInput(ctx, preparedInput); err != nil {
-		return Prepared{}, err
+		return prepareInput{}, err
 	}
-	return service.prepareSelected(
-		ctx,
-		preparedInput,
-		[]blueprints.EnvironmentBlueprintServiceChange{change},
+	return preparedInput, nil
+}
+
+// Native capture and its later publication select the same authored definition;
+// the current record contributes runtime intent and the exact publication fence.
+func serviceUnitDesiredChange(projection projectionrecord.EnvironmentComposeProjection, serviceID string,
+	current etcdstore.Versioned[servicerecord.ServiceRecord],
+) (blueprints.EnvironmentBlueprintServiceChange, error) {
+	for _, selected := range projection.DesiredServices {
+		if selected.Desired.ID != serviceID {
+			continue
+		}
+		candidate, err := servicerecord.ReplaceServiceDesired(current.Record, selected.Desired)
+		if err != nil {
+			return blueprints.EnvironmentBlueprintServiceChange{}, err
+		}
+		return blueprints.EnvironmentBlueprintServiceChange{Current: &current, Record: candidate}, nil
+	}
+	return blueprints.EnvironmentBlueprintServiceChange{}, errs.New(
+		errs.KindStateConflict,
+		"Blueprint Service unit is absent from its captured input",
 	)
 }
 

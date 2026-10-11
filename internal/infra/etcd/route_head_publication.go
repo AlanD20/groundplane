@@ -202,6 +202,7 @@ func prepareRouteHeadPublication(
 		}
 		ownedIdentities.Attaches = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Attaches...)
 		ownedIdentities.Scripts = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Scripts...)
+		ownedIdentities.DNSRecords = append([]projectionrecord.OwnedIdentity(nil), previous.Record.DNSRecords...)
 		ownedIdentities, err = projectionrecord.RetainOwnedIdentityBirths(ownedIdentities, previous.Record)
 		if err != nil {
 			clearRouteHeadPublication(publication)
@@ -424,6 +425,7 @@ func validateRouteRemovalCandidateIdentities(
 	}
 	expected.Attaches = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Attaches...)
 	expected.Scripts = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Scripts...)
+	expected.DNSRecords = append([]projectionrecord.OwnedIdentity(nil), previous.Record.DNSRecords...)
 	expected, err = projectionrecord.RetainOwnedIdentityBirths(expected, previous.Record)
 	if err != nil {
 		return 0, err

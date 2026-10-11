@@ -12,11 +12,11 @@ import (
 // no-op; only terminal Task acknowledgement may delete its durable state.
 func TestControllerTaskHandlerAcceptsOnlyExactEntryRemoval(t *testing.T) {
 	t.Parallel()
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		&fakeControllerTaskLocalAgents{},
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
-	)
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
@@ -28,7 +28,7 @@ func TestControllerTaskHandlerAcceptsOnlyExactEntryRemoval(t *testing.T) {
 			testtaskjournal.TaskEntryEnvironmentParam: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 	}
-	if err := handler.Execute(context.Background(), valid); err != nil {
+	if err := handler.Execute(context.Background(), valid, testControllerProgress(context.Background(), valid)); err != nil {
 		t.Fatalf("Execute(valid Entry removal) error = %v", err)
 	}
 	for name, mutate := range map[string]func(*etcd.TaskRecord){
@@ -47,7 +47,7 @@ func TestControllerTaskHandlerAcceptsOnlyExactEntryRemoval(t *testing.T) {
 				testtaskjournal.TaskEntryEnvironmentParam: valid.Params[testtaskjournal.TaskEntryEnvironmentParam],
 			}
 			mutate(&candidate)
-			if err := handler.Execute(context.Background(), candidate); err == nil {
+			if err := handler.Execute(context.Background(), candidate, testControllerProgress(context.Background(), candidate)); err == nil {
 				t.Fatal("Execute(invalid Entry removal) succeeded")
 			}
 		})

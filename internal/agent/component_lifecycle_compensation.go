@@ -186,6 +186,6 @@ func (p *WorkerPool) executeLifecycleCompensation(
 	if p.compose == nil {
 		return errs.New(errs.KindInternal, "agent: Compose compensation runtime is not configured")
 	}
-	_, err := p.compose.ExecuteStep(ctx, assignment, step)
+	_, err := p.compose.ExecuteStep(ctx, assignment, step, nil)
 	return err
 }

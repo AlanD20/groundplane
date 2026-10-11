@@ -53,7 +53,7 @@ func New(services Services, releases Releases, channel Channel, now func() time.
 
 // Observe preserves input order and always returns one outcome per Service.
 // Missing authority or live evidence never turns a successful desired read into
-// an error. All storage work and the single exchange share one five-second bound.
+// an error. All storage work and exchanges share one five-second bound.
 func (observer *Observer) Observe(
 	ctx context.Context, agentID string, services []etcdstore.Versioned[servicerecord.ServiceRecord],
 ) []Observation {
@@ -66,6 +66,7 @@ func (observer *Observer) Observe(
 	started := observer.now()
 	sources := make([]source, len(services))
 	targets := make([]*agentpb.ServiceObservationTarget, 0, len(services))
+	replicas := make([]uint32, 0, len(services))
 	ordinals := make([]int, 0, len(services))
 	for index, service := range services {
 		if ctx.Err() != nil {
@@ -77,14 +78,13 @@ func (observer *Observer) Observe(
 		}
 		sources[index] = captured
 		targets, ordinals = append(targets, captured.target), append(ordinals, index)
+		replicas = append(replicas, captured.expected)
 	}
 	if len(targets) == 0 || ctx.Err() != nil {
 		return observations
 	}
-	result, err := observer.channel.ObserveServices(ctx, agentID, targets)
-	if err != nil || result == nil || wire.ValidateResult(
-		&agentpb.ObserveServices{RequestId: result.GetRequestId(), Targets: targets}, result,
-	) != nil {
+	rows, err := observer.observeTargets(ctx, agentID, targets, replicas)
+	if err != nil {
 		return observations
 	}
 	// Recheck all usable rows at one new storage revision. An intent change and
@@ -94,7 +94,7 @@ func (observer *Observer) Observe(
 		return observations
 	}
 	for ordinal, index := range ordinals {
-		if result.Observations[ordinal].GetReplicas() == nil {
+		if rows[ordinal].GetReplicas() == nil {
 			continue
 		}
 		if ctx.Err() != nil {
@@ -110,17 +110,17 @@ func (observer *Observer) Observe(
 		if !ok || !sources[index].unchanged(checked) {
 			continue
 		}
-		counts := result.Observations[ordinal].GetReplicas()
+		counts := rows[ordinal].GetReplicas()
 		state := wire.Summarize(counts, sources[index].expected)
 		if sources[index].target.ProxyComposeName != "" {
-			state = wire.SummarizeProxy(counts, sources[index].expected, result.Observations[ordinal].ProxyState)
+			state = wire.SummarizeProxy(counts, sources[index].expected, rows[ordinal].ProxyState)
 		}
 		observations[index] = Observation{
 			State: state,
 			Snapshot: &Snapshot{
 				ObservedAt: started.UTC(), ExpiresAt: started.Add(wire.Freshness).UTC(),
 				ServingReleaseID: sources[index].target.ReleaseId, ExpectedReplicas: sources[index].expected, Replicas: counts,
-				Containers: result.Observations[ordinal].Containers,
+				Containers: rows[ordinal].Containers,
 			},
 		}
 	}

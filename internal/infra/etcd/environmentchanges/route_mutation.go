@@ -40,6 +40,7 @@ type RouteMutationIntent struct {
 	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
 	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
 	Provider                  *RouteProviderPin                              `json:"provider,omitempty"`
+	Plan                      []byte                                         `json:"plan,omitempty"`
 	Status                    taskjournal.TaskStatus                         `json:"status"`
 	CreatedAt                 time.Time                                      `json:"created_at"`
 	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
@@ -55,6 +56,17 @@ type RouteProviderPin struct {
 	ActionID         string                       `json:"action_id"`
 	ServiceID        string                       `json:"service_id"`
 	Input            componentsdk.HTTPRouterInput `json:"input"`
+	Runtime          *RouteProviderRuntime        `json:"runtime,omitempty"`
+}
+
+// A direct Route changes files and may replace the router container. Retain the
+// exact acknowledged artifact and its storage revision before publishing that
+// work. Empty artifact means no acknowledged running predecessor, not a live
+// container-absence proof. Component lifecycle pins do not use this field.
+type RouteProviderRuntime struct {
+	EnvironmentID string `json:"environment_id"`
+	Revision      int64  `json:"revision"`
+	Artifact      []byte `json:"artifact,omitempty"`
 }
 
 // RouteMutationProcedureIDs are allocated before publication by the planner.
@@ -195,7 +207,7 @@ func ValidateRouteMutationIntent(intent RouteMutationIntent) error {
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil {
 		if intent.CurrentProjection != nil || intent.CandidateProjection != nil ||
 			intent.CurrentProjectionRevision != 0 ||
-			intent.Provider != nil {
+			intent.Provider != nil || len(intent.Plan) != 0 {
 			return errs.New(errs.KindValidationFailed, "Route mutation intent projection state is incomplete")
 		}
 		return nil
@@ -208,7 +220,9 @@ func ValidateRouteMutationIntent(intent RouteMutationIntent) error {
 		ValidateRouteProviderPin(intent.Provider) != nil {
 		return errs.New(errs.KindValidationFailed, "Route mutation intent projection is invalid")
 	}
-	return nil
+	_, err := OpenRouteExecutionPlan(intent.Plan, intent.Provider, intent.EnvironmentID, intent.RouteID,
+		intent.CandidateProjection.RenderGeneration, false)
+	return err
 }
 
 func ValidateRouteProviderPin(provider *RouteProviderPin) error {
@@ -226,17 +240,28 @@ func ValidateRouteProviderPin(provider *RouteProviderPin) error {
 		componentsdk.ValidateHTTPRouterInput(provider.Input) != nil {
 		return errs.New(errs.KindValidationFailed, "Route provider pin is invalid")
 	}
+	if provider.Runtime != nil {
+		if _, err := DecodeRouteProviderRuntime(provider); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func CloneRouteProviderPin(source RouteProviderPin) RouteProviderPin {
 	clone := source
 	clone.Input = componentsdk.CloneHTTPRouterInput(source.Input)
+	if source.Runtime != nil {
+		retained := *source.Runtime
+		retained.Artifact = append([]byte(nil), source.Runtime.Artifact...)
+		clone.Runtime = &retained
+	}
 	return clone
 }
 
 func CloneRouteMutationIntent(source RouteMutationIntent) RouteMutationIntent {
 	clone := source
+	clone.Plan = append([]byte(nil), source.Plan...)
 	clone.Route = routerecord.CloneRecord(source.Route)
 	if source.Previous != nil {
 		previous := etcdstore.Versioned[routerecord.Record]{

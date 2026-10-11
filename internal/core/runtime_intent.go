@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 )
 
@@ -33,6 +34,9 @@ type ServiceRuntime struct {
 	ServiceID          string               `json:"service_id"`
 	RuntimeIntent      ServiceRuntimeIntent `json:"runtime_intent"`
 	PostgresToolsImage string               `json:"postgres_tools_image,omitempty"`
+	// Intent changes at admission. This remains set until successful lifecycle
+	// execution or Deploy, so intent alone cannot advertise an old DNS endpoint.
+	UnconfirmedLifecycleTaskID string `json:"unconfirmed_lifecycle_task_id,omitempty"`
 }
 
 // Validate enforces a complete per-service runtime record.
@@ -42,6 +46,9 @@ func (r ServiceRuntime) Validate() error {
 	}
 	if err := r.RuntimeIntent.Validate(); err != nil {
 		return fmt.Errorf("service runtime: %w", err)
+	}
+	if r.UnconfirmedLifecycleTaskID != "" && ids.Validate(ids.KindTask, r.UnconfirmedLifecycleTaskID) != nil {
+		return fmt.Errorf("service runtime: unconfirmed lifecycle Task id is invalid")
 	}
 	if r.PostgresToolsImage != "" && !imageref.IsDigestPinned(r.PostgresToolsImage) {
 		return fmt.Errorf("service runtime: PostgreSQL backup tools must be digest-pinned")

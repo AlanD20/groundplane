@@ -20,7 +20,7 @@ import (
 func TestObservationBatchKeepsOrderAndIsolatesFailure(t *testing.T) {
 	request := readRequest()
 	worker := proto.CloneOf(request.Targets[0])
-	worker.ServiceId, worker.ComposeName = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW", "worker"
+	worker.ServiceId, worker.Workloads[0].ComposeName = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW", "worker"
 	request.Targets = append(request.Targets, worker)
 	engine := &readEngine{inspectErrors: map[string]error{"late": errs.New(errs.KindInternal, "private failure")}}
 	engine.add("worker", readLabels(worker, 1), &container.State{Status: container.StateRunning, Running: true})

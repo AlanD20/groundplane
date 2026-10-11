@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -50,6 +52,7 @@ func TestServiceLifecyclePlanSelectsAppliedSealedAddressableRuntime(t *testing.T
 	reader.projection.DesiredServices[0].Desired.Expose = []string{"8080"}
 	reader.projection.DesiredServices[0].Desired.Replicas = 2
 	reader.projection.Volumes = nil
+	captureTestServiceProxySelection(t, &reader.projection, testServiceProxyImplementation())
 	seal := domain.WorkloadSeal{
 		RequestedReference: "example/api:deployed",
 		LocalImageID:       "sha256:" + strings.Repeat("d", 64), ReplicaCount: 2,
@@ -62,38 +65,71 @@ func TestServiceLifecyclePlanSelectsAppliedSealedAddressableRuntime(t *testing.T
 		AuthorizedVolumeDir: reader.environment.VolumeDir,
 		Identities:          mustComposeIdentitySnapshotFromProjection(t, reader.projection),
 		Releases: map[string]testcomposerender.ComposeReleaseIdentity{serviceID: {
-			ProxyImage: testServiceProxyImage(), ReleaseID: releaseID,
-			Target: domain.WorkloadSingleton, Image: seal.LocalImageID,
-			ServingReleaseID: releaseID, ServingTarget: domain.WorkloadSingleton,
-			ServingProxyGeneration: 4, Strategy: domain.StrategyRecreate,
+			ProxyImplementation:    testServiceProxyImplementation(),
+			ProxyImage:             testServiceProxyImage(),
+			ReleaseID:              releaseID,
+			Target:                 domain.WorkloadSingleton,
+			Image:                  seal.LocalImageID,
+			ServingReleaseID:       releaseID,
+			ServingTarget:          domain.WorkloadSingleton,
+			ServingProxyGeneration: 4,
+			Strategy:               domain.StrategyRecreate,
 		}},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	proxyConfigDigest := ""
+	for _, service := range source.GetServices() {
+		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			proxyConfigDigest = hex.EncodeToString(service.GetProxyConfigSha256())
+		}
+	}
+	if proxyConfigDigest == "" {
+		t.Fatal("addressable runtime fixture has no stable proxy configuration")
 	}
 	reader.projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(source)
 	if err != nil {
 		t.Fatal(err)
 	}
 	releaseRender := testreleaserender.ReleaseRenderInput{
-		ReleaseID: releaseID, PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAX",
-		ArtifactID: source.ArtifactId, ServiceID: serviceID, ServiceName: "api",
-		CandidateWorkload: seal, Strategy: domain.StrategyRecreate, PriorStrategy: domain.StrategyRecreate,
-		CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
-		ProxyGeneration: 4, ProxyPorts: []uint16{8080}, ProxyConfigDigest: "sealed",
-		ProxyImage: testServiceProxyImage(),
-		TenantID:   reader.tenant.ID, TenantSlug: reader.tenant.Slug,
-		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
-		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-		AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection,
+		ReleaseID:           releaseID,
+		PlanID:              "plan_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+		ArtifactID:          source.ArtifactId,
+		ServiceID:           serviceID,
+		ServiceName:         "api",
+		CandidateWorkload:   seal,
+		Strategy:            domain.StrategyRecreate,
+		PriorStrategy:       domain.StrategyRecreate,
+		CandidateTarget:     domain.WorkloadSingleton,
+		PriorTarget:         domain.WorkloadSingleton,
+		ProxyImplementation: testServiceProxyImplementation(),
+		ProxyGeneration:     4,
+		ProxyPorts:          []domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+		ProxyConfigDigest:   proxyConfigDigest,
+		ProxyImage:          testServiceProxyImage(),
+		TenantID:            reader.tenant.ID,
+		TenantSlug:          reader.tenant.Slug,
+		ProjectID:           reader.project.ID,
+		ProjectSlug:         reader.project.Slug,
+		EnvironmentID:       reader.environment.ID,
+		EnvironmentName:     reader.environment.Name,
+		AuthorizedVolumeDir: reader.environment.VolumeDir,
+		Projection:          reader.projection,
 	}
 	input := testreleaserender.ServiceLifecycleRenderInput{
-		PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW", ServiceID: serviceID,
-		TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug,
-		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
-		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
-		AuthorizedVolumeDir: reader.environment.VolumeDir,
-		ArtifactID:          source.ArtifactId, AppliedRenderGeneration: reader.projection.RenderGeneration, AppliedProjectionRevision: 20,
+		PlanID:                    "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		ServiceID:                 serviceID,
+		TenantID:                  reader.tenant.ID,
+		TenantSlug:                reader.tenant.Slug,
+		ProjectID:                 reader.project.ID,
+		ProjectSlug:               reader.project.Slug,
+		EnvironmentID:             reader.environment.ID,
+		EnvironmentName:           reader.environment.Name,
+		AuthorizedVolumeDir:       reader.environment.VolumeDir,
+		ArtifactID:                source.ArtifactId,
+		AppliedRenderGeneration:   reader.projection.RenderGeneration,
+		AppliedProjectionRevision: 20,
 		Release: &testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID: releaseID, ProjectionRevision: 21, IntentRevision: 22,
 			RenderRevision: 23, Current: releaseRender,

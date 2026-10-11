@@ -24,6 +24,14 @@ type authoredRuntimeComponents struct {
 	sources     []projectionrecord.ManagedComponentRuntimeSource
 }
 
+// Rendering needs selected configuration, not acknowledgement authority. Keep
+// that input separate from the receipts required for runtime publication.
+type authoredComponentCompileInput struct {
+	records   []componentrecord.Record
+	projected []core.Component
+	sources   []projectionrecord.ManagedComponentRuntimeSource
+}
+
 // loadAuthoredRuntimeComponents joins the immutable authored selection to the
 // exact applied receipts and acknowledged runtime records at the unit snapshot.
 // The complete singleton pair is returned for rendering; an omitted singleton
@@ -33,6 +41,21 @@ func (service *Service) loadAuthoredRuntimeComponents(
 	parent etcd.TaskRecord,
 	source authoredRuntimeProjectionSource,
 	snapshot blueprintunits.Snapshot,
+) (authoredRuntimeComponents, error) {
+	return service.loadAuthoredComponentSelections(ctx, parent, source, snapshot, nil)
+}
+
+type authoredPendingProxy struct {
+	record componentrecord.Record
+	source projectionrecord.ManagedComponentRuntimeSource
+}
+
+func (service *Service) loadAuthoredComponentSelections(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	source authoredRuntimeProjectionSource,
+	snapshot blueprintunits.Snapshot,
+	pending *authoredPendingProxy,
 ) (authoredRuntimeComponents, error) {
 	authorities, err := service.repository.ReadEnvironmentBlueprintRuntimeComponents(
 		ctx, parent.Owner.EnvironmentID, snapshot.ReadRevision,
@@ -55,6 +78,26 @@ func (service *Service) loadAuthoredRuntimeComponents(
 		record := authority.Component.Record
 		currentIDs[record.Desired.ID] = struct{}{}
 		identity, explicitlyOwned := selected[record.Desired.ID]
+		if pending != nil && pending.record.Desired.ID == record.Desired.ID {
+			spec, found := source.desired.Record.Input.Components[identity.Name]
+			if !explicitlyOwned || identity.Name != string(core.ComponentCapabilityHTTPRouter) ||
+				!found || spec.Implementation != pending.record.Desired.Kind {
+				return authoredRuntimeComponents{}, errs.New(errs.KindStateConflict,
+					"prepared router differs from the authored Environment selection")
+			}
+			record = componentrecord.CloneRecord(pending.record)
+			projected, err := componentrecord.ProjectRecord(record)
+			if err != nil {
+				return authoredRuntimeComponents{}, err
+			}
+			result.records = append(result.records, record)
+			result.projected = append(result.projected, projected)
+			if record.Desired.Enabled {
+				result.sources = append(result.sources, pending.source)
+			}
+			delete(selected, record.Desired.ID)
+			continue // Planning selection only: never manufacture an applied receipt.
+		}
 		if !explicitlyOwned {
 			if record.Desired.Enabled || len(record.Runtime.GeneratedServices) != 0 ||
 				record.Runtime.PinnedIPv4 != "" || authoredRuntimeComponentEffectPossible(snapshot, record.Desired.ID) {
@@ -117,6 +160,12 @@ func (service *Service) loadAuthoredRuntimeComponents(
 	}
 	sort.Slice(result.receipts, func(left, right int) bool {
 		return result.receipts[left].Identity.ID < result.receipts[right].Identity.ID
+	})
+	sort.Slice(result.records, func(left, right int) bool {
+		return result.records[left].Desired.Kind < result.records[right].Desired.Kind
+	})
+	sort.Slice(result.projected, func(left, right int) bool {
+		return result.projected[left].Kind < result.projected[right].Kind
 	})
 	sort.Slice(result.sources, func(left, right int) bool {
 		return result.sources[left].ComponentKind < result.sources[right].ComponentKind

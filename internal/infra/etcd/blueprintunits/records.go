@@ -41,23 +41,27 @@ const (
 // Applied is acknowledged execution authority. Source fields identify the
 // exact child outcome when present. Initial proven absence has no source.
 type AppliedRecord struct {
-	EnvironmentID                      string        `json:"environment_id"`
-	Target                             ResourceKey   `json:"target"`
-	State                              AppliedState  `json:"state"`
-	Fingerprint                        string        `json:"fingerprint,omitempty"`
-	AffectedWrites                     []ResourceKey `json:"affected_writes,omitempty"`
-	ParentTaskID                       string        `json:"parent_task_id,omitempty"`
-	SourceTaskID                       string        `json:"source_task_id,omitempty"`
-	SourcePlanID                       string        `json:"source_plan_id,omitempty"`
-	SourceAssignment                   string        `json:"source_assignment,omitempty"`
-	ExecutionEpoch                     uint32        `json:"execution_epoch,omitempty"`
-	ControllerOperationID              string        `json:"controller_operation_id,omitempty"`
-	ControllerValueGenerationID        string        `json:"controller_value_generation_id,omitempty"`
-	ControllerRuntimeRevision          int64         `json:"controller_runtime_revision,omitempty"`
-	ControllerAuthoredRevision         int64         `json:"controller_authored_revision,omitempty"`
-	ControllerComponentRecordRevision  int64         `json:"controller_component_record_revision,omitempty"`
-	ControllerComponentRuntimeRevision int64         `json:"controller_component_runtime_revision,omitempty"`
-	ControllerScriptSetRevision        int64         `json:"controller_script_set_revision,omitempty"`
+	EnvironmentID                       string                     `json:"environment_id"`
+	Target                              ResourceKey                `json:"target"`
+	State                               AppliedState               `json:"state"`
+	Fingerprint                         string                     `json:"fingerprint,omitempty"`
+	AffectedWrites                      []ResourceKey              `json:"affected_writes,omitempty"`
+	ParentTaskID                        string                     `json:"parent_task_id,omitempty"`
+	SourceTaskID                        string                     `json:"source_task_id,omitempty"`
+	SourcePlanID                        string                     `json:"source_plan_id,omitempty"`
+	SourceAssignment                    string                     `json:"source_assignment,omitempty"`
+	ExecutionEpoch                      uint32                     `json:"execution_epoch,omitempty"`
+	NativeOperationID                   string                     `json:"native_operation_id,omitempty"`
+	ControllerOperationID               string                     `json:"controller_operation_id,omitempty"`
+	ControllerValueGenerationID         string                     `json:"controller_value_generation_id,omitempty"`
+	ControllerRuntimeRevision           int64                      `json:"controller_runtime_revision,omitempty"`
+	ControllerAuthoredRevision          int64                      `json:"controller_authored_revision,omitempty"`
+	ControllerComponentRecordRevision   int64                      `json:"controller_component_record_revision,omitempty"`
+	ControllerComponentRuntimeRevision  int64                      `json:"controller_component_runtime_revision,omitempty"`
+	ControllerProxySelection            bool                       `json:"controller_proxy_selection,omitempty"`
+	ControllerScriptSetRevision         int64                      `json:"controller_script_set_revision,omitempty"`
+	ControllerDNS                       *DNSReceipt                `json:"controller_dns,omitempty"`
+	ControllerServiceDeclarationAbsence *ServiceDeclarationAbsence `json:"controller_service_declaration_absence,omitempty"`
 }
 
 type ExecutionState string
@@ -210,14 +214,49 @@ func validateApplied(record AppliedRecord) error {
 		!validKeys(record.AffectedWrites) {
 		return invalidRecord()
 	}
-	if record.ControllerOperationID != "" {
+	if record.ControllerProxySelection &&
+		(record.Target.Kind != ids.KindComponent || record.ControllerOperationID == "" ||
+			record.NativeOperationID != "" || record.SourceTaskID != "" || record.State != Applied) {
+		return invalidRecord()
+	}
+	if record.ControllerDNS != nil && (record.Target.Kind != ids.KindDNSRecord ||
+		(record.ControllerOperationID == "" && record.NativeOperationID == "") || !validDNSReceipt(record)) {
+		return invalidRecord()
+	}
+	if record.ControllerServiceDeclarationAbsence != nil && !validServiceDeclarationAbsence(record) {
+		return invalidRecord()
+	}
+	if record.NativeOperationID != "" {
+		validExecution := ids.Validate(ids.KindAssignment, record.SourceAssignment) == nil && record.ExecutionEpoch > 0
+		if record.Target.Kind == ids.KindDNSRecord {
+			// DNS withdrawal is acknowledged by the shared resolver Task, not
+			// by a fabricated per-record Agent assignment or Blueprint parent.
+			validExecution = record.ControllerDNS != nil && record.ControllerDNS.TaskID == record.SourceTaskID &&
+				record.SourceAssignment == "" && record.ExecutionEpoch == 0
+		}
+		if record.State != Absent || !nativeRemovalTarget(record.Target) || record.ParentTaskID != "" ||
+			ids.Validate(ids.KindOperation, record.NativeOperationID) != nil ||
+			ids.Validate(ids.KindTask, record.SourceTaskID) != nil ||
+			ids.Validate(ids.KindPlan, record.SourcePlanID) != nil ||
+			!validExecution ||
+			record.ControllerOperationID != "" || record.ControllerValueGenerationID != "" ||
+			record.ControllerRuntimeRevision != 0 || record.ControllerAuthoredRevision != 0 ||
+			record.ControllerComponentRecordRevision != 0 || record.ControllerComponentRuntimeRevision != 0 ||
+			record.ControllerScriptSetRevision != 0 {
+			return invalidRecord()
+		}
+	} else if record.ControllerOperationID != "" {
 		validEntry := record.Target.Kind == ids.KindEnvEntry &&
 			ids.Validate(ids.KindConfig, record.ControllerValueGenerationID) == nil &&
 			record.ControllerRuntimeRevision == 0 && record.ControllerAuthoredRevision == 0 &&
 			record.ControllerComponentRecordRevision == 0 && record.ControllerComponentRuntimeRevision == 0 &&
 			record.ControllerScriptSetRevision == 0
-		validDormantService := record.Target.Kind == ids.KindService &&
-			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision > 0 &&
+		validServiceConfiguration := record.Target.Kind == ids.KindService &&
+			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision >= 0 &&
+			record.ControllerAuthoredRevision > 0 && record.ControllerComponentRecordRevision == 0 &&
+			record.ControllerComponentRuntimeRevision == 0 && record.ControllerScriptSetRevision == 0
+		validServiceDeclaration := validServiceDeclarationAbsence(record) &&
+			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision == 0 &&
 			record.ControllerAuthoredRevision == 0 && record.ControllerComponentRecordRevision == 0 &&
 			record.ControllerComponentRuntimeRevision == 0 && record.ControllerScriptSetRevision == 0
 		validRoute := record.Target.Kind == ids.KindRoute &&
@@ -232,8 +271,12 @@ func validateApplied(record AppliedRecord) error {
 			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision == 0 &&
 			record.ControllerAuthoredRevision == 0 && record.ControllerComponentRecordRevision == 0 &&
 			record.ControllerComponentRuntimeRevision == 0
-		if (!validEntry && !validDormantService && !validRoute && !validDisabledComponent && !validScript) ||
-			(record.State != Applied && !((validScript || validEntry || validRoute || validDisabledComponent) && record.State == Absent)) ||
+		validDNS := record.Target.Kind == ids.KindDNSRecord && record.ControllerDNS != nil &&
+			record.ControllerAuthoredRevision > 0 && record.ControllerValueGenerationID == "" &&
+			record.ControllerRuntimeRevision == 0 && record.ControllerComponentRecordRevision == 0 &&
+			record.ControllerComponentRuntimeRevision == 0 && record.ControllerScriptSetRevision == 0
+		if (!validEntry && !validServiceConfiguration && !validServiceDeclaration && !validRoute && !validDisabledComponent && !validScript && !validDNS) ||
+			(record.State != Applied && !((validScript || validEntry || validServiceDeclaration || validRoute || validDisabledComponent || validDNS) && record.State == Absent)) ||
 			ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
 			ids.Validate(ids.KindOperation, record.ControllerOperationID) != nil ||
 			record.SourceTaskID != "" || record.SourcePlanID != "" ||
@@ -340,7 +383,7 @@ func validKeys(keys []ResourceKey) bool {
 func validKey(key ResourceKey) bool {
 	switch key.Kind {
 	case ids.KindEnvironment, ids.KindService, ids.KindEnvEntry, ids.KindVolume, ids.KindAttach,
-		ids.KindRoute, ids.KindNetwork, ids.KindComponent, ids.KindSecret, ids.KindScript:
+		ids.KindRoute, ids.KindDNSRecord, ids.KindNetwork, ids.KindComponent, ids.KindSecret, ids.KindScript:
 		return ids.Validate(key.Kind, key.ID) == nil
 	default:
 		return false

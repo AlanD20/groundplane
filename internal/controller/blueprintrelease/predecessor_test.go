@@ -8,7 +8,9 @@ import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -127,8 +129,9 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 	}
 	t.Run("frozen proxy image", func(t *testing.T) {
 		previous := historical
-		previous.ProxyPorts, previous.ProxyGeneration, previous.ProxyConfigDigest = []uint16{
-			8080,
+		previous.ProxyImplementation = serviceproxy.Caddy
+		previous.ProxyPorts, previous.ProxyGeneration, previous.ProxyConfigDigest = []domain.ProxyPort{
+			{Port: 8080, Protocol: serviceports.TCP},
 		}, 7, strings.Repeat(
 			"d",
 			64,
@@ -163,7 +166,7 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 func TestBlueprintFirstCandidateDoesNotInventPredecessor(t *testing.T) {
 	render := testreleaserender.ReleaseRenderInput{}
 	intent := domain.Intent{}
-	if err := (&Service{}).preparePredecessor(context.Background(), PrepareInput{}, testblueprints.EnvironmentBlueprintServiceChange{}, &render, &intent); err != nil {
+	if err := (&Service{}).preparePredecessor(context.Background(), prepareInput{}, testblueprints.EnvironmentBlueprintServiceChange{}, &render, &intent); err != nil {
 		t.Fatal(err)
 	}
 	if render.PriorWorkload != nil || render.PriorArtifactID != "" || intent.PriorServingReleaseID != "" ||

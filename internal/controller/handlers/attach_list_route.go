@@ -51,6 +51,7 @@ func (s *Server) listAttaches(
 	}
 	for index, item := range page.Items {
 		response.Items[index] = attachResponse(item.Record)
+		response.Items[index].Revision = item.Revision
 	}
 	return &attachPageOutput{Body: response}, nil
 }

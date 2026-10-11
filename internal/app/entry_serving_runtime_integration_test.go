@@ -152,10 +152,7 @@ func testEntryMutationServingRuntime(
 		}
 		authority := testreleaserender.ServiceLifecycleRelease{ServingReleaseID: currentRelease.ReleaseID,
 			PriorServingReleaseID: intent.PriorServingReleaseID, Current: currentRelease, RetainedPrior: &prior.Record}
-		fragments, err := resolver.RenderRetainedServiceRuntime(ctx, authority)
-		if err != nil {
-			t.Fatal(err)
-		}
+		fragments := renderNativeRuntimeFixture(t, authority)
 		if withAttach {
 			for index, fragment := range fragments {
 				fragments[index], err = testtaskplanning.MutateAttachNetworkArtifact(

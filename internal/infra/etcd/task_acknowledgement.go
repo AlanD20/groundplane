@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -55,14 +56,19 @@ func (repository *TaskRepository) AcknowledgeEnvironmentCreation(
 }
 
 // AcknowledgeControllerTask terminalizes one Controller claim. Native Tasks
-// have no Compose result; their durable event journal carries execution detail.
+// retain native failure diagnostics in the same atomic terminal transaction.
 func (repository *TaskRepository) AcknowledgeControllerTask(
 	ctx context.Context,
 	taskID string,
 	terminalStatus taskjournal.TaskStatus,
+	failure *taskprogress.Failure,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
+	result := taskjournal.ControllerResult(failure)
+	if err := taskjournal.ValidateTaskResult(result, nil, terminalStatus); err != nil {
+		return etcdstore.Versioned[TaskRecord]{}, err
+	}
 	return repository.acknowledgeTask(
-		ctx, taskjournal.TaskExecutorController, "", 0, taskID, "", terminalStatus, nil, terminalAt, "",
+		ctx, taskjournal.TaskExecutorController, "", 0, taskID, "", terminalStatus, &result, terminalAt, "",
 	)
 }

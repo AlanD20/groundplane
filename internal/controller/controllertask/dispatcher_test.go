@@ -18,9 +18,20 @@ type recordingHandler struct {
 	task  etcd.TaskRecord
 }
 
-func (handler *recordingHandler) Execute(_ context.Context, task etcd.TaskRecord) error {
+func (handler *recordingHandler) Execute(_ context.Context, task etcd.TaskRecord, _ *Progress) error {
 	handler.calls++
 	handler.task = task
+	return nil
+}
+
+type recordingRotation struct {
+	calls int
+	task  etcd.TaskRecord
+}
+
+func (rotation *recordingRotation) Execute(_ context.Context, task etcd.TaskRecord) error {
+	rotation.calls++
+	rotation.task = task
 	return nil
 }
 
@@ -29,7 +40,7 @@ func (handler *recordingHandler) Execute(_ context.Context, task etcd.TaskRecord
 // existing fallback without an optional or variadic compatibility path.
 func TestDispatcherRequiresAndRoutesExactBackupKeyRotationExecutor(t *testing.T) {
 	fallback := &recordingHandler{}
-	rotations := &recordingHandler{}
+	rotations := &recordingRotation{}
 	if _, err := NewDispatcher(nil, rotations); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("NewDispatcher(nil fallback) error = %v", err)
 	}
@@ -58,7 +69,13 @@ func TestDispatcherRequiresAndRoutesExactBackupKeyRotationExecutor(t *testing.T)
 		Status:           testtaskjournal.TaskStatusRunning,
 	}
 	task.Target = task.Owner.EnvironmentID
-	if err := dispatcher.Execute(context.Background(), task); err != nil {
+	progress := NewProgress(
+		context.Background(),
+		&fakeStore{},
+		controllerClaim(now, now.Add(time.Minute)),
+		func() time.Time { return now },
+	)
+	if err := dispatcher.Execute(context.Background(), task, progress); err != nil {
 		t.Fatalf("Execute(rotation) error = %v", err)
 	}
 	if rotations.calls != 1 || rotations.task.ID != task.ID || fallback.calls != 0 {
@@ -67,7 +84,7 @@ func TestDispatcherRequiresAndRoutesExactBackupKeyRotationExecutor(t *testing.T)
 
 	ordinary := task
 	ordinary.Type = testtaskjournal.TaskRemove
-	if err := dispatcher.Execute(context.Background(), ordinary); err != nil {
+	if err := dispatcher.Execute(context.Background(), ordinary, progress); err != nil {
 		t.Fatalf("Execute(fallback) error = %v", err)
 	}
 	if fallback.calls != 1 || rotations.calls != 1 {
@@ -76,7 +93,7 @@ func TestDispatcherRequiresAndRoutesExactBackupKeyRotationExecutor(t *testing.T)
 
 	invalid := task
 	invalid.TimeoutSeconds--
-	if err := dispatcher.Execute(context.Background(), invalid); !errors.Is(
+	if err := dispatcher.Execute(context.Background(), invalid, progress); !errors.Is(
 		err,
 		errs.New(errs.KindValidationFailed, ""),
 	) {

@@ -60,7 +60,7 @@ func OpenBlueprintRuntime(encoded []byte, input BlueprintRuntimeInput) (Candidat
 }
 
 func projectBlueprintRuntime(artifact *agentpb.ComposeArtifact, input BlueprintRuntimeInput) (CandidateRuntime, error) {
-	if input.Target == "blue" || input.Target == "green" {
+	if input.Target == "blue" || input.Target == "green" || input.Target == "rolling" {
 		activated := &agentpb.ComposeArtifact{}
 		if len(input.ActivatedArtifact) == 0 || proto.Unmarshal(input.ActivatedArtifact, activated) != nil ||
 			RejectUnknown(activated) != nil || activated.GetArtifactId() != artifact.GetArtifactId() ||
@@ -73,6 +73,9 @@ func projectBlueprintRuntime(artifact *agentpb.ComposeArtifact, input BlueprintR
 		artifact = activated
 	} else if input.Target != "singleton" || len(input.ActivatedArtifact) != 0 {
 		return CandidateRuntime{}, errs.New(errs.KindValidationFailed, "Blueprint runtime activation target is invalid")
+	}
+	if input.Target == "rolling" {
+		return openRollingBlueprintRuntime(artifact, input)
 	}
 	current, generation, digest, err := projectCandidateRuntimeArtifact(
 		artifact, input.ServiceID, input.ReleaseID, input.Target, true, nil,

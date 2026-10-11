@@ -485,7 +485,7 @@ func (service *CreationService) createBackingServiceFromStage(
 			return idempotencyrecord.IdempotencyResponse{}, buildErr
 		}
 		task.PlanHash = hex.EncodeToString(plan.PlanHash)
-		task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan.Steps)
+		task.Steps = taskjournal.CaptureStepDescriptions(task.Steps, plan)
 	}
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

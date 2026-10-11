@@ -3,10 +3,12 @@ package controllerupgrade
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,6 +16,7 @@ import (
 
 func (coordinator *Coordinator) prepare(
 	ctx context.Context, operation *nativeOperation, prepared bool,
+	progress *controllertask.Progress,
 ) (taskjournal.TaskStatus, error) {
 	expected := operation.expected
 	budget := min(expected.CandidateDeadline().Sub(coordinator.now()), upgrade.DrainTimeoutSeconds*time.Second)
@@ -30,9 +33,16 @@ func (coordinator *Coordinator) prepare(
 		operation.cancel = nil
 		coordinator.mu.Unlock()
 	}()
-	preparationErr := coordinator.validateAndDrain(preparation, operation)
+	preparationErr := progress.Run(preparation, "controller_update_prepare", func(ctx context.Context) error {
+		return coordinator.validateAndDrain(ctx, operation)
+	})
 	if preparationErr == nil {
-		preparationErr = coordinator.journal.Prepare(preparation, expected)
+		preparationErr = progress.Run(preparation, "controller_update_stage", func(ctx context.Context) error {
+			return coordinator.journal.Prepare(ctx, expected)
+		})
+	}
+	if err := progress.Err(); err != nil {
+		return "", err
 	}
 	if ctx.Err() != nil {
 		return "", ctx.Err()
@@ -57,6 +67,7 @@ func (coordinator *Coordinator) prepare(
 		}
 		coordinator.mu.Lock()
 		aborted := operation.aborted
+		operation.failure = taskprogress.CaptureControllerFailure(preparationErr)
 		coordinator.mu.Unlock()
 		status := taskjournal.TaskStatusFailed
 		if aborted {
@@ -73,7 +84,13 @@ func (coordinator *Coordinator) prepare(
 	} else if !coordinator.now().Before(expected.CandidateDeadline()) {
 		phase = upgrade.PhaseRollingBack
 	}
-	_, err := coordinator.journal.Advance(ctx, expected.TaskID, upgrade.PhasePrepared, phase)
+	var err error
+	if phase == upgrade.PhaseRollingBack {
+		_, err = coordinator.journal.BeginRollback(ctx, expected.TaskID, upgrade.PhasePrepared,
+			taskprogress.CaptureControllerFailure(context.DeadlineExceeded))
+	} else {
+		_, err = coordinator.journal.Advance(ctx, expected.TaskID, upgrade.PhasePrepared, phase)
+	}
 	coordinator.mu.Unlock()
 	if err != nil {
 		return "", err
@@ -81,7 +98,7 @@ func (coordinator *Coordinator) prepare(
 	if phase == upgrade.PhaseCancelled {
 		return coordinator.settle(operation, taskjournal.TaskStatusAborted), nil
 	}
-	return coordinator.handoff(ctx, operation)
+	return coordinator.handoff(ctx, operation, progress)
 }
 
 func (coordinator *Coordinator) validateAndDrain(ctx context.Context, operation *nativeOperation) error {

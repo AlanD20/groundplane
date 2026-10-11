@@ -2,6 +2,7 @@ package localagent
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -30,12 +31,19 @@ func (manager *Manager) RecoverUpdate(
 	ctx context.Context,
 	request UpdateRequest,
 	goal UpdateGoal,
+	failure *taskprogress.Failure,
 ) (UpdateResult, error) {
 	if ctx == nil {
 		return "", errs.New(errs.KindInternal, "local agent recovery context is required")
 	}
 	if err := validateUpdateRequest(request); err != nil {
 		return "", err
+	}
+	if err := failure.Validate(); err != nil {
+		return "", err
+	}
+	if failure != nil && (goal != UpdateRestore || failure.ExitCode != 0) {
+		return "", errs.New(errs.KindValidationFailed, "agent restoration cause is invalid")
 	}
 	if request.StartingGeneration > math.MaxUint64-2 || goal != UpdateFinish && goal != UpdateRestore {
 		return "", errs.New(errs.KindValidationFailed, "local agent recovery goal is invalid")
@@ -70,7 +78,7 @@ func (manager *Manager) RecoverUpdate(
 	if goal == UpdateFinish {
 		executionErr = manager.update(ctx, request)
 	} else {
-		executionErr = manager.restoreUpdate(ctx, request, stored)
+		executionErr = manager.restoreUpdate(ctx, request, stored, failure)
 	}
 	if ctx.Err() != nil {
 		return "", ctx.Err()
@@ -96,6 +104,16 @@ func (manager *Manager) RecoverUpdate(
 	}
 	if err := manager.waitReplacementReady(ctx, current.Record); err != nil {
 		return "", err
+	}
+	build, err := manager.acceptedBuild(current.Record)
+	if err != nil {
+		return "", err
+	}
+	if build != current.Record.Build {
+		return "", errs.New(
+			errs.KindStateConflict,
+			"agent recovery reported a different build from its accepted installation",
+		)
 	}
 	return result, nil
 }
@@ -140,14 +158,16 @@ func validateRecoveryRecord(stored StoredRecord, request UpdateRequest) error {
 	return errs.New(errs.KindStateConflict, "local agent recovery generation changed")
 }
 
-func (manager *Manager) restoreUpdate(ctx context.Context, request UpdateRequest, stored StoredRecord) error {
+func (manager *Manager) restoreUpdate(ctx context.Context, request UpdateRequest, stored StoredRecord,
+	failure *taskprogress.Failure,
+) error {
 	if stored.Record.Generation == request.StartingGeneration+1 {
 		if err := manager.tasks.RequireIdle(
 			ctx, request.AgentID, stored.Record.Generation, stored.Record.Config.MaxConcurrentTasks,
 		); err != nil {
 			return err
 		}
-		return manager.rollbackUpdate(ctx, request, stored)
+		return manager.rollbackUpdate(ctx, request, stored, failure)
 	}
 	if stored.Record.Phase == PhaseUpdating {
 		return manager.resumeReplacement(ctx, stored)

@@ -21,6 +21,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/dnsname"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/internal/core/serviceports"
 )
 
@@ -69,6 +70,9 @@ func (e Environment) Validate() error {
 			"environment %s: volume_dir is required (must derive from id, never the label)",
 			e.Name,
 		)
+	}
+	if err := ValidateEnvironmentProxySelection(e.ID, e.Components); err != nil {
+		return err
 	}
 
 	// A service on a zone must reference a zone that exists — see
@@ -151,6 +155,12 @@ func (s Service) Validate() error {
 	if s.ID == "" || s.Name == "" || s.Image == "" {
 		return fmt.Errorf("id, name, and image are required")
 	}
+	if s.RollingReplicaTimeoutSeconds > 86400 {
+		return fmt.Errorf("rolling replica timeout must not exceed 86400 seconds")
+	}
+	if s.Adapter != "" && s.RollingReplicaTimeoutSeconds != 0 {
+		return fmt.Errorf("rolling replica timeout is not supported for Backing Services")
+	}
 	if backingcatalog.Managed(s.Adapter) && (!backingcatalog.ValidImage(s.Adapter, s.AdapterVersion, s.Image) ||
 		(s.Replicas != 0 && s.Replicas != 1) || (s.Strategy != "" && s.Strategy != StrategyRecreate)) {
 		return fmt.Errorf(
@@ -161,12 +171,12 @@ func (s Service) Validate() error {
 	case "", StrategyBlueGreen, StrategyRecreate:
 		// ok
 	case StrategyRolling:
-		// blueprint.md's required-validation case: "a requested release
-		// strategy is deferred (rolling in the MVP)".
-		return fmt.Errorf(
-			"strategy %q is declared-deferred (see errs.CodeStrategyNotImplemented)",
-			s.Strategy,
-		)
+		if s.Replicas < 0 || s.Replicas > rollingrelease.MaximumReplicas {
+			return fmt.Errorf("rolling requires 1 to 16 replicas; omission defaults to one")
+		}
+		if s.Adapter != "" {
+			return fmt.Errorf("backing services cannot use rolling deployment")
+		}
 	default:
 		return fmt.Errorf("unknown strategy %q", s.Strategy)
 	}
@@ -423,6 +433,9 @@ func (c Component) Validate() error {
 	if c.Config.Caddy != nil {
 		branches++
 	}
+	if c.Config.Envoy != nil {
+		branches++
+	}
 	if c.Config.CloudflareTunnel != nil {
 		branches++
 	}
@@ -433,22 +446,21 @@ func (c Component) Validate() error {
 		return fmt.Errorf("component %s: desired config has multiple variants", c.ID)
 	}
 	switch c.Kind {
-	case ComponentKindIngressCaddy:
-		if c.Owner != ComponentOwnerEnvironment || c.Config.CloudflareTunnel != nil || c.Config.CoreDNS != nil ||
-			(c.Enabled && (c.Config.Caddy == nil || len(c.Config.Caddy.ZoneIDs) == 0)) ||
-			(c.Config.Caddy != nil && (validateComponentZoneIDs(c.Config.Caddy.ZoneIDs) != nil ||
-				(c.Config.Caddy.Alias != "" && (!dnsname.ValidWithin(c.Config.Caddy.Alias, 63) || strings.Contains(c.Config.Caddy.Alias, "."))))) {
-			return fmt.Errorf("component %s: Caddy ownership or config is invalid", c.ID)
+	case ComponentKindIngressCaddy, ComponentKindIngressEnvoy:
+		if err := c.validateHTTPRouterConfig(); err != nil {
+			return err
 		}
 	case ComponentKindEdgeCloudflare:
-		if c.Owner != ComponentOwnerEnvironment || c.Config.Caddy != nil || c.Config.CoreDNS != nil ||
+		if c.Owner != ComponentOwnerEnvironment || c.Config.Caddy != nil || c.Config.Envoy != nil ||
+			c.Config.CoreDNS != nil ||
 			(c.Enabled && (c.Config.CloudflareTunnel == nil || c.Config.CloudflareTunnel.SecretID == "" ||
 				len(c.Config.CloudflareTunnel.ZoneIDs) == 0)) ||
 			(c.Config.CloudflareTunnel != nil && validateComponentZoneIDs(c.Config.CloudflareTunnel.ZoneIDs) != nil) {
 			return fmt.Errorf("component %s: Cloudflare Tunnel ownership or config is invalid", c.ID)
 		}
 	case ComponentKindCoreDNS:
-		if c.Owner != ComponentOwnerPlatform || c.Config.Caddy != nil || c.Config.CloudflareTunnel != nil ||
+		if c.Owner != ComponentOwnerPlatform || c.Config.Caddy != nil || c.Config.Envoy != nil ||
+			c.Config.CloudflareTunnel != nil ||
 			(c.Enabled && c.Config.CoreDNS == nil) ||
 			(c.Config.CoreDNS != nil && c.Config.CoreDNS.CorefileTemplate == "") {
 			return fmt.Errorf("component %s: CoreDNS ownership or config is invalid", c.ID)

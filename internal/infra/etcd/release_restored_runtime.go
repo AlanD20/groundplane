@@ -55,6 +55,9 @@ func restoredReleaseRuntimeMutation(task TaskRecord, assignment taskassignments.
 		if proxy, ok := releaseProxyEvidence(recovery.result, intent.ServiceID); ok {
 			target = proxy.Target
 		}
+		if rolling, ok := releaseRollingEvidence(recovery.result, intent.ServiceID); ok && rolling.Compensated {
+			target = "rolling"
+		}
 		digest, err := domain.Digest(recovery.result)
 		if err != nil || len(recovery.record.RecoveryStepIDs) == 0 {
 			return etcdstore.Mutation{}, releases.CorruptReleaseRecord()

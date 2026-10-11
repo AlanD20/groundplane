@@ -43,7 +43,9 @@ func previewComponent() core.Component {
 	return core.Component{
 		ID: "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAX", OwnerID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAX",
 		Owner: core.ComponentOwnerEnvironment, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{CaddyfileTemplate: "complete template"}},
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			CaddyfileTemplate: "complete template", ZoneIDs: []string{"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"},
+		}},
 	}
 }
 

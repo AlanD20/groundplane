@@ -65,6 +65,7 @@ func newServiceCmd() *cobra.Command {
 	var zones, expose []string
 	var cpus float64
 	var replicas int
+	var rollingReplicaTimeout uint32
 	var healthcheckFile string
 	add := &cobra.Command{
 		Use:   "add <name>",
@@ -86,7 +87,8 @@ func newServiceCmd() *cobra.Command {
 			created, err := app.Client.CreateService(cmd.Context(), apiTypes.ServiceCreate{
 				EnvironmentID: environmentID, Name: args[0], Image: image, Zones: zones,
 				Strategy: strategy, OnFailure: apiTypes.OnFailure(onFailure),
-				Resources: apiTypes.ServiceResources{Mem: memory, CPUs: cpus}, Expose: expose,
+				RollingReplicaTimeoutSeconds: rollingReplicaTimeout,
+				Resources:                    apiTypes.ServiceResources{Mem: memory, CPUs: cpus}, Expose: expose,
 				Restart: restart, Replicas: replicas,
 				Healthcheck: healthcheck,
 			})
@@ -99,7 +101,8 @@ func newServiceCmd() *cobra.Command {
 	}
 	add.Flags().StringVar(&image, "image", "", "container image")
 	add.Flags().StringSliceVar(&zones, "zone", nil, "Zone name (repeatable)")
-	add.Flags().StringVar(&strategy, "strategy", "recreate", "declared default strategy: blue-green | recreate")
+	add.Flags().
+		StringVar(&strategy, "strategy", "recreate", "declared default strategy: blue-green | recreate | rolling")
 	add.Flags().StringVar(&onFailure, "on-failure", "switch_back", "declared default: switch_back | leave_active")
 	add.Flags().StringVar(&memory, "memory", "", "memory limit, for example 512m")
 	add.Flags().Float64Var(&cpus, "cpus", 0, "CPU limit, for example 0.5")
@@ -107,6 +110,8 @@ func newServiceCmd() *cobra.Command {
 		StringSliceVar(&expose, "expose", nil, "container port[/tcp|/udp], comma-separated or repeatable; no host ports")
 	add.Flags().StringVar(&restart, "restart", "unless-stopped", "unless-stopped | always | no")
 	add.Flags().IntVar(&replicas, "replicas", 1, "desired replica count")
+	add.Flags().
+		Uint32Var(&rollingReplicaTimeout, "rolling-replica-timeout", 0, "per-replica rolling timeout in seconds, 0 uses 300")
 	add.Flags().
 		StringVar(&healthcheckFile, "healthcheck-file", "", "native Compose healthcheck JSON object; - reads stdin")
 	_ = add.MarkFlagRequired("image")
@@ -120,6 +125,7 @@ func newServiceCmd() *cobra.Command {
 	var editHealthcheckFile string
 	var editCPUs float64
 	var editReplicas, editLogMaxFile int
+	var editRollingReplicaTimeout uint32
 	var resetCommand, resetEntrypoint, resetLogging bool
 	edit := &cobra.Command{
 		Use:   "edit <name>",
@@ -162,6 +168,9 @@ func newServiceCmd() *cobra.Command {
 			}
 			if cmd.Flags().Changed("strategy") {
 				input.Strategy = editStrategy
+			}
+			if cmd.Flags().Changed("rolling-replica-timeout") {
+				input.RollingReplicaTimeoutSeconds = &editRollingReplicaTimeout
 			}
 			if cmd.Flags().Changed("on-failure") {
 				input.OnFailure = apiTypes.OnFailure(editOnFailure)
@@ -262,13 +271,15 @@ func newServiceCmd() *cobra.Command {
 	edit.Flags().
 		StringVar(&editHooksFile, "hooks-file", "", "replacement custom hook configuration JSON; {} clears, omission preserves; - reads stdin")
 	edit.Flags().StringSliceVar(&editZones, "zone", nil, "replacement Zone names")
-	edit.Flags().StringVar(&editStrategy, "strategy", "", "blue-green | recreate")
+	edit.Flags().StringVar(&editStrategy, "strategy", "", "blue-green | recreate | rolling")
 	edit.Flags().StringVar(&editOnFailure, "on-failure", "", "switch_back | leave_active")
 	edit.Flags().StringVar(&editMemory, "memory", "", "memory limit")
 	edit.Flags().Float64Var(&editCPUs, "cpus", 0, "CPU limit")
 	edit.Flags().StringSliceVar(&editExpose, "expose", nil, "replacement container port[/tcp|/udp] list; no host ports")
 	edit.Flags().StringVar(&editRestart, "restart", "", "unless-stopped | always | no")
 	edit.Flags().IntVar(&editReplicas, "replicas", 0, "desired replica count")
+	edit.Flags().
+		Uint32Var(&editRollingReplicaTimeout, "rolling-replica-timeout", 0, "per-replica rolling timeout in seconds, 0 restores 300")
 	edit.Flags().StringArrayVar(
 		&editCommand,
 		"command",
@@ -353,7 +364,7 @@ func newServiceCmd() *cobra.Command {
 		StringVar(&deployImage, "image", "", "host-local image reference for this Release only (does not edit Service configuration)")
 	deploy.MarkFlagsMutuallyExclusive("tag", "image")
 	deploy.Flags().
-		StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling (rolling is declared-deferred)")
+		StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling")
 	deploy.Flags().
 		StringVar(&deployOnFailure, "on-failure", "", "switch_back | leave_active (defaults to the Service declaration)")
 	cmd.AddCommand(deploy)
@@ -361,7 +372,7 @@ func newServiceCmd() *cobra.Command {
 	var rollbackTag string
 	rollback := &cobra.Command{
 		Use:   "rollback <name>",
-		Short: "Roll back a service (defaults to the pre-selected previous tag)",
+		Short: "Deploy a previous image using the current Service configuration and strategy",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			serviceID, err := resolveServiceTarget(cmd, args[0])
@@ -570,7 +581,8 @@ func serviceFields(service apiTypes.Service) map[string]any {
 		"id": service.ID, "environment_id": service.EnvironmentID, "name": service.Name, "image": service.Image,
 		"runtime_intent": service.RuntimeIntent, "zones": service.Zones,
 		"strategy": service.Strategy, "on_failure": service.OnFailure, "replicas": service.Replicas,
-		"healthcheck": service.Healthcheck, "resources": service.Resources,
+		"rolling_replica_timeout_seconds": service.RollingReplicaTimeoutSeconds,
+		"healthcheck":                     service.Healthcheck, "resources": service.Resources,
 		"command": service.Command, "entrypoint": service.Entrypoint,
 		"working_dir": service.WorkingDir, "user": service.User,
 		"aliases": service.Aliases, "depends_on": service.DependsOn, "logging": service.Logging,

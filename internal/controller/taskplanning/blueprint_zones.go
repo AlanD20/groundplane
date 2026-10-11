@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -46,16 +47,18 @@ func ProjectZoneProjection(
 		zones = append(zones, core.Zone{
 			ID: networkIDs[definition.Name], Name: definition.Name,
 			Subnet: definition.Subnet, Internal: definition.Internal,
-			OwnerKind: ownerKind, OwnerID: ownerID,
+			AllowGPDNS: definition.AllowGPDNS,
+			OwnerKind:  ownerKind, OwnerID: ownerID,
 		})
 	}
 	return zones, nil
 }
 
 type blueprintZoneDefinition struct {
-	Name     string
-	Subnet   string
-	Internal bool
+	Name       string
+	Subnet     string
+	Internal   bool
+	AllowGPDNS bool
 }
 
 // validatedBlueprintZones shares authored network admission between Validate
@@ -68,6 +71,10 @@ func validatedBlueprintZones(project *types.Project) ([]blueprintZoneDefinition,
 	definitions := make([]blueprintZoneDefinition, 0, len(names))
 	for _, name := range names {
 		network := project.Networks[name]
+		allowDNS, err := zonedns.Enabled(network)
+		if err != nil {
+			return nil, errs.Newf(errs.KindValidationFailed, "Blueprint network %q: %s", name, err.Error())
+		}
 		if (network.Driver != "" && network.Driver != "bridge") || len(network.DriverOpts) != 0 ||
 			network.Attachable || network.EnableIPv4 != nil && !*network.EnableIPv4 ||
 			network.EnableIPv6 != nil && *network.EnableIPv6 ||
@@ -99,8 +106,14 @@ func validatedBlueprintZones(project *types.Project) ([]blueprintZoneDefinition,
 		if err := ipam.ValidateBridgeSubnet(subnet); err != nil {
 			return nil, err
 		}
+		if allowDNS {
+			if _, err := zonedns.Gateway(subnet.String()); err != nil {
+				return nil, err
+			}
+		}
 		definitions = append(definitions, blueprintZoneDefinition{
 			Name: name, Subnet: subnet.String(), Internal: network.Internal,
+			AllowGPDNS: allowDNS,
 		})
 	}
 	return definitions, nil

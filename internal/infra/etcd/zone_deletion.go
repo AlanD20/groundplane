@@ -6,6 +6,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
@@ -47,6 +48,15 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	zone = selected
+	checkCondition, err := edgechecks.RequireZoneIdle(
+		ctx,
+		repository.store,
+		zone.Record.Desired.ID,
+		authorities.Desired.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	if selectedByEnabledComponent(authorities.Desired.Record.Components, zone.Record.Desired.ID) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindResourceInUse,
@@ -213,6 +223,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
+	conditions = append(conditions, checkCondition)
 	conditions = append(conditions, dnsConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
@@ -272,8 +283,9 @@ func selectedByEnabledComponent(components []componentrecord.Record, zoneID stri
 			continue
 		}
 		switch record.Desired.Kind {
-		case core.ComponentKindIngressCaddy:
-			if record.Desired.Config.Caddy != nil && slices.Contains(record.Desired.Config.Caddy.ZoneIDs, zoneID) {
+		case core.ComponentKindIngressCaddy, core.ComponentKindIngressEnvoy:
+			component := core.Component{Kind: record.Desired.Kind, Config: record.Desired.Config}
+			if slices.Contains(component.HTTPRouterZoneIDs(), zoneID) {
 				return true
 			}
 		case core.ComponentKindEdgeCloudflare:

@@ -203,7 +203,7 @@ func (pool *WorkerPool) databaseRecoverConsumers(ctx context.Context, assignment
 		}
 		_, err = pool.compose.ExecuteStep(ctx, assignment, &agentpb.ExecutionStep{StepId: execution.StepId,
 			Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
-				ArtifactId: artifactID, ServiceIds: []string{serviceID}}}})
+				ArtifactId: artifactID, ServiceIds: []string{serviceID}}}}, nil)
 		if err != nil {
 			return err
 		}

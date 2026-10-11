@@ -66,6 +66,15 @@ func blueprintAcknowledgedRuntime(
 	if err != nil {
 		return nil, err
 	}
+	if runtime.Target == "rolling" {
+		evidence, found := releaseRollingEvidence(result, member.ServiceID)
+		if !found {
+			return nil, errs.New(errs.KindStateConflict, "Blueprint rolling runtime has no final Agent proof")
+		}
+		if err := executionplan.ValidateRollingCompletion(runtime, evidence); err != nil {
+			return nil, err
+		}
+	}
 	record := serviceruntimerecord.Record{EnvironmentID: task.Owner.EnvironmentID, Runtime: runtime,
 		Source: serviceruntimerecord.Acknowledgement{
 			TaskID: task.ID, PlanID: task.PlanID, PlanHash: task.PlanHash, StepID: stepID,

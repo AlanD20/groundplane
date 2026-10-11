@@ -59,6 +59,7 @@ type ActionCatalog interface {
 }
 
 type PlatformRenderPlanner struct {
+	zoneListeners       *ZoneListenerSource
 	records             DNSRecordsResolver
 	projections         PlatformProjectionReader
 	baselines           BaselineRepository
@@ -83,16 +84,19 @@ func NewPlatformRenderPlanner(
 	catalog ActionCatalog,
 	managedConfigAction componentsdk.ActionID,
 	registryAddress netip.Addr,
+	zoneListeners *ZoneListenerSource,
 ) (*PlatformRenderPlanner, error) {
-	if projections == nil || records == nil || baselines == nil || observations == nil || capture == nil ||
+	if projections == nil || records == nil || zoneListeners == nil || baselines == nil || observations == nil ||
+		capture == nil ||
 		renderer == nil ||
 		environmentPlanner == nil ||
 		catalog == nil {
 		return nil, errs.New(errs.KindInternal, "platform Component render planner dependencies are required")
 	}
 	return &PlatformRenderPlanner{
-		records:     records,
-		projections: projections, baselines: baselines, observations: observations, capture: capture,
+		zoneListeners: zoneListeners,
+		records:       records,
+		projections:   projections, baselines: baselines, observations: observations, capture: capture,
 		renderer: renderer, environmentPlanner: environmentPlanner, catalog: catalog,
 		managedConfigAction: managedConfigAction,
 		registryAddress:     registryAddress,
@@ -163,8 +167,9 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 	if desired.Config.CoreDNS == nil {
 		return platformcomponents.PlatformComponentTaskRenderInput{}, invalid("CoreDNS config is required")
 	}
-	recordHosts, referenceConditions, err := planner.records.ResolveDNSRecords(
+	recordHosts, referenceConditions, environmentDNS, err := resolveManagedRecords(
 		ctx,
+		planner.records,
 		desired.Config.CoreDNS.Records,
 		current.ReadRevision,
 	)
@@ -176,6 +181,15 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	resolverInput.HostResolution = mergedProjection
+	zoneSelection, err := planner.zoneListeners.Resolve(ctx, current.ReadRevision)
+	if err != nil {
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
+	}
+	resolverInput.ZoneListeners, err = platformcomponents.ParseZoneListeners(zoneSelection.Addresses)
+	if err != nil {
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
+	}
+	referenceConditions = append(referenceConditions, zoneSelection.Conditions...)
 	generatedServiceID := ""
 	switch len(desired.GeneratedServices) {
 	case 0:
@@ -220,6 +234,7 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		decodedConfig,
 		resolverInput.Baseline.Resolvers,
 		resolverInput.PrivateListener,
+		resolverInput.ZoneListeners,
 	)
 	if err != nil {
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
@@ -317,6 +332,7 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 	}
 	input := platformcomponents.PlatformComponentTaskRenderInput{
 		ReferenceConditions: referenceConditions,
+		EnvironmentDNS:      environmentDNS,
 		PlanID:              task.PlanID, TaskID: task.ID, ComponentID: desired.ID,
 		DesiredSHA256:      desiredSHA256,
 		BaselineGeneration: baseline.Record.Generation, BaselineSHA256: baseline.Record.SHA256,
@@ -346,6 +362,9 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 	}
 	if resolverInput.PrivateListener.IsValid() {
 		input.PrivateListener = resolverInput.PrivateListener.String()
+	}
+	for _, listener := range resolverInput.ZoneListeners {
+		input.ZoneListeners = append(input.ZoneListeners, listener.String())
 	}
 	return sealPlatformComponentTaskPlanHash(task, input, selectedPlan.Services[0].ObservationAction)
 }

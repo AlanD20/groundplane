@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -24,6 +25,7 @@ func TestLocalAgentReadServiceProjectsDurableAndLiveState(t *testing.T) {
 			Generation:       7,
 			Phase:            localagent.PhaseReady,
 			ReadyAt:          readyAt,
+			Build:            buildversion.BuildIdentity{Version: "v0.4.2"},
 			Config: localagent.Config{
 				PullIntervalSeconds: 2,
 				MaxConcurrentTasks:  3,
@@ -32,7 +34,7 @@ func TestLocalAgentReadServiceProjectsDurableAndLiveState(t *testing.T) {
 		},
 		Healthy:   true,
 		LastReady: lastReady,
-		Version:   "v0.4.2",
+		Version:   "v0.4.3",
 	}
 	reader := &fakeLocalAgentHealthReader{health: health}
 	assignments := &fakeLocalAgentReadAssignments{result: []etcd.TaskAssignment{{}, {}}}

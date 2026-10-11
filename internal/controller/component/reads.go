@@ -7,6 +7,7 @@ import (
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/core"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -14,6 +15,7 @@ import (
 )
 
 type readRepository interface {
+	GetComponentInstalledSoftware(context.Context, string, int64) (*buildversion.ContainerIdentity, error)
 	GetPlatformComponentActiveTask(context.Context, string, int64) (string, error)
 	GetComponent(context.Context, string) (etcdstore.Versioned[componentrecord.Record], error)
 	ListEnvironmentComponents(
@@ -30,16 +32,29 @@ type ManagedConfigProjector interface {
 	ProjectManagedConfigFiles(context.Context, core.Component, int64) ([]apiTypes.ManagedConfigFile, error)
 }
 
+type softwareInspector interface {
+	InspectSoftware(context.Context, buildversion.ContainerIdentity) (buildversion.ContainerIdentity, error)
+}
+
 type ReadService struct {
 	repository             readRepository
 	managedConfigProjector ManagedConfigProjector
+	softwareInspector      softwareInspector
 }
 
-func NewReadService(repository readRepository, managedConfigProjector ManagedConfigProjector) (*ReadService, error) {
-	if repository == nil || managedConfigProjector == nil {
+func NewReadService(
+	repository readRepository,
+	managedConfigProjector ManagedConfigProjector,
+	software softwareInspector,
+) (*ReadService, error) {
+	if repository == nil || managedConfigProjector == nil || software == nil {
 		return nil, errs.New(errs.KindInternal, "Component read dependencies are required")
 	}
-	return &ReadService{repository: repository, managedConfigProjector: managedConfigProjector}, nil
+	return &ReadService{
+		repository:             repository,
+		managedConfigProjector: managedConfigProjector,
+		softwareInspector:      software,
+	}, nil
 }
 
 func (service *ReadService) ListComponents(
@@ -75,6 +90,11 @@ func (service *ReadService) ListComponents(
 			return nil, projectErr
 		}
 		if kind == "" || component.Kind == kind {
+			component.Software, err = service.installedSoftware(ctx, component.ID, records.Revision)
+			if err != nil {
+				return nil, err
+			}
+			component.Revision = record.Revision
 			items = append(items, component)
 		}
 	}
@@ -86,7 +106,13 @@ func (service *ReadService) GetComponent(ctx context.Context, id string) (apiTyp
 	if err != nil {
 		return apiTypes.Component{}, err
 	}
-	return projectComponent(record.Record)
+	component, err := projectComponent(record.Record)
+	if err != nil {
+		return apiTypes.Component{}, err
+	}
+	component.Software, err = service.installedSoftware(ctx, id, record.ReadRevision)
+	component.Revision = record.Revision
+	return component, err
 }
 
 func (service *ReadService) GetComponentConfig(
@@ -129,13 +155,17 @@ func (service *ReadService) GetRouter(ctx context.Context, environmentID string)
 	var router apiTypes.Router
 	for _, component := range components {
 		projection := &apiTypes.ComponentProjection{
-			ComponentID: component.ID,
-			Enabled:     component.Enabled,
-			PinnedIPv4:  component.PinnedIPv4,
+			Implementation: component.Kind,
+			ComponentID:    component.ID,
+			Enabled:        component.Enabled,
+			PinnedIPv4:     component.PinnedIPv4,
 		}
 		switch core.ComponentKind(component.Kind) {
-		case core.ComponentKindIngressCaddy:
-			router.Caddy = projection
+		case core.ComponentKindIngressCaddy, core.ComponentKindIngressEnvoy:
+			if router.Proxy != nil {
+				return apiTypes.Router{}, errs.New(errs.KindInternal, "Environment has multiple router Components")
+			}
+			router.Proxy = projection
 		case core.ComponentKindEdgeCloudflare:
 			router.Tunnel = projection
 		}
@@ -177,6 +207,11 @@ func projectComponentConfig(component core.Component) *apiTypes.ComponentConfig 
 		return nil
 	}
 	config := component.Config
+	if config.Envoy != nil {
+		return &apiTypes.ComponentConfig{Envoy: &apiTypes.EnvoyComponentConfig{
+			ZoneIDs: append([]string(nil), config.Envoy.ZoneIDs...), Alias: config.Envoy.Alias,
+		}}
+	}
 	if config.Caddy != nil {
 		result := &apiTypes.ComponentConfig{
 			Caddy: &apiTypes.CaddyComponentConfig{

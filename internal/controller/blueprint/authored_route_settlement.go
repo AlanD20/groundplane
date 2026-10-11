@@ -12,11 +12,20 @@ import (
 )
 
 type authoredRouteSettlementRepository interface {
-	SettleBlueprintRoute(context.Context, etcd.TaskRecord, blueprintunits.Unit, projectionrecord.EnvironmentRouteProjection) error
+	SettleBlueprintRoute(
+		context.Context,
+		etcd.TaskRecord,
+		blueprintunits.Unit,
+		projectionrecord.EnvironmentRouteProjection,
+	) error
 	SettleBlueprintRouteOmission(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
 }
 
-func (service *Service) SettleRouteOmission(ctx context.Context, parent etcd.TaskRecord, unit blueprintunits.Unit) error {
+func (service *Service) SettleRouteOmission(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	unit blueprintunits.Unit,
+) error {
 	if service == nil || ctx == nil {
 		return errs.New(errs.KindInternal, "Blueprint Route settler is not configured")
 	}
@@ -41,7 +50,11 @@ func (service *Service) SettleRoute(
 	if err != nil {
 		return err
 	}
-	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, source.desired.Record, source.identities.Record)
+	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
+		ctx,
+		source.desired.Record,
+		source.identities.Record,
+	)
 	if err != nil {
 		return err
 	}
@@ -49,7 +62,11 @@ func (service *Service) SettleRoute(
 	if err != nil {
 		return err
 	}
-	services, err := taskplanning.ProjectServiceProjection(project, identities, source.desired.Record.Input.ServiceExtensions)
+	services, err := taskplanning.ProjectServiceProjection(
+		project,
+		identities,
+		source.desired.Record.Input.ServiceExtensions,
+	)
 	if err != nil {
 		return err
 	}

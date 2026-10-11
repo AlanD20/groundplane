@@ -92,7 +92,7 @@ func (fixture *ExecutedArtifactFixture) CheckManualJourneySecretDeletion(t *test
 	if err != nil || !found || claim.Task.Record.ID != task.ID {
 		t.Fatalf("Secret removal claim = %t, %v", found, err)
 	}
-	if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, at.Add(2*time.Second)); err != nil {
+	if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, at.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repository.GetSecret(ctx, secretID); !isKind(err, errs.KindSecretNotFound) {

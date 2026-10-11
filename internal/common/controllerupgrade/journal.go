@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -69,16 +70,17 @@ type AgentPredecessor struct {
 // Journal pins all recovery inputs. Its single phase is host handoff evidence;
 // the referenced durable Task remains the operator-visible operation authority.
 type Journal struct {
-	Schema             int               `json:"schema"`
-	TaskID             string            `json:"task_id"`
-	Release            Digest            `json:"release"`
-	Manifest           Manifest          `json:"manifest"`
-	PreviousController Digest            `json:"previous_controller"`
-	Agent              *AgentPredecessor `json:"agent"`
-	StartedAt          time.Time         `json:"started_at"`
-	Deadline           time.Time         `json:"deadline"`
-	Phase              Phase             `json:"phase"`
-	TrialBootID        string            `json:"trial_boot_id"`
+	Schema             int                   `json:"schema"`
+	TaskID             string                `json:"task_id"`
+	Release            Digest                `json:"release"`
+	Manifest           Manifest              `json:"manifest"`
+	PreviousController Digest                `json:"previous_controller"`
+	Agent              *AgentPredecessor     `json:"agent"`
+	StartedAt          time.Time             `json:"started_at"`
+	Deadline           time.Time             `json:"deadline"`
+	Phase              Phase                 `json:"phase"`
+	TrialBootID        string                `json:"trial_boot_id"`
+	Failure            *taskprogress.Failure `json:"failure,omitempty"`
 }
 
 // CandidateDeadline leaves time for native restart and authenticated Agent
@@ -90,7 +92,7 @@ func (journal Journal) CandidateDeadline() time.Time {
 func (journal Journal) Validate() error {
 	_, startOffset := journal.StartedAt.Zone()
 	_, deadlineOffset := journal.Deadline.Zone()
-	if journal.Schema != 1 || ids.Validate(ids.KindTask, journal.TaskID) != nil ||
+	if journal.Schema != 2 || ids.Validate(ids.KindTask, journal.TaskID) != nil ||
 		!journal.Release.Valid() || !journal.PreviousController.Valid() ||
 		!journal.Phase.Valid() || journal.StartedAt.IsZero() || startOffset != 0 || deadlineOffset != 0 ||
 		!journal.Deadline.After(journal.StartedAt) ||
@@ -99,6 +101,14 @@ func (journal Journal) Validate() error {
 	}
 	if err := journal.Manifest.Validate(); err != nil {
 		return err
+	}
+	if err := journal.Failure.Validate(); err != nil {
+		return err
+	}
+	if journal.Failure != nil && (journal.Failure.ExitCode != 0 ||
+		journal.Phase != PhaseRollingBack && journal.Phase != PhaseStopping &&
+			journal.Phase != PhaseRolledBack && journal.Phase != PhaseRecovered) {
+		return errs.New(errs.KindValidationFailed, "controller recovery cause is inconsistent with its phase")
 	}
 	if journal.TrialBootID != "" && !ValidBootID(journal.TrialBootID) ||
 		(journal.Phase == PhaseTrial || journal.Phase == PhaseStarting || journal.Phase == PhaseHealthy) &&

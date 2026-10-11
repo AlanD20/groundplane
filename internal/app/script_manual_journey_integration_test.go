@@ -140,7 +140,7 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 			preparation, err := testtaskplanning.NewScriptRunnerPreparationService(
 				service,
 				&migratedagentregistration.Repository{},
-				retainedUnexpectedImageResolver{t: t},
+				unexpectedManualScriptImageResolver{t: t},
 			)
 			if err != nil {
 				t.Fatal(err)

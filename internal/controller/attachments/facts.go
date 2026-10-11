@@ -195,6 +195,26 @@ func (service *FactService) ResolveTaskIdentity(
 	})
 }
 
+// ResolveStoredTaskIdentity exposes only the exact encrypted identity captured
+// by an authored removal recipe. It never falls back to the mutable fact key.
+func (service *FactService) ResolveStoredTaskIdentity(
+	ctx context.Context,
+	current etcdstore.Versioned[attachrecord.Record],
+	stored attachrecord.EncryptedFacts,
+	taskID string,
+	consume taskplanning.AttachPlanIdentityConsumer,
+) error {
+	if ctx == nil || consume == nil || ids.Validate(ids.KindTask, taskID) != nil ||
+		current.Record.TaskID != taskID || !current.Record.OwnsCredential() ||
+		current.Record.Operation != attachrecord.AttachOperationDetach ||
+		current.Record.Status != core.AttachDetaching || stored.AttachID != current.Record.ID {
+		return errs.New(errs.KindValidationFailed, "stored Attach task identity request is invalid")
+	}
+	return service.openStoredBundle(ctx, current.Record, stored, func(bundle *attachFactBundle) error {
+		return consumeAttachTaskIdentity(bundle, consume)
+	})
+}
+
 // ResolveReadyDatabase exposes only the stable database identity needed to
 // construct another ready Attach's grant procedure and fact set.
 func (service *FactService) ResolveReadyDatabase(

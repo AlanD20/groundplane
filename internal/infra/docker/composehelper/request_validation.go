@@ -52,6 +52,8 @@ func validateRequest(
 		artifactID = payload.ComposeApply.ArtifactId
 	case *agentpb.ExecutionStep_ManagedNetworkEnsure:
 		artifactID = payload.ManagedNetworkEnsure.ArtifactId
+	case *agentpb.ExecutionStep_ManagedNetworkPreparationProbe:
+		artifactID = payload.ManagedNetworkPreparationProbe.ArtifactId
 	case *agentpb.ExecutionStep_ManagedVolumeEnsure:
 		artifactID = payload.ManagedVolumeEnsure.ArtifactId
 	case *agentpb.ExecutionStep_ComposeStop:
@@ -70,8 +72,22 @@ func validateRequest(
 		}
 	case *agentpb.ExecutionStep_ComposeWorkloadApply:
 		artifactID = payload.ComposeWorkloadApply.ArtifactId
+	case *agentpb.ExecutionStep_ComposeWorkloadRemove:
+		artifactID = payload.ComposeWorkloadRemove.ArtifactId
 	case *agentpb.ExecutionStep_ServiceProxySwitch:
 		artifactID = payload.ServiceProxySwitch.CandidateArtifactId
+	case *agentpb.ExecutionStep_RollingTrafficSwitch:
+		member, memberErr := executionplan.RollingMember(plan, payload.RollingTrafficSwitch.GetServiceId())
+		if memberErr != nil {
+			return nil, nil, nil, memberErr
+		}
+		artifactID = member.GetCandidateArtifactId()
+	case *agentpb.ExecutionStep_RollingReleaseAcknowledge:
+		member, memberErr := executionplan.RollingMember(plan, payload.RollingReleaseAcknowledge.GetServiceId())
+		if memberErr != nil {
+			return nil, nil, nil, memberErr
+		}
+		artifactID = member.GetCandidateArtifactId()
 	case *agentpb.ExecutionStep_ServiceProxyProbe:
 		artifactID = payload.ServiceProxyProbe.CandidateArtifactId
 	case *agentpb.ExecutionStep_ServiceProxyCompensate:
@@ -88,6 +104,12 @@ func validateRequest(
 		if procedure.GetPredecessor() != nil {
 			artifactID = procedure.GetPredecessor().GetPriorArtifactId()
 		}
+	case *agentpb.ExecutionStep_ComponentRestorationProbe:
+		procedure := plan.GetComponentRecoveryProcedure()
+		if executionplan.ComponentConfigurationAction(plan) == nil || procedure.GetPredecessor() == nil {
+			return nil, nil, nil, errs.New(errs.KindValidationFailed, "Component configuration probe has no retained predecessor")
+		}
+		artifactID = procedure.GetPredecessor().GetPriorArtifactId()
 	default:
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}

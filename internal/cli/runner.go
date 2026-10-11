@@ -16,6 +16,7 @@ const maximumGitHubRegistrationTokenBytes = 4096
 // Groundplane never generates or auto-fetches it. See mvp.md, "Runner".
 func newRunnerCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "runner", Short: "GitHub Actions self-hosted runners"}
+	cmd.AddCommand(newRunnerCheckCmd(), newRunnerCheckResultCmd())
 
 	list := &cobra.Command{
 		Use:   "list",
@@ -234,7 +235,7 @@ func resolveRunnerTarget(cmd *cobra.Command, argument string) (string, error) {
 }
 
 func runnerFields(runner apiTypes.Runner) map[string]any {
-	return map[string]any{
+	fields := map[string]any{
 		"id":             runner.ID,
 		"slug":           runner.Slug,
 		"tenant_id":      runner.TenantID,
@@ -250,4 +251,15 @@ func runnerFields(runner apiTypes.Runner) map[string]any {
 		"observed_at":    runner.ObservedAt,
 		"created_at":     runner.CreatedAt,
 	}
+	if software := runner.Software; software != nil {
+		fields["installed_image"] = software.Image
+		fields["image_config_digest"] = software.ConfigDigest
+		fields["version"] = software.Version
+		fields["selected_tag"] = software.SelectedTag
+		if software.Source.Known() {
+			fields["source_kind"] = software.Source.Kind
+			fields["source_commit"] = software.Source.Commit
+		}
+	}
+	return fields
 }

@@ -70,10 +70,13 @@ func requireAuthoredBackupInputs(
 				break
 			}
 		}
-		if targetID == "" || !authoredRuntimeInputApplied(snapshot, blueprintunits.ResourceKey{
+		if targetID == "" {
+			return errs.New(errs.KindStateConflict, "Blueprint Backup Volume identity is unavailable")
+		}
+		if !authoredRuntimeInputApplied(snapshot, blueprintunits.ResourceKey{
 			Kind: ids.KindVolume, ID: targetID,
 		}) {
-			return errs.New(errs.KindStateConflict, "Blueprint Backup Volume is not applied yet")
+			return errs.New(errs.KindResourceInUse, "Blueprint Backup Volume is not applied yet")
 		}
 	}
 	return nil

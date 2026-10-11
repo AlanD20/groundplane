@@ -19,6 +19,8 @@ export function ControllerReleaseDetails({
         value={
           <SoftwareIdentity
             version={release.controller_version}
+            sourceBuild={release.controller_source?.kind === "source_ref"}
+            sourceCommit={release.controller_source?.commit}
             digest={release.controller_sha256}
           />
         }

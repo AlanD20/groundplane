@@ -14,7 +14,11 @@ type healthcheckObserver struct {
 	calls    int
 }
 
-func (observer *healthcheckObserver) Observe(context.Context, *agentpb.ExecutionPlan, string) (*agentpb.ObservedProject, error) {
+func (observer *healthcheckObserver) Observe(
+	context.Context,
+	*agentpb.ExecutionPlan,
+	string,
+) (*agentpb.ObservedProject, error) {
 	index := observer.calls
 	observer.calls++
 	if index >= len(observer.projects) {
@@ -23,11 +27,18 @@ func (observer *healthcheckObserver) Observe(context.Context, *agentpb.Execution
 	return observer.projects[index], nil
 }
 
-func (observer *healthcheckObserver) ObserveRestoration(ctx context.Context, _ *executionplan.RestorationObservation) (*agentpb.ObservedProject, error) {
+func (observer *healthcheckObserver) ObserveRestoration(
+	ctx context.Context,
+	_ *executionplan.RestorationObservation,
+) (*agentpb.ObservedProject, error) {
 	return observer.Observe(ctx, nil, "")
 }
 
-func (observer *healthcheckObserver) ObserveReleaseRestoration(ctx context.Context, _ *agentpb.ExecutionPlan, _, _ string) (*agentpb.ObservedProject, error) {
+func (observer *healthcheckObserver) ObserveReleaseRestoration(
+	ctx context.Context,
+	_ *agentpb.ExecutionPlan,
+	_, _ string,
+) (*agentpb.ObservedProject, error) {
 	return observer.Observe(ctx, nil, "")
 }
 
@@ -50,7 +61,10 @@ func TestHealthWaitFailsMissingExecutableWithoutWaitingForDeadline(t *testing.T)
 				unrelated.HealthcheckDiagnostic = agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_HEALTHCHECK_CURL_MISSING
 				observer := &healthcheckObserver{projects: []*agentpb.ObservedProject{
 					{ProjectName: artifact.ProjectName, Containers: []*agentpb.ObservedContainer{warming, unrelated}},
-					{ProjectName: artifact.ProjectName, Containers: []*agentpb.ObservedContainer{healthyContainer("api-1", "svc_api"), unrelated}},
+					{
+						ProjectName: artifact.ProjectName,
+						Containers:  []*agentpb.ObservedContainer{healthyContainer("api-1", "svc_api"), unrelated},
+					},
 				}}
 				runtime, err := New(cancellationHelper{}, observer)
 				if err != nil {
@@ -61,13 +75,29 @@ func TestHealthWaitFailsMissingExecutableWithoutWaitingForDeadline(t *testing.T)
 				defer cancel()
 				var result StepResult
 				if workload {
-					result, err = runtime.waitWorkloadHealthy(ctx, plan, &agentpb.WaitWorkloadHealthy{ArtifactId: artifact.ArtifactId, ServiceId: "svc_api", Target: "blue"})
+					result, err = runtime.waitWorkloadHealthy(
+						ctx,
+						plan,
+						&agentpb.WaitWorkloadHealthy{
+							ArtifactId: artifact.ArtifactId,
+							ServiceId:  "svc_api",
+							Target:     "blue",
+						},
+						nil,
+					)
 				} else {
-					result, err = runtime.waitHealthy(ctx, plan, &agentpb.WaitHealthy{ArtifactId: artifact.ArtifactId, ServiceIds: []string{"svc_api"}})
+					result, err = runtime.waitHealthy(ctx, plan, &agentpb.WaitHealthy{ArtifactId: artifact.ArtifactId, ServiceIds: []string{"svc_api"}}, nil)
 				}
 				if missing {
-					if err == nil || ctx.Err() != nil || observer.calls != 1 || !result.ReconciliationRequired || result.Diagnostic != warming.HealthcheckDiagnostic {
-						t.Fatalf("missing executable: calls=%d result=%v error=%v deadline=%v", observer.calls, result, err, ctx.Err())
+					if err == nil || ctx.Err() != nil || observer.calls != 1 || !result.ReconciliationRequired ||
+						result.Diagnostic != warming.HealthcheckDiagnostic {
+						t.Fatalf(
+							"missing executable: calls=%d result=%v error=%v deadline=%v",
+							observer.calls,
+							result,
+							err,
+							ctx.Err(),
+						)
 					}
 				} else if err != nil || observer.calls != 2 || result.ReconciliationRequired {
 					t.Fatalf("startup convergence: calls=%d result=%v error=%v", observer.calls, result, err)

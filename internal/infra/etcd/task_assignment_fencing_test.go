@@ -64,7 +64,8 @@ func TestAgentTaskAcknowledgementFencesExactAssignmentAndReplay(t *testing.T) {
 		len(terminal.Record.Result.ProxyEvidence) != 0 || len(terminal.Record.Result.RecreateEvidence) != 0 ||
 		terminal.Record.Result.CandidateAbsenceEvidence != nil ||
 		terminal.Record.Result.DNSResolverCandidateObservation != nil ||
-		terminal.Record.Result.DNSResolverRollbackObservation != nil || terminal.Record.Result.ExecutionEpoch != 0 ||
+		terminal.Record.Result.DNSResolverRollbackObservation != nil ||
+		terminal.Record.Result.ExecutionEpoch != claim.Assignment.Record.ExecutionEpoch ||
 		terminal.Record.Result.ReleaseRecoveryRecordSHA256 != "" ||
 		terminal.Record.TerminalAssignment == nil ||
 		*terminal.Record.TerminalAssignment != wantTerminalAssignment || terminal.Record.FinishedAt == nil ||

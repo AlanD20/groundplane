@@ -1,26 +1,11 @@
 import type { operations } from "@/lib/api.generated";
-import type { DNSRecord } from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
 type ComponentTaskAccepted =
   operations["component.enable"]["responses"][202]["content"]["application/json"];
 type ComponentConfigMutationResponse =
   operations["component-config.set"]["responses"][200]["content"]["application/json"];
 type ComponentConfigInput =
-  | { zone_ids: string[]; caddyfile_template?: string; alias?: string }
-  | {
-      zone_ids: string[];
-      credential:
-        | { mode: "existing"; secret_id: string }
-        | { mode: "new"; secret_name: string; token: string };
-    }
-  | {
-      upstream_auto: boolean;
-      records: DNSRecord[];
-      upstream_resolvers: string[];
-      forwarders: { domain: string; resolvers: string[] }[];
-      tailnet_delegation: boolean;
-      corefile_template: string;
-    };
+  operations["component-config.set"]["requestBody"]["content"]["application/json"]["config"];
 
 export type ComponentActions = {
   setComponentEnabled: (

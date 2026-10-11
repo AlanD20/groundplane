@@ -34,9 +34,11 @@ type EnvironmentOwnedIdentities struct {
 	Volumes          []OwnedIdentity `json:"volumes,omitempty"`
 	Entries          []OwnedIdentity `json:"entries,omitempty"`
 	Routes           []OwnedIdentity `json:"routes,omitempty"`
+	DNSRecords       []OwnedIdentity `json:"dns_records,omitempty"`
 	Attaches         []OwnedIdentity `json:"attaches,omitempty"`
 	Components       []OwnedIdentity `json:"components,omitempty"`
 	Scripts          []OwnedIdentity `json:"scripts,omitempty"`
+	PendingOmissions []OwnedOmission `json:"pending_omissions,omitempty"`
 }
 
 // OwnedIdentitiesFromProjection captures the IDs already assigned during
@@ -141,9 +143,11 @@ func CloneEnvironmentOwnedIdentities(source EnvironmentOwnedIdentities) Environm
 	clone.Volumes = append([]OwnedIdentity(nil), source.Volumes...)
 	clone.Entries = append([]OwnedIdentity(nil), source.Entries...)
 	clone.Routes = append([]OwnedIdentity(nil), source.Routes...)
+	clone.DNSRecords = append([]OwnedIdentity(nil), source.DNSRecords...)
 	clone.Attaches = append([]OwnedIdentity(nil), source.Attaches...)
 	clone.Components = append([]OwnedIdentity(nil), source.Components...)
 	clone.Scripts = append([]OwnedIdentity(nil), source.Scripts...)
+	clone.PendingOmissions = append([]OwnedOmission(nil), source.PendingOmissions...)
 	return clone
 }
 
@@ -174,9 +178,13 @@ func RetainOwnedIdentityBirths(
 	retainOwnedBirths(result.Volumes, previous.Volumes)
 	retainOwnedBirths(result.Entries, previous.Entries)
 	retainOwnedBirths(result.Routes, previous.Routes)
+	retainOwnedBirths(result.DNSRecords, previous.DNSRecords)
 	retainOwnedBirths(result.Attaches, previous.Attaches)
 	retainOwnedBirths(result.Components, previous.Components)
 	retainOwnedBirths(result.Scripts, previous.Scripts)
+	result.PendingOmissions = RetainOwnedOmissions(result, EnvironmentOwnedIdentities{
+		PendingOmissions: previous.PendingOmissions,
+	})
 	if err := ValidateEnvironmentOwnedIdentities(result); err != nil {
 		return EnvironmentOwnedIdentities{}, err
 	}
@@ -203,9 +211,10 @@ func ValidateEnvironmentOwnedIdentities(value EnvironmentOwnedIdentities) error 
 		!validOwnedIdentities(value.Volumes, ids.KindVolume) ||
 		!validOwnedIdentities(value.Entries, ids.KindEnvEntry) ||
 		!validOwnedIdentities(value.Routes, ids.KindRoute) ||
+		!validOwnedIdentities(value.DNSRecords, ids.KindDNSRecord) ||
 		!validOwnedIdentities(value.Attaches, ids.KindAttach) ||
 		!validOwnedIdentities(value.Components, ids.KindComponent) ||
-		!validOwnedIdentities(value.Scripts, ids.KindScript) {
+		!validOwnedIdentities(value.Scripts, ids.KindScript) || !validOwnedOmissions(value) {
 		return errs.New(errs.KindValidationFailed, "Environment owned identities are invalid")
 	}
 	return nil

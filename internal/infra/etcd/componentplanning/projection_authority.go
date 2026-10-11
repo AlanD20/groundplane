@@ -29,11 +29,15 @@ type FrozenProjectionAuthority struct {
 	environmentID            string
 	readRevision             int64
 	desiredHeadRevision      int64
+	desiredRevisionID        string
 	desiredZones             []etcdstore.Versioned[zonerecord.Record]
 	managedRuntimeSources    []projectionrecord.ManagedComponentRuntimeSource
 	appliedProjection        etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	appliedProjectionPresent bool
 	unitRuntimeCondition     *etcdstore.Condition
+	proxyServicePreflight    *ProxyServicePreflight
+	proxyServiceConditions   []etcdstore.Condition
+	proxySourceMutations     []etcdstore.Mutation
 }
 
 type FrozenProjectionAuthorityInput struct {
@@ -66,7 +70,10 @@ func (repository *Planner) PrepareFrozenProjectionAuthority(
 		return FrozenProjectionAuthority{}, err
 	}
 	if appliedState == nil || appliedState.ReadRevision != input.ReadRevision || len(appliedState.Values) != 1 {
-		return FrozenProjectionAuthority{}, errs.New(errs.KindInternal, "Component applied projection read is incomplete")
+		return FrozenProjectionAuthority{}, errs.New(
+			errs.KindInternal,
+			"Component applied projection read is incomplete",
+		)
 	}
 	defer etcdstore.ClearValues(appliedState.Values)
 	appliedValue := appliedState.Values[0]
@@ -78,16 +85,21 @@ func (repository *Planner) PrepareFrozenProjectionAuthority(
 			return FrozenProjectionAuthority{}, decodeErr
 		}
 		if projection.EnvironmentID != input.EnvironmentID {
-			return FrozenProjectionAuthority{}, errs.New(errs.KindStateConflict, "Component candidate applied Environment projection changed")
+			return FrozenProjectionAuthority{}, errs.New(
+				errs.KindStateConflict,
+				"Component candidate applied Environment projection changed",
+			)
 		}
 		applied.Record = projection
 		applied.Revision = appliedValue.ModRevision
 	}
 	desired := projectionrecord.EnvironmentComposeProjection{
-		EnvironmentID:                  input.EnvironmentID,
-		RevisionID:                     input.DesiredRevisionID,
-		Components:                     append([]componentrecord.Record(nil), input.DesiredComponents...),
-		ManagedComponentRuntimeSources: append([]projectionrecord.ManagedComponentRuntimeSource(nil), input.ManagedRuntimeSources...),
+		EnvironmentID: input.EnvironmentID,
+		RevisionID:    input.DesiredRevisionID,
+		Components:    append([]componentrecord.Record(nil), input.DesiredComponents...),
+		ManagedComponentRuntimeSources: append(
+			[]projectionrecord.ManagedComponentRuntimeSource(nil),
+			input.ManagedRuntimeSources...),
 	}
 	var managed []projectionrecord.ManagedComponentRuntimeSource
 	switch input.RuntimeSourceAuthority {
@@ -133,7 +145,10 @@ func (repository *Planner) prepareFrozenDesiredAuthority(
 	}
 	if input.RuntimeSourceAuthority == ManagedRuntimeSourceAuthorityApplied &&
 		(len(input.DesiredComponents) != 0 || len(input.ManagedRuntimeSources) != 0) {
-		return FrozenProjectionAuthority{}, errs.New(errs.KindValidationFailed, "applied Component runtime authority includes desired sources")
+		return FrozenProjectionAuthority{}, errs.New(
+			errs.KindValidationFailed,
+			"applied Component runtime authority includes desired sources",
+		)
 	}
 	zones := append([]etcdstore.Versioned[zonerecord.Record](nil), input.DesiredZones...)
 	sort.Slice(zones, func(left, right int) bool {
@@ -196,6 +211,7 @@ func (repository *Planner) prepareFrozenDesiredAuthority(
 	return FrozenProjectionAuthority{
 		environmentID: input.EnvironmentID, readRevision: input.ReadRevision,
 		desiredHeadRevision: input.DesiredHeadRevision,
+		desiredRevisionID:   input.DesiredRevisionID,
 		desiredZones:        zones,
 	}, nil
 }

@@ -1,25 +1,25 @@
-import { FormActionsProvider } from "@/components/common/form-actions";
-import { DialogTitle } from "@/components/ui/dialog";
+"use client";
+
 import { ContextReturnLink } from "@/components/common/context-link";
-("use client");
-
+import { FormActionsProvider } from "@/components/common/form-actions";
 import { ThemeToggle } from "@/components/common/theme-toggle";
-import { TaskNotifications } from "@/features/task/task-access";
-import { Brand } from "./brand";
-
 import { Button } from "@/components/ui/button";
-
+import { DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { HostTerminalPanel } from "@/features/host-terminal/terminal-panel";
+import { HostTerminalProvider } from "@/features/host-terminal/terminal-provider";
+import { TaskNotifications } from "@/features/task/task-access";
 import { useStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { cn } from "@/lib/utils";
+import { Brand } from "./brand";
+import { PlatformNavigation } from "./platform-navigation";
 import { Sidebar, hasWorkspaceNavigation } from "./sidebar";
 import { Topbar } from "./topbar";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { PlatformNavigation } from "./platform-navigation";
 
 function useWorkspace(pathname: string): {
   kind: "platform" | "tenant";
@@ -85,187 +85,195 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   useEffect(() => setMobileOpen(false), [pathname, search]);
 
   return (
-    <TooltipProvider>
-      <a
-        href="#console-main"
-        className="sr-only fixed left-4 top-4 z-[100] rounded-md bg-popover p-3 text-sm focus:not-sr-only"
-      >
-        Skip to content
-      </a>
-      <div
-        className="console-shell flex min-h-screen w-full"
-        style={
-          {
-            "--desktop-navigation-width": hasLocalNavigation
-              ? collapsed
-                ? "128px"
-                : "304px"
-              : "64px",
-          } as CSSProperties
-        }
-      >
-        {/* Desktop sidebar */}
-        <aside
-          className={cn(
-            "fixed inset-y-0 left-0 z-30 hidden border-r border-border bg-sidebar lg:flex",
-            "w-[var(--desktop-navigation-width)]",
-          )}
-        >
-          <PlatformNavigation pathname={pathname} />
-          {hasLocalNavigation && (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <div
-                className={cn(
-                  "flex h-16 shrink-0 items-center border-b border-border",
-                  collapsed ? "justify-center px-2" : "gap-1 px-3",
-                )}
-              >
-                {!collapsed && (
-                  <div className="min-w-0 flex-1">
-                    <WorkspaceSwitcher
-                      workspace={workspace}
-                      onNewTenant={() =>
-                        navigate("/platform/overview?create=tenant")
-                      }
-                    />
-                  </div>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={
-                    collapsed
-                      ? "Expand secondary navigation"
-                      : "Collapse secondary navigation"
-                  }
-                  title={
-                    collapsed
-                      ? "Expand secondary navigation"
-                      : "Collapse secondary navigation"
-                  }
-                  aria-expanded={!collapsed}
-                  onClick={toggleNavigation}
-                >
-                  {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-                </Button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <Sidebar
-                  workspace={workspace}
-                  projectSlug={projectSlug}
-                  pathname={pathname}
-                  collapsed={collapsed}
-                />
-              </div>
-            </div>
-          )}
-        </aside>
-
-        <Drawer open={mobileOpen} onOpenChange={setMobileOpen}>
-          <DrawerContent
-            className="left-0 right-auto max-w-80 border-l-0 border-r p-0 data-[ending-style]:-translate-x-full data-[starting-style]:-translate-x-full"
-            onClick={(event) => {
-              if (event.target instanceof Element && event.target.closest("a"))
-                setMobileOpen(false);
-            }}
+    <HostTerminalProvider>
+      <TooltipProvider>
+        <div className="grid h-dvh min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+          <a
+            href="#console-main"
+            className="sr-only fixed left-4 top-4 z-[100] rounded-md bg-popover p-3 text-sm focus:not-sr-only"
           >
-            <DialogTitle className="sr-only">Navigation</DialogTitle>
-            <div className="border-b border-border p-4">
-              <Brand />
-            </div>
-            <div className="flex min-h-0 flex-1">
-              <PlatformNavigation
-                pathname={pathname}
-                compact={hasLocalNavigation}
-              />
+            Skip to content
+          </a>
+          <div
+            className="console-shell relative flex min-h-0 w-full overflow-hidden"
+            style={
+              {
+                "--desktop-navigation-width": hasLocalNavigation
+                  ? collapsed
+                    ? "128px"
+                    : "304px"
+                  : "64px",
+              } as CSSProperties
+            }
+          >
+            {/* Desktop sidebar */}
+            <aside
+              className={cn(
+                "absolute inset-y-0 left-0 z-30 hidden border-r border-border bg-sidebar lg:flex",
+                "w-[var(--desktop-navigation-width)]",
+              )}
+            >
+              <PlatformNavigation pathname={pathname} />
               {hasLocalNavigation && (
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  <div className="border-b border-border px-3 py-2">
-                    <WorkspaceSwitcher
-                      workspace={workspace}
-                      onNewTenant={() => {
-                        setMobileOpen(false);
-                        navigate("/platform/overview?create=tenant");
-                      }}
-                    />
+                  <div
+                    className={cn(
+                      "flex h-16 shrink-0 items-center border-b border-border",
+                      collapsed ? "justify-center px-2" : "gap-1 px-3",
+                    )}
+                  >
+                    {!collapsed && (
+                      <div className="min-w-0 flex-1">
+                        <WorkspaceSwitcher
+                          workspace={workspace}
+                          onNewTenant={() =>
+                            navigate("/platform/overview?create=tenant")
+                          }
+                        />
+                      </div>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={
+                        collapsed
+                          ? "Expand secondary navigation"
+                          : "Collapse secondary navigation"
+                      }
+                      title={
+                        collapsed
+                          ? "Expand secondary navigation"
+                          : "Collapse secondary navigation"
+                      }
+                      aria-expanded={!collapsed}
+                      onClick={toggleNavigation}
+                    >
+                      {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+                    </Button>
                   </div>
                   <div className="flex-1 overflow-y-auto">
                     <Sidebar
                       workspace={workspace}
                       projectSlug={projectSlug}
                       pathname={pathname}
+                      collapsed={collapsed}
                     />
                   </div>
                 </div>
               )}
-            </div>
-          </DrawerContent>
-        </Drawer>
+            </aside>
 
-        {/* Main column */}
-        <div
-          className={cn(
-            "flex min-w-0 flex-1 flex-col",
-            "lg:pl-[var(--desktop-navigation-width)]",
-          )}
-        >
-          <div
-            data-workspace-header
-            className="flex min-h-16 items-center gap-2 border-b border-border px-4 sm:px-6 lg:px-7"
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setMobileOpen(true)}
-              className="shrink-0 text-muted-foreground lg:hidden"
+            <Drawer open={mobileOpen} onOpenChange={setMobileOpen}>
+              <DrawerContent
+                className="left-0 right-auto max-w-80 border-l-0 border-r p-0 data-[ending-style]:-translate-x-full data-[starting-style]:-translate-x-full"
+                onClick={(event) => {
+                  if (
+                    event.target instanceof Element &&
+                    event.target.closest("a")
+                  )
+                    setMobileOpen(false);
+                }}
+              >
+                <DialogTitle className="sr-only">Navigation</DialogTitle>
+                <div className="border-b border-border p-4">
+                  <Brand />
+                </div>
+                <div className="flex min-h-0 flex-1">
+                  <PlatformNavigation
+                    pathname={pathname}
+                    compact={hasLocalNavigation}
+                  />
+                  {hasLocalNavigation && (
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      <div className="border-b border-border px-3 py-2">
+                        <WorkspaceSwitcher
+                          workspace={workspace}
+                          onNewTenant={() => {
+                            setMobileOpen(false);
+                            navigate("/platform/overview?create=tenant");
+                          }}
+                        />
+                      </div>
+                      <div className="flex-1 overflow-y-auto">
+                        <Sidebar
+                          workspace={workspace}
+                          projectSlug={projectSlug}
+                          pathname={pathname}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </DrawerContent>
+            </Drawer>
+
+            {/* Main column */}
+            <div
+              className={cn(
+                "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                "lg:pl-[var(--desktop-navigation-width)]",
+              )}
             >
-              <Menu className="size-5" />
-              <span>Navigate</span>
-            </Button>
-            <div className="min-w-0 flex-1">
-              <Topbar pathname={pathname} />
-            </div>
-            <TaskNotifications />
-            <div>
-              <ThemeToggle />
+              <div
+                data-workspace-header
+                className="flex min-h-16 items-center gap-2 border-b border-border px-4 sm:px-6 lg:px-7"
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMobileOpen(true)}
+                  className="shrink-0 text-muted-foreground lg:hidden"
+                >
+                  <Menu className="size-5" />
+                  <span>Navigate</span>
+                </Button>
+                <div className="min-w-0 flex-1">
+                  <Topbar pathname={pathname} />
+                </div>
+                <TaskNotifications />
+                <div>
+                  <ThemeToggle />
+                </div>
+              </div>
+              <main
+                id="console-main"
+                data-local-navigation={hasLocalNavigation}
+                tabIndex={-1}
+                className="mx-auto w-full max-w-[1580px] flex-1 overflow-y-auto px-4 pb-12 pt-6 outline-none sm:px-6 lg:px-7 console-content"
+              >
+                <div className="console-page" key={pathname}>
+                  <ContextReturnLink />
+                  {resourceRefreshErrors.length > 0 && (
+                    <div
+                      role="alert"
+                      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          Some resource details could not be refreshed after an
+                          operation.
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {resourceRefreshErrors.join(" · ")}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={retryResourceRefresh}
+                      >
+                        Retry refresh
+                      </Button>
+                    </div>
+                  )}
+                  <FormActionsProvider>{children}</FormActionsProvider>
+                </div>
+              </main>
             </div>
           </div>
-          <main
-            id="console-main"
-            data-local-navigation={hasLocalNavigation}
-            tabIndex={-1}
-            className="mx-auto w-full max-w-[1580px] flex-1 px-4 pb-12 pt-6 outline-none sm:px-6 lg:px-7 console-content"
-          >
-            <div className="console-page" key={pathname}>
-              <ContextReturnLink />
-              {resourceRefreshErrors.length > 0 && (
-                <div
-                  role="alert"
-                  className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm"
-                >
-                  <div>
-                    <p className="font-medium">
-                      Some resource details could not be refreshed after an
-                      operation.
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {resourceRefreshErrors.join(" · ")}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={retryResourceRefresh}
-                  >
-                    Retry refresh
-                  </Button>
-                </div>
-              )}
-              <FormActionsProvider>{children}</FormActionsProvider>
-            </div>
-          </main>
+          <HostTerminalPanel />
         </div>
-      </div>
-    </TooltipProvider>
+      </TooltipProvider>
+    </HostTerminalProvider>
   );
 }

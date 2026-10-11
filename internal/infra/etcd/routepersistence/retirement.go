@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,6 +15,7 @@ import (
 // the router has withdrawn the Route and commit that proof with these writes.
 func PrepareRetirement(ctx context.Context, store interface {
 	GetMany(context.Context, keyvalue.GetManyRequest) (*keyvalue.GetManyResult, error)
+	Range(context.Context, keyvalue.RangeRequest) (*keyvalue.RangeResult, error)
 }, environmentID, routeID string, revision int64) ([]keyvalue.Condition, []keyvalue.Mutation, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return nil, nil, err
@@ -21,6 +23,10 @@ func PrepareRetirement(ctx context.Context, store interface {
 	if store == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		ids.Validate(ids.KindRoute, routeID) != nil || revision <= 0 {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Route retirement identity is invalid")
+	}
+	checkCondition, err := edgechecks.RequireRouteIdle(ctx, store, routeID, revision)
+	if err != nil {
+		return nil, nil, err
 	}
 	keys := []string{routes.RecordKey(routeID), routes.OwnerKey(environmentID, routeID),
 		routes.ObservationKey(routeID), deletions.TombstoneKey("route", routeID)}
@@ -32,7 +38,8 @@ func PrepareRetirement(ctx context.Context, store interface {
 		return nil, nil, errs.New(errs.KindInternal, "Route retirement snapshot is incomplete")
 	}
 	defer keyvalue.ClearValues(read.Values)
-	conditions := make([]keyvalue.Condition, 0, 5)
+	conditions := make([]keyvalue.Condition, 0, 6)
+	conditions = append(conditions, checkCondition)
 	mutations := make([]keyvalue.Mutation, 0, 4)
 	for index, value := range read.Values {
 		if value != nil && value.Key != keys[index] {

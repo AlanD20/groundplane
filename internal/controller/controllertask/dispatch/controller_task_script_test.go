@@ -21,11 +21,11 @@ func TestControllerTaskHandlerAcceptsOnlyClosedScriptRemovalInput(t *testing.T) 
 		CreatedAt: now,
 	}
 	handler := &ResourceHandler{}
-	if err := handler.Execute(context.Background(), task); err != nil {
+	if err := handler.Execute(context.Background(), task, testControllerProgress(context.Background(), task)); err != nil {
 		t.Fatalf("Execute(valid Script removal): %v", err)
 	}
 	task.Params["unexpected"] = "value"
-	if err := handler.Execute(context.Background(), task); err == nil {
+	if err := handler.Execute(context.Background(), task, testControllerProgress(context.Background(), task)); err == nil {
 		t.Fatal("Execute() accepted hidden Script removal input")
 	}
 }

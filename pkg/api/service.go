@@ -51,36 +51,37 @@ type ServiceLogging struct {
 }
 
 type Service struct {
-	ID                         string                       `json:"id"`
-	EnvironmentID              string                       `json:"environment_id"`
-	Name                       string                       `json:"name"`
-	Image                      string                       `json:"image"`
-	RuntimeIntent              ServiceRuntimeIntent         `json:"runtime_intent"`
-	Observation                *ServiceObservation          `json:"observation,omitempty"`
-	Zones                      []string                     `json:"zones,omitempty"`
-	Strategy                   string                       `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate"
-	OnFailure                  OnFailure                    `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
-	Healthcheck                *ServiceHealthcheck          `json:"healthcheck,omitempty"`
-	Resources                  ServiceResources             `json:"resources,omitempty"`
-	Command                    []string                     `json:"command,omitempty"`
-	Entrypoint                 []string                     `json:"entrypoint,omitempty"`
-	WorkingDir                 string                       `json:"working_dir,omitempty"`
-	User                       string                       `json:"user,omitempty"`
-	Mounts                     []ServiceMount               `json:"mounts,omitempty"`
-	Aliases                    map[string][]string          `json:"aliases,omitempty"`
-	DependsOn                  map[string]ServiceDependency `json:"depends_on,omitempty"`
-	Expose                     []string                     `json:"expose,omitempty"`
-	Restart                    string                       `json:"restart,omitempty"`
-	Logging                    ServiceLogging               `json:"logging,omitempty"`
-	Replicas                   int                          `json:"replicas,omitempty"`
-	Adapter                    string                       `json:"adapter,omitempty"`
-	AdapterVersion             string                       `json:"adapter_version,omitempty"`
-	FactsPrefix                string                       `json:"facts_prefix,omitempty"`
-	Label                      string                       `json:"label,omitempty"`
-	BackingNetworkID           string                       `json:"backing_network_id,omitempty"`
-	ServingReleaseID           string                       `json:"serving_release_id,omitempty"`
-	CurrentSuccessfulReleaseID string                       `json:"current_successful_release_id,omitempty"`
-	Hooks                      *BackingHookConfiguration    `json:"hooks,omitempty"`
+	ID                           string                       `json:"id"`
+	EnvironmentID                string                       `json:"environment_id"`
+	Name                         string                       `json:"name"`
+	Image                        string                       `json:"image"`
+	RuntimeIntent                ServiceRuntimeIntent         `json:"runtime_intent"`
+	Observation                  *ServiceObservation          `json:"observation,omitempty"`
+	Zones                        []string                     `json:"zones,omitempty"`
+	Strategy                     string                       `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate" | "rolling"
+	OnFailure                    OnFailure                    `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
+	RollingReplicaTimeoutSeconds uint32                       `json:"rolling_replica_timeout_seconds,omitempty" maximum:"86400" doc:"Per-replica rolling change/readiness budget in seconds; zero uses 300. The overall Task deadline still applies."`
+	Healthcheck                  *ServiceHealthcheck          `json:"healthcheck,omitempty"`
+	Resources                    ServiceResources             `json:"resources,omitempty"`
+	Command                      []string                     `json:"command,omitempty"`
+	Entrypoint                   []string                     `json:"entrypoint,omitempty"`
+	WorkingDir                   string                       `json:"working_dir,omitempty"`
+	User                         string                       `json:"user,omitempty"`
+	Mounts                       []ServiceMount               `json:"mounts,omitempty"`
+	Aliases                      map[string][]string          `json:"aliases,omitempty"`
+	DependsOn                    map[string]ServiceDependency `json:"depends_on,omitempty"`
+	Expose                       []string                     `json:"expose,omitempty"`
+	Restart                      string                       `json:"restart,omitempty"`
+	Logging                      ServiceLogging               `json:"logging,omitempty"`
+	Replicas                     int                          `json:"replicas,omitempty"`
+	Adapter                      string                       `json:"adapter,omitempty"`
+	AdapterVersion               string                       `json:"adapter_version,omitempty"`
+	FactsPrefix                  string                       `json:"facts_prefix,omitempty"`
+	Label                        string                       `json:"label,omitempty"`
+	BackingNetworkID             string                       `json:"backing_network_id,omitempty"`
+	ServingReleaseID             string                       `json:"serving_release_id,omitempty"`
+	CurrentSuccessfulReleaseID   string                       `json:"current_successful_release_id,omitempty"`
+	Hooks                        *BackingHookConfiguration    `json:"hooks,omitempty"`
 }
 
 // ServiceDetail adds the lossless normalized native Compose source used by
@@ -93,38 +94,40 @@ type ServiceDetail struct {
 }
 
 type ServiceCreate struct {
-	EnvironmentID string             `json:"environment_id"`
-	Name          string             `json:"name"`
-	Image         string             `json:"image"`
-	Zones         []string           `json:"zones"`
-	Strategy      string             `json:"strategy"`
-	OnFailure     OnFailure          `json:"on_failure"`
-	Healthcheck   ServiceHealthcheck `json:"healthcheck"`
-	Resources     ServiceResources   `json:"resources"`
-	Expose        []string           `json:"expose"`
-	Restart       string             `json:"restart"`
-	Replicas      int                `json:"replicas"`
+	EnvironmentID                string             `json:"environment_id"`
+	Name                         string             `json:"name"`
+	Image                        string             `json:"image"`
+	Zones                        []string           `json:"zones"`
+	Strategy                     string             `json:"strategy"`
+	OnFailure                    OnFailure          `json:"on_failure"`
+	RollingReplicaTimeoutSeconds uint32             `json:"rolling_replica_timeout_seconds,omitempty" maximum:"86400" doc:"Per-replica rolling change/readiness budget; zero uses 300 seconds."`
+	Healthcheck                  ServiceHealthcheck `json:"healthcheck"`
+	Resources                    ServiceResources   `json:"resources"`
+	Expose                       []string           `json:"expose"`
+	Restart                      string             `json:"restart"`
+	Replicas                     int                `json:"replicas"`
 }
 
 type ServiceEdit struct {
-	VolumeMounts *[]ServiceVolumeMount         `json:"volume_mounts,omitempty" doc:"Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy."`
-	Command      *[]string                     `json:"command,omitempty" doc:"Replacement argument vector; omission preserves, an empty list removes the Compose override and restores the image command."`
-	Entrypoint   *[]string                     `json:"entrypoint,omitempty" doc:"Replacement entrypoint vector; omission preserves, an empty list removes the Compose override and restores the image entrypoint."`
-	WorkingDir   *string                       `json:"working_dir,omitempty" doc:"Replacement container working directory; omission preserves, an empty string restores the image default."`
-	User         *string                       `json:"user,omitempty" doc:"Replacement container user; omission preserves, an empty string restores the image default."`
-	Aliases      *map[string][]string          `json:"aliases,omitempty" doc:"Replacement network aliases keyed by joined Zone name; omission preserves, an empty object removes all aliases."`
-	DependsOn    *map[string]ServiceDependency `json:"depends_on,omitempty" doc:"Replacement Service dependencies keyed by Service name; omission preserves, an empty object removes all dependencies."`
-	Logging      *ServiceLogging               `json:"logging,omitempty" doc:"Replacement supported log rotation options; omission preserves, an empty object removes both overrides."`
-	Image        string                        `json:"image"`
-	Zones        []string                      `json:"zones"`
-	Strategy     string                        `json:"strategy"`
-	OnFailure    OnFailure                     `json:"on_failure"`
-	Healthcheck  ServiceHealthcheck            `json:"healthcheck"`
-	Resources    ServiceResources              `json:"resources"`
-	Expose       []string                      `json:"expose"`
-	Restart      string                        `json:"restart"`
-	Replicas     int                           `json:"replicas"`
-	Hooks        *BackingHookConfiguration     `json:"hooks,omitempty"`
+	VolumeMounts                 *[]ServiceVolumeMount         `json:"volume_mounts,omitempty" doc:"Replacement managed Volume mounts; omission preserves, an empty list removes all. File mounts are preserved. Applies on next deploy."`
+	Command                      *[]string                     `json:"command,omitempty" doc:"Replacement argument vector; omission preserves, an empty list removes the Compose override and restores the image command."`
+	Entrypoint                   *[]string                     `json:"entrypoint,omitempty" doc:"Replacement entrypoint vector; omission preserves, an empty list removes the Compose override and restores the image entrypoint."`
+	WorkingDir                   *string                       `json:"working_dir,omitempty" doc:"Replacement container working directory; omission preserves, an empty string restores the image default."`
+	User                         *string                       `json:"user,omitempty" doc:"Replacement container user; omission preserves, an empty string restores the image default."`
+	Aliases                      *map[string][]string          `json:"aliases,omitempty" doc:"Replacement network aliases keyed by joined Zone name; omission preserves, an empty object removes all aliases."`
+	DependsOn                    *map[string]ServiceDependency `json:"depends_on,omitempty" doc:"Replacement Service dependencies keyed by Service name; omission preserves, an empty object removes all dependencies."`
+	Logging                      *ServiceLogging               `json:"logging,omitempty" doc:"Replacement supported log rotation options; omission preserves, an empty object removes both overrides."`
+	Image                        string                        `json:"image"`
+	Zones                        []string                      `json:"zones"`
+	Strategy                     string                        `json:"strategy"`
+	OnFailure                    OnFailure                     `json:"on_failure"`
+	RollingReplicaTimeoutSeconds *uint32                       `json:"rolling_replica_timeout_seconds,omitempty" maximum:"86400" doc:"Replacement per-replica rolling budget; omission preserves, zero restores 300 seconds."`
+	Healthcheck                  ServiceHealthcheck            `json:"healthcheck"`
+	Resources                    ServiceResources              `json:"resources"`
+	Expose                       []string                      `json:"expose"`
+	Restart                      string                        `json:"restart"`
+	Replicas                     int                           `json:"replicas"`
+	Hooks                        *BackingHookConfiguration     `json:"hooks,omitempty"`
 }
 
 type ServiceObservationState string

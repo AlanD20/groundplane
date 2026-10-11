@@ -23,7 +23,8 @@ func TestRenderedBlueGreenLeavesOppositeSlotUninstantiated(t *testing.T) {
 	}}})
 	input.Identities.Services = []composeidentity.Resource{{ID: serviceID, Name: "api"}}
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
-		ReleaseID: releaseID, Image: input.Project.Services["api"].Image,
+		ProxyImplementation: testServiceProxyImplementation(),
+		ReleaseID:           releaseID, Image: input.Project.Services["api"].Image,
 		ProxyImage: testServiceProxyImage(), Strategy: domain.StrategyBlueGreen,
 		Target: domain.WorkloadBlue, ServingTarget: domain.WorkloadBlue,
 		ServingReleaseID: releaseID, ServingProxyGeneration: 1,

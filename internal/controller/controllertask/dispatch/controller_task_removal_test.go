@@ -20,16 +20,20 @@ func TestControllerTaskHandlerExecutesExactAgentRemoval(t *testing.T) {
 	t.Parallel()
 
 	agents := &removalTaskAgents{}
-	handler, err := NewResourceHandler(
+	handler, err := newTestResourceHandler(
 		agents,
 		testBackingZoneCascade(t),
 		&fakeControllerTaskRunners{},
-		&recordingControllerTaskExecutor{},
-	)
+		&recordingControllerTaskExecutor{})
+
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
-	err = handler.Execute(context.Background(), validAgentRemovalTask())
+	err = handler.Execute(
+		context.Background(),
+		validAgentRemovalTask(),
+		testControllerProgress(context.Background(), validAgentRemovalTask()),
+	)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -49,18 +53,18 @@ func TestControllerTaskHandlerRejectsInvalidAgentRemovalParameters(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			agents := &removalTaskAgents{}
-			handler, err := NewResourceHandler(
+			handler, err := newTestResourceHandler(
 				agents,
 				testBackingZoneCascade(t),
 				&fakeControllerTaskRunners{},
-				&recordingControllerTaskExecutor{},
-			)
+				&recordingControllerTaskExecutor{})
+
 			if err != nil {
 				t.Fatalf("NewResourceHandler() error = %v", err)
 			}
 			task := validAgentRemovalTask()
 			task.Params = params
-			err = handler.Execute(context.Background(), task)
+			err = handler.Execute(context.Background(), task, testControllerProgress(context.Background(), task))
 			if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 				t.Fatalf("Execute() error = %v, want %s", err, errs.CodeValidationFailed)
 			}

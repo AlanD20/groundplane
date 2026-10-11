@@ -4,6 +4,7 @@ import (
 	"context"
 
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -15,7 +16,12 @@ func (runtime *Runtime) componentRestoration(
 ) (StepResult, error) {
 	procedure := assignment.Plan.GetComponentRecoveryProcedure()
 	if procedure == nil {
-		return StepResult{ReconciliationRequired: true}, errs.New(errs.KindInternal, "agent: Component recovery procedure is absent")
+		return StepResult{
+			ReconciliationRequired: true,
+		}, errs.New(
+			errs.KindInternal,
+			"agent: Component recovery procedure is absent",
+		)
 	}
 	artifactID, serviceID, projectName, target := componentRestorationTarget(procedure)
 	artifact := taskassignment.ComposeArtifact(assignment.Plan, artifactID)
@@ -26,7 +32,12 @@ func (runtime *Runtime) componentRestoration(
 	}
 	if artifactID == "" || serviceID == "" || projectName == "" || artifact == nil ||
 		target == agentpb.ComponentRestorationTarget_COMPONENT_RESTORATION_TARGET_UNSPECIFIED {
-		return StepResult{ReconciliationRequired: true}, errs.New(errs.KindInternal, "agent: Component recovery target is invalid")
+		return StepResult{
+			ReconciliationRequired: true,
+		}, errs.New(
+			errs.KindInternal,
+			"agent: Component recovery target is invalid",
+		)
 	}
 	names, err := composeNamesForServiceIDs(artifact, []string{serviceID})
 	if err != nil {
@@ -69,12 +80,45 @@ func (runtime *Runtime) componentRestoration(
 			result.ReconciliationRequired = true
 			return result, proveErr
 		}
+		if restored && executionplan.ComponentConfigurationProofRequired(assignment.Plan) {
+			response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
+				Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
+				OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
+				TimeoutSeconds: taskassignment.RemainingSeconds(ctx, step.GetTimeoutSeconds()),
+			})
+			if err != nil {
+				result.ReconciliationRequired = true
+				return result, err
+			}
+			if response == nil || response.GetSchema() != composeHelperSchema ||
+				response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED ||
+				response.GetExitCode() != 0 || response.GetDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
+				result.ReconciliationRequired = true
+				return result, errs.New(errs.KindRequestFailed, "agent: Component configuration recovery probe failed")
+			}
+			matched, configurationRestored := componentRestorationEvidenceStatus(assignment, StepResult{
+				ComponentRestorationEvidence: response.GetComponentRestorationEvidence(),
+			})
+			if !matched {
+				result.ReconciliationRequired = true
+				return result, errs.New(
+					errs.KindInternal,
+					"agent: Component configuration recovery proof is not bound to this Task",
+				)
+			}
+			restored = configurationRestored
+		}
 		result.RestorationRequired = !restored
 		result.ComponentRestorationEvidence = evidence(restored)
 		return result, nil
 	}
 	if step.GetComponentRestorationCompensate() == nil {
-		return StepResult{ReconciliationRequired: true}, errs.New(errs.KindInternal, "agent: Component recovery step is invalid")
+		return StepResult{
+			ReconciliationRequired: true,
+		}, errs.New(
+			errs.KindInternal,
+			"agent: Component recovery step is invalid",
+		)
 	}
 	var proofObservation *agentpb.ObservedProject
 	result, err := runtime.mutate(ctx, assignment, step, artifactID, func(observed *agentpb.ObservedProject) error {
@@ -90,6 +134,14 @@ func (runtime *Runtime) componentRestoration(
 	})
 	if proofObservation != nil {
 		result.Observed = proofObservation
+	}
+	if err == nil && executionplan.ComponentConfigurationProofRequired(assignment.Plan) &&
+		!ComponentRestorationEvidenceProven(assignment, result) {
+		result.ReconciliationRequired = true
+		err = errs.New(
+			errs.KindRequestFailed,
+			"agent: Component runtime is running but its previous Routes are not proved restored",
+		)
 	}
 	result.ComponentRestorationEvidence = evidence(err == nil && !result.ReconciliationRequired)
 	return result, err

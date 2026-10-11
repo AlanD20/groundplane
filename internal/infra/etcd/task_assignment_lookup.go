@@ -80,7 +80,51 @@ func (repository *TaskRepository) GetTaskAssignment(
 	var recovery *taskassignments.ReleaseRecoveryDirective
 	var componentRecovery *taskassignments.ReleaseRecoveryDirective
 	var serviceAbsenceRecovery *taskassignments.ReleaseRecoveryDirective
-	if assignment.ServiceAbsenceProcedureSHA256 != "" {
+	var managedNetworkRecovery *taskassignments.ReleaseRecoveryDirective
+	var attachRemovalRecovery *taskassignments.ReleaseRecoveryDirective
+	if assignment.AttachRemovalAuthoritySHA256 != "" {
+		authority, _, found, authorityErr := repository.attachRemovalRecoveryAuthorityAtRevision(
+			ctx,
+			task,
+			indexed.ReadRevision,
+		)
+		digest, digestErr := taskassignments.AttachRemovalRecoveryAuthoritySHA256(authority)
+		if authorityErr != nil || !found || digestErr != nil || digest != assignment.AttachRemovalAuthoritySHA256 {
+			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
+		}
+		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
+			record, value, recordErr := repository.readAttachRemovalRecovery(
+				ctx,
+				task,
+				assignment,
+				indexed.ReadRevision,
+			)
+			if recordErr != nil {
+				return TaskAssignment{}, recordErr
+			}
+			clear(value.Value)
+			attachRemovalRecovery, err = taskassignments.AttachRemovalRecoveryDirective(record, assignment)
+			if err != nil {
+				return TaskAssignment{}, err
+			}
+		}
+	} else if assignment.ManagedNetworkProcedureSHA256 != "" {
+		procedure, _, _, found, procedureErr := repository.managedNetworkRecoveryProcedureAtRevision(
+			ctx, task, indexed.ReadRevision,
+		)
+		digest, digestErr := managedNetworkRecoveryAuthorityDigest(procedure)
+		if procedureErr != nil || !found || digestErr != nil || digest != assignment.ManagedNetworkProcedureSHA256 {
+			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
+		}
+		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
+			managedNetworkRecovery, err = repository.managedNetworkRecoveryDirectiveAtRevision(
+				ctx, task, assignment, procedure, indexed.ReadRevision,
+			)
+			if err != nil {
+				return TaskAssignment{}, err
+			}
+		}
+	} else if assignment.ServiceAbsenceProcedureSHA256 != "" {
 		procedure, _, _, found, procedureErr := repository.serviceAbsenceProcedureAtRevision(
 			ctx,
 			task,
@@ -112,7 +156,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 			}
 		}
 	}
-	if task.Params[taskjournal.TaskBlueprintComponentUnitParam] != "" {
+	if componentRecoveryTask(task) {
 		_, procedure, _, procedureErr := repository.componentRecoveryProcedureAtRevision(
 			ctx,
 			task,
@@ -145,6 +189,8 @@ func (repository *TaskRepository) GetTaskAssignment(
 		ReleaseRecovery:        recovery,
 		ComponentRecovery:      componentRecovery,
 		ServiceAbsenceRecovery: serviceAbsenceRecovery,
+		ManagedNetworkRecovery: managedNetworkRecovery,
+		AttachRemovalRecovery:  attachRemovalRecovery,
 		RecoveryProofRequired:  proofRequired,
 	}, nil
 }

@@ -183,7 +183,12 @@ func (operations *localOperations) inspectRunner(
 	if err != nil {
 		return runnerallocation.RunnerRuntimeEvidence{}, false, err
 	}
+	software, err := installedRunnerSoftware(ctx, engine, inspected.Image, plan.Container.ImageRef)
+	if err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, false, err
+	}
 	return runnerallocation.RunnerRuntimeEvidence{
+		Software:    software,
 		ContainerID: inspected.ID, DaemonNonce: nonce, SocketDevice: device, SocketInode: inode,
 	}, true, nil
 }

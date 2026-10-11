@@ -24,6 +24,7 @@ func newHostCmd() *cobra.Command {
 			return app.Out.Render(headers, rows, host)
 		},
 	})
+	cmd.AddCommand(newHostTerminalCmd())
 	return cmd
 }
 
@@ -60,10 +61,27 @@ func hostFields(host apiTypes.Host) map[string]any {
 		"agent_max_concurrent":        host.Agent.MaxConcurrent,
 		"agent_labels":                host.Agent.Labels,
 	}
+	if source := host.Controller.Source; source != nil {
+		fields["controller_source_kind"] = source.Kind
+		fields["controller_source_commit"] = source.Commit
+	}
+	if host.Etcd.Version != nil {
+		fields["etcd_version"] = *host.Etcd.Version
+	}
+	if software := host.Etcd.Software; software != nil {
+		fields["etcd_image"] = software.Image
+		fields["etcd_image_config_digest"] = software.ConfigDigest
+		fields["etcd_image_version"] = software.Version
+		fields["etcd_selected_tag"] = software.SelectedTag
+	}
 	if candidate := host.Controller.Update.Candidate; candidate != nil {
 		fields["controller_candidate"] = candidate.Release
 		fields["controller_candidate_version"] = candidate.ControllerVersion
 		fields["controller_candidate_agent_image"] = candidate.AgentImage
+		if source := candidate.ControllerSource; source != nil {
+			fields["controller_candidate_source_kind"] = source.Kind
+			fields["controller_candidate_source_commit"] = source.Commit
+		}
 	}
 	if last := host.Controller.Update.LastUpdate; last != nil {
 		fields["controller_update_task"] = last.TaskID

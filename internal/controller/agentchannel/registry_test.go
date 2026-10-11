@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"context"
 	"errors"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"sync"
 	"testing"
 	"time"
@@ -297,7 +298,7 @@ func TestRegistryFencesReplacementSessions(t *testing.T) {
 	default:
 		t.Fatal("replaced session was not canceled")
 	}
-	assertStateConflict(t, first.RecordReady(testTime(), 3, "v0.4.2"))
+	assertStateConflict(t, first.RecordReady(testTime(), 3, "v0.4.2", buildversion.BuildProvenance{}))
 	first.Close()
 	snapshot, ok := registry.Snapshot(testAgentID)
 	if !ok || !snapshot.Online || snapshot.Generation != 2 {
@@ -318,7 +319,7 @@ func TestRegistryReadyClosesImmediatelyAfterMatchingReady(t *testing.T) {
 		t.Fatalf("open session: %v", err)
 	}
 	defer session.Close()
-	if err := session.RecordReady(testTime(), 3, "v0.4.2"); err != nil {
+	if err := session.RecordReady(testTime(), 3, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("record Ready: %v", err)
 	}
 	ready, err := registry.Ready(context.Background(), testAgentID, 7)
@@ -342,7 +343,7 @@ func TestRegistryReadyWaitsForFreshReportAfterMatchingSessionCloses(t *testing.T
 	if err != nil {
 		t.Fatalf("open first session: %v", err)
 	}
-	if err := first.RecordReady(testTime(), 3, "v0.4.2"); err != nil {
+	if err := first.RecordReady(testTime(), 3, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("record first Ready: %v", err)
 	}
 	first.Close()
@@ -369,7 +370,7 @@ func TestRegistryReadyWaitsForFreshReportAfterMatchingSessionCloses(t *testing.T
 		t.Fatal("replacement connection satisfied readiness without a fresh report")
 	default:
 	}
-	if err := replacement.RecordReady(testTime().Add(time.Second), 2, "v0.4.2"); err != nil {
+	if err := replacement.RecordReady(testTime().Add(time.Second), 2, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("record replacement Ready: %v", err)
 	}
 	select {
@@ -399,7 +400,7 @@ func TestRegistryReadyClosesWhenMatchingReadyArrivesAfterSubscribe(t *testing.T)
 		t.Fatalf("open session: %v", err)
 	}
 	defer session.Close()
-	if err := session.RecordReady(testTime(), 2, "v0.4.2"); err != nil {
+	if err := session.RecordReady(testTime(), 2, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("record Ready: %v", err)
 	}
 	select {
@@ -446,7 +447,7 @@ func TestRegistryReadyCancellationReleasesSubscription(t *testing.T) {
 		t.Fatalf("open session: %v", err)
 	}
 	defer session.Close()
-	if err := session.RecordReady(testTime(), 1, "v0.4.2"); err != nil {
+	if err := session.RecordReady(testTime(), 1, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("record Ready: %v", err)
 	}
 	select {
@@ -472,7 +473,7 @@ func TestRegistryReadyIgnoresDifferentGeneration(t *testing.T) {
 		t.Fatalf("open replacement: %v", err)
 	}
 	defer session.Close()
-	if err := session.RecordReady(testTime(), 2, "v0.4.2"); err != nil {
+	if err := session.RecordReady(testTime(), 2, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("record replacement Ready: %v", err)
 	}
 	select {
@@ -760,7 +761,7 @@ func TestRegistryOpenRejectsInvalidInputsWithoutFencingCurrentSession(t *testing
 		t.Fatal("invalid Open input fenced the current session")
 	default:
 	}
-	if err := current.RecordReady(testTime(), 1, "v0.4.2"); err != nil {
+	if err := current.RecordReady(testTime(), 1, "v0.4.2", buildversion.BuildProvenance{}); err != nil {
 		t.Fatalf("current session lost authority: %v", err)
 	}
 }

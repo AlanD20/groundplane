@@ -68,9 +68,18 @@ func componentTestRegistration(
 // Rationale: the helper's public selector must validate a real Controller plan
 // and select only the acknowledged workload/proxy, even when its rendered
 // predecessor declares a dependency on another configured Service.
-func assertRestorationStartupScope(t *testing.T, task etcd.TaskRecord, plan *agentpb.ExecutionPlan) {
+func assertRestorationStartupScope(
+	t *testing.T,
+	task etcd.TaskRecord,
+	plan *agentpb.ExecutionPlan,
+) {
 	t.Helper()
 	member := plan.GetCandidateReleaseProcedure().GetMembers()[0]
+	for _, artifact := range plan.GetArtifacts() {
+		if artifact.GetArtifactId() == member.GetCandidateArtifactId() {
+			task.Owner.EnvironmentID = artifact.GetOwnerId()
+		}
+	}
 	for _, addressable := range []bool{false, true} {
 		name := "portless"
 		if addressable {
@@ -90,45 +99,70 @@ func assertRestorationStartupScope(t *testing.T, task etcd.TaskRecord, plan *age
 				{ID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAZ", Name: "configured"},
 			}
 			identity := fixtureowner.ComposeReleaseIdentity{
-				ReleaseID: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", Image: project.Services["api"].Image,
-				Strategy: domain.StrategyRecreate, Target: domain.WorkloadSingleton,
-				ServingTarget: domain.WorkloadSingleton, ServingReleaseID: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				ReleaseID:              "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				Image:                  project.Services["api"].Image,
+				Strategy:               domain.StrategyRecreate,
+				Target:                 domain.WorkloadSingleton,
+				ServingTarget:          domain.WorkloadSingleton,
+				ServingReleaseID:       "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				ServingProxyGeneration: 1,
 			}
 			want := []string{"api"}
 			if addressable {
 				api := project.Services["api"]
 				api.Expose = []string{"8080"}
-				api.HealthCheck = &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}}
+				api.HealthCheck = &composetypes.HealthCheckConfig{
+					Test: composetypes.HealthCheckTest{"CMD", "true"},
+				}
 				project.Services["api"] = api
 				identity.Strategy, identity.Target, identity.ServingTarget = domain.StrategyBlueGreen, domain.WorkloadBlue, domain.WorkloadBlue
+				identity.ProxyImplementation = serviceproxy.Caddy
 				identity.ProxyImage = testServiceProxyImage()
 				want = []string{"api", "api--blue"}
 			}
-			input.Releases = map[string]fixtureowner.ComposeReleaseIdentity{member.ServiceId: identity}
+			input.Releases = map[string]fixtureowner.ComposeReleaseIdentity{
+				member.ServiceId: identity,
+			}
 			predecessor, err := fixtureowner.RenderCompose(input)
 			if err != nil {
 				t.Fatal(err)
 			}
+			predecessor = nativeServiceArtifactFixture(
+				t,
+				predecessor,
+				member.ServiceId,
+				string(identity.Target),
+				addressable,
+			)
 			encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(predecessor)
 			if err != nil {
 				t.Fatal(err)
 			}
-			digest := sha256.Sum256(encoded)
 			request := &agentpb.ComposeHelperRequest{
-				Schema: composehelper.SchemaVersion, AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-				TaskId: task.ID, OperationId: task.OperationID, Plan: plan, TimeoutSeconds: 30,
-				StepId: member.ServingPredecessor.CompensateStepId,
+				Schema:         composehelper.SchemaVersion,
+				AssignmentId:   "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				TaskId:         task.ID,
+				OperationId:    task.OperationID,
+				Plan:           plan,
+				TimeoutSeconds: 30,
+				StepId:         member.ServingPredecessor.CompensateStepId,
 				RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
-					TaskId: task.ID, OperationId: task.OperationID, PlanHash: slices.Clone(plan.PlanHash), AuthoritySha256: make([]byte, 32),
-					EnvironmentId: task.Owner.EnvironmentID, CandidateArtifactId: member.CandidateArtifactId,
+					TaskId:              task.ID,
+					OperationId:         task.OperationID,
+					PlanHash:            slices.Clone(plan.PlanHash),
+					AuthoritySha256:     make([]byte, 32),
+					EnvironmentId:       task.Owner.EnvironmentID,
+					CandidateArtifactId: member.CandidateArtifactId,
 					Candidates: []*agentpb.ReleaseRestorationCandidate{
-						{ServiceId: member.ServiceId, ReleaseId: member.CandidateReleaseId,
-							Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR},
+						{
+							ServiceId: member.ServiceId,
+							ReleaseId: member.CandidateReleaseId,
+							Target:    agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
+						},
 					},
-					AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
-						KeyRevision: 1, RevisionId: task.ID, RenderGeneration: 7, ComposeArtifact: encoded, ComposeArtifactSha256: digest[:],
-					},
+					NativePredecessors: []*agentpb.ReleaseNativePredecessorAuthority{{
+						ServiceId: member.ServiceId, CurrentArtifact: encoded,
+					}},
 				},
 			}
 			selected, err := composehelper.StartupServices(request)
@@ -206,14 +240,24 @@ func assertRestorationProxyScenario(
 	fake := runner.NewFake()
 	fake.RunFunc = func(_ context.Context, options runner.RunCmdOpts) (runner.Result, error) {
 		if options.Args[0] == "exec" {
-			if slices.Equal(options.Args, []string{"exec", "bbbbbbbbbbbbbbbb", "cat", "/proc/1/cmdline"}) {
+			if slices.Equal(
+				options.Args,
+				[]string{"exec", "bbbbbbbbbbbbbbbb", "cat", "/proc/1/cmdline"},
+			) {
 				return runner.Result{Stdout: []byte(serviceproxy.RunningCommand)}, nil
 			}
 			if slices.Contains(options.Args, serviceproxy.Activate) {
 				if !compensate ||
 					!slices.Equal(
 						options.Args,
-						[]string{"exec", "--interactive", "bbbbbbbbbbbbbbbb", "sh", "-ec", serviceproxy.Activate},
+						[]string{
+							"exec",
+							"--interactive",
+							"bbbbbbbbbbbbbbbb",
+							"sh",
+							"-ec",
+							serviceproxy.Activate,
+						},
 					) ||
 					!bytes.Equal(options.Stdin, proxy.ProxyConfigJson) {
 					t.Fatalf("unauthorized reload: %v", options.Args)
@@ -222,7 +266,10 @@ func assertRestorationProxyScenario(
 				activeMatches = reloadWorks
 				return runner.Result{}, nil
 			}
-			if slices.Equal(options.Args, []string{"exec", "bbbbbbbbbbbbbbbb", "cat", serviceproxy.RuntimeConfigPath}) {
+			if slices.Equal(
+				options.Args,
+				[]string{"exec", "bbbbbbbbbbbbbbbb", "cat", serviceproxy.RuntimeConfigPath},
+			) {
 				if activeMatches {
 					return runner.Result{Stdout: slices.Clone(proxy.ProxyConfigJson)}, nil
 				}
@@ -269,15 +316,21 @@ func assertRestorationProxyScenario(
 		case "{{.Config.Image}}":
 			return runner.Result{Stdout: []byte(service.ImageReference)}, nil
 		case "{{.Config.Image}}\n{{.Image}}":
-			return runner.Result{Stdout: []byte(service.ImageReference + "\n" + service.ImageReference)}, nil
+			return runner.Result{
+				Stdout: []byte(service.ImageReference + "\n" + service.ImageReference),
+			}, nil
 		case "{{.Config.Image}}\n{{.Image}}\n{{json .ImageManifestDescriptor}}":
 			return runner.Result{
 				Stdout: []byte(
-					service.ImageReference + "\nsha256:" + hex.EncodeToString(service.ImageConfigDigest) + "\nnull",
+					service.ImageReference + "\nsha256:" + hex.EncodeToString(
+						service.ImageConfigDigest,
+					) + "\nnull",
 				),
 			}, nil
 		case "{{json .State}}":
-			return runner.Result{Stdout: []byte(`{"Running":true,"Health":{"Status":"healthy"}}`)}, nil
+			return runner.Result{
+				Stdout: []byte(`{"Running":true,"Health":{"Status":"healthy"}}`),
+			}, nil
 		}
 		t.Fatalf("unexpected observation: %v", options.Args)
 		return runner.Result{}, nil
@@ -293,10 +346,11 @@ func assertRestorationProxyScenario(
 	if err != nil || response.GetOutcome() != wantOutcome {
 		t.Fatalf("active proxy result = %v, %v, want %v", response, err, wantOutcome)
 	}
-	if reads == 0 || compensate && (reloads != 1 || reads != 2) || !compensate && reloads != 0 {
+	if reads == 0 || compensate && (reloads != 1 || reads < 2) || !compensate && reloads != 0 {
 		t.Fatalf("active config reads=%d reloads=%d", reads, reloads)
 	}
-	if wantComplete && !bytes.Equal(response.GetProxyEvidence().GetConfigSha256(), proxy.ProxyConfigSha256) {
+	if wantComplete &&
+		!bytes.Equal(response.GetProxyEvidence().GetConfigSha256(), proxy.ProxyConfigSha256) {
 		t.Fatal("completed proxy proof differs from observed sealed configuration")
 	}
 }

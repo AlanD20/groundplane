@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -105,6 +106,9 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 	if err := recordcodec.ValidateTimestamp("task timeout collector", now); err != nil {
 		return 0, err
 	}
+	if err := repository.resumeUnassignedReleaseTerminals(ctx); err != nil {
+		return 0, err
+	}
 	page, err := repository.store.Range(
 		ctx,
 		etcdstore.RangeRequest{Prefix: taskjournal.TaskTimeoutIndexPrefix, Limit: 24},
@@ -143,7 +147,8 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 			continue
 		}
 		if assignment.Executor == taskjournal.TaskExecutorController {
-			_, err = repository.AcknowledgeControllerTask(ctx, taskID, taskjournal.TaskStatusTimedOut, now)
+			_, err = repository.AcknowledgeControllerTask(ctx, taskID, taskjournal.TaskStatusTimedOut,
+				taskprogress.CaptureControllerFailure(context.DeadlineExceeded), now)
 		} else {
 			result := taskjournal.TaskResultRecord{
 				Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,

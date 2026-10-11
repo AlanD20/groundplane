@@ -11,8 +11,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func unassignedReleaseAbort(task TaskRecord, status taskjournal.TaskStatus) bool {
-	return status == taskjournal.TaskStatusAborted && task.Status == taskjournal.TaskStatusAborted &&
+func unassignedReleaseTerminal(task TaskRecord, status taskjournal.TaskStatus) bool {
+	preflightFailure := task.Result != nil && !task.Result.ReconciliationRequired &&
+		(status == taskjournal.TaskStatusFailed &&
+			(task.Result.Diagnostic == taskjournal.TaskResultDiagnosticReleaseNetworkFailed || task.Result.Diagnostic == taskjournal.TaskResultDiagnosticDNSActivationFailed) ||
+			status == taskjournal.TaskStatusTimedOut && task.Result.Diagnostic == taskjournal.TaskResultDiagnosticDNSActivationTimedOut)
+	return (status == taskjournal.TaskStatusAborted || preflightFailure) && task.Status == status &&
 		task.StartedAt == nil &&
 		task.FinishedAt != nil &&
 		task.Executor == taskjournal.TaskExecutorAgent &&
@@ -22,16 +26,33 @@ func unassignedReleaseAbort(task TaskRecord, status taskjournal.TaskStatus) bool
 
 // Task terminalization wins its assignment race first. Only then may the
 // existing bounded Release finalizer retire never-executed candidates and
-// release their fence. Replaying Abort resumes this cleanup after interruption.
-func (repository *TaskRepository) finishUnassignedReleaseAbort(
+// release their fence. The durable timeout scan resumes interrupted cleanup.
+func (repository *TaskRepository) finishUnassignedReleaseTerminal(
 	ctx context.Context,
 	current etcdstore.Versioned[TaskRecord],
 ) (etcdstore.Versioned[TaskRecord], error) {
-	if !unassignedReleaseAbort(current.Record, current.Record.Status) {
+	if !unassignedReleaseTerminal(current.Record, current.Record.Status) {
 		return current, nil
 	}
 	for batch := 0; batch < 32; batch++ {
 		task := current.Record
+		dependency, applies, err := repository.readReleaseNetworkDependency(ctx, task, current.ReadRevision)
+		if err != nil {
+			return etcdstore.Versioned[TaskRecord]{}, err
+		}
+		if applies && !releaseNetworkEffectsSettled(dependency.child.Record) {
+			if dependency.child.Record.Status == taskjournal.TaskStatusPending {
+				if _, err := repository.AbortPendingTask(ctx, dependency.child.Record.ID, *task.FinishedAt); err != nil {
+					return etcdstore.Versioned[TaskRecord]{}, err
+				}
+				current, err = repository.GetTask(ctx, task.ID)
+				if err != nil {
+					return etcdstore.Versioned[TaskRecord]{}, err
+				}
+				continue
+			}
+			return current, nil // Assigned or uncertain bridge effects retain the release fence.
+		}
 		keys := []string{
 			taskjournal.TaskAssignmentIndexKey(task.ID),
 			releases.ReleaseFenceSetKey(task.Owner.EnvironmentID),
@@ -55,20 +76,30 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			// A later operation owns this fence; the old Abort has no authority over it.
 			return current, nil
 		}
+		result := taskjournal.TaskResultRecord{
+			Kind:       taskjournal.TaskResultCompose,
+			Diagnostic: taskjournal.TaskResultDiagnosticNone,
+		}
+		if task.Result != nil {
+			result = *task.Result
+		}
+		proofs := []etcdstore.Condition{
+			{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: current.Revision},
+			{Key: keys[0]},
+		}
+		if applies {
+			proofs = append(proofs, dependency.conditions...)
+		}
 		processed, err := repository.finalizeReleaseTaskBatch(
 			ctx,
 			task,
 			taskassignments.TaskAssignmentRecord{},
-			taskjournal.TaskStatusAborted,
-			taskjournal.TaskResultRecord{
-				Kind:       taskjournal.TaskResultCompose,
-				Diagnostic: taskjournal.TaskResultDiagnosticNone,
-			},
+			task.Status,
+			result,
 			"",
 			*task.FinishedAt,
 			current.ReadRevision,
-			etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: current.Revision},
-			etcdstore.Condition{Key: keys[0]},
+			proofs...,
 		)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -80,7 +111,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		if !unassignedReleaseAbort(current.Record, current.Record.Status) {
+		if !unassignedReleaseTerminal(current.Record, current.Record.Status) {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"unassigned Release abort authority changed",

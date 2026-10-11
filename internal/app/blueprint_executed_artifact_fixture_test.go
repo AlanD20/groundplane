@@ -15,6 +15,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
@@ -149,9 +151,9 @@ func (fixture *ExecutedArtifactFixture) SeedNativeCandidateDesired(
 
 func (fixture *ExecutedArtifactFixture) AssertNativeCandidateSourceRace(
 	t *testing.T,
-	task etcd.TaskRecord,
-	projection testenvironmentprojection.EnvironmentComposeProjection,
-	publication etcd.BlueprintReleasePublication,
+	revision nativeBlueprintRevisionFixture,
+	serviceID string,
+	prepared blueprintrelease.Prepared,
 	source testreleaserender.ReleaseRenderInput,
 	fault string,
 ) {
@@ -170,7 +172,7 @@ func (fixture *ExecutedArtifactFixture) AssertNativeCandidateSourceRace(
 	if err != nil || before.Entry == nil {
 		t.Fatalf("source race fixture: %v", err)
 	}
-	head, err := fixture.store.Get(ctx, testblueprints.EnvironmentBlueprintHeadKey(task.Target))
+	head, err := fixture.store.Get(ctx, testblueprints.EnvironmentBlueprintHeadKey(prepared.Task.Target))
 	if err != nil || head.Entry == nil {
 		t.Fatalf("desired head before race: %v", err)
 	}
@@ -181,21 +183,23 @@ func (fixture *ExecutedArtifactFixture) AssertNativeCandidateSourceRace(
 	if _, err := fixture.store.Transact(ctx, nil, []testkeyvalue.Mutation{mutation}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := fixture.tryPublish(t, task, projection, publication)
-	if err != nil {
-		t.Fatal(err)
+	unit, found := revision.Units[serviceID]
+	if !found {
+		t.Fatal("native source race unit is absent")
 	}
-	outcome, _, conflict, err := result.Classify()
-	if err != nil || !errors.Is(conflict, errs.New(errs.KindStateConflict, "")) ||
-		outcome == etcd.IdempotencyKnownApplied {
-		t.Fatalf("native source race published: %v %v %v", outcome, conflict, err)
+	if _, err := fixture.Tasks.PublishBlueprintChild(
+		ctx, revision.Parent.ID, prepared.Task, unit, prepared.Publication,
+		testcomponentplanning.Publication{}, etcd.BlueprintEntryRemovalPublication{},
+		etcd.BlueprintServiceRemovalPublication{}, etcd.BlueprintZoneRemovalPublication{}, nil,
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("native source race published: %v", err)
 	}
 	loaded, err := fixture.store.GetMany(
 		ctx, testkeyvalue.GetManyRequest{
 			Keys: []string{
-				testtaskjournal.TaskStorageKey(task.ID),
-				testreleases.ReleasePublicationKey(task.Params[testreleaserender.TaskReleasePublicationParam]),
-				testblueprints.EnvironmentBlueprintHeadKey(task.Target),
+				testtaskjournal.TaskStorageKey(prepared.Task.ID),
+				testreleases.ReleasePublicationKey(prepared.Task.Params[testreleaserender.TaskReleasePublicationParam]),
+				testblueprints.EnvironmentBlueprintHeadKey(prepared.Task.Target),
 			},
 		},
 	)
@@ -241,13 +245,13 @@ func (fixture *ExecutedArtifactFixture) SeedNativeBlueGreenPredecessor(
 				[]byte(strings.Split(old, ":")[0]+": 1"),
 			)
 		}
-		config, err := domain.RenderProxyConfig(
+		config, err := domain.RenderProxyConfig(serviceproxy.Caddy,
 			render.ServiceName,
 			render.ReleaseID,
 			render.CandidateTarget,
 			render.ProxyGeneration,
-			render.ProxyPorts,
-		)
+			render.ProxyPorts)
+
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -314,7 +318,7 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 					AgentGeneration: 1, TaskID: task.ID, StepID: member.GetForwardStepIds()[0], Attempt: 1, Ordinal: uint64(index + 1)},
 				State: state,
 				Payload: json.RawMessage(
-					`{"message":"native forward"}`,
+					`{}`,
 				),
 			},
 			task.CreatedAt.Add(time.Duration(1100+index*100)*time.Millisecond),
@@ -392,7 +396,7 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 						Ordinal:         ordinal,
 					},
 					State:   state,
-					Payload: json.RawMessage(`{"message":"native recovery"}`),
+					Payload: json.RawMessage(`{}`),
 				}, task.CreatedAt.Add(time.Duration(4+ordinal)*time.Second),
 			)
 			if err != nil {
@@ -532,6 +536,61 @@ func (fixture *ExecutedArtifactFixture) AssertMixedRuntimeTamperingRejected(
 
 // Mutate only the independently owned serving pointer after capture. The
 // applied Blueprint key stays byte-for-byte and revision-for-revision intact.
+func (fixture *ExecutedArtifactFixture) RejectChangedServingChildPublication(
+	t *testing.T,
+	revision nativeBlueprintRevisionFixture,
+	serviceID string,
+	prepared blueprintrelease.Prepared,
+) {
+	t.Helper()
+	ctx := context.Background()
+	before, err := fixture.store.Get(
+		ctx,
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(prepared.Task.Target),
+	)
+	if err != nil || before.Entry == nil {
+		t.Fatalf("applied before: %v", err)
+	}
+	record, err := fixture.store.Get(ctx, testreleases.ReleaseProjectionKey(serviceID))
+	if err != nil || record.Entry == nil {
+		t.Fatalf("serving before: %v", err)
+	}
+	current, err := testreleases.DecodeReleaseRecord[domain.ServiceProjection](
+		record.Entry.Value,
+		"service-release-projection",
+	)
+	if err != nil || current.ServingReleaseID == "" {
+		t.Fatalf("serving decode: %v", err)
+	}
+	current.ServingReleaseID = ids.New(ids.KindDeployment)
+	value, err := testreleases.EncodeReleaseRecord("service-release-projection", current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.store.Put(ctx, record.Entry.Key, value); err != nil {
+		t.Fatal(err)
+	}
+	unit, found := revision.Units[serviceID]
+	if !found {
+		t.Fatal("serving-race Service unit is absent")
+	}
+	if _, err := fixture.Tasks.PublishBlueprintChild(
+		ctx, revision.Parent.ID, prepared.Task, unit, prepared.Publication,
+		testcomponentplanning.Publication{}, etcd.BlueprintEntryRemovalPublication{},
+		etcd.BlueprintServiceRemovalPublication{}, etcd.BlueprintZoneRemovalPublication{}, nil,
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("stale serving accepted: %v", err)
+	}
+	after, err := fixture.store.Get(
+		ctx,
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(prepared.Task.Target),
+	)
+	if err != nil || after.Entry == nil || after.Entry.ModRevision != before.Entry.ModRevision ||
+		string(after.Entry.Value) != string(before.Entry.Value) {
+		t.Fatal("serving-race fixture changed applied Blueprint authority")
+	}
+}
+
 func (fixture *ExecutedArtifactFixture) RejectChangedServingPublication(
 	t *testing.T,
 	task etcd.TaskRecord,

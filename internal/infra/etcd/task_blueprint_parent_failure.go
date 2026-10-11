@@ -15,11 +15,13 @@ import (
 const blueprintParentFailurePrefix = "/v1/runtime/blueprint-parent-failures/"
 
 type blueprintParentFailureRecord struct {
-	Schema       int       `json:"schema"`
-	ParentTaskID string    `json:"parent_task_id"`
-	ChildTaskID  string    `json:"child_task_id"`
-	ChildPlanID  string    `json:"child_plan_id"`
-	FailedAt     time.Time `json:"failed_at"`
+	Schema           int       `json:"schema"`
+	ParentTaskID     string    `json:"parent_task_id"`
+	ChildTaskID      string    `json:"child_task_id"`
+	ChildPlanID      string    `json:"child_plan_id"`
+	CoordinatorPhase string    `json:"coordinator_phase,omitempty"`
+	CoordinatorCode  errs.Code `json:"coordinator_code,omitempty"`
+	FailedAt         time.Time `json:"failed_at"`
 }
 
 func blueprintParentFailureKey(taskID string) string {
@@ -27,13 +29,33 @@ func blueprintParentFailureKey(taskID string) string {
 }
 
 func validateBlueprintParentFailureRecord(record blueprintParentFailureRecord) error {
-	if record.Schema != 1 || ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
-		ids.Validate(ids.KindTask, record.ChildTaskID) != nil ||
-		ids.Validate(ids.KindPlan, record.ChildPlanID) != nil ||
+	if record.Schema != 2 || ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
 		recordcodec.ValidateTimestamp("Blueprint parent failure", record.FailedAt) != nil {
 		return errs.New(errs.KindInternal, "Blueprint parent failure record is corrupt")
 	}
+	if record.CoordinatorPhase != "" {
+		if record.CoordinatorPhase == "child_execution" {
+			return errs.New(errs.KindInternal, "Blueprint coordinator failure phase is corrupt")
+		}
+		if err := taskjournal.ValidateBlueprintFailure(record.terminalFailure()); err != nil {
+			return err
+		}
+	} else if ids.Validate(ids.KindTask, record.ChildTaskID) != nil ||
+		ids.Validate(ids.KindPlan, record.ChildPlanID) != nil || record.CoordinatorCode != "" {
+		return errs.New(errs.KindInternal, "Blueprint child failure record is corrupt")
+	}
 	return nil
+}
+
+func (record blueprintParentFailureRecord) terminalFailure() taskjournal.BlueprintFailure {
+	phase := record.CoordinatorPhase
+	if phase == "" {
+		phase = "child_execution"
+	}
+	return taskjournal.BlueprintFailure{
+		Phase: phase, Code: record.CoordinatorCode, ChildTaskID: record.ChildTaskID,
+		ChildPlanID: record.ChildPlanID, FailedAt: record.FailedAt,
+	}
 }
 
 func encodeBlueprintParentFailureRecord(record blueprintParentFailureRecord) ([]byte, error) {
@@ -113,7 +135,7 @@ func (repository *TaskRepository) prepareBlueprintParentFailure(
 		return nil, nil, err
 	}
 	failureValue, err := encodeBlueprintParentFailureRecord(blueprintParentFailureRecord{
-		Schema: 1, ParentTaskID: parentTaskID, ChildTaskID: child.ID,
+		Schema: 2, ParentTaskID: parentTaskID, ChildTaskID: child.ID,
 		ChildPlanID: child.PlanID, FailedAt: failedAt,
 	})
 	if err != nil {

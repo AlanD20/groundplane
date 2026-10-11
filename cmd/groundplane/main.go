@@ -18,6 +18,12 @@ import (
 func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
+	if len(os.Args) == 2 && os.Args[1] == app.RunnerConnectionCheckHelperArgument {
+		if err := app.RunRunnerConnectionCheckHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 
 	os.Exit(cli.Execute(ctx, cli.Dependencies{
 		RunController:         app.RunController,

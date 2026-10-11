@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -34,13 +35,17 @@ func (repository *TaskRepository) prepareAuthoredServiceRemovalAcknowledgement(
 		state.Values[4] == nil || state.Values[5] == nil || state.Values[6] != nil ||
 		!keyvalue.ConditionMatchesRead(
 			keyvalue.Condition{Key: keys[0], ModRevision: intent.RuntimeRevision}, state.Values[0],
-		) || state.Values[1].ModRevision != intent.AcknowledgedRuntimeRevision ||
+		) ||
 		keyvalue.RevisionOf(state.Values[1]) != intent.AcknowledgedRuntimeRevision ||
 		state.Values[4].ModRevision != intent.CurrentProjectionRevision ||
 		string(state.Values[5].Value) != task.ID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "authored Service removal terminal state changed")
 	}
 	defer keyvalue.ClearValues(state.Values)
+	definitionGuards, err := repository.declaredServiceRemovalAppliedAbsence(ctx, intent, revision)
+	if err != nil {
+		return routeTaskChange{}, err
+	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		headTaskID, err := idempotencyrecord.DecodeTaskReference(state.Values[3].Value)
 		if err != nil || state.Values[3].ModRevision != intent.ExpectedHeadRevision ||
@@ -99,6 +104,7 @@ func (repository *TaskRepository) prepareAuthoredServiceRemovalAcknowledgement(
 		},
 		values: [][]byte{terminalValue},
 	}
+	change.conditions = append(change.conditions, definitionGuards...)
 	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return change, nil
 	}
@@ -109,17 +115,29 @@ func (repository *TaskRepository) prepareAuthoredServiceRemovalAcknowledgement(
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err
 	}
+	dnsConditions, err := dnsrecords.NewReader(repository.store).
+		RequireDNSUnreferenced(ctx, intent.ServiceID, "", revision)
+	if err != nil {
+		clearRouteTaskChange(change)
+		return routeTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, dnsConditions...)
 	addresses, err := networkreservations.PrepareProxyAddressRelease(ctx, repository.store, intent.ServiceID, revision)
 	if err != nil {
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err
 	}
-	projectionValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(intent.CandidateProjection)
-	if err != nil {
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
+	if intent.Authored.ProjectionSource == environmentchanges.ServiceRemovalAppliedProjection {
+		projectionValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(intent.CandidateProjection)
+		if err != nil {
+			clearRouteTaskChange(change)
+			return routeTaskChange{}, err
+		}
+		change.values = append(change.values, projectionValue)
+		change.mutations = append(change.mutations, keyvalue.Mutation{
+			Type: keyvalue.MutationPut, Key: keys[4], Value: projectionValue,
+		})
 	}
-	change.values = append(change.values, projectionValue)
 	change.conditions = append(change.conditions, scriptConditions...)
 	change.conditions = append(change.conditions, addresses.Conditions()...)
 	change.mutations = append(change.mutations, addresses.Mutations()...)
@@ -127,7 +145,6 @@ func (repository *TaskRepository) prepareAuthoredServiceRemovalAcknowledgement(
 		change.values = append(change.values, mutation.Value)
 	}
 	change.mutations = append(change.mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: keys[4], Value: projectionValue},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[0]},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: keys[1]},
 	)
@@ -147,9 +164,14 @@ func (repository *TaskRepository) validateAuthoredServiceRemovalAcknowledgementR
 		return errs.New(errs.KindStateConflict, "authored Service removal terminal fence is inconsistent")
 	}
 	defer keyvalue.ClearValues(state.Values)
+	if _, err := repository.declaredServiceRemovalAppliedAbsence(ctx, intent, revision); err != nil {
+		return err
+	}
 	wantProjection := intent.CurrentProjection
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		wantProjection = intent.CandidateProjection
+		if intent.Authored.ProjectionSource == environmentchanges.ServiceRemovalAppliedProjection {
+			wantProjection = intent.CandidateProjection
+		}
 		if state.Values[0] != nil || state.Values[1] != nil {
 			return errs.New(errs.KindStateConflict, "completed authored Service removal retained runtime")
 		}
@@ -174,7 +196,7 @@ func authoredServiceRemovalStateKeys(intent environmentchanges.ServiceRemovalInt
 		serviceruntimerecord.Key(intent.ServiceID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
+		environmentchanges.ServiceRemovalProjectionKey(intent),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		servicerecord.ServiceLifecycleActiveKey(intent.ServiceID),
 	}

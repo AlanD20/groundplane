@@ -2,7 +2,7 @@ package controllerrelease
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +10,8 @@ import (
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/jcs"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -134,12 +136,23 @@ func testReleaseStore(t *testing.T) (*Store, upgrade.Digest, []byte) {
 		t.Fatal(err)
 	}
 	binary := []byte("verified executable bytes")
-	manifest := []byte(`{"agent_image":"registry.example/agent@sha256:` + strings.Repeat("a", 64) +
-		fmt.Sprintf(
-			`","channel_schema":%d,"controller_sha256":"`,
-			executionplan.SchemaVersion,
-		) + string(upgrade.Hash(binary)) +
-		fmt.Sprintf(`","controller_version":"0.1.0","schema":1,"storage_epoch":%d}`, upgrade.StorageEpoch))
+	manifest, err := json.Marshal(upgrade.Manifest{
+		Schema:            upgrade.ManifestSchema,
+		ControllerSHA256:  upgrade.Hash(binary),
+		ControllerVersion: "0.1.0",
+		ControllerSource: buildversion.BuildProvenance{
+			Kind: "release", Commit: strings.Repeat("c", 40),
+		},
+		AgentImage:   "registry.example/agent@sha256:" + strings.Repeat("a", 64),
+		StorageEpoch: upgrade.StorageEpoch, ChannelSchema: executionplan.SchemaVersion,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err = jcs.Canonicalize(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
 	id := upgrade.Hash(manifest)
 	leaf := filepath.Join(directory, "releases", string(id)[7:])
 	if err := os.MkdirAll(leaf, 0o700); err != nil {

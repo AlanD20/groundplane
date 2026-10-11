@@ -3,6 +3,7 @@ package composehelper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -20,7 +22,11 @@ func TestComponentConfigAcceptsSealedContainerdImage(t *testing.T) {
 	base := fake.RunFunc
 	child := strings.Split(componentImageReference, "@")[1]
 	descriptor, err := json.Marshal(
-		ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Size: 123, Digest: digest.Digest(child)},
+		ocispec.Descriptor{
+			MediaType: ocispec.MediaTypeImageManifest,
+			Size:      123,
+			Digest:    digest.Digest(child),
+		},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -28,12 +34,19 @@ func TestComponentConfigAcceptsSealedContainerdImage(t *testing.T) {
 	fake.RunFunc = func(ctx context.Context, options runner.RunCmdOpts) (runner.Result, error) {
 		if strings.Contains(strings.Join(options.Args, " "), ".Config.Image") {
 			return runner.Result{
-				Stdout: []byte(componentImageReference + "\n" + child + "\n" + string(descriptor) + "\n"),
+				Stdout: []byte(
+					componentImageReference + "\n" + child + "\n" + string(descriptor) + "\n",
+				),
 			}, nil
 		}
 		return base(ctx, options)
 	}
-	response, err := ExecuteWithComponentCatalog(context.Background(), fake, request, componentCatalogFake{})
+	response, err := ExecuteWithComponentCatalog(
+		context.Background(),
+		fake,
+		request,
+		componentCatalogFake{},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,17 +64,21 @@ func TestComponentConfigRejectsSubstitutedActualImage(t *testing.T) {
 	fake.RunFunc = func(ctx context.Context, options runner.RunCmdOpts) (runner.Result, error) {
 		if strings.Contains(strings.Join(options.Args, " "), "{{.Image}}") {
 			return runner.Result{
-				Stdout: []byte(componentImageReference + "\nsha256:" + strings.Repeat("f", 64) + "\nnull\n"),
+				Stdout: []byte(
+					componentImageReference + "\nsha256:" + strings.Repeat("f", 64) + "\nnull\n",
+				),
 			}, nil
 		}
 		return base(ctx, options)
 	}
-	response, err := ExecuteWithComponentCatalog(context.Background(), fake, request, componentCatalogFake{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED {
-		t.Fatalf("substituted image accepted: %v", response)
+	response, err := ExecuteWithComponentCatalog(
+		context.Background(),
+		fake,
+		request,
+		componentCatalogFake{},
+	)
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || response != nil {
+		t.Fatalf("substituted image result = %v, %v; want state conflict", response, err)
 	}
 	for _, call := range fake.Calls {
 		if strings.Contains(strings.Join(call.Args, " "), "container exec") {

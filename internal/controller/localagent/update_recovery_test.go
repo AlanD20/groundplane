@@ -3,6 +3,7 @@ package localagent
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ func TestRecoverUpdateFencesColdAttemptBeforeNewCredential(t *testing.T) {
 	harness := newTestManager(t, repository, trace)
 	barrier := &coldAttemptRepository{fakeRepository: repository, old: old}
 	harness.manager.repository = barrier
-	result, err := harness.manager.RecoverUpdate(context.Background(), recoveryRequest(), UpdateFinish)
+	result, err := harness.manager.RecoverUpdate(context.Background(), recoveryRequest(), UpdateFinish, nil)
 	if err != nil || result != UpdateReadyDesired {
 		t.Fatalf("cold recovery = %q, %v", result, err)
 	}
@@ -36,7 +37,7 @@ func TestRecoverUpdateRestoresReadyCandidateExactlyOnce(t *testing.T) {
 	repository.record.Record.Image = replacementTestImage
 	harness := newTestManager(t, repository, trace)
 	for attempt := 0; attempt < 2; attempt++ {
-		result, err := harness.manager.RecoverUpdate(context.Background(), recoveryRequest(), UpdateRestore)
+		result, err := harness.manager.RecoverUpdate(context.Background(), recoveryRequest(), UpdateRestore, nil)
 		if err != nil || result != UpdateReadyPrevious {
 			t.Fatalf("restore attempt %d = %q, %v", attempt, result, err)
 		}
@@ -54,7 +55,7 @@ func TestRecoverUpdateUnchangedGenerationOnlyFencesAndWaits(t *testing.T) {
 	repository := seededRepository(trace, PhaseReady)
 	oldRevision := repository.record.Revision
 	harness := newTestManager(t, repository, trace)
-	result, err := harness.manager.RecoverUpdate(context.Background(), recoveryRequest(), UpdateRestore)
+	result, err := harness.manager.RecoverUpdate(context.Background(), recoveryRequest(), UpdateRestore, nil)
 	if err != nil || result != UpdateReadyPrevious || repository.record.Revision <= oldRevision ||
 		harness.runtime.generateCalls != 0 || repository.record.Record.Generation != initialGeneration {
 		t.Fatalf("unchanged recovery = %q, %v, generation %d", result, err, repository.record.Record.Generation)
@@ -71,7 +72,7 @@ func TestRecoverUpdateWaitsForAuthenticatedReady(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		result, err := harness.manager.RecoverUpdate(ctx, recoveryRequest(), UpdateRestore)
+		result, err := harness.manager.RecoverUpdate(ctx, recoveryRequest(), UpdateRestore, nil)
 		if result != "" {
 			done <- errors.New("unready recovery returned a settled result")
 			return
@@ -104,7 +105,7 @@ func TestRecoverUpdateRejectsChangedAuthorityAndBusyCandidate(t *testing.T) {
 			case "overflow":
 				request.StartingGeneration = ^uint64(0) - 1
 			}
-			result, err := harness.manager.RecoverUpdate(context.Background(), request, UpdateRestore)
+			result, err := harness.manager.RecoverUpdate(context.Background(), request, UpdateRestore, nil)
 			if err == nil || result != "" || harness.runtime.generateCalls != 0 {
 				t.Fatalf("unsafe restore = %q, %v", result, err)
 			}
@@ -135,9 +136,14 @@ func (repository *coldAttemptRepository) FenceReplacementAttempt(
 }
 
 func (repository *coldAttemptRepository) BeginReplacement(
-	ctx context.Context, current StoredRecord, image string, credential Credential, at time.Time,
+	ctx context.Context,
+	current StoredRecord,
+	image string,
+	credential Credential,
+	failure *taskprogress.Failure,
+	at time.Time,
 ) (StoredRecord, error) {
-	_, lateErr := repository.fakeRepository.BeginReplacement(ctx, repository.old, image, credential, at)
+	_, lateErr := repository.fakeRepository.BeginReplacement(ctx, repository.old, image, credential, failure, at)
 	repository.lateRejected = errors.Is(lateErr, errs.New(errs.KindStateConflict, ""))
-	return repository.fakeRepository.BeginReplacement(ctx, current, image, credential, at)
+	return repository.fakeRepository.BeginReplacement(ctx, current, image, credential, failure, at)
 }

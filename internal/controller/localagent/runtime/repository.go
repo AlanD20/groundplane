@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
@@ -18,6 +20,8 @@ type localAgentRecords interface {
 		localagentrecord.LocalAgentRecord,
 	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
+	RecordReplacementFailure(context.Context, etcdstore.Versioned[localagentrecord.LocalAgentRecord],
+		*taskprogress.Failure) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	UpdateConfigIdempotent(
 		context.Context,
 		etcdstore.Versioned[localagentrecord.LocalAgentRecord],
@@ -30,6 +34,7 @@ type localAgentRecords interface {
 		uint64,
 		int64,
 		time.Time,
+		buildversion.BuildIdentity,
 	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	ReplaceGeneration(
 		context.Context,
@@ -37,6 +42,7 @@ type localAgentRecords interface {
 		string,
 		[]byte,
 		string,
+		*taskprogress.Failure,
 		time.Time,
 	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	FenceReplacementAttempt(
@@ -50,6 +56,7 @@ type localAgentRecords interface {
 		string,
 		uint64,
 		int64,
+		buildversion.BuildIdentity,
 	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	BeginDelete(context.Context, string, uint64, int64) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	Delete(context.Context, string, uint64, int64) error
@@ -105,8 +112,9 @@ func (adapter *localAgentRepositoryAdapter) MarkReady(
 	generation uint64,
 	revision int64,
 	readyAt time.Time,
+	build buildversion.BuildIdentity,
 ) (localagent.StoredRecord, error) {
-	stored, err := adapter.repository.MarkReady(ctx, id, generation, revision, readyAt)
+	stored, err := adapter.repository.MarkReady(ctx, id, generation, revision, readyAt, build)
 	if err != nil {
 		return localagent.StoredRecord{}, err
 	}
@@ -118,6 +126,7 @@ func (adapter *localAgentRepositoryAdapter) BeginReplacement(
 	current localagent.StoredRecord,
 	image string,
 	credential localagent.Credential,
+	failure *taskprogress.Failure,
 	updatedAt time.Time,
 ) (localagent.StoredRecord, error) {
 	durable, err := localAgentRecordToDurable(current.Record)
@@ -132,6 +141,7 @@ func (adapter *localAgentRepositoryAdapter) BeginReplacement(
 		image,
 		append([]byte(nil), credential.EncryptedToken...),
 		credential.Digest,
+		failure,
 		updatedAt,
 	)
 	if err != nil {
@@ -155,8 +165,9 @@ func (adapter *localAgentRepositoryAdapter) MarkReplacementReady(
 	id string,
 	generation uint64,
 	revision int64,
+	build buildversion.BuildIdentity,
 ) (localagent.StoredRecord, error) {
-	stored, err := adapter.repository.MarkReplacementReady(ctx, id, generation, revision)
+	stored, err := adapter.repository.MarkReplacementReady(ctx, id, generation, revision, build)
 	if err != nil {
 		return localagent.StoredRecord{}, err
 	}
@@ -191,8 +202,10 @@ func localAgentRecordToDurable(record localagent.Record) (localagentrecord.Local
 		return localagentrecord.LocalAgentRecord{}, err
 	}
 	return localagentrecord.LocalAgentRecord{
-		ID: record.ID, EnrollmentTaskID: record.EnrollmentTaskID,
+		ReplacementFailure: taskprogress.CloneFailure(record.ReplacementFailure),
+		ID:                 record.ID, EnrollmentTaskID: record.EnrollmentTaskID,
 		Image: record.Image, Generation: record.Generation, Phase: phase,
+		Build: record.Build,
 		Config: localagentrecord.LocalAgentConfig{
 			PullIntervalSeconds: record.Config.PullIntervalSeconds,
 			MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
@@ -215,8 +228,10 @@ func localAgentRecordFromDurable(
 	}
 	return localagent.StoredRecord{
 		Record: localagent.Record{
-			ID: stored.Record.ID, EnrollmentTaskID: stored.Record.EnrollmentTaskID,
+			ReplacementFailure: taskprogress.CloneFailure(stored.Record.ReplacementFailure),
+			ID:                 stored.Record.ID, EnrollmentTaskID: stored.Record.EnrollmentTaskID,
 			Image:      stored.Record.Image,
+			Build:      stored.Record.Build,
 			Generation: stored.Record.Generation, Phase: phase,
 			Config: localagent.Config{
 				PullIntervalSeconds: stored.Record.Config.PullIntervalSeconds,

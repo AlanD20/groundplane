@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -43,6 +44,13 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 			(service.GetOwnerComponentId() != "" && validateID(ids.KindComponent, service.GetOwnerComponentId()) != nil) {
 			return errs.New(errs.KindValidationFailed, "Compose artifact service Component ownership is invalid")
 		}
+		if !componentsdk.ValidOCIImageTag(service.GetImageSelectedTag()) ||
+			service.GetImageSelectedTag() != "" && !validManagedComposeImage(service) {
+			return errs.New(
+				errs.KindValidationFailed,
+				"Compose artifact selected image tag has no valid immutable image identity",
+			)
+		}
 		if service.GetOwnerComponentId() != "" ||
 			plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
 				artifact.GetOwnerKind() == agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM {
@@ -50,7 +58,22 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 				return errs.New(errs.KindValidationFailed, "component Compose service image identity is invalid")
 			}
 		}
+		if service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA &&
+			service.GetRollingReplicaOrdinal() != 0 {
+			return errs.New(errs.KindValidationFailed, "non-rolling Compose service carries a replica ordinal")
+		}
+		if service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY &&
+			service.GetProxyImplementation() != agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_UNSPECIFIED {
+			return errs.New(
+				errs.KindValidationFailed,
+				"non-proxy Compose service carries proxy implementation authority",
+			)
+		}
 		switch service.Role {
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA:
+			if err := validateRollingReplica(service); err != nil {
+				return err
+			}
 		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED:
 			if service.Slot != "" || len(service.ProxyConfigJson) != 0 || len(service.ProxyConfigSha256) != 0 {
 				return errs.New(errs.KindValidationFailed, "ordinary Compose service carries release runtime metadata")
@@ -65,6 +88,9 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 				return errs.New(errs.KindValidationFailed, "recreate singleton service metadata is invalid")
 			}
 		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
+			if _, err := OpenProxyConfiguration(service); err != nil {
+				return err
+			}
 			digest := sha256.Sum256(service.ProxyConfigJson)
 			if service.Slot != "" || len(service.ProxyConfigJson) == 0 ||
 				len(service.ProxyConfigSha256) != sha256.Size ||

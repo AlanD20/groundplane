@@ -282,7 +282,7 @@ func (repository *TaskRepository) retryTask(
 		mutations = append(mutations, resolverChange.mutations...)
 	}
 	defer clearHostResolutionReconciliationChange(resolverChange)
-	connectorChange, err := repository.prepareConnectorTaskRetry(
+	connectorChange, err := repository.prepareResourceTaskRetry(
 		ctx, source.Record, retry, source.ReadRevision,
 	)
 	if err != nil {
@@ -292,7 +292,7 @@ func (repository *TaskRepository) retryTask(
 		conditions = append(conditions, connectorChange.conditions...)
 		mutations = append(mutations, connectorChange.mutations...)
 	}
-	defer clearConnectorTaskChange(connectorChange)
+	defer clearResourceTaskChange(connectorChange)
 	runnerChange, err := repository.prepareRunnerTaskRetry(
 		ctx, source.Record, retry, source.ReadRevision,
 	)

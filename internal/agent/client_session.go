@@ -97,6 +97,12 @@ func (c *Client) runSession(
 	defer images.close()
 	observations := newObservationSession(c.observer)
 	defer observations.Close()
+	backingAccess := newBackingAccessSession(c.backingAccess)
+	defer backingAccess.Close()
+	dnsChecks := newDNSCheckSession(c.dnsChecks)
+	defer dnsChecks.close()
+	edgeChecks := newEdgeCheckSession(c.edgeChecks)
+	defer edgeChecks.close()
 	receiveNext(streamCtx, stream, received)
 	controlBurst := 0
 	for {
@@ -112,7 +118,19 @@ func (c *Client) runSession(
 				return true, nil
 			}
 		}
-		event := nextSessionEvent(ctx, c.pool, observations, images, received, c.logs.Outputs(), ticker.C, controlBurst)
+		event := nextSessionEvent(
+			ctx,
+			c.pool,
+			observations,
+			images,
+			backingAccess,
+			dnsChecks,
+			edgeChecks,
+			received,
+			c.logs.Outputs(),
+			ticker.C,
+			controlBurst,
+		)
 		controlBurst = min(controlBurst+1, maximumControlBurst)
 		switch event.kind {
 		case sessionEnded:
@@ -128,6 +146,23 @@ func (c *Client) runSession(
 			}
 			if err := sendServiceObservation(streamCtx, stream, event.observation); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send service observation", false)
+			}
+		case sessionBackingAccess:
+			if err := backingAccess.Close(); err != nil {
+				return false, err
+			}
+			if err := sendBackingAccess(streamCtx, stream, event.backingAccess); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send Backing access result", false)
+			}
+		case sessionDNSCheck:
+			dnsChecks.close()
+			if err := sendDNSCheck(streamCtx, stream, event.dnsCheck); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send DNS check result", false)
+			}
+		case sessionEdgeCheck:
+			edgeChecks.close()
+			if err := sendEdgeCheck(streamCtx, stream, event.edgeCheck); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send Tunnel check result", false)
 			}
 		case sessionImage:
 			output := event.image
@@ -160,6 +195,27 @@ func (c *Client) runSession(
 			if handled, err := c.handleTerminalDelivery(streamCtx, stream, result.message); handled {
 				if err != nil {
 					return agentChannelTransportResult(ctx, err, "agent: terminal delivery", false)
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if handled, err := backingAccess.handle(streamCtx, stream, result.message); handled {
+				if err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: receive Backing access check", true)
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if handled, err := dnsChecks.handle(streamCtx, stream, result.message); handled {
+				if err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: receive DNS check", false)
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if handled, err := edgeChecks.handle(streamCtx, stream, result.message); handled {
+				if err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: receive Tunnel check", false)
 				}
 				receiveNext(streamCtx, stream, received)
 				continue

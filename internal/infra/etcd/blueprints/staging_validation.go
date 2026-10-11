@@ -65,7 +65,12 @@ func validateEnvironmentBlueprintStageDescriptor(value EnvironmentBlueprintStage
 	}
 	switch value.State {
 	case EnvironmentBlueprintStageOpen:
-	case EnvironmentBlueprintStageSealed, EnvironmentBlueprintStagePublished, EnvironmentBlueprintStageMetadata:
+	case EnvironmentBlueprintStageSealed, EnvironmentBlueprintStagePublished, EnvironmentBlueprintStageMetadata,
+		EnvironmentBlueprintStagePublishedMetadata:
+		if value.State == EnvironmentBlueprintStagePublishedMetadata &&
+			(value.Claim.SourceKind != EnvironmentBlueprintSourceMutation || value.Claim.TaskID != value.Claim.RevisionID) {
+			return errs.New(errs.KindValidationFailed, "metadata Blueprint retention owner is invalid")
+		}
 		if value.NextAuditChunk != value.AuditChunks || value.NextProjectionChunk != value.ProjectionChunks {
 			return errs.New(errs.KindValidationFailed, "sealed Blueprint staging descriptor is incomplete")
 		}

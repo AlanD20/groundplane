@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -47,6 +48,13 @@ func (repository *Planner) PrepareComponentTaskPublication(
 	}
 	if err := validateComponentTaskPublicationZones(preparation, zoneChanges); err != nil {
 		return Publication{}, err
+	}
+	for _, candidate := range preparation.Intent.Candidates {
+		if candidate.Current.Desired.Kind != candidate.Candidate.Desired.Kind {
+			if err := validateProxyRolloutPublication(ctx, repository.store, preparation); err != nil {
+				return Publication{}, err
+			}
+		}
 	}
 	secretReferences, secretConditions, secretMutations, err := PrepareComponentTaskSecretReferences(
 		ctx,
@@ -92,6 +100,20 @@ func (repository *Planner) PrepareComponentTaskPublication(
 		})
 	}
 	publication.conditions = append(publication.conditions, secretConditions...)
+	// Disabling a captured connector/router must wait for exact helper cleanup.
+	// Enabled configuration edits remain independent and make old results stale.
+	for _, candidate := range preparation.Intent.Candidates {
+		if !candidate.Candidate.Desired.Enabled {
+			publication.conditions = append(publication.conditions, etcdstore.Condition{
+				Key: edgechecks.ComponentReferencePrefix(candidate.Current.Desired.ID), Prefix: true,
+			})
+		}
+	}
+	publication.conditions = append(publication.conditions, preparation.proxyServiceConditions...)
+	for _, mutation := range cloneProxySourceMutations(preparation.proxySourceMutations) {
+		publication.mutations = append(publication.mutations, mutation)
+		publication.values = append(publication.values, mutation.Value)
+	}
 	intentValue, err := environmentchanges.EncodeComponentTaskIntent(preparation.Intent)
 	if err != nil {
 		return Publication{}, err
@@ -154,6 +176,7 @@ func ComponentTaskPreparationIsZero(preparation ComponentTaskPreparation) bool {
 		!preparation.appliedProjectionPresent && preparation.appliedProjectionRevision == 0 &&
 		preparation.desiredProjectionRevision == 0 &&
 		preparation.unitRuntimeCondition == nil &&
+		preparation.proxyServicePreflight == nil && len(preparation.proxyServiceConditions) == 0 &&
 		len(preparation.addresses) == 0
 }
 
@@ -252,6 +275,26 @@ func (publication Publication) Classify(values []*etcdstore.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "Component Secret candidate reference already exists")
 		}
 		offset += 3
+	}
+	for _, candidate := range publication.preparation.Intent.Candidates {
+		if candidate.Candidate.Desired.Enabled {
+			continue
+		}
+		if values[offset] != nil {
+			return errs.New(
+				errs.KindResourceInUse,
+				"connection check still owns this Component; finish its helper cleanup before disabling it",
+			)
+		}
+		offset++
+	}
+	for index, condition := range publication.preparation.proxyServiceConditions {
+		if etcdstore.RevisionOf(values[offset+index]) != condition.ModRevision {
+			return errs.New(
+				errs.KindStateConflict,
+				"router Service membership or captured runtime changed before publication; prepare the current Blueprint again",
+			)
+		}
 	}
 	return nil
 }

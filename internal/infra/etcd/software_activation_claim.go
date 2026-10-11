@@ -29,7 +29,7 @@ func (repository *TaskRepository) ClaimNextSoftwareActivation(
 	}
 	conflicts := 0
 	for {
-		candidate, found, err := repository.nextTaskClaimCandidate(ctx, taskjournal.TaskExecutorSoftware)
+		candidate, found, err := repository.nextTaskClaimCandidate(ctx, taskjournal.TaskExecutorSoftware, at)
 		if err != nil || !found {
 			return etcdstore.Versioned[TaskRecord]{}, found, err
 		}

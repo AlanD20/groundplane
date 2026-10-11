@@ -173,8 +173,8 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 				renderPlannerEnvironmentPlanner{},
 				renderPlannerCatalog{definition: definition},
 				"activate-config",
-				netip.MustParseAddr("127.0.0.1"),
-			)
+				netip.MustParseAddr("127.0.0.1"), testZoneListenerSource(t))
+
 			if err != nil {
 				t.Fatalf("NewPlatformRenderPlanner() error = %v", err)
 			}
@@ -191,7 +191,7 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 					}, {Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)},
 				},
 			}
-			current := testkeyvalue.Versioned[testcomponents.Record]{Record: record}
+			current := testkeyvalue.Versioned[testcomponents.Record]{Record: record, ReadRevision: 42}
 			var input testplatformcomponents.PlatformComponentTaskRenderInput
 			if test.bootstrapProvenance {
 				input, err = planner.PrepareBootstrapConfigTaskAtProjection(

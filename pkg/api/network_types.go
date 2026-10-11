@@ -6,6 +6,7 @@ type Zone struct {
 	Name          string        `json:"name"`
 	Subnet        string        `json:"subnet"`
 	Internal      bool          `json:"internal"`
+	AllowGPDNS    bool          `json:"allow_gp_dns" doc:"Use shared CoreDNS from this internal Zone; existing workloads change on their next deployment."`
 	OwnerKind     ZoneOwnerKind `json:"owner_kind" enum:"environment,backing_project"`
 	OwnerID       string        `json:"owner_id"`
 }
@@ -15,6 +16,7 @@ type ZoneCreate struct {
 	Name          string `json:"name"           pattern:"^[A-Za-z0-9._-]+$"`
 	Subnet        string `json:"subnet"`
 	Internal      bool   `json:"internal"`
+	AllowGPDNS    bool   `json:"allow_gp_dns" doc:"Opt into shared CoreDNS without enabling outbound connectivity; requires internal=true."`
 }
 
 type ZoneOwnerKind string
@@ -62,6 +64,7 @@ type ZoneRemovalImpact struct {
 }
 
 type Route struct {
+	Revision        int64  `json:"revision" minimum:"0" doc:"Desired configuration revision on reads; zero in a mutation reply. Read the Route before submitting a check."`
 	ID              string `json:"id"                pattern:"^rte_[0-9A-HJKMNP-TV-Z]{26}$"`
 	EnvironmentID   string `json:"environment_id"    pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
 	Host            string `json:"host,omitempty"    maxLength:"253"`

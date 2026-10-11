@@ -309,6 +309,17 @@ func connectorCreationIntent(
 	environmentID string,
 	input apiTypes.ConnectorCreateRequest,
 ) requestidempotency.CanonicalIntentV1 {
+	return requestidempotency.CanonicalIntentV1{
+		Method: http.MethodPost, Route: "/api/v1/connectors",
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Query: requestidempotency.Object(
+			requestidempotency.Field{Name: "environment", Value: requestidempotency.String(environmentID)},
+		),
+		Body: requestidempotency.JSONBody(connectorCreationBody(input)),
+	}
+}
+
+func connectorCreationBody(input apiTypes.ConnectorCreateRequest) requestidempotency.Value {
 	pathStyle := requestidempotency.Null()
 	if input.PathStyle != nil {
 		pathStyle = requestidempotency.Bool(*input.PathStyle)
@@ -327,23 +338,16 @@ func connectorCreationIntent(
 			requestidempotency.Field{Name: "value", Value: requestidempotency.String(credential.Value)},
 		))
 	}
-	return requestidempotency.CanonicalIntentV1{
-		Method: http.MethodPost, Route: "/api/v1/connectors",
-		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
-		Query: requestidempotency.Object(
-			requestidempotency.Field{Name: "environment", Value: requestidempotency.String(environmentID)},
-		),
-		Body: requestidempotency.JSONBody(requestidempotency.Object(
-			requestidempotency.Field{Name: "name", Value: requestidempotency.String(input.Name)},
-			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(input.Kind)},
-			requestidempotency.Field{Name: "endpoint", Value: requestidempotency.String(input.Endpoint)},
-			requestidempotency.Field{Name: "bucket", Value: requestidempotency.String(input.Bucket)},
-			requestidempotency.Field{Name: "prefix", Value: requestidempotency.String(input.Prefix)},
-			requestidempotency.Field{Name: "region", Value: requestidempotency.String(input.Region)},
-			requestidempotency.Field{Name: "path_style", Value: pathStyle},
-			requestidempotency.Field{Name: "credentials", Value: requestidempotency.List(credentials...)},
-		)),
-	}
+	return requestidempotency.Object(
+		requestidempotency.Field{Name: "name", Value: requestidempotency.String(input.Name)},
+		requestidempotency.Field{Name: "kind", Value: requestidempotency.String(input.Kind)},
+		requestidempotency.Field{Name: "endpoint", Value: requestidempotency.String(input.Endpoint)},
+		requestidempotency.Field{Name: "bucket", Value: requestidempotency.String(input.Bucket)},
+		requestidempotency.Field{Name: "prefix", Value: requestidempotency.String(input.Prefix)},
+		requestidempotency.Field{Name: "region", Value: requestidempotency.String(input.Region)},
+		requestidempotency.Field{Name: "path_style", Value: pathStyle},
+		requestidempotency.Field{Name: "credentials", Value: requestidempotency.List(credentials...)},
+	)
 }
 
 func isUnknownConnectorCreationOutcome(err error) bool {

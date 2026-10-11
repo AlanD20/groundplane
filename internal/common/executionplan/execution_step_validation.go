@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
+	"github.com/AlanD20/groundplane/internal/common/rollingrelease"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -21,6 +22,13 @@ func validateStep(
 		return errs.New(errs.KindValidationFailed, "execution step identity or timeout is invalid")
 	}
 	switch payload := step.Payload.(type) {
+	case *agentpb.ExecutionStep_ManagedNetworkPreparationProbe:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE || plan.GetManagedNetworkRecoveryProcedure().GetPreparation() == nil {
+			return errs.New(errs.KindValidationFailed, "network preparation observation has no closed recovery authority")
+		}
+		return validateManagedNetworkEnsure(operation, &agentpb.ManagedNetworkEnsure{
+			ArtifactId: payload.ManagedNetworkPreparationProbe.GetArtifactId(), NetworkId: payload.ManagedNetworkPreparationProbe.GetNetworkId(),
+		}, artifacts)
 	case *agentpb.ExecutionStep_ComposeApply:
 		return validateComposeApply(plan, step, artifacts)
 	case *agentpb.ExecutionStep_ComposeStop:
@@ -49,21 +57,60 @@ func validateStep(
 		}
 		return validateSelection(payload.WaitHealthy.ArtifactId, payload.WaitHealthy.ServiceIds, artifacts, true)
 	case *agentpb.ExecutionStep_ComposeWorkloadApply:
+		if value := payload.ComposeWorkloadApply; value.GetRollingReplicaOrdinal() != 0 {
+			if err := validateRollingPhaseReference(plan, step, value.GetServiceId(), value.GetRollingReplicaOrdinal(), rollingrelease.StartCandidate); err != nil {
+				return err
+			}
+		}
 		return validateReleaseWorkloadStep(
 			operation,
 			payload.ComposeWorkloadApply.GetArtifactId(),
 			payload.ComposeWorkloadApply.GetServiceId(),
 			payload.ComposeWorkloadApply.GetTarget(),
+			payload.ComposeWorkloadApply.GetRollingReplicaOrdinal(),
 			artifacts,
 		)
 	case *agentpb.ExecutionStep_WaitWorkloadHealthy:
+		if value := payload.WaitWorkloadHealthy; value.GetRollingReplicaOrdinal() != 0 {
+			if err := validateRollingPhaseReference(plan, step, value.GetServiceId(), value.GetRollingReplicaOrdinal(), rollingrelease.WaitCandidateHealthy); err != nil {
+				return err
+			}
+		}
 		return validateReleaseWorkloadStep(
 			operation,
 			payload.WaitWorkloadHealthy.GetArtifactId(),
 			payload.WaitWorkloadHealthy.GetServiceId(),
 			payload.WaitWorkloadHealthy.GetTarget(),
+			payload.WaitWorkloadHealthy.GetRollingReplicaOrdinal(),
 			artifacts,
 		)
+	case *agentpb.ExecutionStep_ComposeWorkloadRemove:
+		value := payload.ComposeWorkloadRemove
+		if err := validateRollingPhaseReference(plan, step, value.GetServiceId(), 0, rollingrelease.RemovePredecessor, rollingrelease.RemoveRetained); err != nil {
+			return err
+		}
+		if err := validateReleaseWorkloadStep(operation, value.GetArtifactId(), value.GetServiceId(), value.GetTarget(), value.GetRollingReplicaOrdinal(), artifacts); err != nil {
+			return err
+		}
+		workload, err := ReleaseWorkloadService(artifacts[value.GetArtifactId()], value.GetServiceId(), value.GetTarget(), value.GetRollingReplicaOrdinal())
+		if err != nil {
+			return err
+		}
+		replica, err := RollingRetirement(plan, step)
+		if err != nil {
+			return err
+		}
+		if workload.GetExpectedReplicas() != 1 && replica.ContainerID == "" {
+			return errs.New(errs.KindValidationFailed, "targeted workload removal requires one independently addressable replica")
+		}
+		_, err = RollingReplicaService(artifacts[value.GetArtifactId()], value.GetServiceId(), replica)
+		return err
+	case *agentpb.ExecutionStep_RollingTrafficSwitch:
+		return validateRollingPhaseReference(plan, step, payload.RollingTrafficSwitch.GetServiceId(), payload.RollingTrafficSwitch.GetChangeOrdinal(), rollingrelease.SwitchTraffic)
+	case *agentpb.ExecutionStep_RollingReplicaDrain:
+		return validateRollingPhaseReference(plan, step, payload.RollingReplicaDrain.GetServiceId(), payload.RollingReplicaDrain.GetChangeOrdinal(), rollingrelease.DrainPredecessor)
+	case *agentpb.ExecutionStep_RollingReleaseAcknowledge:
+		return validateRollingPhaseReference(plan, step, payload.RollingReleaseAcknowledge.GetServiceId(), 0, "")
 	case *agentpb.ExecutionStep_ServiceProxySwitch:
 		return validateServiceProxySwitch(operation, payload.ServiceProxySwitch, artifacts)
 	case *agentpb.ExecutionStep_ServiceProxyProbe:
@@ -216,7 +263,9 @@ func validateComponentRestorationStep(
 	artifacts map[string]*agentpb.ComposeArtifact,
 ) error {
 	artifact := artifacts[candidateArtifactID]
-	if operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
+	if (operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
+		operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
+		operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) ||
 		ids.Validate(ids.KindComponent, componentID) != nil ||
 		ids.Validate(ids.KindConfig, candidateArtifactID) != nil || artifact == nil {
 		return errs.New(errs.KindValidationFailed, "Component restoration step authority is invalid")

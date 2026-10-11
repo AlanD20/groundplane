@@ -278,7 +278,11 @@ func TestBlueprintScriptPublicationRetainsReferencedOldSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.Transact(t.Context(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: oldKey, Value: value}})
+	result, err := store.Transact(
+		t.Context(),
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: oldKey, Value: value}},
+	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("pin old execution = %v, %v", result, err)
 	}
@@ -306,7 +310,12 @@ func TestBlueprintScriptPublicationRetainsReferencedOldSet(t *testing.T) {
 		t.Fatalf("new Script set = %+v, %v", next, err)
 	}
 	read, err := store.GetMany(t.Context(), testkeyvalue.GetManyRequest{Keys: []string{oldKey,
-		testscripts.ScriptSetBodyGenerationKey(old.EnvironmentID, old.ScriptSetGeneration, old.Desired.ID, old.ActiveGeneration),
+		testscripts.ScriptSetBodyGenerationKey(
+			old.EnvironmentID,
+			old.ScriptSetGeneration,
+			old.Desired.ID,
+			old.ActiveGeneration,
+		),
 	}})
 	if err != nil || read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
 		t.Fatalf("retained old execution sources = %+v, %v", read, err)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -36,13 +37,13 @@ func (fixture *ExecutedArtifactFixture) SeedRetainedRollback(
 		)
 		result.CandidateWorkload.ReplicaCount = replicas
 		if len(result.ProxyPorts) > 0 {
-			config, err := domain.RenderProxyConfig(
+			config, err := domain.RenderProxyConfig(serviceproxy.Caddy,
 				result.ServiceName,
 				result.ReleaseID,
 				result.CandidateTarget,
 				result.ProxyGeneration,
-				result.ProxyPorts,
-			)
+				result.ProxyPorts)
+
 			if err != nil {
 				t.Fatal(err)
 			}

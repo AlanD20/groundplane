@@ -73,6 +73,9 @@ func runnerStringMapsEqual(left map[string]string, right map[string]string) bool
 }
 
 func taskOwnsRunner(task TaskRecord) (bool, error) {
+	if runnerCheckTask(task) {
+		return false, nil
+	}
 	if task.Executor != taskjournal.TaskExecutorController ||
 		task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
 		return false, nil
@@ -89,6 +92,9 @@ func taskOwnsRunner(task TaskRecord) (bool, error) {
 }
 
 func taskOwnsRunnerCreation(task TaskRecord) (bool, error) {
+	if runnerCheckTask(task) {
+		return false, nil
+	}
 	if task.Executor != taskjournal.TaskExecutorController ||
 		task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
 		return false, nil

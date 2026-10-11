@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (c *Client) ListComponents(
@@ -72,6 +73,13 @@ func (c *Client) ListComponents(
 	); err != nil {
 		return apiTypes.Page[apiTypes.Component]{}, err
 	}
+	for _, component := range page.Items {
+		if component.Software != nil {
+			if err := component.Software.Validate(); err != nil {
+				return apiTypes.Page[apiTypes.Component]{}, errs.Wrap(errs.KindInternal, err)
+			}
+		}
+	}
 	return page, nil
 }
 
@@ -106,6 +114,11 @@ func (c *Client) ShowComponent(ctx context.Context, id string) (apiTypes.Compone
 	var component apiTypes.Component
 	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(body), &component); err != nil {
 		return apiTypes.Component{}, err
+	}
+	if component.Software != nil {
+		if err := component.Software.Validate(); err != nil {
+			return apiTypes.Component{}, errs.Wrap(errs.KindInternal, err)
+		}
 	}
 	return component, nil
 }

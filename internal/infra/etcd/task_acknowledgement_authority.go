@@ -55,9 +55,9 @@ func validateTaskAcknowledgement(
 		recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
 		!taskjournal.IsTerminalTaskStatus(terminalStatus) ||
 		(executor == taskjournal.TaskExecutorAgent && (recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0 ||
-			recordcodec.ValidateID(ids.KindAssignment, assignmentID) != nil || result == nil)) ||
+			recordcodec.ValidateID(ids.KindAssignment, assignmentID) != nil || result == nil || result.Kind == taskjournal.TaskResultController)) ||
 		(executor == taskjournal.TaskExecutorController &&
-			(agentID != "" || agentGeneration != 0 || assignmentID != "" || result != nil)) {
+			(agentID != "" || agentGeneration != 0 || assignmentID != "" || result == nil || result.Kind != taskjournal.TaskResultController)) {
 		return errs.New(errs.KindValidationFailed, "task acknowledgement is invalid")
 	}
 	if err := recordcodec.ValidateTimestamp("task terminal_at", terminalAt); err != nil {

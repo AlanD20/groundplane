@@ -88,13 +88,14 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	terminal, err := restartedTasks.AcknowledgeControllerTask(
 		ctx,
 		begin.TaskID,
-		testtaskjournal.TaskStatusCompleted,
-		terminalAt,
-	)
+		testtaskjournal.TaskStatusCompleted, nil,
+
+		terminalAt)
+
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 	}
-	if _, err := restartedTasks.AcknowledgeControllerTask(ctx, begin.TaskID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := restartedTasks.AcknowledgeControllerTask(ctx, begin.TaskID, testtaskjournal.TaskStatusCompleted, nil, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
 	if result, err := restarted.Get(ctx, testhierarchy.TenantKey(tenantID)); err != nil || result.Entry != nil {
@@ -220,9 +221,10 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 	failed, err := tasks.AcknowledgeControllerTask(
 		ctx,
 		begin.TaskID,
-		testtaskjournal.TaskStatusFailed,
-		now.Add(2*time.Second),
-	)
+		testtaskjournal.TaskStatusFailed, nil,
+
+		now.Add(2*time.Second))
+
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
 	}

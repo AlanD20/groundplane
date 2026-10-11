@@ -4,6 +4,7 @@ import type {
   ConnectorCredential,
   ConnectorCredentialInput,
   ConnectorEditInput,
+  ConnectorCreateInput,
 } from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
 export type ConnectorPageResponse =
@@ -16,6 +17,10 @@ export type ConnectorTaskAccepted =
   operations["connector.remove"]["responses"][202]["content"]["application/json"];
 export type ConnectorEditRequest =
   operations["connector.edit"]["requestBody"]["content"]["application/json"];
+export type ConnectorCheckRequest =
+  operations["connector.check"]["requestBody"]["content"]["application/json"];
+export type ConnectorCheckResult =
+  operations["connector.check.show"]["responses"][200]["content"]["application/json"];
 type ConnectorCredentialWrite = NonNullable<
   NonNullable<ConnectorEditRequest["credentials"]>["access_key"]
 >;
@@ -23,6 +28,97 @@ export type ConnectorEditSnapshot = {
   connector: Connector;
   etag: string;
 };
+
+export function connectorSnapshotRevision(
+  snapshot: ConnectorEditSnapshot,
+): number {
+  const revision = Number(snapshot.etag.slice(1, -1));
+  if (!Number.isSafeInteger(revision) || revision <= 0)
+    throw new Error("Connector response has no valid revision");
+  return revision;
+}
+
+export async function checkConnectorConnection(
+  environmentId: string,
+  input: ConnectorCheckRequest,
+  idempotencyKey: string,
+) {
+  const query = new URLSearchParams({ environment: environmentId });
+  const accepted = await controllerRequest<ConnectorTaskAccepted>(
+    `/connectors/checks?${query}`,
+    202,
+    { method: "POST", body: input, idempotencyKey },
+  );
+  if (!accepted.task_id)
+    throw new Error("Controller response is missing task_id");
+  return accepted.task_id;
+}
+
+export async function getConnectorCheck(
+  environmentId: string,
+  taskId: string,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({
+    environment: environmentId,
+    task: taskId,
+  });
+  const result = await controllerRequest<ConnectorCheckResult>(
+    `/connectors/checks?${query}`,
+    200,
+    { signal },
+  );
+  if (result.task_id !== taskId || result.environment_id !== environmentId)
+    throw new Error(
+      "Controller returned a check for a different Task or Environment",
+    );
+  return result;
+}
+
+export async function getLatestConnectorCheck(
+  environmentId: string,
+  connectorId: string,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({
+    environment: environmentId,
+    connector: connectorId,
+  });
+  const result = await controllerRequest<ConnectorCheckResult>(
+    `/connectors/checks?${query}`,
+    200,
+    { signal },
+  );
+  if (
+    result.configuration.id !== connectorId ||
+    result.environment_id !== environmentId ||
+    result.draft
+  )
+    throw new Error(
+      "Controller returned a saved check for a different Connector or Environment",
+    );
+  return result;
+}
+
+export function connectorCreateRequest(
+  connector: ConnectorCreateInput,
+): ConnectorCreateRequest {
+  const credential = (value: ConnectorCredentialInput) =>
+    value.kind === "ref" ? { secret_ref: value.name } : { value: value.value };
+  return {
+    name: connector.name,
+    kind: connector.kind,
+    endpoint: connector.endpoint,
+    bucket: connector.bucket,
+    prefix: connector.prefix || undefined,
+    region: connector.region,
+    path_style: connector.pathStyle,
+    credentials: {
+      access_key: credential(connector.credentials.accessKey),
+      secret_key: credential(connector.credentials.secretKey),
+    },
+  };
+}
 
 export function connectorFromAPI(connector: ConnectorResponse): Connector {
   const credential = (

@@ -13,6 +13,7 @@ func releaseTerminalGroupProgress(
 	terminalStatus taskjournal.TaskStatus,
 	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
+	marker releases.ReleasePublicationMarker,
 ) (domain.GroupProgress, error) {
 	executor, err := domain.NewGroupExecutor(domain.GroupManifest{
 		OperationID: head.OperationID, ReleaseGroupID: head.ReleaseGroupID, EnvironmentID: head.EnvironmentID,
@@ -27,7 +28,7 @@ func releaseTerminalGroupProgress(
 	progress.NextMemberOrdinal = 1
 	progress.Compensating = false
 	progress.NextCompensationOrdinal = 0
-	failedOrdinal, err := releaseFailedMemberOrdinal(task, terminalStatus, result)
+	failedOrdinal, err := releaseFailedMemberOrdinal(task, terminalStatus, result, marker, head.Members)
 	if err != nil {
 		return domain.GroupProgress{}, err
 	}

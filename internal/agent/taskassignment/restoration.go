@@ -20,6 +20,19 @@ func HasServingPredecessorAuthority(authority *agentpb.ReleaseRestorationAuthori
 func ValidateCandidateReleaseAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
 	procedure := plan.GetCandidateReleaseProcedure()
 	if procedure == nil {
+		if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_DETACH &&
+			assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
+			if assignment.RestorationAuthority != nil || assignment.ComponentRecoveryDirective != nil ||
+				len(assignment.ComponentRecoveryRecordSHA256) != 0 {
+				return errs.New(errs.KindInternal, "agent: Detach assignment carries foreign recovery authority")
+			}
+			return executionplan.ValidateAttachRemovalRecoveryDirective(
+				plan, assignment.ReleaseRecoveryDirective, assignment.ReleaseRecoveryRecordSHA256,
+			)
+		}
+		if plan.GetManagedNetworkRecoveryProcedure() != nil {
+			return ValidateManagedNetworkRecoveryAuthority(assignment, plan)
+		}
 		if plan.GetServiceAbsenceRecoveryProcedure() != nil {
 			return ValidateServiceAbsenceRecoveryAuthority(assignment, plan)
 		}

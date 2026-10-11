@@ -190,17 +190,23 @@ func newAgentCmd() *cobra.Command {
 }
 
 func agentFields(agent apiTypes.Agent) map[string]any {
-	return map[string]any{
+	fields := map[string]any{
 		"id":                 agent.ID,
 		"enrollment_task_id": agent.EnrollmentTaskID,
 		"host":               agent.Host,
 		"status":             agent.Status,
 		"version":            optionalAgentString(agent.Version),
+		"installed_image":    optionalAgentString(agent.InstalledImage),
 		"labels":             agent.Labels,
 		"ready_at":           optionalAgentTime(agent.ReadyAt),
 		"last_report_at":     optionalAgentTime(agent.LastReportAt),
 		"in_flight":          agent.InFlight,
 	}
+	if agent.Source != nil {
+		fields["source_kind"] = agent.Source.Kind
+		fields["source_commit"] = agent.Source.Commit
+	}
+	return fields
 }
 
 func optionalAgentString(value *string) string {

@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const servingPredecessorImageReference = "registry.example/api@sha256:" +
+const servingPredecessorImageReference = "sha256:" +
 	"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 // Rationale: serving restoration consumes the exact deterministic artifact
@@ -22,7 +22,9 @@ const servingPredecessorImageReference = "registry.example/api@sha256:" +
 func TestOpenServingPredecessorRequiresExactClaimSealedArtifact(t *testing.T) {
 	releaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	predecessor := &agentpb.ComposeArtifact{
-		ArtifactId: helperArtifactID, ProjectName: "gp-serving", CanonicalYaml: []byte("services:\n  api: {}\n"),
+		ArtifactId:    helperArtifactID,
+		ProjectName:   "gp-serving",
+		CanonicalYaml: []byte("services:\n  api: {}\n"),
 		Services: []*agentpb.ComposeService{{
 			ServiceId: helperServiceID, ComposeName: "api", ExpectedReplicas: 1,
 			Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
@@ -31,10 +33,6 @@ func TestOpenServingPredecessorRequiresExactClaimSealedArtifact(t *testing.T) {
 				{Key: "com.groundplane.runtime-role", Value: "singleton"},
 			},
 			ImageReference: servingPredecessorImageReference,
-		}, {
-			ServiceId: helperServiceID, ComposeName: "api-green", ExpectedReplicas: 1, Slot: "green",
-			Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-			ExpectedLabels: []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "slot"}},
 		}},
 	}
 	request, _ := sealedServingPredecessorRequest(t, predecessor)
@@ -44,23 +42,34 @@ func TestOpenServingPredecessorRequiresExactClaimSealedArtifact(t *testing.T) {
 			CandidateReleaseId: servingRecoveryCandidateID,
 		},
 	}}
-	opened, service, openedRelease, target, err := openServingPredecessor(
+	opened, err := openServingPredecessor(
 		request, &agentpb.ComposeArtifact{ProjectName: predecessor.ProjectName}, step,
 	)
-	if err != nil || !proto.Equal(opened, predecessor) || service.GetServiceId() != helperServiceID ||
-		openedRelease != releaseID || target != "singleton" {
-		t.Fatalf("openServingPredecessor() = %#v, %#v, %q, %q, %v", opened, service, openedRelease, target, err)
+	if err != nil || !proto.Equal(opened.Artifact, predecessor) ||
+		opened.Workloads[0].GetServiceId() != helperServiceID ||
+		opened.ReleaseID != releaseID ||
+		opened.Target != "singleton" {
+		t.Fatalf("openServingPredecessor() = %#v, %v", opened, err)
 	}
 	slotPredecessor := proto.Clone(predecessor).(*agentpb.ComposeArtifact)
 	slotPredecessor.Services[0].Role = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT
 	slotPredecessor.Services[0].Slot = "green"
+	slotPredecessor.Services[0].HasHealthcheck = true
 	slotPredecessor.Services[0].ExpectedLabels[1].Value = "slot"
+	slotPredecessor.Services[0].ExpectedLabels = append(
+		slotPredecessor.Services[0].ExpectedLabels,
+		&agentpb.LabelPair{Key: "com.groundplane.slot", Value: "green"},
+	)
 	slotRequest, _ := sealedServingPredecessorRequest(t, slotPredecessor)
-	_, _, _, slotTarget, slotErr := openServingPredecessor(
+	slotRuntime, slotErr := openServingPredecessor(
 		slotRequest, &agentpb.ComposeArtifact{ProjectName: predecessor.ProjectName}, step,
 	)
-	if slotErr != nil || slotTarget != "green" {
-		t.Fatalf("openServingPredecessor(slot) target = %q, error = %v", slotTarget, slotErr)
+	if slotErr != nil || slotRuntime.Target != "green" {
+		t.Fatalf(
+			"openServingPredecessor(slot) target = %q, error = %v",
+			slotRuntime.Target,
+			slotErr,
+		)
 	}
 	for _, test := range []struct {
 		name   string
@@ -87,15 +96,17 @@ func TestOpenServingPredecessorRequiresExactClaimSealedArtifact(t *testing.T) {
 				test.mutate(invalid.Services[0])
 			}
 			invalidRequest, _ := sealedServingPredecessorRequest(t, invalid)
-			if _, _, _, _, err := openServingPredecessor(
-				invalidRequest, &agentpb.ComposeArtifact{ProjectName: predecessor.ProjectName}, step,
+			if _, err := openServingPredecessor(
+				invalidRequest,
+				&agentpb.ComposeArtifact{ProjectName: predecessor.ProjectName},
+				step,
 			); err == nil {
 				t.Fatal("openServingPredecessor() accepted invalid sealed runtime role")
 			}
 		})
 	}
-	request.RestorationAuthority.AppliedPredecessor.ComposeArtifact[0] ^= 0xff
-	if _, _, _, _, err := openServingPredecessor(
+	request.RestorationAuthority.NativePredecessors[0].CurrentArtifact[0] ^= 0xff
+	if _, err := openServingPredecessor(
 		request, &agentpb.ComposeArtifact{ProjectName: predecessor.ProjectName}, step,
 	); err == nil {
 		t.Fatal("openServingPredecessor() accepted changed artifact bytes")
@@ -114,7 +125,13 @@ func TestOpenServingPredecessorUsesNativeWitnessOverAppliedArtifact(t *testing.T
 		nativeRetainedRelease  = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 	)
 	current := nativeHelperArtifact(t, nativeCurrentArtifact, nativeCurrentRelease, "blue", true)
-	retained := nativeHelperArtifact(t, nativeRetainedArtifact, nativeRetainedRelease, "green", false)
+	retained := nativeHelperArtifact(
+		t,
+		nativeRetainedArtifact,
+		nativeRetainedRelease,
+		"green",
+		false,
+	)
 	applied := &agentpb.ComposeArtifact{
 		ArtifactId: helperArtifactID, ProjectName: current.ProjectName,
 		Services: []*agentpb.ComposeService{{
@@ -131,33 +148,50 @@ func TestOpenServingPredecessorUsesNativeWitnessOverAppliedArtifact(t *testing.T
 	appliedDigest := sha256.Sum256(appliedBytes)
 	currentBytes := marshalNativeHelperArtifact(t, current)
 	retainedBytes := marshalNativeHelperArtifact(t, retained)
-	request := &agentpb.ComposeHelperRequest{RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
-		EnvironmentId: helperEnvironmentID,
-		Candidates: []*agentpb.ReleaseRestorationCandidate{{
-			ServiceId: helperServiceID, ReleaseId: servingRecoveryCandidateID,
-			Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
-		}},
-		AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
-			ComposeArtifact: appliedBytes, ComposeArtifactSha256: appliedDigest[:],
+	request := &agentpb.ComposeHelperRequest{
+		RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
+			EnvironmentId: helperEnvironmentID,
+			Candidates: []*agentpb.ReleaseRestorationCandidate{
+				{
+					ServiceId: helperServiceID,
+					ReleaseId: servingRecoveryCandidateID,
+					Target:    agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
+				},
+			},
+			AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
+				ComposeArtifact: appliedBytes, ComposeArtifactSha256: appliedDigest[:],
+			},
+			NativePredecessors: []*agentpb.ReleaseNativePredecessorAuthority{
+				{
+					ServiceId:             helperServiceID,
+					CurrentArtifact:       currentBytes,
+					RetainedPriorArtifact: retainedBytes,
+				},
+			},
 		},
-		NativePredecessors: []*agentpb.ReleaseNativePredecessorAuthority{{
-			ServiceId: helperServiceID, CurrentArtifact: currentBytes, RetainedPriorArtifact: retainedBytes,
-		}},
-	}}
+	}
 	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{
 		CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
 			ServiceId: helperServiceID, CandidateReleaseId: servingRecoveryCandidateID,
 		},
 	}}
-	opened, service, releaseID, target, err := openServingPredecessor(
+	opened, err := openServingPredecessor(
 		request, &agentpb.ComposeArtifact{ProjectName: current.ProjectName}, step,
 	)
-	if err != nil || !proto.Equal(opened, current) || service.GetServiceId() != helperServiceID ||
-		releaseID != nativeCurrentRelease || target != "blue" {
-		t.Fatalf("open native predecessor = %#v, %#v, %q, %q, %v", opened, service, releaseID, target, err)
+	if err != nil || !proto.Equal(opened.Artifact, current) ||
+		opened.Workloads[0].GetServiceId() != helperServiceID ||
+		opened.ReleaseID != nativeCurrentRelease ||
+		opened.Target != "blue" {
+		t.Fatalf("open native predecessor = %#v, %v", opened, err)
 	}
-	if !bytes.Equal(request.RestorationAuthority.AppliedPredecessor.ComposeArtifact, appliedBytes) ||
-		!bytes.Equal(request.RestorationAuthority.AppliedPredecessor.ComposeArtifactSha256, appliedDigest[:]) {
+	if !bytes.Equal(
+		request.RestorationAuthority.AppliedPredecessor.ComposeArtifact,
+		appliedBytes,
+	) ||
+		!bytes.Equal(
+			request.RestorationAuthority.AppliedPredecessor.ComposeArtifactSha256,
+			appliedDigest[:],
+		) {
 		t.Fatal("native helper selection changed applied A witness")
 	}
 
@@ -176,7 +210,7 @@ func TestOpenServingPredecessorUsesNativeWitnessOverAppliedArtifact(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			changed := proto.Clone(request).(*agentpb.ComposeHelperRequest)
 			mutate(changed)
-			if _, _, _, _, err := openServingPredecessor(
+			if _, err := openServingPredecessor(
 				changed, &agentpb.ComposeArtifact{ProjectName: current.ProjectName}, step,
 			); err == nil {
 				t.Fatal("accepted incomplete or altered native witness")
@@ -185,28 +219,43 @@ func TestOpenServingPredecessorUsesNativeWitnessOverAppliedArtifact(t *testing.T
 	}
 }
 
-func nativeHelperArtifact(t *testing.T, artifactID, releaseID, slot string, proxy bool) *agentpb.ComposeArtifact {
+func nativeHelperArtifact(
+	t *testing.T,
+	artifactID, releaseID, slot string,
+	proxy bool,
+) *agentpb.ComposeArtifact {
 	t.Helper()
 	artifact := &agentpb.ComposeArtifact{
 		ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId: helperEnvironmentID, ProjectName: "gp-" + strings.ToLower(helperEnvironmentID),
-		Services: []*agentpb.ComposeService{{
-			ServiceId: helperServiceID, ComposeName: "api-" + slot, ExpectedReplicas: 1,
-			HasHealthcheck: true, Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
-			Slot: slot, ImageReference: "sha256:" + strings.Repeat("a", 64),
-			ExpectedLabels: []*agentpb.LabelPair{
-				{Key: "com.groundplane.release-id", Value: releaseID},
-				{Key: "com.groundplane.runtime-role", Value: "slot"},
-				{Key: "com.groundplane.slot", Value: slot},
+		Services: []*agentpb.ComposeService{
+			{
+				ServiceId:        helperServiceID,
+				ComposeName:      "api-" + slot,
+				ExpectedReplicas: 1,
+				HasHealthcheck:   true,
+				Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+				Slot:             slot,
+				ImageReference:   "sha256:" + strings.Repeat("a", 64),
+				ExpectedLabels: []*agentpb.LabelPair{
+					{Key: "com.groundplane.release-id", Value: releaseID},
+					{Key: "com.groundplane.runtime-role", Value: "slot"},
+					{Key: "com.groundplane.slot", Value: slot},
+				},
 			},
-		}},
+		},
 	}
 	if proxy {
-		artifact.Services = append(artifact.Services, &agentpb.ComposeService{
-			ServiceId: helperServiceID, ComposeName: "api-proxy",
-			Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			ExpectedLabels: []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "proxy"}},
-		})
+		service := &agentpb.ComposeService{
+			ServiceId:   helperServiceID,
+			ComposeName: "api-proxy",
+			Role:        agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+			ExpectedLabels: []*agentpb.LabelPair{
+				{Key: "com.groundplane.runtime-role", Value: "proxy"},
+			},
+		}
+		sealNativeProxyFixture(service)
+		artifact.Services = append(artifact.Services, service)
 	}
 	return artifact
 }
@@ -274,7 +323,10 @@ func TestServingPredecessorCountsOnlyExactHealthyWorkloadLineage(t *testing.T) {
 		{name: "wrong observed image", replicas: 1, observations: []servingPredecessorObservation{proxy, wrongImage}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			artifact := &agentpb.ComposeArtifact{ArtifactId: helperArtifactID, ProjectName: "gp-serving"}
+			artifact := &agentpb.ComposeArtifact{
+				ArtifactId:  helperArtifactID,
+				ProjectName: "gp-serving",
+			}
 			service := &agentpb.ComposeService{
 				ServiceId: helperServiceID, ExpectedReplicas: test.replicas, HasHealthcheck: true,
 				Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
@@ -301,7 +353,11 @@ func TestServingPredecessorCountsOnlyExactHealthyWorkloadLineage(t *testing.T) {
 				t.Fatalf("servingPredecessorProven() = %t, %v, want proven", proven, err)
 			}
 			if test.wantUnproven && (err != nil || proven) {
-				t.Fatalf("servingPredecessorProven() = %t, %v, want owned but unproven", proven, err)
+				t.Fatalf(
+					"servingPredecessorProven() = %t, %v, want owned but unproven",
+					proven,
+					err,
+				)
 			}
 			if !test.wantProven && !test.wantUnproven && (err == nil || proven) {
 				t.Fatalf("servingPredecessorProven() = %t, %v, want rejection", proven, err)
@@ -345,7 +401,13 @@ func servingPredecessorRunner(
 	fake := runner.NewFake()
 	fake.RunFunc = func(_ context.Context, options runner.RunCmdOpts) (runner.Result, error) {
 		listArgs := []string{
-			"container", "ls", "--all", "--filter", "label=com.docker.compose.project=" + projectName, "--format", "{{.ID}}",
+			"container",
+			"ls",
+			"--all",
+			"--filter",
+			"label=com.docker.compose.project=" + projectName,
+			"--format",
+			"{{.ID}}",
 		}
 		if slices.Equal(options.Args, listArgs) {
 			ids := make([]string, len(observations))
@@ -355,7 +417,13 @@ func servingPredecessorRunner(
 			return runner.Result{Stdout: []byte(strings.Join(ids, "\n") + "\n")}, nil
 		}
 		for _, observation := range observations {
-			labelsArgs := []string{"container", "inspect", "--format", "{{json .Config.Labels}}", observation.id}
+			labelsArgs := []string{
+				"container",
+				"inspect",
+				"--format",
+				"{{json .Config.Labels}}",
+				observation.id,
+			}
 			if slices.Equal(options.Args, labelsArgs) {
 				encoded, err := json.Marshal(observation.labels)
 				if err != nil {
@@ -363,11 +431,23 @@ func servingPredecessorRunner(
 				}
 				return runner.Result{Stdout: encoded}, nil
 			}
-			imageArgs := []string{"container", "inspect", "--format", "{{.Config.Image}}", observation.id}
+			imageArgs := []string{
+				"container",
+				"inspect",
+				"--format",
+				"{{.Config.Image}}",
+				observation.id,
+			}
 			if slices.Equal(options.Args, imageArgs) {
 				return runner.Result{Stdout: []byte(observation.image + "\n")}, nil
 			}
-			stateArgs := []string{"container", "inspect", "--format", "{{json .State}}", observation.id}
+			stateArgs := []string{
+				"container",
+				"inspect",
+				"--format",
+				"{{json .State}}",
+				observation.id,
+			}
 			if slices.Equal(options.Args, stateArgs) {
 				return runner.Result{Stdout: []byte(observation.state)}, nil
 			}
@@ -383,12 +463,30 @@ func sealedServingPredecessorRequest(
 	predecessor *agentpb.ComposeArtifact,
 ) (*agentpb.ComposeHelperRequest, []byte) {
 	t.Helper()
-	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(predecessor)
+	predecessor.OwnerKind = agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT
+	predecessor.OwnerId = helperEnvironmentID
+	predecessor.ProjectName = "gp-" + strings.ToLower(helperEnvironmentID)
+	witness := proto.CloneOf(predecessor)
+	witness.Services = witness.Services[:0]
+	for _, service := range predecessor.GetServices() {
+		if service.GetServiceId() != helperServiceID {
+			continue
+		}
+		captured := proto.CloneOf(service)
+		slices.SortFunc(captured.ExpectedLabels, func(left, right *agentpb.LabelPair) int {
+			return strings.Compare(left.GetKey(), right.GetKey())
+		})
+		if captured.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			sealNativeProxyFixture(captured)
+		}
+		witness.Services = append(witness.Services, captured)
+	}
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(witness)
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := sha256.Sum256(encoded)
 	return &agentpb.ComposeHelperRequest{RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
+		EnvironmentId: helperEnvironmentID,
 		Candidates: []*agentpb.ReleaseRestorationCandidate{
 			{
 				ServiceId: helperServiceID,
@@ -396,8 +494,16 @@ func sealedServingPredecessorRequest(
 				Target:    agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
 			},
 		},
-		AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
-			ComposeArtifact: encoded, ComposeArtifactSha256: digest[:],
-		},
+		NativePredecessors: []*agentpb.ReleaseNativePredecessorAuthority{{
+			ServiceId: helperServiceID, CurrentArtifact: encoded,
+		}},
 	}}, encoded
+}
+
+func sealNativeProxyFixture(service *agentpb.ComposeService) {
+	config := []byte(`{"apps":{}}`)
+	digest := sha256.Sum256(config)
+	service.ProxyImplementation = agentpb.ServiceProxyImplementation_SERVICE_PROXY_IMPLEMENTATION_CADDY
+	service.ProxyConfigJson = config
+	service.ProxyConfigSha256 = digest[:]
 }

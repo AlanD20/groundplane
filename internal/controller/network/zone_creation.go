@@ -16,6 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/composekey"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -117,6 +118,7 @@ func (service *durableZoneCreationIdempotency) Prepare(
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(input.EnvironmentID)},
 			requestidempotency.Field{Name: "internal", Value: requestidempotency.Bool(input.Internal)},
+			requestidempotency.Field{Name: "allow_gp_dns", Value: requestidempotency.Bool(input.AllowGPDNS)},
 			requestidempotency.Field{Name: "name", Value: requestidempotency.String(input.Name)},
 			requestidempotency.Field{Name: "subnet", Value: requestidempotency.String(input.Subnet)},
 		)),
@@ -332,6 +334,7 @@ func (service *zoneCreationService) createZoneOnce(
 	record, err := zonerecord.NewRecord(environment.Record.ID, core.Zone{
 		ID: allocator.Named(ids.KindNetwork, "zone/create"), Name: input.Name, Subnet: input.Subnet,
 		Internal: input.Internal, OwnerKind: ownerKind, OwnerID: ownerID,
+		AllowGPDNS: input.AllowGPDNS,
 	})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -361,6 +364,7 @@ func (service *zoneCreationService) createZoneOnce(
 			ZoneID: record.Desired.ID,
 			Request: &blueprints.EnvironmentZoneMutationRequest{
 				EnvironmentID: input.EnvironmentID, Name: input.Name, Subnet: input.Subnet, Internal: input.Internal,
+				AllowGPDNS: input.AllowGPDNS,
 			},
 		}},
 		DesiredInput: desiredInput, DependencyDigest: projectionEvidence.DependencyDigest,
@@ -370,7 +374,8 @@ func (service *zoneCreationService) createZoneOnce(
 	responseBody, err := json.Marshal(apiTypes.Zone{
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Name: record.Desired.Name,
 		Subnet: record.Desired.Subnet, Internal: record.Desired.Internal,
-		OwnerKind: apiTypes.ZoneOwnerKind(record.Desired.OwnerKind), OwnerID: record.Desired.OwnerID,
+		AllowGPDNS: record.Desired.AllowGPDNS,
+		OwnerKind:  apiTypes.ZoneOwnerKind(record.Desired.OwnerKind), OwnerID: record.Desired.OwnerID,
 	})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -427,6 +432,9 @@ func (service *zoneCreationService) createZoneOnce(
 }
 
 func validateZoneCreationInput(input apiTypes.ZoneCreate) error {
+	if err := zonedns.Validate(input.Internal, input.AllowGPDNS); err != nil {
+		return err
+	}
 	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil {
 		return errs.New(errs.KindValidationFailed, "Zone creation requires a stable Environment id")
 	}
@@ -436,6 +444,11 @@ func validateZoneCreationInput(input apiTypes.ZoneCreate) error {
 	subnet, err := ipam.ParseIPv4Prefix(input.Subnet)
 	if err != nil || subnet.String() != input.Subnet {
 		return errs.New(errs.KindValidationFailed, "Zone subnet must be a canonical IPv4 CIDR")
+	}
+	if input.AllowGPDNS {
+		if _, err := zonedns.Gateway(input.Subnet); err != nil {
+			return err
+		}
 	}
 	return ipam.ValidateBridgeSubnet(subnet)
 }

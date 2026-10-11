@@ -19,11 +19,17 @@ func TestZoneRemovalFailureAndRetryPreserveBaselineDesiredRevision(t *testing.T)
 	fixture, tasks := beginAndClaimZoneRemoval(t)
 	ctx := context.Background()
 	failureAt := fixture.task.CreatedAt.Add(2 * time.Second)
-	failed, err := tasks.AcknowledgeControllerTask(ctx, fixture.task.ID, testtaskjournal.TaskStatusFailed, failureAt)
+	failed, err := tasks.AcknowledgeControllerTask(
+		ctx,
+		fixture.task.ID,
+		testtaskjournal.TaskStatusFailed,
+		nil,
+		failureAt,
+	)
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, fixture.task.ID, testtaskjournal.TaskStatusFailed, failureAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, fixture.task.ID, testtaskjournal.TaskStatusFailed, nil, failureAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(failed replay) error = %v", err)
 	}
 	assertZoneRemovalBaseline(t, fixture, fixture.task.ID, testtaskjournal.TaskStatusFailed)

@@ -22,7 +22,8 @@ func newComponentEnableCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			id := target(app, args[0])
-			configChanged := cmd.Flags().Changed("alias") || cmd.Flags().Changed("file") ||
+			configChanged := cmd.Flags().Changed("implementation") || cmd.Flags().Changed("alias") ||
+				cmd.Flags().Changed("file") ||
 				cmd.Flags().Changed("template-file") ||
 				cmd.Flags().Changed("zone") ||
 				cmd.Flags().Changed("create-zone") ||
@@ -55,8 +56,11 @@ func newComponentEnableCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(creations) > 0 && component.Kind != "caddy" && component.Kind != "cloudflare-tunnel" {
-				return fmt.Errorf("zone creation during enable is valid only for Caddy and Cloudflare Tunnel")
+			if len(creations) > 0 && component.Kind != "caddy" && component.Kind != "envoy" &&
+				component.Kind != "cloudflare-tunnel" {
+				return fmt.Errorf(
+					"zone creation during enable is valid only for Environment routers and Cloudflare Tunnel",
+				)
 			}
 			zoneIDs, err := resolveComponentZoneIDs(cmd, component.EnvironmentID, zones)
 			if err != nil {
@@ -96,7 +100,8 @@ func newComponentEnableCmd() *cobra.Command {
 	}
 	cmd.Flags().
 		StringVar(&configFile, "file", "", "read a Caddyfile template (Caddy) or complete JSON config (other kinds) from PATH, or -")
-	cmd.Flags().StringVar(&alias, "alias", "", "optional Caddy primary-Zone alias; empty clears it")
+	cmd.Flags().StringVar(&alias, "alias", "", "optional router primary-Zone alias; empty clears it")
+	cmd.Flags().String("implementation", "", "select caddy (HTTP) or envoy (HTTP/TCP/UDP) for the Environment router")
 	cmd.Flags().StringVar(&templateFile, "template-file", "", "read a CoreDNS Corefile template from PATH, or -")
 	cmd.Flags().StringArrayVar(&zones, "zone", nil, "repeatable Zone slug; with global --id, repeatable stable Zone id")
 	cmd.Flags().
@@ -114,13 +119,20 @@ func componentEnableConfig(
 	zoneIDs []string,
 	willCreateZones bool,
 ) (*apiTypes.ComponentConfigMutationInput, error) {
-	if cmd.Flags().Changed("alias") && component.Kind != "caddy" {
-		return nil, fmt.Errorf("--alias is valid only for Caddy")
+	var err error
+	component, err = componentProxySelection(cmd, component)
+	if err != nil {
+		return nil, err
+	}
+	if cmd.Flags().Changed("alias") && component.Kind != "caddy" && component.Kind != "envoy" {
+		return nil, fmt.Errorf("--alias is valid only for Caddy or Envoy")
 	}
 	if templateFile != "" && component.Kind != "coredns" {
 		return nil, fmt.Errorf("--template-file is valid only for CoreDNS")
 	}
 	switch component.Kind {
+	case "envoy":
+		return componentEnvoyConfig(cmd, component, configFile, zoneIDs)
 	case "caddy":
 		if templateFile != "" {
 			return nil, fmt.Errorf("config for Caddy accepts --file, --zone, and Zone creation flags only")
@@ -232,6 +244,9 @@ func componentEnableConfig(
 }
 
 func appendComponentZoneIDs(input *apiTypes.ComponentConfigMutationInput, zoneIDs []string) {
+	if input.Envoy != nil {
+		input.Envoy.ZoneIDs = append(input.Envoy.ZoneIDs, zoneIDs...)
+	}
 	if input.Caddy != nil {
 		input.Caddy.ZoneIDs = append(input.Caddy.ZoneIDs, zoneIDs...)
 	}

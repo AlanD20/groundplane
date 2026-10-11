@@ -48,24 +48,34 @@ func TestVolumeListRouteProjectsEnvironmentScopedPage(t *testing.T) {
 func TestVolumeListRoutePreservesDetailProjection(t *testing.T) {
 	reader := &volumeViewTestReader{}
 	server := New(nil, nil, Options{Volumes: reader})
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/volumes?environment=env_01AAAAAAAAAAAAAAAAAAAAAAAA&limit=3&cursor=next", nil)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/volumes?environment=env_01AAAAAAAAAAAAAAAAAAAAAAAA&limit=3&cursor=next",
+		nil,
+	)
 	response := httptest.NewRecorder()
 	server.HTTPHandler().ServeHTTP(response, request)
 	var page apiTypes.Page[apiTypes.Volume]
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil {
 		t.Fatalf("response = %d %s", response.Code, response.Body.String())
 	}
-	if len(page.Items) != 1 || page.Items[0].State != "active" || page.Items[0].Path != "/vol/uploads-data" || page.NextCursor != "after" {
+	if len(page.Items) != 1 || page.Items[0].State != "active" || page.Items[0].Path != "/vol/uploads-data" ||
+		page.NextCursor != "after" {
 		t.Fatalf("Volume detail fields lost in list: %#v", page)
 	}
-	if reader.environmentID != "env_01AAAAAAAAAAAAAAAAAAAAAAAA" || reader.request != (testkeyvalue.PageRequest{Limit: 3, Cursor: "next"}) {
+	if reader.environmentID != "env_01AAAAAAAAAAAAAAAAAAAAAAAA" ||
+		reader.request != (testkeyvalue.PageRequest{Limit: 3, Cursor: "next"}) {
 		t.Fatalf("scope/request = %q, %#v", reader.environmentID, reader.request)
 	}
 }
 
 type volumeViewTestReader struct{ volumeRouteTestReader }
 
-func (reader *volumeViewTestReader) ListVolumeViews(ctx context.Context, environmentID string, request testkeyvalue.PageRequest) (apiTypes.Page[apiTypes.Volume], error) {
+func (reader *volumeViewTestReader) ListVolumeViews(
+	ctx context.Context,
+	environmentID string,
+	request testkeyvalue.PageRequest,
+) (apiTypes.Page[apiTypes.Volume], error) {
 	page, err := reader.ListVolumes(ctx, environmentID, request)
 	if err != nil {
 		return apiTypes.Page[apiTypes.Volume]{}, err

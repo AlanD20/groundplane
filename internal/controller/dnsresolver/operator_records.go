@@ -16,6 +16,28 @@ type DNSRecordsResolver interface {
 		[]core.DNSRecord,
 		int64,
 	) ([]platformcomponents.PlatformDNSHost, []keyvalue.Condition, error)
+	ResolveEnvironmentDNS(
+		context.Context,
+		int64,
+	) (platformcomponents.EnvironmentDNSResolution, []keyvalue.Condition, error)
+}
+
+// Preview and Task planning use one combined record selection. Resolver policy
+// stays platform-owned; Environment declarations contribute only owned answers.
+func resolveManagedRecords(
+	ctx context.Context, resolver DNSRecordsResolver, records []core.DNSRecord, revision int64,
+) ([]platformcomponents.PlatformDNSHost, []keyvalue.Condition, []platformcomponents.EnvironmentDNSCapture, error) {
+	hosts, conditions, err := resolver.ResolveDNSRecords(ctx, records, revision)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	environments, environmentConditions, err := resolver.ResolveEnvironmentDNS(ctx, revision)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	hosts = append(hosts, environments.Hosts...)
+	conditions = append(conditions, environmentConditions...)
+	return hosts, conditions, environments.Captures, nil
 }
 
 func mergeResolverHosts(

@@ -42,6 +42,20 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 	if task.Type == taskjournal.TaskScript {
 		return nil, nil
 	}
+	if status == taskjournal.TaskStatusCompleted || len(result.RollingEvidence) != 0 {
+		rollingConditions, err := repository.rollingCompletionConditions(
+			ctx,
+			task,
+			assignment,
+			status,
+			*result,
+			current.Task.ReadRevision,
+		)
+		if err != nil {
+			return nil, err
+		}
+		conditions = append(conditions, rollingConditions...)
+	}
 	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
 		result.Diagnostic != taskjournal.TaskResultDiagnosticTimeoutBeforeEffect || result.ReconciliationRequired {
 		if task.Type == taskjournal.TaskUpdate && result.ReconciliationRequired {

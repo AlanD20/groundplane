@@ -20,7 +20,6 @@ func validateImageFetchTask(record TaskRecord) error {
 		record.TimeoutSeconds != imagefetch.TimeoutSeconds || record.RenderGeneration != 1 ||
 		len(record.Steps) != 0 || len(record.Materializations) != 0 || record.Configuration != nil ||
 		record.EntryRuntime != nil ||
-		record.Result != nil ||
 		len(record.ComponentActionStepIDs) != 0 ||
 		len(record.ManagedComponentTeardownSources) != 0 {
 		return errs.New(errs.KindValidationFailed, "image fetch Task authority is invalid")

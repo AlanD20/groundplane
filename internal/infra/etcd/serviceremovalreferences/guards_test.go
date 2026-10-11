@@ -10,6 +10,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -66,10 +68,18 @@ func TestPrepareServiceRemovalReferenceGuards(t *testing.T) {
 			t.Fatal(err)
 		}
 		conditions := guards.Conditions()
-		if len(conditions) != 1 || conditions[0] != (etcdstore.Condition{
-			Key: groupstore.ReleaseGroupCollectionEpochKey(environmentID),
-		}) {
-			t.Fatalf("reference guards = %#v", conditions)
+		for _, expected := range []etcdstore.Condition{
+			{Key: groupstore.ReleaseGroupCollectionEpochKey(environmentID)},
+			{Key: backingchecks.ServiceReferencePrefix(serviceID), Prefix: true},
+			{Key: edgechecks.ServiceReferencePrefix(serviceID), Prefix: true},
+		} {
+			found := false
+			for _, condition := range conditions {
+				found = found || condition == expected
+			}
+			if !found {
+				t.Fatalf("removal omitted reference fence %#v: %#v", expected, conditions)
+			}
 		}
 	})
 }

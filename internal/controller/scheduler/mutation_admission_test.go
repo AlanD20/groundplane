@@ -39,15 +39,17 @@ func (schedules *nativeAdmissionBackupSchedules) RunBackupSchedules(context.Cont
 // QA: UP-10; scheduler calls against fake stores, not durable trial recovery.
 func TestNativeMutationAdmissionPausesScheduler(t *testing.T) {
 	tasks, markers, agents, schedules := &fakeTaskExpiration{}, &fakeIdempotencyPruning{}, &fakeStaleAgentExpiration{}, &nativeAdmissionBackupSchedules{}
+	blueprintRevisions := &fakeBlueprintRevisionCleanup{}
 	admission := &closedMutationAdmission{}
 	scheduler := &Scheduler{
 		admission: admission, tasks: tasks, idempotency: markers, agents: agents,
-		backupSchedules: schedules, now: time.Now,
+		blueprintRevisions: blueprintRevisions, backupSchedules: schedules, now: time.Now,
 	}
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if tasks.calls != 0 || tasks.pruneCalls != 0 || markers.calls != 0 || agents.calls != 0 || schedules.calls != 0 ||
+	if tasks.calls != 0 || tasks.pruneCalls != 0 || markers.calls != 0 || agents.calls != 0 ||
+		blueprintRevisions.calls != 0 || schedules.calls != 0 ||
 		!scheduler.nextPrune.IsZero() {
 		t.Fatal("trial scheduler reached ordinary durable mutation")
 	}
@@ -59,7 +61,8 @@ func TestNativeMutationAdmissionPausesScheduler(t *testing.T) {
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if tasks.calls != 1 || tasks.pruneCalls != 1 || markers.calls != 1 || agents.calls != 1 || schedules.calls != 1 {
+	if tasks.calls != 1 || tasks.pruneCalls != 1 || markers.calls != 1 || agents.calls != 1 ||
+		blueprintRevisions.calls != 1 || schedules.calls != 1 {
 		t.Fatal("scheduler did not resume")
 	}
 }

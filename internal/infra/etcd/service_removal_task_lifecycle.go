@@ -6,6 +6,7 @@ import (
 
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -13,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -48,6 +50,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
+	assignment taskassignments.TaskAssignmentRecord,
 ) (routeTaskChange, error) {
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentchanges.ServiceRemovalIntentKey(task.ID)}, Revision: revision,
@@ -167,6 +170,13 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		return routeTaskChange{}, err
 	}
 	change.conditions = append(change.conditions, scriptConditions...)
+	dnsConditions, err := dnsrecords.NewReader(repository.store).
+		RequireDNSUnreferenced(ctx, intent.ServiceID, "", revision)
+	if err != nil {
+		clearRouteTaskChange(change)
+		return routeTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, dnsConditions...)
 	addresses, err := networkreservations.PrepareProxyAddressRelease(ctx, repository.store, intent.ServiceID, revision)
 	if err != nil {
 		clearRouteTaskChange(change)
@@ -243,6 +253,21 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: serviceruntimerecord.Key(intent.ServiceID)},
 	)
+	receipt, err := repository.prepareDirectServiceRemovalReceipt(ctx, task, assignment, intent, revision)
+	if err != nil {
+		clearRouteTaskChange(change)
+		return routeTaskChange{}, err
+	}
+	change.conditions, err = appendRemovalComparisons(change.conditions, receipt.Conditions())
+	if err != nil {
+		receipt.Clear()
+		clearRouteTaskChange(change)
+		return routeTaskChange{}, err
+	}
+	change.mutations = append(change.mutations, receipt.Mutations()...)
+	for _, mutation := range receipt.Mutations() {
+		change.values = append(change.values, mutation.Value)
+	}
 	return change, nil
 }
 

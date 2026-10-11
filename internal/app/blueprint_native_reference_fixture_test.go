@@ -44,7 +44,9 @@ func (fault *blueprintNativeReferenceReadFault) GetMany(
 	return read, nil
 }
 
-func (fixture *ExecutedArtifactFixture) AssertBlueprintNativeReferenceRejection(t *testing.T, task etcd.TaskRecord) {
+func (fixture *ExecutedArtifactFixture) AssertBlueprintNativeReferenceRejection(
+	t *testing.T, task etcd.TaskRecord, foreignServiceID string,
+) {
 	t.Helper()
 	ctx := context.Background()
 	key := testreleases.ReleasePublicationKey(task.Params[testreleaserender.TaskReleasePublicationParam])
@@ -56,8 +58,9 @@ func (fixture *ExecutedArtifactFixture) AssertBlueprintNativeReferenceRejection(
 		stored.Entry.Value,
 		"release-publication",
 	)
-	if err != nil || len(marker.NativePredecessors) != 2 || marker.NativePredecessors[0].Serving == nil {
-		t.Fatalf("native reference fixture must own two running predecessors: %v", err)
+	if err != nil || len(marker.NativePredecessors) != 1 || marker.NativePredecessors[0].Serving == nil ||
+		marker.NativePredecessors[0].ServiceID == foreignServiceID {
+		t.Fatalf("native reference fixture must own only its selected running predecessor: %v", err)
 	}
 	marker.NativePredecessors[0].PriorRuntimeSHA256 = strings.Repeat("b", 64)
 	changedMarker, err := testreleases.EncodeReleaseRecord("release-publication", marker)
@@ -70,7 +73,8 @@ func (fixture *ExecutedArtifactFixture) AssertBlueprintNativeReferenceRejection(
 	}
 	renderKey := testreleases.ReleaseRenderInputStagingKey(input.PublicationID, input.Members[0].Intent.ID)
 	render := input.Members[0].Render
-	render.PriorRuntime.CurrentArtifact = slices.Clone(input.Members[1].Render.PriorRuntime.CurrentArtifact)
+	foreign := fixture.AcknowledgedRuntime(t, foreignServiceID)
+	render.PriorRuntime.CurrentArtifact = slices.Clone(foreign.Record.Runtime.CurrentArtifact)
 	changedRaw, err := json.Marshal(render)
 	if err != nil {
 		t.Fatal(err)

@@ -2,16 +2,15 @@ package agentchannel
 
 import (
 	"context"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	"sync"
 	"time"
-	"unicode/utf8"
 )
 
 const (
 	maximumTaskAbortReasonBytes = 128
-	maximumAgentVersionBytes    = 128
 )
 
 // Snapshot is the non-secret, point-in-time state of an Agent session.
@@ -23,6 +22,7 @@ type Snapshot struct {
 	LastReady          time.Time
 	Capacity           int32
 	Version            string
+	Source             buildversion.BuildProvenance
 }
 
 // Registry owns the single active session for each Agent.
@@ -260,6 +260,7 @@ func (r *Registry) Snapshot(agentID string) (Snapshot, bool) {
 		LastReady:          state.lastReady,
 		Capacity:           state.capacity,
 		Version:            state.version,
+		Source:             state.source,
 	}, true
 }
 
@@ -267,8 +268,5 @@ func validateReady(capacity int32, version string) error {
 	if capacity < 0 {
 		return errs.New(errs.KindValidationFailed, "agent Ready capacity must be non-negative")
 	}
-	if version == "" || len(version) > maximumAgentVersionBytes || !utf8.ValidString(version) {
-		return errs.New(errs.KindValidationFailed, "agent Ready version is invalid")
-	}
-	return nil
+	return (buildversion.BuildIdentity{Version: version}).Validate()
 }

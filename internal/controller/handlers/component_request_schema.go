@@ -17,6 +17,7 @@ func componentConfigSchema(registry huma.Registry) *huma.Schema {
 	schema.Required = nil
 	schema.OneOf = []*huma.Schema{
 		caddyComponentConfigSchema(),
+		envoyComponentConfigSchema(),
 		cloudflareTunnelComponentConfigResponseSchema(),
 		coreDNSComponentConfigSchema(),
 	}
@@ -24,7 +25,9 @@ func componentConfigSchema(registry huma.Registry) *huma.Schema {
 	if componentSchema := registry.SchemaFromRef(componentReference.Ref); componentSchema != nil &&
 		componentSchema.Properties != nil {
 		componentSchema.Properties["config"] = nullableComponentConfigSchema(reference.Ref)
+		componentSchema.PrecomputeMessages()
 	}
+	schema.PrecomputeMessages()
 	return reference
 }
 
@@ -45,6 +48,7 @@ func componentConfigResponseSchema(registry huma.Registry) *huma.Schema {
 		Type:  huma.TypeArray,
 		Items: &huma.Schema{Ref: managedFileReference.Ref},
 	}
+	schema.PrecomputeMessages()
 	return reference
 }
 
@@ -61,9 +65,11 @@ func componentConfigMutationRequestSchema(registry huma.Registry) *huma.Schema {
 	schema.MaxProperties = &one
 	schema.Properties["config"] = &huma.Schema{OneOf: []*huma.Schema{
 		caddyComponentConfigSchema(),
+		envoyComponentConfigSchema(),
 		cloudflareTunnelComponentConfigSchema(),
 		coreDNSComponentConfigSchema(),
 	}}
+	schema.PrecomputeMessages()
 	return reference
 }
 
@@ -76,14 +82,15 @@ func componentEnableRequestSchema(registry huma.Registry) *huma.Schema {
 	schema.AdditionalProperties = false
 	schema.Required = nil
 	schema.Properties = map[string]*huma.Schema{"config": {OneOf: []*huma.Schema{
-		caddyComponentConfigSchema(), cloudflareTunnelComponentConfigSchema(),
+		caddyComponentConfigSchema(), envoyComponentConfigSchema(), cloudflareTunnelComponentConfigSchema(),
 	}}}
+	schema.PrecomputeMessages()
 	return reference
 }
 
 func coreDNSComponentConfigSchema() *huma.Schema {
-	five := 5
 	six := 6
+	seven := 7
 	resolverList := &huma.Schema{
 		Type:  huma.TypeArray,
 		Items: &huma.Schema{Type: huma.TypeString},
@@ -102,6 +109,7 @@ func coreDNSComponentConfigSchema() *huma.Schema {
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
 			"corefile_template": {Type: huma.TypeString},
+			"implementation":    componentImplementationSchema("coredns"),
 			"records": {
 				Type:  huma.TypeArray,
 				Items: &huma.Schema{OneOf: []*huma.Schema{dnsAddressRecordSchema(), dnsServiceRecordSchema()}},
@@ -112,41 +120,62 @@ func coreDNSComponentConfigSchema() *huma.Schema {
 			"tailnet_delegation": {Type: huma.TypeBoolean},
 		},
 		Required: []string{
+			"implementation",
 			"corefile_template",
 			"upstream_auto",
 			"upstream_resolvers",
 			"forwarders",
 			"tailnet_delegation",
 		},
-		MinProperties: &five,
-		MaxProperties: &six,
+		MinProperties: &six,
+		MaxProperties: &seven,
 	}
 }
 
 func caddyComponentConfigSchema() *huma.Schema {
-	one := 1
+	two := 2
+	four := 4
+	return &huma.Schema{
+		Type:                 huma.TypeObject,
+		AdditionalProperties: false,
+		Properties: map[string]*huma.Schema{
+			"implementation":     componentImplementationSchema("caddy"),
+			"zone_ids":           componentZoneIDsSchema(),
+			"caddyfile_template": {Type: huma.TypeString},
+			"alias":              {Type: huma.TypeString, Pattern: "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$"},
+		},
+		Required:      []string{"implementation", "zone_ids"},
+		MinProperties: &two,
+		MaxProperties: &four,
+	}
+}
+
+func envoyComponentConfigSchema() *huma.Schema {
+	two := 2
+	three := 3
+	return &huma.Schema{
+		Type: huma.TypeObject, AdditionalProperties: false,
+		Properties: map[string]*huma.Schema{
+			"implementation": componentImplementationSchema("envoy"),
+			"zone_ids":       componentZoneIDsSchema(),
+			"alias":          {Type: huma.TypeString, Pattern: "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$"},
+		},
+		Required: []string{"implementation", "zone_ids"}, MinProperties: &two, MaxProperties: &three,
+	}
+}
+
+func componentImplementationSchema(implementation string) *huma.Schema {
+	return &huma.Schema{Type: huma.TypeString, Enum: []any{implementation}}
+}
+
+func cloudflareTunnelComponentConfigSchema() *huma.Schema {
 	three := 3
 	return &huma.Schema{
 		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
-			"zone_ids":           componentZoneIDsSchema(),
-			"caddyfile_template": {Type: huma.TypeString},
-			"alias":              {Type: huma.TypeString, Pattern: "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$"},
-		},
-		Required:      []string{"zone_ids"},
-		MinProperties: &one,
-		MaxProperties: &three,
-	}
-}
-
-func cloudflareTunnelComponentConfigSchema() *huma.Schema {
-	two := 2
-	return &huma.Schema{
-		Type:                 huma.TypeObject,
-		AdditionalProperties: false,
-		Properties: map[string]*huma.Schema{
-			"zone_ids": componentZoneIDsSchema(),
+			"implementation": componentImplementationSchema("cloudflare-tunnel"),
+			"zone_ids":       componentZoneIDsSchema(),
 			"credential": {
 				OneOf: []*huma.Schema{
 					cloudflareTunnelExistingCredentialSchema(),
@@ -154,27 +183,28 @@ func cloudflareTunnelComponentConfigSchema() *huma.Schema {
 				},
 			},
 		},
-		Required:      []string{"zone_ids", "credential"},
-		MinProperties: &two,
-		MaxProperties: &two,
+		Required:      []string{"implementation", "zone_ids", "credential"},
+		MinProperties: &three,
+		MaxProperties: &three,
 	}
 }
 
 func cloudflareTunnelComponentConfigResponseSchema() *huma.Schema {
-	two := 2
+	three := 3
 	return &huma.Schema{
 		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
-			"zone_ids": componentZoneIDsSchema(),
+			"implementation": componentImplementationSchema("cloudflare-tunnel"),
+			"zone_ids":       componentZoneIDsSchema(),
 			"secret_id": {
 				Type:    huma.TypeString,
 				Pattern: "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
 			},
 		},
-		Required:      []string{"zone_ids", "secret_id"},
-		MinProperties: &two,
-		MaxProperties: &two,
+		Required:      []string{"implementation", "zone_ids", "secret_id"},
+		MinProperties: &three,
+		MaxProperties: &three,
 	}
 }
 
