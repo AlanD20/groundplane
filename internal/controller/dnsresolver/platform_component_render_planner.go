@@ -189,7 +189,10 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 	if err != nil {
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
-	referenceConditions = append(referenceConditions, zoneSelection.Conditions...)
+	referenceConditions, err = mergeResolverConditions(referenceConditions, zoneSelection.Conditions)
+	if err != nil {
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
+	}
 	generatedServiceID := ""
 	switch len(desired.GeneratedServices) {
 	case 0:

@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
 )
 
@@ -36,8 +37,34 @@ func resolveManagedRecords(
 		return nil, nil, nil, err
 	}
 	hosts = append(hosts, environments.Hosts...)
-	conditions = append(conditions, environmentConditions...)
+	conditions, err = mergeResolverConditions(conditions, environmentConditions)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	return hosts, conditions, environments.Captures, nil
+}
+
+// Record and listener selection share generation and owner fences. Keep each
+// exact comparison once; disagreement cannot be resolved by dropping a fence.
+func mergeResolverConditions(groups ...[]keyvalue.Condition) ([]keyvalue.Condition, error) {
+	byKey := make(map[string]keyvalue.Condition)
+	var merged []keyvalue.Condition
+	for _, conditions := range groups {
+		for _, condition := range conditions {
+			if previous, found := byKey[condition.Key]; found {
+				if previous != condition {
+					return nil, errs.New(
+						errs.KindStateConflict,
+						"DNS sources changed while capturing resolver configuration",
+					)
+				}
+				continue
+			}
+			byKey[condition.Key] = condition
+			merged = append(merged, condition)
+		}
+	}
+	return merged, nil
 }
 
 func mergeResolverHosts(
