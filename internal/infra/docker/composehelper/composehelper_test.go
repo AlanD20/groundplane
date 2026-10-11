@@ -243,11 +243,11 @@ func TestExecuteConfigFailureStopsBeforeMutation(t *testing.T) {
 	fake := runner.NewFake()
 	fake.RunFunc = func(context.Context, runner.RunCmdOpts) (runner.Result, error) {
 		return runner.Result{
-			ExitCode: 15,
-			Stderr:   []byte("secret-like raw diagnostic"),
-		}, errors.New(
-			"exit status 15",
-		)
+				ExitCode: 15,
+				Stderr:   []byte("secret-like raw diagnostic"),
+			}, errors.New(
+				"exit status 15",
+			)
 	}
 	response, err := Execute(context.Background(), fake, validRequest(t))
 	if err != nil {

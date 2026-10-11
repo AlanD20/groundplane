@@ -38,16 +38,16 @@ func PreparePublication(record Record) ([]keyvalue.Condition, []keyvalue.Mutatio
 	operation := OperationKey(record.Owner.OperationID)
 	environmentReference := EnvironmentReferenceKey(record.Owner.EnvironmentID, record.Owner.TaskID)
 	return []keyvalue.Condition{
-		{Key: key},
-		{Key: reference},
-		{Key: operation},
-		{Key: environmentReference},
-	}, []keyvalue.Mutation{
-		{Type: keyvalue.MutationPut, Key: key, Value: value},
-		{Type: keyvalue.MutationPut, Key: reference, Value: []byte(record.Owner.TaskID)},
-		{Type: keyvalue.MutationPut, Key: operation, Value: []byte(record.Owner.TaskID)},
-		{Type: keyvalue.MutationPut, Key: environmentReference, Value: []byte(record.Owner.TaskID)},
-	}, nil
+			{Key: key},
+			{Key: reference},
+			{Key: operation},
+			{Key: environmentReference},
+		}, []keyvalue.Mutation{
+			{Type: keyvalue.MutationPut, Key: key, Value: value},
+			{Type: keyvalue.MutationPut, Key: reference, Value: []byte(record.Owner.TaskID)},
+			{Type: keyvalue.MutationPut, Key: operation, Value: []byte(record.Owner.TaskID)},
+			{Type: keyvalue.MutationPut, Key: environmentReference, Value: []byte(record.Owner.TaskID)},
+		}, nil
 }
 
 func (repository *Repository) Load(ctx context.Context, taskID string) (keyvalue.Versioned[Record], error) {

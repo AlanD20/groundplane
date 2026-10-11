@@ -17,11 +17,11 @@ func (runtime *Runtime) componentRestoration(
 	procedure := assignment.Plan.GetComponentRecoveryProcedure()
 	if procedure == nil {
 		return StepResult{
-			ReconciliationRequired: true,
-		}, errs.New(
-			errs.KindInternal,
-			"agent: Component recovery procedure is absent",
-		)
+				ReconciliationRequired: true,
+			}, errs.New(
+				errs.KindInternal,
+				"agent: Component recovery procedure is absent",
+			)
 	}
 	artifactID, serviceID, projectName, target := componentRestorationTarget(procedure)
 	artifact := taskassignment.ComposeArtifact(assignment.Plan, artifactID)
@@ -33,11 +33,11 @@ func (runtime *Runtime) componentRestoration(
 	if artifactID == "" || serviceID == "" || projectName == "" || artifact == nil ||
 		target == agentpb.ComponentRestorationTarget_COMPONENT_RESTORATION_TARGET_UNSPECIFIED {
 		return StepResult{
-			ReconciliationRequired: true,
-		}, errs.New(
-			errs.KindInternal,
-			"agent: Component recovery target is invalid",
-		)
+				ReconciliationRequired: true,
+			}, errs.New(
+				errs.KindInternal,
+				"agent: Component recovery target is invalid",
+			)
 	}
 	names, err := composeNamesForServiceIDs(artifact, []string{serviceID})
 	if err != nil {
@@ -114,11 +114,11 @@ func (runtime *Runtime) componentRestoration(
 	}
 	if step.GetComponentRestorationCompensate() == nil {
 		return StepResult{
-			ReconciliationRequired: true,
-		}, errs.New(
-			errs.KindInternal,
-			"agent: Component recovery step is invalid",
-		)
+				ReconciliationRequired: true,
+			}, errs.New(
+				errs.KindInternal,
+				"agent: Component recovery step is invalid",
+			)
 	}
 	var proofObservation *agentpb.ObservedProject
 	result, err := runtime.mutate(ctx, assignment, step, artifactID, func(observed *agentpb.ObservedProject) error {

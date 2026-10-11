@@ -18,20 +18,20 @@ func (runtime *Runtime) serviceAbsence(
 	artifact := taskassignment.ComposeArtifact(assignment.Plan, procedure.GetArtifactId())
 	if procedure == nil || artifact == nil || procedure.GetServiceId() == "" || artifact.GetProjectName() == "" {
 		return StepResult{
-			ReconciliationRequired: true,
-		}, errs.New(
-			errs.KindInternal,
-			"agent: Service absence authority is invalid",
-		)
+				ReconciliationRequired: true,
+			}, errs.New(
+				errs.KindInternal,
+				"agent: Service absence authority is invalid",
+			)
 	}
 	names, err := composeNamesForServiceIDs(artifact, []string{procedure.GetServiceId()})
 	if err != nil || len(names) != len(artifact.GetServices()) {
 		return StepResult{
-			ReconciliationRequired: true,
-		}, errs.New(
-			errs.KindInternal,
-			"agent: Service absence identity is incomplete",
-		)
+				ReconciliationRequired: true,
+			}, errs.New(
+				errs.KindInternal,
+				"agent: Service absence identity is incomplete",
+			)
 	}
 	slices.Sort(names)
 	services, err := convergenceServices(artifact, names)
@@ -73,11 +73,11 @@ func (runtime *Runtime) serviceAbsence(
 	if remove == nil || remove.GetArtifactId() != procedure.GetArtifactId() ||
 		!slices.Equal(remove.GetServiceIds(), []string{procedure.GetServiceId()}) || remove.GetWholeProject() {
 		return StepResult{
-			ReconciliationRequired: true,
-		}, errs.New(
-			errs.KindInternal,
-			"agent: Service absence mutation is invalid",
-		)
+				ReconciliationRequired: true,
+			}, errs.New(
+				errs.KindInternal,
+				"agent: Service absence mutation is invalid",
+			)
 	}
 	before, observeErr := runtime.observer.Observe(ctx, assignment.Plan, procedure.GetArtifactId())
 	if observeErr != nil {
