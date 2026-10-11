@@ -128,8 +128,14 @@ def install(source: Path, output: Path, version: str, identity: str,
             runtime_tag = f"localhost:5000/groundplane-agent:ref-{identity}"
             run("docker", "tag", tags[0], runtime_tag)
             run("docker", "--config", "/etc/groundplane/registry/client", "push", runtime_tag)
-            image = subprocess.check_output(["docker", "image", "inspect", runtime_tag,
-                                            "--format", "{{index .RepoDigests 0}}"], text=True).strip()
+            digests = json.loads(subprocess.check_output(
+                ["docker", "image", "inspect", runtime_tag, "--format", "{{json .RepoDigests}}"], text=True))
+            repository = runtime_tag.rsplit(":", 1)[0]
+            images = [digest for digest in digests
+                      if re.fullmatch(re.escape(repository) + r"@sha256:[0-9a-f]{64}", digest)]
+            if len(images) != 1:
+                raise ValueError("published Agent image has no unique GP registry digest")
+            image = images[0]
             install_agent.install(image)
             return
         selected_agent = tags[0]
