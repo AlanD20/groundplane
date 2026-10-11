@@ -17,7 +17,7 @@ const (
 
 var fixedEnvironment = []string{
 	"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-	"HOME=/nonexistent",
+	"HOME=" + WorkDirectory,
 	"DOCKER_HOST=unix:///var/run/docker.sock",
 	"COMPOSE_DISABLE_ENV_FILE=1",
 	"COMPOSE_PARALLEL_LIMIT=1",
