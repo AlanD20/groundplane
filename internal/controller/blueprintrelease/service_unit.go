@@ -67,6 +67,14 @@ func (service *Service) PrepareServiceUnit(
 	if err != nil {
 		return Prepared{}, err
 	}
+	// Waiting for another file writer is normal coordinator scheduling. Check
+	// before staging a new rollout so each waiting pass cannot leave an unused
+	// Release manifest and render inputs. Final preparation still rechecks the
+	// captured configuration head before publication.
+	input.Task, err = service.prepareTaskConfiguration(ctx, input.Task, scope.ReadRevision)
+	if err != nil {
+		return Prepared{}, err
+	}
 	preparedInput, err := service.prepareServiceUnitInput(ctx, input, scope, replacement)
 	if err != nil {
 		return Prepared{}, err
