@@ -9,6 +9,16 @@ import (
 )
 
 func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord) bool {
+	if etcd.IsAuthoredBlueprintPreparationTask(task) {
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
+	}
+	if task.Type == taskjournal.TaskUpdate && task.Actor == taskjournal.TaskActorSystem &&
+		task.Executor == taskjournal.TaskExecutorAgent && task.Target == task.Owner.EnvironmentID &&
+		ids.Validate(ids.KindEnvironment, task.Target) == nil && len(task.Params) == 1 &&
+		ids.Validate(ids.KindTask, task.Params[taskjournal.TaskReleaseNetworkParentParam]) == nil &&
+		task.Params[taskjournal.TaskReleaseNetworkParentParam] != task.ID {
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	}
 	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute &&
 		(task.Type == taskjournal.TaskCreate || task.Type == taskjournal.TaskUpdate) {
 		return ids.Validate(ids.KindRoute, task.Target) == nil &&

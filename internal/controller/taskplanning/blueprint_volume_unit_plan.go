@@ -181,7 +181,7 @@ func (resolver *TaskPlanResolver) buildBlueprintVolumeUnitPlan(
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
 		Operation:        agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
-		TargetID:         environmentID, Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
+		TargetID:         task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
 	})
 }
 

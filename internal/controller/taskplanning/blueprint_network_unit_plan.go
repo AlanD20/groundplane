@@ -199,7 +199,7 @@ func (resolver *TaskPlanResolver) buildBlueprintNetworkUnitPlan(
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
 		Operation:        agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
-		TargetID:         environmentID, Artifacts: []*agentpb.ComposeArtifact{artifact},
+		TargetID:         task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
 		Steps: []*agentpb.ExecutionStep{step},
 	})
 }

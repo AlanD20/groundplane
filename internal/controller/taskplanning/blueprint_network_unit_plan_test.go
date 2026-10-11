@@ -106,7 +106,7 @@ networks:
 	ensure := first.GetSteps()[0].GetManagedNetworkEnsure()
 	if !bytes.Equal(first.GetPlanHash(), second.GetPlanHash()) || !proto.Equal(first, second) ||
 		first.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
-		first.GetTargetId() != environmentID || len(first.GetArtifacts()) != 1 ||
+		first.GetTargetId() != task.Target || len(first.GetArtifacts()) != 1 ||
 		len(first.GetArtifacts()[0].GetNetworks()) != 1 || len(first.GetArtifacts()[0].GetServices()) != 0 ||
 		ensure.GetNetworkId() != networkID || ensure.GetArtifactId() != first.GetArtifacts()[0].GetArtifactId() {
 		t.Fatalf("Blueprint Network plans diverged: first=%#v second=%#v", first, second)

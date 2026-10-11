@@ -106,7 +106,7 @@ volumes:
 	artifact := first.GetArtifacts()[0]
 	if !bytes.Equal(first.GetPlanHash(), second.GetPlanHash()) || !proto.Equal(first, second) ||
 		first.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
-		first.GetTargetId() != environmentID || len(first.GetArtifacts()) != 1 ||
+		first.GetTargetId() != task.Target || len(first.GetArtifacts()) != 1 ||
 		len(artifact.GetVolumes()) != 1 || len(artifact.GetServices()) != 0 || len(artifact.GetNetworks()) != 0 ||
 		len(first.GetSteps()) != 2 || directories.GetArtifactId() != artifact.GetArtifactId() ||
 		len(directories.GetVolumeIds()) != 1 || directories.GetVolumeIds()[0] != volumeID ||
