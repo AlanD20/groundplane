@@ -25,22 +25,28 @@ func runtimeConfigurationHeadKey(environmentID string) string {
 func (repository *HierarchyRepository) requireSettledEnvironmentConfiguration(
 	ctx context.Context, environmentID string, revision int64,
 ) error {
+	return requireSettledConfiguration(ctx, repository.store, environmentID, "", revision, errs.KindStateConflict)
+}
+
+func requireSettledConfiguration(
+	ctx context.Context, store hierarchyStore, environmentID, taskID string, revision int64, kind errs.Kind,
+) error {
 	page, err := recordquery.ListVisibleIndex(
-		ctx, repository.store, "tasks", "environment", environmentID,
+		ctx, store, "tasks", "environment", environmentID,
 		taskjournal.TaskEnvironmentIndexPrefix+environmentID+"/",
 		taskjournal.TaskStorageKey, ids.KindTask,
 		etcdstore.PageRequest{Limit: 1, Revision: revision},
 		DecodeTaskRecord, func(task TaskRecord) string { return task.ID },
 		func(task TaskRecord) bool { return task.Owner.EnvironmentID == environmentID },
 		func(task TaskRecord) bool {
-			return task.Configuration != nil && !connectorCheckTask(task) &&
+			return task.ID != taskID && task.Configuration != nil && !connectorCheckTask(task) &&
 				!taskjournal.IsTerminalTaskStatus(task.Status)
 		},
 	)
 	if err != nil || len(page.Items) == 0 {
 		return err
 	}
-	return errs.Newf(errs.KindStateConflict,
+	return errs.Newf(kind,
 		"Environment configuration is still being applied by Task %s; wait for it to finish",
 		page.Items[0].Record.ID)
 }
@@ -53,6 +59,12 @@ func (ledger *ReleaseLedger) PrepareTaskConfigurationAtRevision(
 			errs.KindInternal,
 			"Release configuration repository is not configured",
 		)
+	}
+	// Pending writers count too: a queued Task has already captured the prior
+	// file head. Seal the next child only after that writer acknowledges or
+	// proves restoration, rather than queuing two incompatible predecessors.
+	if err := requireSettledConfiguration(ctx, ledger.store, task.Owner.EnvironmentID, task.ID, revision, errs.KindResourceInUse); err != nil {
+		return TaskRecord{}, err
 	}
 	return prepareRuntimeConfigurationTask(ctx, ledger.store, task, revision)
 }

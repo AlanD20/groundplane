@@ -179,13 +179,25 @@ func (service *Service) Prepare(
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
+	allocate := func(kind ids.Kind, name string) string { return ids.DeriveAt(kind, createdAt, child.PlanID, name) }
+	child, prefixSteps, err := service.prepareAuthoredServiceFiles(
+		ctx,
+		child,
+		projection.Record,
+		input,
+		artifact,
+		allocate,
+	)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
 	prepared, err := service.blueprintReleases.PrepareServiceUnit(
 		ctx,
 		blueprintrelease.PrepareServiceUnitInput{
 			ServiceID: unit.Target.ID, Projection: projection.Record,
-			Scripts: scripts,
-			Task:    child, CreatedAt: createdAt,
-			AllocateNamed: func(kind ids.Kind, _ string) string { return ids.New(kind) },
+			Scripts: scripts, PrefixSteps: prefixSteps,
+			Task: child, CreatedAt: createdAt,
+			AllocateNamed: allocate,
 		},
 	)
 	if err != nil {

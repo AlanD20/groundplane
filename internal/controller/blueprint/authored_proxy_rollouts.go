@@ -41,6 +41,10 @@ func (service *Service) prepareAuthoredProxyServiceRollouts(ctx context.Context,
 			return nil, errs.New(errs.KindStateConflict, "Blueprint Script set changed before router preparation")
 		}
 	}
+	input, err := service.loadAuthoredParentInput(ctx, parent)
+	if err != nil {
+		return nil, err
+	}
 	var result []componentplanning.ProxyServiceRolloutReference
 	for _, source := range preflight.Services {
 		if !source.ReplacementRequired {
@@ -70,10 +74,21 @@ func (service *Service) prepareAuthoredProxyServiceRollouts(ctx context.Context,
 				scripts = append(scripts, script.Record)
 			}
 		}
+		child, prefixSteps, err := service.prepareAuthoredServiceFiles(
+			ctx,
+			child,
+			projection,
+			input,
+			artifact,
+			allocate,
+		)
+		if err != nil {
+			return nil, err
+		}
 		captured, err := service.blueprintReleases.CaptureProxyServiceRollout(ctx,
 			blueprintrelease.PrepareServiceUnitInput{
 				ServiceID: source.ServiceID, Projection: projection, Scripts: scripts,
-				Task: child, CreatedAt: child.CreatedAt, AllocateNamed: allocate,
+				Task: child, PrefixSteps: prefixSteps, CreatedAt: child.CreatedAt, AllocateNamed: allocate,
 			}, reference, preflight)
 		if err != nil {
 			return nil, err

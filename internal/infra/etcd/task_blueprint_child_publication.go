@@ -136,7 +136,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		)
 	}
 	configuration := configurationTaskPublication{task: child}
-	if componentChild || entryChild {
+	if componentChild || entryChild || releaseChild {
 		configuration, err = prepareConfigurationTaskPublication(ctx, repository.store, child, snapshot.ReadRevision)
 		if err != nil {
 			return keyvalue.Versioned[TaskRecord]{}, err
@@ -416,7 +416,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		conditions = append(conditions, attachPublication.conditions...)
 		mutations = append(mutations, attachPublication.mutations...)
 	}
-	if componentChild || entryChild {
+	if componentChild || entryChild || releaseChild {
 		if componentChild {
 			conditions = append(conditions, componentPublication.Conditions()...)
 			mutations = append(mutations, componentPublication.Mutations()...)

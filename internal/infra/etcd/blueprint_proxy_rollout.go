@@ -45,13 +45,17 @@ func (ledger *ReleaseLedger) StageBlueprintProxyServiceRollout(ctx context.Conte
 		preparation.Task.Owner.EnvironmentID != preparation.Input.EnvironmentID ||
 		preparation.Task.Params[taskjournal.TaskBlueprintParentParam] != preparation.Input.ParentTaskID ||
 		preparation.Task.Status != taskjournal.TaskStatusPending || preparation.Task.Configuration != nil ||
-		preparation.Task.Materializations != nil || len(preparation.Members) != 1 ||
+		len(preparation.Members) != 1 ||
 		len(preparation.Manifest.Record.Members) != 1 || preparation.Manifest.Revision <= 0 ||
 		preparation.Manifest.Record.OperationID != preparation.Task.OperationID {
 		return componentplanning.ProxyServiceRolloutReference{}, errs.New(
 			errs.KindValidationFailed,
 			"pre-switch Service rollout preparation is invalid",
 		)
+	}
+	if err := validateTaskMaterializationReferences(preparation.Task.Materializations, preparation.Task.Steps,
+		preparation.Input.EnvironmentID, true, uint64(preparation.Task.RenderGeneration)); err != nil {
+		return componentplanning.ProxyServiceRolloutReference{}, err
 	}
 	if err := validateBlueprintServiceRolloutTask(capture, preparation.Task); err != nil {
 		return componentplanning.ProxyServiceRolloutReference{}, err
@@ -166,13 +170,17 @@ func (ledger *ReleaseLedger) ReadBlueprintProxyServiceRollout(ctx context.Contex
 	}
 	if preparation.Input.EnvironmentID != environmentID || preparation.Input.ParentTaskID != parentID ||
 		preparation.Task.ID != reference.TaskID || preparation.Task.Status != taskjournal.TaskStatusPending ||
-		preparation.Task.Configuration != nil || preparation.Task.Materializations != nil ||
+		preparation.Task.Configuration != nil ||
 		len(preparation.Members) != 1 || preparation.Members[0].Intent.ServiceID != reference.ServiceID ||
 		preparation.Manifest.Record.OperationID != preparation.Task.OperationID {
 		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, errs.New(
 			errs.KindStateConflict,
 			"pre-switch Service preparation scope changed",
 		)
+	}
+	if err := validateTaskMaterializationReferences(preparation.Task.Materializations, preparation.Task.Steps,
+		environmentID, true, uint64(preparation.Task.RenderGeneration)); err != nil {
+		return BlueprintProxyServiceRollout{}, keyvalue.Versioned[releaserender.BlueprintServiceRolloutCapture]{}, err
 	}
 	input, err := componentplanning.ReadProxyCandidateInput(ctx, ledger.store, preparation.Input, read.ReadRevision)
 	if err != nil {
