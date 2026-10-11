@@ -19,6 +19,10 @@ assert spec is not None and spec.loader is not None
 supervisor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(supervisor)
 
+# This guards the whole subprocess, not its configured journey deadline:
+# five seconds of lifetime, both shutdown phases, then durable receipt I/O.
+COMPLETION_TIMEOUT = 5 + 2 * supervisor.SHUTDOWN_GRACE_SECONDS + 5
+
 
 class SupervisorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -106,7 +110,9 @@ class SupervisorTests(unittest.TestCase):
         ]
 
     def wait_for(self, path: Path) -> None:
-        deadline = time.monotonic() + 3
+        # Receipt publication includes fsync; it is not a three-second
+        # readiness contract. The supervisor still enforces its own deadline.
+        deadline = time.monotonic() + COMPLETION_TIMEOUT
         while time.monotonic() < deadline:
             if path.exists():
                 return
@@ -135,7 +141,7 @@ class SupervisorTests(unittest.TestCase):
         command = self.command()
         separator = command.index("--")
         command[separator + 1 :] = ["/definitely/missing-child"]
-        result = subprocess.run(command, capture_output=True, text=True, timeout=3)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=COMPLETION_TIMEOUT)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("reason=startup", self.failure.read_text())
         self.assert_receipts_bounded()
@@ -144,7 +150,7 @@ class SupervisorTests(unittest.TestCase):
     # Rationale: A cancelled journey must not launch a new owned tunnel child.
     def test_preexisting_stop_does_not_start_child(self) -> None:
         self.stop.write_text("stop\n")
-        result = subprocess.run(self.command(), capture_output=True, text=True, timeout=3)
+        result = subprocess.run(self.command(), capture_output=True, text=True, timeout=COMPLETION_TIMEOUT)
         self.assertEqual(result.returncode, 0)
         self.assertFalse(self.ready.exists())
         self.assertFalse(self.output.exists())
@@ -163,7 +169,7 @@ class SupervisorTests(unittest.TestCase):
             self.wait_for(self.ready)
             self.wait_for(self.child_pid)
             self.stop.write_text("stop\n")
-            self.assertEqual(process.wait(timeout=3), 0)
+            self.assertEqual(process.wait(timeout=COMPLETION_TIMEOUT), 0)
         finally:
             if process.poll() is None:
                 process.kill()
@@ -188,7 +194,7 @@ class SupervisorTests(unittest.TestCase):
             self.wait_for(self.check_started)
             self.assertFalse(self.ready.exists())
             self.stop.write_text("stop\n")
-            self.assertEqual(process.wait(timeout=3), 0)
+            self.assertEqual(process.wait(timeout=COMPLETION_TIMEOUT), 0)
         finally:
             if process.poll() is None:
                 process.kill()
@@ -202,7 +208,7 @@ class SupervisorTests(unittest.TestCase):
             self.command(child_code="import sys; sys.exit(7)"),
             capture_output=True,
             text=True,
-            timeout=3,
+            timeout=COMPLETION_TIMEOUT,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.ready.exists())
@@ -223,7 +229,7 @@ class SupervisorTests(unittest.TestCase):
                  "-O", "check", "--", self.control_target],
             )
             self.stop.write_text("stop\n")
-            self.assertEqual(process.wait(timeout=3), 0)
+            self.assertEqual(process.wait(timeout=COMPLETION_TIMEOUT), 0)
         finally:
             if process.poll() is None:
                 process.kill()
@@ -237,7 +243,7 @@ class SupervisorTests(unittest.TestCase):
             self.command(deadline=1.0, ready_timeout=0.75, check_timeout=0.5),
             capture_output=True,
             text=True,
-            timeout=3,
+            timeout=COMPLETION_TIMEOUT,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue(self.ready.exists())
@@ -283,7 +289,7 @@ class SupervisorTests(unittest.TestCase):
             stderr=subprocess.DEVNULL,
         )
         try:
-            self.assertNotEqual(process.wait(timeout=3), 0)
+            self.assertNotEqual(process.wait(timeout=COMPLETION_TIMEOUT), 0)
         finally:
             if process.poll() is None:
                 process.kill()
