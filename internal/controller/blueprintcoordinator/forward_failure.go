@@ -3,6 +3,7 @@ package blueprintcoordinator
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -29,9 +30,11 @@ func (runner *Runner) forwardFailed(
 		}
 	}
 	code := errs.CodeInternal
+	detail := "Internal Server Error"
 	var domainError *errs.Error
 	if errors.As(cause, &domainError) {
-		code = domainError.ToProblem().Code
+		problem := domainError.ToProblem()
+		code, detail = problem.Code, problem.Detail
 	}
 	if err := runner.tasks.RequestBlueprintForwardFailure(ctx, parent.ID, snapshot, phase, code, runner.now().UTC()); err != nil {
 		if isStateRace(err) {
@@ -39,5 +42,12 @@ func (runner *Runner) forwardFailed(
 		}
 		return false, err
 	}
+	runner.logger.Error("Blueprint forward planning stopped",
+		slog.String("task_id", parent.ID),
+		slog.String("environment_id", parent.Owner.EnvironmentID),
+		slog.String("phase", phase),
+		slog.String("code", string(code)),
+		slog.String("detail", detail),
+	)
 	return true, nil
 }

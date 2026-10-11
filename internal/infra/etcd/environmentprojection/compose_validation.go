@@ -45,7 +45,7 @@ func validateEnvironmentServiceExtensions(
 				)
 			}
 			switch extension.Release.DefaultStrategy {
-			case "", core.StrategyBlueGreen, core.StrategyRecreate:
+			case "", core.StrategyBlueGreen, core.StrategyRecreate, core.StrategyRolling:
 			default:
 				return errs.New(errs.KindValidationFailed, "Environment Service release strategy is invalid")
 			}
