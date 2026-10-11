@@ -136,11 +136,6 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			Rolling:            member.Render.Rolling,
 			ServingProxyConfig: initialProxy,
 		}
-		if member.Render.Rolling != nil {
-			identity := labels[member.Render.ServiceID]
-			identity.Target = ""
-			labels[member.Render.ServiceID] = identity
-		}
 		if member.Render.Strategy == domain.StrategyRecreate {
 			// Recreate applies the proxy with the candidate workload; unlike
 			// blue-green, no later proxy-switch step replaces this config.

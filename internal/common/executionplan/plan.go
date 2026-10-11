@@ -426,7 +426,7 @@ func validLabelKey(key string) bool {
 	case labelComponentID, labelEnvironmentID, labelImageChildDigest, labelImageConfigDigest, labelImageIndexDigest,
 		labelImagePlatform,
 		labelKind, labelManaged, labelPlanID, labelProjectID,
-		labelReleaseID, labelRenderGen, labelRuntimeRole, labelServiceID, labelSlot, labelTenantID:
+		labelReleaseID, labelRenderGen, labelReplicaOrdinal, labelRuntimeRole, labelServiceID, labelSlot, labelTenantID:
 		return true
 	default:
 		return false

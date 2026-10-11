@@ -81,9 +81,6 @@ func (resolver *TaskPlanResolver) prepareBlueprintReleaseRuntime(
 			Rolling:            member.Render.Rolling,
 			ServingProxyConfig: initialProxy,
 		}
-		if identity.Rolling != nil {
-			identity.Target = ""
-		}
 		if member.Render.Strategy == domain.StrategyRecreate {
 			identity.ServingReleaseID = member.Intent.ID
 			identity.ServingTarget = member.Render.CandidateTarget
