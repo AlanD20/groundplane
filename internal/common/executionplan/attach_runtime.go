@@ -305,7 +305,7 @@ func attachRuntimeYAML(
 			if preserved[section][name] {
 				before := candidateRuntimeMappingValue(candidateRuntimeMappingValue(previousRoot, section), name)
 				after := candidateRuntimeMappingValue(candidateRuntimeMappingValue(sourceRoot, section), name)
-				if !attachRuntimeYAMLEqual(before, after) ||
+				if !sharedRuntimeResourceEqual(section, before, after) ||
 					!attachRuntimeSharedMetadataEqual(previous, source, section, name) {
 					return nil, nil, invalidAttachRuntime("selected workload changed a preserved resource")
 				}

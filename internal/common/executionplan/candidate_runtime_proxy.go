@@ -118,7 +118,7 @@ func retainCandidateRuntimeProxyYAML(
 			if workloadReferences[section][name] {
 				before := candidateRuntimeMappingValue(candidateRuntimeMappingValue(candidateRoot, section), name)
 				after := candidateRuntimeMappingValue(candidateRuntimeMappingValue(acknowledgedRoot, section), name)
-				if !attachRuntimeYAMLEqual(before, after) ||
+				if !sharedRuntimeResourceEqual(section, before, after) ||
 					!attachRuntimeSharedMetadataEqual(candidate, acknowledged, section, name) {
 					return nil, nil, invalidCandidateRuntimeProxySource()
 				}
