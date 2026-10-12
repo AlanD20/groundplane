@@ -258,7 +258,10 @@ export function TaskDetailDrawer({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setReload((value) => value + 1)}
+              onClick={() => {
+                setExecutionCursors([""]);
+                setReload((value) => value + 1);
+              }}
             >
               Retry
             </Button>

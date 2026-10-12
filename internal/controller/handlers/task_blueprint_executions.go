@@ -42,6 +42,18 @@ func (s *Server) applyBlueprintExecutionDetails(
 		Revision:   page.Revision,
 	}
 	for _, child := range page.Items {
+		// Membership is cursor-pinned; execution progress must not freeze at that
+		// old revision while the operator is looking beyond the first page.
+		latest, err := s.tasks.GetTask(ctx, child.Record.ID)
+		if err != nil {
+			return err
+		}
+		if latest.Record.Owner != parent.Record.Owner || latest.Record.PlanID != child.Record.PlanID ||
+			latest.Record.Params[taskjournal.TaskBlueprintParentParam] != parent.Record.ID ||
+			!taskjournal.IsBlueprintChild(latest.Record.Params) {
+			return errs.New(errs.KindInternal, "Blueprint execution does not match its captured parent")
+		}
+		child = latest
 		events, err := s.tasks.ListTaskEvents(ctx, child.Record.ID, child.ReadRevision)
 		if err != nil {
 			return err

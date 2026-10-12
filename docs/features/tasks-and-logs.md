@@ -16,7 +16,8 @@ resource executions with their own outcome, captured stages, health observations
 and recovery state. These are not separate operator Tasks; their routes and
 controls stay private. The list defaults to five executions per page, with
 5/10/25/50 choices. CLI Task Show accepts `--execution-limit` and
-`--execution-cursor` for the same fixed-revision pages. Older executions without
+`--execution-cursor` for the same pages. Page membership is revision-pinned;
+each execution's recorded progress is refreshed while Apply runs. Older executions without
 captured names remain unnamed; GP does not reconstruct them from current state.
 Controller-only Entry settlement does not invent an Agent execution record.
 
