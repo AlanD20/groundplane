@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -112,10 +113,11 @@ func validateBlueprintCandidateCompensation(
 ) error {
 	proxy, hasProxy := releaseProxyEvidence(result, intent.ServiceID)
 	recreate, hasRecreate := releaseRecreateEvidence(result, intent.ServiceID)
+	rolling, hasRolling := releaseRollingEvidence(result, intent.ServiceID)
 	priorReleaseID := intent.PriorServingReleaseID
 	if priorReleaseID == "" {
 		absence := result.CandidateAbsenceEvidence
-		if hasProxy || hasRecreate || absence == nil || !absence.AbsenceProven {
+		if hasProxy || hasRecreate || hasRolling || absence == nil || !absence.AbsenceProven {
 			return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint candidate absence restoration is unproven")
 		}
 		for _, candidate := range absence.Candidates {
@@ -128,15 +130,28 @@ func validateBlueprintCandidateCompensation(
 	// Evidence follows the sealed predecessor topology. Addressable recreate
 	// also owns a stable proxy; the candidate strategy cannot select its proof.
 	switch {
+	case render.PriorTarget == domain.WorkloadRolling:
+		if render.PriorRuntime == nil || !hasRolling || hasProxy || hasRecreate {
+			return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint rolling predecessor restoration is unproven")
+		}
+		serving, err := executionplan.OpenNativeServingRuntime(render.EnvironmentID, intent.ServiceID,
+			render.PriorRuntime.CurrentArtifact, render.PriorRuntime.RetainedPriorArtifact)
+		if err != nil || serving.Rolling == nil || serving.ReleaseID != priorReleaseID ||
+			serving.Artifact.GetArtifactId() != render.PriorArtifactID ||
+			rolling != executionplan.RollingCompletion(serving.Rolling) ||
+			rolling.ProxyGeneration != render.PriorProxyGeneration ||
+			rolling.ProxyConfigSHA256 != render.PriorProxyDigest {
+			return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint rolling predecessor restoration is unproven")
+		}
 	case render.PriorProxyGeneration != 0:
-		if !hasProxy || hasRecreate || !proxy.Compensated ||
+		if !hasProxy || hasRecreate || hasRolling || !proxy.Compensated ||
 			proxy.ReleaseID != priorReleaseID || proxy.Target != string(render.PriorTarget) ||
 			proxy.ProxyGeneration != render.PriorProxyGeneration ||
 			proxy.ConfigSHA256 != render.PriorProxyDigest {
 			return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint proxy predecessor restoration is unproven")
 		}
 	case render.PriorTarget == domain.WorkloadSingleton:
-		if hasProxy || !hasRecreate || !recreate.Compensated ||
+		if hasProxy || hasRolling || !hasRecreate || !recreate.Compensated ||
 			recreate.ReleaseID != priorReleaseID || recreate.Target != string(render.PriorTarget) ||
 			recreate.ArtifactID != render.PriorArtifactID {
 			return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint recreate predecessor restoration is unproven")
