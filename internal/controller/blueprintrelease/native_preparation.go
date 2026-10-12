@@ -114,10 +114,13 @@ func (service *Service) stageSelectedRuntime(
 				"first PostgreSQL image Deploy requires leave_active; no prior Release exists")
 		}
 		expose := candidate.Record.Desired.ProxyExposures()
+		if err := selectBlueprintProxy(&render, expose); err != nil {
+			return preparedSelectedRuntime{}, err
+		}
 		if err := rollingpredecessor.Capture(ctx, service.agents, service.observer, &render, candidate.Record.Desired.RollingReplicaTimeoutSeconds); err != nil {
 			return preparedSelectedRuntime{}, err
 		}
-		if err := configureBlueprintProxy(&render, expose); err != nil {
+		if err := sealBlueprintProxy(&render); err != nil {
 			return preparedSelectedRuntime{}, err
 		}
 		var priorRender *releaserender.ReleaseRenderInput

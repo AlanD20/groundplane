@@ -10,9 +10,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// configureBlueprintProxy binds current exposure decisions without replacing
-// the predecessor's independently captured proxy generation or config digest.
-func configureBlueprintProxy(render *releaserender.ReleaseRenderInput, exposures []string) error {
+// selectBlueprintProxy binds listeners before predecessor validation. Config
+// sealing waits until the rolling plan has captured its exact replica set.
+func selectBlueprintProxy(render *releaserender.ReleaseRenderInput, exposures []string) error {
 	priorAddressable := render.PriorProxyGeneration != 0
 	if render.PriorWorkload != nil && priorAddressable != (len(exposures) != 0) {
 		return errs.New(
@@ -35,8 +35,12 @@ func configureBlueprintProxy(render *releaserender.ReleaseRenderInput, exposures
 	}
 	render.ProxyPorts = ports
 	render.ProxyImplementation, err = projectionrecord.ServiceProxyImplementation(render.Projection)
-	if err != nil {
-		return err
+	return err
+}
+
+func sealBlueprintProxy(render *releaserender.ReleaseRenderInput) error {
+	if len(render.ProxyPorts) == 0 {
+		return nil
 	}
 	render.ProxyGeneration = render.PriorProxyGeneration + 1
 	if render.Strategy == domain.StrategyRolling {
@@ -51,7 +55,7 @@ func configureBlueprintProxy(render *releaserender.ReleaseRenderInput, exposures
 		render.ReleaseID,
 		render.CandidateTarget,
 		render.ProxyGeneration,
-		ports,
+		render.ProxyPorts,
 	)
 	if err != nil {
 		return err

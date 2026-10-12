@@ -24,7 +24,10 @@ func TestBlueprintProxyConfigSealsFirstAndSuccessor(t *testing.T) {
 		CandidateTarget: domain.WorkloadSingleton,
 		Projection:      blueprintProxyTestProjection(t),
 	}
-	if err := configureBlueprintProxy(&render, []string{"9090", "8080/tcp"}); err != nil {
+	if err := selectBlueprintProxy(&render, []string{"9090", "8080/tcp"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sealBlueprintProxy(&render); err != nil {
 		t.Fatal(err)
 	}
 	if render.ProxyGeneration != 1 || render.PriorProxyGeneration != 0 || render.PriorProxyDigest != "" ||
@@ -49,7 +52,10 @@ func TestBlueprintProxyConfigSealsFirstAndSuccessor(t *testing.T) {
 	render.ReleaseID = ids.New(ids.KindDeployment)
 	render.PriorWorkload = &domain.WorkloadSeal{}
 	render.PriorProxyGeneration, render.PriorProxyDigest = 1, priorDigest
-	if err := configureBlueprintProxy(&render, []string{"8081"}); err != nil {
+	if err := selectBlueprintProxy(&render, []string{"8081"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sealBlueprintProxy(&render); err != nil {
 		t.Fatal(err)
 	}
 	if render.ProxyGeneration != 2 || render.PriorProxyGeneration != 1 || render.PriorProxyDigest != priorDigest ||
@@ -88,7 +94,7 @@ func TestBlueprintProxyConfigRejectsUnsealedAddressabilityTransitions(t *testing
 			render.PriorProxyGeneration = 1
 			exposures = nil
 		}
-		if configureBlueprintProxy(&render, exposures) == nil {
+		if selectBlueprintProxy(&render, exposures) == nil {
 			t.Fatal("unsupported addressability transition accepted")
 		}
 	}
