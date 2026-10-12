@@ -52,8 +52,13 @@ func (delivery *assignmentPayloadDelivery) start(
 	send func(agentpb.AgentChannel_ConnectServer, *agentpb.TaskAssignment, *configTransferExchange) error,
 ) error {
 	delivery.mu.Lock()
+	if delivery.ctx.Err() != nil {
+		delivery.mu.Unlock()
+		release()
+		return nil // The stream is closing; its durable claim remains for reconnect.
+	}
 	_, exists := delivery.active[assignment.AssignmentId]
-	if delivery.ctx.Err() != nil || exists || len(delivery.active) >= delivery.limit {
+	if exists || len(delivery.active) >= delivery.limit {
 		delivery.mu.Unlock()
 		release()
 		return errs.New(errs.KindStateConflict, "assignment payload delivery is not available")
