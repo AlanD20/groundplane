@@ -227,6 +227,7 @@ func normalize(input dnsresolver.RenderInput) (dnsresolver.RenderInput, error) {
 	return dnsresolver.RenderInput{
 		CorefileTemplate: input.CorefileTemplate,
 		PrivateListener:  input.PrivateListener,
+		ZoneListeners:    input.ZoneListeners,
 		Hosts:            hosts, Forwarders: forwarders, CatchAll: catchAll,
 	}, nil
 }
