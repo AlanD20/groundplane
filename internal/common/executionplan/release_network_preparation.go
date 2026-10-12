@@ -38,10 +38,14 @@ func CaptureReleaseNetworkPreparation(
 	if subtle.ConstantTimeCompare(digest[:], source.GetYamlSha256()) != 1 {
 		return ReleaseNetworkPreparation{}, errs.New(errs.KindStateConflict, "release network source digest changed")
 	}
+	// This stage selects network memberships, not workload configuration. Native
+	// Compose fields such as healthcheck durations require Compose's own loader.
 	var document struct {
-		Name     string                                `yaml:"name"`
-		Services map[string]composetypes.ServiceConfig `yaml:"services"`
-		Networks composetypes.Networks                 `yaml:"networks"`
+		Name     string `yaml:"name"`
+		Services map[string]struct {
+			Networks map[string]*composetypes.ServiceNetworkConfig `yaml:"networks"`
+		} `yaml:"services"`
+		Networks composetypes.Networks `yaml:"networks"`
 	}
 	if err := yaml.Unmarshal(source.GetCanonicalYaml(), &document); err != nil {
 		return ReleaseNetworkPreparation{}, errs.Wrap(errs.KindInternal, err)
