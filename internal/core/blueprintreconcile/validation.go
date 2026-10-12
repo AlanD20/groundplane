@@ -27,13 +27,17 @@ func normalizeSnapshot(input Snapshot) (Snapshot, error) {
 	applied := make(map[ResourceKey]AppliedUnit, len(result.Applied))
 	for index, unit := range result.Applied {
 		if !validKey(unit.Target) ||
-			unit.State != Applied && unit.State != Absent && unit.State != Diverged && unit.State != Uncertain ||
+			unit.State != Applied && unit.State != Absent && unit.State != Diverged && unit.State != Uncertain &&
+				unit.State != Declared ||
 			unit.State == Applied && unit.Fingerprint == (Fingerprint{}) ||
-			unit.State == Absent && unit.Fingerprint != (Fingerprint{}) {
+			(unit.State == Absent || unit.State == Declared) && unit.Fingerprint != (Fingerprint{}) {
 			return Snapshot{}, invalidSnapshot("blueprint reconciliation applied authority is invalid")
 		}
 		if _, duplicate := applied[unit.Target]; duplicate {
 			return Snapshot{}, invalidSnapshot("blueprint reconciliation repeats an applied target")
+		}
+		if unit.State == Declared && !desired[unit.Target].Removal {
+			return Snapshot{}, invalidSnapshot("unreconciled declaration requires a removal unit")
 		}
 		writes, err := normalizeKeys(unit.AffectedWrites)
 		if err != nil {

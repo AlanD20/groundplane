@@ -38,17 +38,19 @@ func Select(snapshot Snapshot) (blueprintreconcile.Selection, error) {
 	}
 	for _, value := range snapshot.Applied {
 		record := value.Record
+		state := blueprintreconcile.AppliedState(record.State)
 		if removals[record.Target] && value.Revision == 0 && record.State == Absent {
 			// Birth proves no prior Blueprint effect, not retirement of the
-			// resource definition or a later direct lifecycle operation.
-			continue
+			// definition or a later direct lifecycle operation. Cleanup must
+			// capture those separately before it can acknowledge absence.
+			state = blueprintreconcile.Declared
 		}
 		fingerprint, err := reconcileFingerprint(record.Fingerprint)
 		if err != nil {
 			return blueprintreconcile.Selection{}, err
 		}
 		input.Applied = append(input.Applied, blueprintreconcile.AppliedUnit{
-			Target: reconcileKey(record.Target), State: blueprintreconcile.AppliedState(record.State),
+			Target: reconcileKey(record.Target), State: state,
 			Fingerprint: fingerprint, AffectedWrites: reconcileKeys(record.AffectedWrites),
 		})
 	}

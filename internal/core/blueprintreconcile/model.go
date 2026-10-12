@@ -39,9 +39,13 @@ const (
 	Applied   AppliedState = "applied"
 	Diverged  AppliedState = "diverged"
 	Uncertain AppliedState = "uncertain"
+	// Declared is positive creation authority without acknowledged retirement.
+	// It permits planning removal, never skipping it or asserting runtime absence.
+	Declared AppliedState = "declared"
 )
 
-// AppliedUnit records acknowledged execution, not an earlier desired document.
+// AppliedUnit records acknowledged execution or, for Declared, the resource's
+// creation record without a removal receipt. Desired documents prove neither.
 // Fingerprint retains the last successful inputs, if any, even when later effects
 // invalidate them. Absent requires explicit absence authority. Diverged means
 // stopped executors and accounted effects allow repair, not that input was applied.
