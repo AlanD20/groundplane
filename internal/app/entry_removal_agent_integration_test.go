@@ -93,7 +93,7 @@ func runEntryRemovalAgent(
 				if progress.State != agent.TaskProgressRunning && progress.State != agent.TaskProgressCompleted {
 					t.Fatalf("Entry cleanup step failed: %+v", progress)
 				}
-				_, err := fixture.Tasks.AppendTaskEvent(
+				appended, err := fixture.Tasks.AppendTaskEvent(
 					ctx,
 					testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 						AssignmentID: assigned.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID,
@@ -106,7 +106,7 @@ func runEntryRemovalAgent(
 				}
 				if err := pool.AcceptTaskEventAck(ctx, &agentpb.TaskEventAck{TaskId: task.ID, AssignmentId: assigned.AssignmentID,
 					PlanHash: progress.PlanHash[:], StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch,
-					Ordinal: progress.Ordinal, State: wireState}); err != nil {
+					Ordinal: progress.Ordinal, State: wireState, StartDecision: fixtureStepStartDecision(t, appended.StartDecision)}); err != nil {
 					t.Fatal(err)
 				}
 			} else if output.Result != nil {

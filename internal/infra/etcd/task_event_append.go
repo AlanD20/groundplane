@@ -118,6 +118,22 @@ func (repository *TaskRepository) appendTaskEvent(ctx context.Context,
 			assignment.ExecutionEpoch != input.Identity.Attempt {
 			return TaskEventAppend{}, errs.New(errs.KindStateConflict, "task event assignment identity does not match")
 		}
+		startDecision, startConditions, err := repository.prepareBlueprintStepStart(
+			ctx, task, assignment, input, result.ReadRevision, receivedAt,
+		)
+		if err != nil {
+			return TaskEventAppend{}, err
+		}
+		if startDecision == taskjournal.StepStartWait || startDecision == taskjournal.StepStartStop {
+			if prepared.Duplicate {
+				if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, prepared.Dedup); err != nil {
+					return TaskEventAppend{}, err
+				}
+				return TaskEventAppend{Sequence: prepared.Sequence, Duplicate: true,
+					Revision: result.ReadRevision, StartDecision: startDecision}, nil
+			}
+			return TaskEventAppend{Revision: result.ReadRevision, StartDecision: startDecision}, nil
+		}
 		if prepared.Duplicate {
 			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, prepared.Dedup); err != nil {
 				return TaskEventAppend{}, err
@@ -135,6 +151,7 @@ func (repository *TaskRepository) appendTaskEvent(ctx context.Context,
 				return TaskEventAppend{}, err
 			}
 			return TaskEventAppend{
+				StartDecision: startDecision,
 				Sequence:      prepared.Sequence,
 				Revision:      result.ReadRevision,
 				Duplicate:     true,
@@ -285,6 +302,7 @@ func (repository *TaskRepository) appendTaskEvent(ctx context.Context,
 			{Key: eventKey},
 			{Key: taskClosingReportKey(task)},
 		}
+		conditions = append(conditions, startConditions...)
 		if recoveryValue != nil {
 			conditions = append(
 				conditions,
@@ -317,6 +335,7 @@ func (repository *TaskRepository) appendTaskEvent(ctx context.Context,
 			continue
 		}
 		return TaskEventAppend{
+			StartDecision: startDecision,
 			Sequence:      prepared.Sequence,
 			Revision:      transaction.Revision,
 			RollingBudget: rolling.budget,

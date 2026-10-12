@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -84,6 +85,39 @@ func (p *WorkerPool) emitProgressAndWait(ctx context.Context, progress TaskProgr
 }
 
 func (p *WorkerPool) emitProgressForReceipt(ctx context.Context, progress TaskProgress) (*agentpb.TaskEventAck, error) {
+	for {
+		ack, err := p.awaitProgressReceipt(ctx, progress)
+		if err != nil || progress.State != TaskProgressRunning || progress.Ordinal != 1 {
+			return ack, err
+		}
+		switch ack.GetStartDecision() {
+		case agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED:
+			return ack, nil
+		case agentpb.StepStartDecision_STEP_START_DECISION_STOP:
+			if ctx.Err() == nil {
+				if err := p.Abort(ctx, progress.TaskID, progress.AssignmentID); err != nil {
+					return nil, err
+				}
+			}
+			return nil, context.Canceled
+		case agentpb.StepStartDecision_STEP_START_DECISION_WAIT:
+			timer := time.NewTimer(250 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
+		default:
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"agent: step start acknowledgement has no execution decision",
+			)
+		}
+	}
+}
+
+func (p *WorkerPool) awaitProgressReceipt(ctx context.Context, progress TaskProgress) (*agentpb.TaskEventAck, error) {
 	key := taskEventAckKeyForProgress(progress)
 	accepted := make(chan struct{})
 	receipt, registered := p.registerTaskEventAck(key, accepted)
@@ -109,6 +143,14 @@ func (p *WorkerPool) AcceptTaskEventAck(_ context.Context, ack *agentpb.TaskEven
 	if p == nil || p.taskEventAcks == nil || ack == nil || ack.GetExecutionEpoch() == 0 || ack.GetOrdinal() == 0 ||
 		len(ack.GetPlanHash()) != 32 {
 		return errs.New(errs.KindValidationFailed, "agent: Controller Task event acknowledgement is invalid")
+	}
+	start := ack.GetState() == agentpb.TaskState_TASK_STATE_RUNNING && ack.GetOrdinal() == 1
+	decision := ack.GetStartDecision()
+	if start && decision != agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED &&
+		decision != agentpb.StepStartDecision_STEP_START_DECISION_WAIT && decision != agentpb.StepStartDecision_STEP_START_DECISION_STOP ||
+		!start && decision != agentpb.StepStartDecision_STEP_START_DECISION_UNSPECIFIED ||
+		decision != agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED && ack.GetRollingBudget() != nil {
+		return errs.New(errs.KindValidationFailed, "agent: Task event start decision is invalid")
 	}
 	if budget := ack.GetRollingBudget(); budget != nil {
 		if ack.GetState() != agentpb.TaskState_TASK_STATE_RUNNING || ack.GetOrdinal() != 1 ||

@@ -230,7 +230,7 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *ExecutedArtifactFixture, 
 			} else if progress.State != agent.TaskProgressRunning {
 				t.Fatalf("mixed Worker step %s failed: %v", progress.StepID, progress.State)
 			}
-			_, err := fixture.Tasks.AppendTaskEvent(
+			appended, err := fixture.Tasks.AppendTaskEvent(
 				ctx,
 				testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 					AssignmentID: progress.AssignmentID, AgentID: recovery.Assignment.Record.AgentID, AgentGeneration: 1,
@@ -241,9 +241,17 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *ExecutedArtifactFixture, 
 			if err != nil {
 				t.Fatalf("durable mixed Worker event: %v", err)
 			}
+			decision := agentpb.StepStartDecision_STEP_START_DECISION_UNSPECIFIED
+			if progress.State == agent.TaskProgressRunning && progress.Ordinal == 1 {
+				if appended.StartDecision != testtaskjournal.StepStartAllowed {
+					t.Fatal("Controller did not allow recovery step")
+				}
+				decision = agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED
+			}
 			if err := pool.AcceptTaskEventAck(ctx, &agentpb.TaskEventAck{
 				TaskId: progress.TaskID, AssignmentId: progress.AssignmentID, PlanHash: progress.PlanHash[:],
 				StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal, State: wireState,
+				StartDecision: decision,
 			}); err != nil {
 				t.Fatalf("Worker event ACK: %v", err)
 			}

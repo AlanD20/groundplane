@@ -62,7 +62,9 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		}
 		nativeAttach := reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
 			reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_DETACH
-		if (reservation.eventsDurable || nativeAttach) && blueprintUnitMutationStep(reservation.assignment.Plan, step) {
+		if (reservation.eventsDurable || nativeAttach) &&
+			(blueprintUnitMutationStep(reservation.assignment.Plan, step) ||
+				reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY) {
 			if err = p.emitProgressAndWait(reservation.ctx, running); err != nil {
 				failedStepID = step.GetStepId()
 				break

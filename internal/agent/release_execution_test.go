@@ -162,6 +162,7 @@ func TestExecuteReleaseWaitsForDurableRunningEventBeforeCandidateMutation(t *tes
 		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
 		PlanHash: output.Progress.PlanHash[:], StepId: output.Progress.StepID,
 		ExecutionEpoch: 1, Ordinal: output.Progress.Ordinal, State: agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err == nil {
 		t.Fatal("accepted stale execution epoch")
@@ -262,6 +263,7 @@ func TestExecuteReleaseRejectedRunningEventRemainsTerminalWithoutRecovery(t *tes
 		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
 		PlanHash: output.Progress.PlanHash[:], StepId: output.Progress.StepID,
 		ExecutionEpoch: 1, Ordinal: output.Progress.Ordinal, State: agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), stale); err == nil {
 		t.Fatal("accepted rejected running-event authority")

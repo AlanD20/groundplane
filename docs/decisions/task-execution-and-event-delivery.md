@@ -41,6 +41,15 @@ external mutation never proves that no effect occurred. Cleanup is followed by
 bounded observation, and ambiguous or contradictory evidence retains recovery
 authority instead of reporting clean success or abort.
 
+Blueprint children request permission before each forward step. The Controller
+orders that grant atomically with the recorded start, comparing the current
+desired head and exact unit claim. While a newer head is still being planned the
+Agent waits; obsolete work stops. These replies do not manufacture execution
+events. Replayed event receipts preserve history without renewing revoked
+permission. Captured recovery remains available after supersession. This requires
+matching Controller and Agent channel schemas, not a compatibility decoder.
+See [step admission](../../internal/infra/etcd/blueprint_step_start.go).
+
 ## Built-in procedures and Custom hooks remain typed
 
 Attach and Detach use typed adapter procedures containing only the registered

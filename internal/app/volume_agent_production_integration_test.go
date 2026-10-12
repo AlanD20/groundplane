@@ -32,6 +32,23 @@ import (
 
 type volumeAgentComposeHelper struct{ runner *runner.FakeRunner }
 
+func fixtureStepStartDecision(t *testing.T, decision testtaskjournal.StepStartDecision) agentpb.StepStartDecision {
+	t.Helper()
+	switch decision {
+	case testtaskjournal.StepStartNotRequested:
+		return agentpb.StepStartDecision_STEP_START_DECISION_UNSPECIFIED
+	case testtaskjournal.StepStartAllowed:
+		return agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED
+	case testtaskjournal.StepStartWait:
+		return agentpb.StepStartDecision_STEP_START_DECISION_WAIT
+	case testtaskjournal.StepStartStop:
+		return agentpb.StepStartDecision_STEP_START_DECISION_STOP
+	default:
+		t.Fatal("unknown Controller step start decision")
+		return agentpb.StepStartDecision_STEP_START_DECISION_UNSPECIFIED
+	}
+}
+
 func (helper volumeAgentComposeHelper) Execute(
 	ctx context.Context,
 	request *agentpb.ComposeHelperRequest,
@@ -215,14 +232,15 @@ func TestVolumeRemovalProductionAgentReachesTerminal(t *testing.T) {
 				if progress.State != agent.TaskProgressRunning && progress.State != agent.TaskProgressCompleted {
 					t.Fatalf("Agent step failed: %+v", progress)
 				}
-				_, err := fixture.Tasks.AppendTaskEvent(ctx, testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
+				appended, err := fixture.Tasks.AppendTaskEvent(ctx, testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 					AssignmentID: assigned.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID, StepID: progress.StepID,
 					Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal}, State: state, Payload: json.RawMessage(`{}`)}, time.Now().UTC())
 				if err != nil {
 					t.Fatal(err)
 				}
 				if err := pool.AcceptTaskEventAck(ctx, &agentpb.TaskEventAck{TaskId: task.ID, AssignmentId: assigned.AssignmentID,
-					PlanHash: progress.PlanHash[:], StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal, State: wireState}); err != nil {
+					PlanHash: progress.PlanHash[:], StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal, State: wireState,
+					StartDecision: fixtureStepStartDecision(t, appended.StartDecision)}); err != nil {
 					t.Fatal(err)
 				}
 			} else if output.Result != nil {

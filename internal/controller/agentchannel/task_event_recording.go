@@ -108,6 +108,20 @@ func (s *Server) recordTaskEvent(
 		PlanHash: append([]byte(nil), event.GetPlanHash()...), StepId: event.GetStepId(),
 		ExecutionEpoch: event.GetExecutionEpoch(), Ordinal: event.GetOrdinal(), State: event.GetState(),
 	}
+	switch appended.StartDecision {
+	case taskjournal.StepStartAllowed:
+		ack.StartDecision = agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED
+	case taskjournal.StepStartWait:
+		ack.StartDecision = agentpb.StepStartDecision_STEP_START_DECISION_WAIT
+	case taskjournal.StepStartStop:
+		ack.StartDecision = agentpb.StepStartDecision_STEP_START_DECISION_STOP
+	case taskjournal.StepStartNotRequested:
+		if event.GetState() == agentpb.TaskState_TASK_STATE_RUNNING && event.GetOrdinal() == 1 {
+			return nil, errs.New(errs.KindInternal, "Task start request has no execution decision")
+		}
+	default:
+		return nil, errs.New(errs.KindInternal, "Task start execution decision is invalid")
+	}
 	if budget := appended.RollingBudget; budget != nil {
 		ack.RollingBudget = &agentpb.RollingStepBudget{Deadline: timestamppb.New(budget.Deadline)}
 		if !budget.DrainUntil.IsZero() {

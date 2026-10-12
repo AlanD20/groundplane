@@ -279,7 +279,11 @@ func (p *WorkerPool) runReleaseStep(
 		}
 	} else if reservation.eventsDurable && (candidateMutationStep(step) || blueprintComponent ||
 		componentRecoveryForwardStep(reservation.assignment.Plan, step.GetStepId()) ||
-		isConfigurationForwardStep(reservation.assignment.Plan, step.GetStepId())) {
+		isConfigurationForwardStep(reservation.assignment.Plan, step.GetStepId()) ||
+		reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
+			(step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD ||
+				step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK ||
+				step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK)) {
 		if err := p.emitProgressAndWait(reservation.ctx, running); err != nil {
 			state.err, state.failedStepID = err, step.GetStepId()
 			return

@@ -235,7 +235,11 @@ func (store *fakeTaskStore) AppendTaskEvent(
 	store.durableEvents = append(store.durableEvents, testtaskjournal.TaskEventRecord{
 		Sequence: sequence, Identity: input.Identity, State: input.State, Payload: append([]byte(nil), input.Payload...),
 	})
-	return etcd.TaskEventAppend{Sequence: sequence, Revision: 6}, nil
+	decision := testtaskjournal.StepStartNotRequested
+	if input.State == testtaskjournal.TaskEventStateRunning && input.Identity.Ordinal == 1 {
+		decision = testtaskjournal.StepStartAllowed
+	}
+	return etcd.TaskEventAppend{Sequence: sequence, Revision: 6, StartDecision: decision}, nil
 }
 
 func (store *fakeTaskStore) AcknowledgeTask(

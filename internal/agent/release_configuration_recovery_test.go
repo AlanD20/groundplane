@@ -207,7 +207,8 @@ func TestReleaseConfigurationForwardFailureWaitsForRunningAndDefersNativeCompens
 		TaskId: running.Progress.TaskID, AssignmentId: running.Progress.AssignmentID,
 		PlanHash: running.Progress.PlanHash[:], StepId: running.Progress.StepID,
 		ExecutionEpoch: running.Progress.ExecutionEpoch, Ordinal: 1,
-		State: agentpb.TaskState_TASK_STATE_RUNNING,
+		State:         agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
 		t.Fatal(err)

@@ -522,7 +522,8 @@ func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *test
 		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
 		StepId: output.Progress.StepID, PlanHash: output.Progress.PlanHash[:],
 		ExecutionEpoch: output.Progress.ExecutionEpoch, Ordinal: output.Progress.Ordinal,
-		State: agentpb.TaskState_TASK_STATE_RUNNING,
+		State:         agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
 		t.Fatalf("AcceptTaskEventAck(receipt) error = %v", err)
@@ -535,6 +536,7 @@ func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *test
 	}
 	changed := proto.CloneOf(ack)
 	changed.Ordinal++
+	changed.StartDecision = agentpb.StepStartDecision_STEP_START_DECISION_UNSPECIFIED
 	if err := pool.AcceptTaskEventAck(context.Background(), changed); !errors.Is(
 		err,
 		errs.New(errs.KindStateConflict, ""),
@@ -563,7 +565,8 @@ func TestWorkerPoolReceiptCleanupPreservesReplacementRegistration(t *testing.T) 
 	ack := &agentpb.TaskEventAck{
 		TaskId: progress.TaskID, AssignmentId: progress.AssignmentID, StepId: progress.StepID,
 		PlanHash: progress.PlanHash[:], ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
-		State: agentpb.TaskState_TASK_STATE_RUNNING,
+		State:         agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
 		t.Fatalf("AcceptTaskEventAck(first) error = %v", err)

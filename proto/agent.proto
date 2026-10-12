@@ -265,6 +265,14 @@ message TaskEventAck {
   TaskState state = 6;
   string assignment_id = 7;
   RollingStepBudget rolling_budget = 8; // first Running acknowledgement only; captured durable budget
+  StepStartDecision start_decision = 9; // first Running only; denied/waiting starts are not journal events
+}
+
+enum StepStartDecision {
+  STEP_START_DECISION_UNSPECIFIED = 0;
+  STEP_START_DECISION_ALLOWED = 1;
+  STEP_START_DECISION_WAIT = 2;
+  STEP_START_DECISION_STOP = 3;
 }
 
 message RollingStepBudget {
