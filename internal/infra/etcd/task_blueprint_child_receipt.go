@@ -98,9 +98,7 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	verifiedNetworkEffect := verifiedResult && blueprintNetworkChildTaskMatches(task, execution.Unit)
 	verifiedVolumeEffect := verifiedResult && blueprintVolumeChildTaskMatches(task, execution.Unit)
 	verifiedAttachEffect := verifiedResult && blueprintAttachChildTaskMatches(task, execution.Unit)
-	verifiedComponentEffect := verifiedResult &&
-		execution.Unit.Target.Kind == ids.KindComponent &&
-		task.Params[taskjournal.TaskBlueprintComponentUnitParam] == execution.Unit.Target.ID
+	verifiedComponentEffect := verifiedResult && blueprintComponentChildTaskMatches(task, execution.Unit)
 	verifiedEntryEffect := verifiedResult && execution.Unit.Removal &&
 		execution.Unit.Target.Kind == ids.KindEnvEntry && authoredBlueprintEntryRemovalTask(task) &&
 		task.Params[taskjournal.TaskBlueprintEntryUnitParam] == execution.Unit.Target.ID

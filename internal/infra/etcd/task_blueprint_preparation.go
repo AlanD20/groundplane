@@ -11,6 +11,12 @@ import (
 // accepted by publication and terminal receipt verification. It does not grant
 // execution authority; dispatch still verifies the captured plan and assignment.
 func IsAuthoredBlueprintPreparationTask(task TaskRecord) bool {
+	componentID := task.Params[taskjournal.TaskBlueprintComponentUnitParam]
+	if ids.Validate(ids.KindComponent, componentID) == nil {
+		return blueprintComponentChildTaskMatches(task, blueprintunits.Unit{
+			Target: blueprintunits.ResourceKey{Kind: ids.KindComponent, ID: componentID},
+		})
+	}
 	networkID := task.Params[taskjournal.TaskBlueprintNetworkUnitParam]
 	volumeID := task.Params[taskjournal.TaskBlueprintVolumeUnitParam]
 	attachID := task.Params[attachinputs.TaskAttachIDParam]
