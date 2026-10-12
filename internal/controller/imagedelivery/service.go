@@ -17,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/distribution/reference"
 )
 
 const FetchRoute = "/images/fetch"
@@ -230,6 +231,16 @@ func (service *Service) prepare(
 ) (etcd.TaskRecord, []byte, error) {
 	if remove {
 		return service.prepareRemoval(ctx, requested, key, now)
+	}
+	named, err := imagefetch.ParseRequested(requested)
+	if err != nil {
+		return etcd.TaskRecord{}, nil, err
+	}
+	if reference.Domain(named) == "localhost:5000" {
+		return etcd.TaskRecord{}, nil, errs.New(
+			errs.KindValidationFailed,
+			"Use registry.groundplane.internal:5000 to fetch from GP's private registry; localhost:5000 is the installer's host-local reference",
+		)
 	}
 	plan, err := service.registry.Resolve(ctx, requested)
 	if err != nil {
