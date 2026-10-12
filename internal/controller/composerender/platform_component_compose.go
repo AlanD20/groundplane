@@ -87,6 +87,7 @@ func RenderPlatformComponentCompose(
 			service.Name: {
 				Name: service.Name, Image: input.ImageReference,
 				Command:     composetypes.ShellCommand(append([]string(nil), service.Command...)),
+				Entrypoint:  composetypes.ShellCommand(append([]string(nil), service.Entrypoint...)),
 				NetworkMode: "host", Restart: service.Restart, Labels: labels,
 				Deploy: &composetypes.DeployConfig{Replicas: &replicas},
 				Volumes: []composetypes.ServiceVolumeConfig{{

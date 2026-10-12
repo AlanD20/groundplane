@@ -186,10 +186,11 @@ func projectEnvironmentComponentService(
 	definition := generated.Definition
 	projected := composetypes.ServiceConfig{
 		Name: definition.Name, Image: image.Reference,
-		Command:  composetypes.ShellCommand(append([]string(nil), definition.Command...)),
-		Networks: make(map[string]*composetypes.ServiceNetworkConfig, len(definition.Networks)),
-		Expose:   composetypes.StringOrNumberList(append([]string(nil), definition.Expose...)),
-		Restart:  definition.Restart,
+		Command:    composetypes.ShellCommand(append([]string(nil), definition.Command...)),
+		Entrypoint: composetypes.ShellCommand(append([]string(nil), definition.Entrypoint...)),
+		Networks:   make(map[string]*composetypes.ServiceNetworkConfig, len(definition.Networks)),
+		Expose:     composetypes.StringOrNumberList(append([]string(nil), definition.Expose...)),
+		Restart:    definition.Restart,
 	}
 	if definition.NetworkMode == componentsdk.ManagedNetworkModeDefault {
 		// Docker's built-in bridge needs no owned Zone. Leaving this empty

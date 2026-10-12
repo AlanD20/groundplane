@@ -101,7 +101,7 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 			ID: input.GeneratedServiceID, Name: ServiceName, Image: Image,
 			NetworkMode: component.ManagedNetworkModeZones, Networks: networks,
 			Expose: []string{"80"}, Restart: "unless-stopped", Replicas: 1,
-			Command: []string{"sh", "-ec", startupCommand},
+			Entrypoint: []string{"sh", "-ec"}, Command: []string{startupCommand},
 			Healthcheck: &component.ManagedHealthcheck{
 				Command: []string{"env", "-i", "PATH=/usr/local/bin:/usr/bin:/bin", "timeout", "3",
 					"bash", "--noprofile", "--norc", "-ec", readyCommand},
@@ -115,8 +115,10 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 }
 
 // These commands are compiled image operations, never operator-authored shell.
-// The upstream entrypoint drops privileges to envoy before starting this shell.
-const startupCommand = "umask 077; command -v bash timeout sed sync mv cat tr sha256sum cut mktemp rm >/dev/null; " +
+// Initialize from the private root-owned, read-only host directory before
+// dropping privileges. Only the container-private runtime files belong to envoy;
+// activation continues as that same unprivileged owner, including atomic renames.
+const startupCommand = "umask 077; command -v bash timeout sed sync mv cat tr sha256sum cut mktemp rm chown su-exec >/dev/null; " +
 	"test ! -L " + RuntimeDirectory + "; mkdir -p " + RuntimeDirectory + "; " +
 	"test ! -L " + BootstrapTarget + "; test ! -L " + ClustersTarget + "; " +
 	"test ! -L " + RoutesTarget + "; test ! -L " + ManifestTarget + "; " +
@@ -128,7 +130,9 @@ const startupCommand = "umask 077; command -v bash timeout sed sync mv cat tr sh
 	"sync; mv -f " + RoutesTarget + ".next " + RoutesTarget + "; sync; fi; " +
 	"if [ ! -e " + ManifestTarget + " ]; then sed -n '4p' " + ConfigurationTarget + " > " + ManifestTarget + ".next; " +
 	"sync; mv -f " + ManifestTarget + ".next " + ManifestTarget + "; sync; fi; " +
-	"exec envoy --config-path " + BootstrapTarget + " --disable-hot-restart"
+	"chown envoy:envoy " + RuntimeDirectory + " " + BootstrapTarget + " " + ClustersTarget + " " +
+	RoutesTarget + " " + ManifestTarget + "; " +
+	"exec su-exec envoy envoy --config-path " + BootstrapTarget + " --disable-hot-restart"
 
 const readyCommand = "exec 3<>/dev/tcp/127.0.0.1/9901; " +
 	"printf 'GET /ready HTTP/1.0\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; " +

@@ -283,6 +283,7 @@ type ManagedService struct {
 	Image             OCIImage
 	NetworkMode       ManagedNetworkMode
 	Command           []string
+	Entrypoint        []string
 	Networks          []ManagedNetworkAttachment
 	Expose            []string
 	Restart           string
@@ -331,7 +332,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		return normalized.Files[left].Path < normalized.Files[right].Path
 	})
 	encoded := make([]byte, 0, 1024)
-	encoded = appendPlanString(encoded, "environment-plan-v8")
+	encoded = appendPlanString(encoded, "environment-plan-v9")
 	encoded = appendPlanCount(encoded, len(normalized.Services))
 	for _, service := range normalized.Services {
 		encoded = appendPlanString(encoded, service.ID)
@@ -339,6 +340,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		encoded = appendOCIImage(encoded, service.Image)
 		encoded = appendPlanString(encoded, string(service.NetworkMode))
 		encoded = appendPlanStrings(encoded, service.Command)
+		encoded = appendPlanStrings(encoded, service.Entrypoint)
 		encoded = appendPlanCount(encoded, len(service.Networks))
 		for _, network := range service.Networks {
 			encoded = appendPlanString(encoded, network.Name)
@@ -441,6 +443,7 @@ func CloneEnvironmentPlan(plan EnvironmentPlan) EnvironmentPlan {
 	for index, service := range plan.Services {
 		service.Image.Platforms = append([]OCIPlatform(nil), service.Image.Platforms...)
 		service.Command = append([]string(nil), service.Command...)
+		service.Entrypoint = append([]string(nil), service.Entrypoint...)
 		if service.Healthcheck != nil {
 			health := *service.Healthcheck
 			health.Command = append([]string(nil), health.Command...)
