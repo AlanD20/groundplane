@@ -80,10 +80,7 @@ func rollingPredecessors(
 		}
 		return nil, nil
 	}
-	if err := validateOrdinaryPriorRuntime(input); err != nil {
-		return nil, err
-	}
-	artifact, err := taskassignments.OpenRestorationWitness(input.EnvironmentID, input.PriorRuntime.CurrentArtifact)
+	artifact, err := openOrdinaryPriorArtifact(input)
 	if err != nil {
 		return nil, err
 	}

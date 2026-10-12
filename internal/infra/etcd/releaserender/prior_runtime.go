@@ -12,18 +12,9 @@ import (
 )
 
 func validateOrdinaryPriorRuntime(render ReleaseRenderInput) error {
-	witness := render.PriorRuntime
-	if witness == nil {
-		return nil
-	}
-	if witness.ServiceID != render.ServiceID || render.PriorWorkload == nil ||
-		executionplan.ValidateNativePredecessorWitness(render.EnvironmentID, render.ServiceID,
-			witness.CurrentArtifact, witness.RetainedPriorArtifact) != nil {
-		return releases.CorruptReleaseRecord()
-	}
-	artifact, err := taskassignments.OpenRestorationWitness(render.EnvironmentID, witness.CurrentArtifact)
-	if err != nil || artifact.ArtifactId != render.PriorArtifactID || artifact.ArtifactId == render.ArtifactID {
-		return releases.CorruptReleaseRecord()
+	artifact, err := openOrdinaryPriorArtifact(render)
+	if err != nil || artifact == nil {
+		return err
 	}
 	previous := domain.ProxySelection{}
 	found := false
@@ -52,4 +43,24 @@ func validateOrdinaryPriorRuntime(render ReleaseRenderInput) error {
 	}
 	return domain.ValidateProxyTransition(render.ServiceName, render.Strategy,
 		domain.ProxySelection{Implementation: render.ProxyImplementation, Ports: render.ProxyPorts}, &previous)
+}
+
+// Replica capture needs the predecessor before candidate proxy configuration
+// can be sealed. Validate its identity here; the complete render validator
+// checks the actual candidate/prior listener transition after sealing.
+func openOrdinaryPriorArtifact(render ReleaseRenderInput) (*agentpb.ComposeArtifact, error) {
+	witness := render.PriorRuntime
+	if witness == nil {
+		return nil, nil
+	}
+	if witness.ServiceID != render.ServiceID || render.PriorWorkload == nil ||
+		executionplan.ValidateNativePredecessorWitness(render.EnvironmentID, render.ServiceID,
+			witness.CurrentArtifact, witness.RetainedPriorArtifact) != nil {
+		return nil, releases.CorruptReleaseRecord()
+	}
+	artifact, err := taskassignments.OpenRestorationWitness(render.EnvironmentID, witness.CurrentArtifact)
+	if err != nil || artifact.ArtifactId != render.PriorArtifactID || artifact.ArtifactId == render.ArtifactID {
+		return nil, releases.CorruptReleaseRecord()
+	}
+	return artifact, nil
 }
