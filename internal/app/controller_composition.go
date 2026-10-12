@@ -438,7 +438,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		blueprintReleases,
 		entryGeneration,
 		execution.attachFactValues,
-		bootstrap.componentCatalog,
+		bootstrap.componentCatalog, execution.planResolver,
 		environmentBlueprintRepository, backups.policyKeys, releaseExecutionTimeout,
 	)
 	if err != nil {

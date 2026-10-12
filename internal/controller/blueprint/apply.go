@@ -55,6 +55,7 @@ func NewService(
 	entryGeneration *entrygeneration.EntryGenerationService,
 	attachFacts *attachments.FactService,
 	componentCatalog []componentrender.EnvironmentComponentRegistration,
+	plans *taskplanning.TaskPlanResolver,
 	backups environmentBlueprintBackupRepository,
 	backupKeys environmentBlueprintBackupKeyFactory,
 	executionTimeout time.Duration,
@@ -68,7 +69,7 @@ func NewService(
 		releaseGroups == nil ||
 		entryGeneration == nil ||
 		attachFacts == nil ||
-		blueprintReleases == nil {
+		blueprintReleases == nil || plans == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
 	if executionTimeout < 40*time.Minute || executionTimeout > 24*time.Hour || executionTimeout%time.Second != 0 {
@@ -76,10 +77,6 @@ func NewService(
 			errs.KindValidationFailed,
 			"Blueprint execution timeout must be an integral duration from 40m through 24h",
 		)
-	}
-	plans, err := taskplanning.NewTaskPlanResolverWithBlueprints(volumeRoot, repository, componentCatalog)
-	if err != nil {
-		return nil, err
 	}
 	return &Service{
 		volumeRoot: volumeRoot, environmentPool: parsedEnvironmentPool, repository: repository, idempotency: idempotency,
