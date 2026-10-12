@@ -59,7 +59,7 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, com
 		return idempotency.IdempotencyResponse{}, err
 	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
-		Method: http.MethodPost, Route: dnsCheckRoute, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform, ID: "-"},
+		Method: http.MethodPost, Route: dnsCheckRoute, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
 		Path: []requestidempotency.PathBinding{{Name: "id", Value: componentID}}, Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "revision", Value: requestidempotency.Integer(input.Revision)},
