@@ -167,7 +167,8 @@ func (service *Service) Prepare(
 		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
 		RenderGeneration: parent.RenderGeneration, Type: taskjournal.TaskUpdate,
-		Target: parent.Owner.EnvironmentID,
+		Target:     parent.Owner.EnvironmentID,
+		TargetName: "Service " + serviceName,
 		Params: map[string]string{
 			blueprints.EnvironmentDesiredRevisionParam:      parent.ID,
 			taskjournal.TaskBlueprintParentParam:            parent.ID,
@@ -271,6 +272,7 @@ func (service *Service) prepareAuthoredAttachChild(
 			taskjournal.TaskBlueprintParentParam:       parent.ID,
 			attachinputs.TaskAttachIDParam:             unit.Target.ID,
 		},
+		TargetName:     "Attach " + versioned.Record.AttachName,
 		TimeoutSeconds: timeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,

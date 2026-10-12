@@ -32,6 +32,14 @@ type fakeTaskQueries struct {
 	list           func(etcd.TaskListScope, testkeyvalue.PageRequest) (testkeyvalue.Page[etcd.TaskRecord], error)
 }
 
+func (*fakeTaskQueries) ListBlueprintTaskChildren(
+	context.Context,
+	etcd.TaskRecord,
+	testkeyvalue.PageRequest,
+) (testkeyvalue.Page[etcd.TaskRecord], error) {
+	return testkeyvalue.Page[etcd.TaskRecord]{}, nil
+}
+
 func (*fakeTaskQueries) GetInterruptedDetachRetry(context.Context, string) (*etcd.InterruptedDetachRetry, error) {
 	return nil, nil
 }

@@ -59,6 +59,7 @@ func (service *Service) prepareAuthoredZoneRemovalChild(
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), PlanID: ids.New(ids.KindPlan),
 		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
 		Type: taskjournal.TaskRemove, Target: unit.Target.ID,
+		TargetName:     "Zone " + zone.Record.Desired.Name,
 		Params:         map[string]string{taskjournal.TaskBlueprintParentParam: parent.ID},
 		TimeoutSeconds: timeoutSeconds, Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,

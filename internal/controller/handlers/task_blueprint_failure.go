@@ -50,7 +50,6 @@ func (s *Server) applyBlueprintFailureDetails(
 	if err := applyTaskRecovery(&observed, child.Record, events, recovery); err != nil {
 		return err
 	}
-	response.Steps = append(response.Steps, observed.Steps...)
 	response.Recovery = observed.Recovery
 	response.ReconciliationRequired = response.ReconciliationRequired || observed.ReconciliationRequired
 	response.ResultSummary = observed.ResultSummary

@@ -200,6 +200,11 @@ type Options struct {
 }
 
 type taskQueries interface {
+	ListBlueprintTaskChildren(
+		context.Context,
+		etcd.TaskRecord,
+		etcdstore.PageRequest,
+	) (etcdstore.Page[etcd.TaskRecord], error)
 	GetInterruptedDetachRetry(context.Context, string) (*etcd.InterruptedDetachRetry, error)
 	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	ListTasksByScope(

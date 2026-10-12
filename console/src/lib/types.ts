@@ -511,6 +511,7 @@ export type ActivityEntry = {
   recovery?: TaskResponse["recovery"];
   preparation?: TaskResponse["preparation"];
   attemptHistory?: TaskResponse["attempt_history"];
+  executions?: TaskResponse["executions"];
   workspace: string; // "platform" or tenant slug
   status: TaskStatus;
   actor: string;

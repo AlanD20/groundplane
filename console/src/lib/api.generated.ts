@@ -3495,6 +3495,12 @@ export interface components {
             /** Format: int64 */
             revision?: number;
         };
+        PageTaskExecution: {
+            items: components["schemas"]["TaskExecution"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
         PageVolume: {
             /**
              * Format: uri
@@ -4529,6 +4535,7 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             environment_id?: string;
+            executions?: components["schemas"]["PageTaskExecution"];
             /** @enum {string} */
             executor: "agent" | "controller" | "blueprint" | "software";
             failure?: components["schemas"]["TaskFailure"];
@@ -4623,6 +4630,26 @@ export interface components {
             /** @enum {string} */
             state: "pending" | "running" | "completed" | "failed" | "aborted" | "timed_out";
             step_id: string;
+        };
+        TaskExecution: {
+            /** Format: date-time */
+            created_at: string;
+            failure?: components["schemas"]["TaskFailure"];
+            /** Format: date-time */
+            finished_at: string | null;
+            id: string;
+            reconciliation_required: boolean;
+            recovery?: components["schemas"]["TaskRecovery"];
+            resource_kind?: string;
+            /** Format: date-time */
+            started_at: string | null;
+            status: string;
+            steps?: components["schemas"]["TaskStep"][] | null;
+            target: string;
+            target_name?: string;
+            type: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         TaskFailure: {
             code?: string;
@@ -9835,7 +9862,10 @@ export interface operations {
     };
     "task.show": {
         parameters: {
-            query?: never;
+            query?: {
+                execution_limit?: number;
+                execution_cursor?: string;
+            };
             header?: never;
             path: {
                 id: string;

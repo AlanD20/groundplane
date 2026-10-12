@@ -11,6 +11,7 @@ import type { ActivityEntry } from "@/lib/types";
 import { ArrowUpRight, Clock3 } from "lucide-react";
 import { ContextLink } from "@/components/common/context-link";
 import { TaskExecutionTerminal } from "./task-execution-terminal";
+import type { ReactNode } from "react";
 
 export function taskPresentation(
   task: ActivityEntry,
@@ -131,10 +132,16 @@ export function taskPresentation(
   };
 }
 
-export function TaskOverview({ task }: { task: ActivityEntry }) {
+export function TaskOverview({
+  task,
+  children,
+}: {
+  task: ActivityEntry;
+  children?: ReactNode;
+}) {
   return (
     <>
-      <TaskExecutionTerminal task={task} />
+      {children ?? <TaskExecutionTerminal task={task} />}
       {task.note && (
         <section className="space-y-1 rounded-lg border border-border p-3 text-sm">
           <h3 className="text-xs font-medium text-muted-foreground">

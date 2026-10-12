@@ -18,20 +18,30 @@ func newTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "task", Short: "Tasks — the one record set behind every action and the activity journal"}
 	cmd.AddCommand(newTaskJournalListCmd("List tasks", false))
 
-	cmd.AddCommand(&cobra.Command{
+	var executionLimit int
+	var executionCursor string
+	show := &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show a task (steps, current state)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			task, err := app.Client.ShowTask(cmd.Context(), args[0])
+			task, err := app.Client.ShowTask(
+				cmd.Context(),
+				args[0],
+				apiclient.TaskDetailOptions{ExecutionLimit: executionLimit, ExecutionCursor: executionCursor},
+			)
 			if err != nil {
 				return err
 			}
 			fields, values := fieldsOfVia(taskFields(task))
 			return app.Out.RenderOne(fields, values, task)
 		},
-	})
+	}
+	show.Flags().
+		IntVar(&executionLimit, "execution-limit", 0, "Blueprint resource changes per page (default 5; maximum 50)")
+	show.Flags().StringVar(&executionCursor, "execution-cursor", "", "continue a Blueprint resource-change page")
+	cmd.AddCommand(show)
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "events <id>",
@@ -107,6 +117,7 @@ func taskFields(task apiTypes.Task) map[string]any {
 		"target_name": task.TargetName, "resource_kind": task.ResourceKind, "executor": task.Executor,
 		"timeout_seconds": task.TimeoutSeconds, "failure": task.Failure, "recovery": task.Recovery, "result_summary": task.ResultSummary,
 		"image_fetch":              task.ImageFetch,
+		"executions":               task.Executions,
 		"interrupted_detach_retry": task.InterruptedDetachRetry,
 		"preparation":              task.Preparation,
 		"attempt_history":          task.AttemptHistory,

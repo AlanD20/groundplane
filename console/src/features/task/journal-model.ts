@@ -72,7 +72,7 @@ function requiredTaskTimestamp(value: string, field: string): string {
     throw new Error(`Controller returned invalid Task ${field}`);
   return value;
 }
-function taskStepState(status: string): TaskStep["state"] {
+export function taskStepState(status: string): TaskStep["state"] {
   switch (status) {
     case "pending":
       return "pending";
@@ -188,6 +188,7 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     recovery: task.recovery,
     preparation: task.preparation,
     attemptHistory: task.attempt_history,
+    executions: task.executions,
     interruptedDetachRetry: task.interrupted_detach_retry,
     workspace:
       task.workspace_type === "platform" ? "platform" : task.tenant_id!,
@@ -202,19 +203,25 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     updatedAt,
     startedAt,
     finishedAt,
-    steps: task.steps?.map((step) => ({
-      label: step.name,
-      action: step.action,
-      description: step.description,
-      target: step.target,
-      timeoutSeconds: step.timeout_seconds,
-      detail: step.script_slug,
-      state: taskStepState(step.status),
-      healthWait: step.health_wait ?? undefined,
-      healthWaitReceivedAt: step.health_wait_received_at ?? undefined,
-      healthchecks: step.healthchecks ?? undefined,
-      failure: step.failure ?? undefined,
-    })),
+    steps: task.steps?.map(taskStepFromAPI),
+  };
+}
+
+export function taskStepFromAPI(
+  step: NonNullable<TaskPageItem["steps"]>[number],
+): TaskStep {
+  return {
+    label: step.name,
+    action: step.action,
+    description: step.description,
+    target: step.target,
+    timeoutSeconds: step.timeout_seconds,
+    detail: step.script_slug,
+    state: taskStepState(step.status),
+    healthWait: step.health_wait ?? undefined,
+    healthWaitReceivedAt: step.health_wait_received_at ?? undefined,
+    healthchecks: step.healthchecks ?? undefined,
+    failure: step.failure ?? undefined,
   };
 }
 

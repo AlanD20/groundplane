@@ -220,7 +220,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
   );
 }
 
-function TaskStepDetails({
+export function TaskStepDetails({
   index,
   step,
   events,

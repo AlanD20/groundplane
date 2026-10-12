@@ -18,6 +18,7 @@ import {
   taskPresentation,
 } from "@/features/task/task-overview";
 import { TaskExecutionTerminal } from "@/features/task/task-execution-terminal";
+import { BlueprintExecutions } from "@/features/task/blueprint-executions";
 import { useStore } from "@/lib/store";
 import { taskDetailActions } from "@/lib/task-detail-actions";
 import type {
@@ -50,11 +51,14 @@ export function TaskDetailDrawer({
   const [actionPending, setActionPending] = useState(false);
   const [retryReview, setRetryReview] = useState(false);
   const [reload, setReload] = useState(0);
+  const [executionLimit, setExecutionLimit] = useState(5);
+  const [executionCursors, setExecutionCursors] = useState<string[]>([""]);
   const suppliedId = taskId ?? entry!.id;
   const [id, setId] = useState(suppliedId);
   const [, setSearch] = useSearchParams();
   useEffect(() => {
     setId(suppliedId);
+    setExecutionCursors([""]);
   }, [suppliedId]);
   const task = detail ?? (id === suppliedId ? entry : undefined);
 
@@ -69,7 +73,15 @@ export function TaskDetailDrawer({
     const poll = async () => {
       let terminal = false;
       try {
-        const loaded = taskFromAPI(await requestTask(id, controller.signal));
+        const loaded = taskFromAPI(
+          await requestTask(
+            id,
+            controller.signal,
+            executionCursors.length > 1 || executionLimit !== 5
+              ? { limit: executionLimit, cursor: executionCursors.at(-1) }
+              : undefined,
+          ),
+        );
         if (controller.signal.aborted) return;
         setDetail(loaded);
         setDetailError(null);
@@ -94,7 +106,7 @@ export function TaskDetailDrawer({
       controller.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [id, reload]);
+  }, [id, reload, executionLimit, executionCursors]);
 
   const actions = taskDetailActions(detail);
 
@@ -261,7 +273,26 @@ export function TaskDetailDrawer({
               </>
             ) : (
               <>
-                <TaskOverview task={task} />
+                <TaskOverview task={task}>
+                  {task.executor === "blueprint" ? (
+                    <BlueprintExecutions
+                      task={task}
+                      limit={executionLimit}
+                      loading={detailLoading}
+                      previous={executionCursors.length > 1}
+                      onLimit={(value) => {
+                        setExecutionLimit(value);
+                        setExecutionCursors([""]);
+                      }}
+                      onPrevious={() =>
+                        setExecutionCursors((current) => current.slice(0, -1))
+                      }
+                      onNext={(cursor) =>
+                        setExecutionCursors((current) => [...current, cursor])
+                      }
+                    />
+                  ) : undefined}
+                </TaskOverview>
                 {task.type === "check" &&
                   task.resourceKind === "connector" &&
                   task.environmentId && (

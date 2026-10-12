@@ -192,6 +192,7 @@ func (service *Service) prepareAuthoredComponentChild(
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), PlanID: ids.New(ids.KindPlan),
 		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
 		Type: taskjournal.TaskUpdate, Target: parent.Owner.EnvironmentID, RenderGeneration: parent.RenderGeneration,
+		TargetName: "Component " + string(candidate.Kind),
 		Params: map[string]string{
 			blueprints.EnvironmentDesiredRevisionParam:      parent.ID,
 			taskjournal.TaskBlueprintParentParam:            parent.ID,

@@ -1,6 +1,7 @@
 package taskjournal
 
 import (
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -59,4 +60,21 @@ func ValidateTargetName(value string) error {
 		return errs.New(errs.KindValidationFailed, "task target name is invalid")
 	}
 	return nil
+}
+
+// CaptureTargetName bounds public metadata without rejecting a valid resource
+// whose file path is longer than the journal's presentation limit.
+func CaptureTargetName(value string) string {
+	var result strings.Builder
+	for _, character := range value {
+		if unicode.IsControl(character) {
+			character = ' '
+		}
+		if result.Len()+utf8.RuneLen(character) > 157 {
+			result.WriteString("...")
+			break
+		}
+		result.WriteRune(character)
+	}
+	return result.String()
 }

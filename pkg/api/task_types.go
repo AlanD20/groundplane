@@ -35,35 +35,55 @@ const (
 )
 
 type Task struct {
-	ID                     string              `json:"id"`
-	OperationID            string              `json:"operation_id"`
-	RetryOf                string              `json:"retry_of,omitempty"`
-	PlanHash               string              `json:"plan_hash,omitempty"`
-	Type                   string              `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate,fetch,prepare,apply,check"`
-	Target                 string              `json:"target"`
-	TargetName             string              `json:"target_name,omitempty"`
-	ResourceKind           string              `json:"resource_kind,omitempty"`
-	Executor               string              `json:"executor" enum:"agent,controller,blueprint,software"`
-	TimeoutSeconds         int64               `json:"timeout_seconds"`
-	Failure                *TaskFailure        `json:"failure,omitempty"`
-	Recovery               *TaskRecovery       `json:"recovery,omitempty"`
-	Preparation            *TaskPreparation    `json:"preparation,omitempty"`
-	AttemptHistory         *TaskAttemptHistory `json:"attempt_history,omitempty"`
-	InterruptedDetachRetry *TaskDetachRetry    `json:"interrupted_detach_retry,omitempty"`
-	ResultSummary          string              `json:"result_summary,omitempty"`
-	Status                 TaskStatus          `json:"status"`
-	ReconciliationRequired bool                `json:"reconciliation_required"`
-	WorkspaceType          TaskWorkspaceType   `json:"workspace_type"           enum:"platform,tenant"`
-	TenantID               string              `json:"tenant_id,omitempty"`
-	ProjectID              string              `json:"project_id,omitempty"`
-	EnvironmentID          string              `json:"environment_id,omitempty"`
-	Actor                  TaskActor           `json:"actor"                    enum:"operator,system"`
-	CreatedAt              time.Time           `json:"created_at"`
-	UpdatedAt              time.Time           `json:"updated_at"`
-	StartedAt              *time.Time          `json:"started_at"`
-	FinishedAt             *time.Time          `json:"finished_at"`
-	Steps                  []TaskStep          `json:"steps,omitempty"`
-	ImageFetch             *TaskImageFetch     `json:"image_fetch,omitempty"`
+	ID                     string               `json:"id"`
+	OperationID            string               `json:"operation_id"`
+	RetryOf                string               `json:"retry_of,omitempty"`
+	PlanHash               string               `json:"plan_hash,omitempty"`
+	Type                   string               `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate,fetch,prepare,apply,check"`
+	Target                 string               `json:"target"`
+	TargetName             string               `json:"target_name,omitempty"`
+	ResourceKind           string               `json:"resource_kind,omitempty"`
+	Executor               string               `json:"executor" enum:"agent,controller,blueprint,software"`
+	TimeoutSeconds         int64                `json:"timeout_seconds"`
+	Failure                *TaskFailure         `json:"failure,omitempty"`
+	Recovery               *TaskRecovery        `json:"recovery,omitempty"`
+	Preparation            *TaskPreparation     `json:"preparation,omitempty"`
+	AttemptHistory         *TaskAttemptHistory  `json:"attempt_history,omitempty"`
+	InterruptedDetachRetry *TaskDetachRetry     `json:"interrupted_detach_retry,omitempty"`
+	ResultSummary          string               `json:"result_summary,omitempty"`
+	Status                 TaskStatus           `json:"status"`
+	ReconciliationRequired bool                 `json:"reconciliation_required"`
+	WorkspaceType          TaskWorkspaceType    `json:"workspace_type"           enum:"platform,tenant"`
+	TenantID               string               `json:"tenant_id,omitempty"`
+	ProjectID              string               `json:"project_id,omitempty"`
+	EnvironmentID          string               `json:"environment_id,omitempty"`
+	Actor                  TaskActor            `json:"actor"                    enum:"operator,system"`
+	CreatedAt              time.Time            `json:"created_at"`
+	UpdatedAt              time.Time            `json:"updated_at"`
+	StartedAt              *time.Time           `json:"started_at"`
+	FinishedAt             *time.Time           `json:"finished_at"`
+	Steps                  []TaskStep           `json:"steps,omitempty"`
+	ImageFetch             *TaskImageFetch      `json:"image_fetch,omitempty"`
+	Executions             *Page[TaskExecution] `json:"executions,omitempty"`
+}
+
+// TaskExecution is an internal Blueprint child's recorded work, inspected only
+// through its visible parent. It is not an independently controllable Task.
+type TaskExecution struct {
+	ID                     string        `json:"id"`
+	Type                   string        `json:"type"`
+	Target                 string        `json:"target"`
+	TargetName             string        `json:"target_name,omitempty"`
+	ResourceKind           string        `json:"resource_kind,omitempty"`
+	Status                 TaskStatus    `json:"status"`
+	CreatedAt              time.Time     `json:"created_at"`
+	UpdatedAt              time.Time     `json:"updated_at"`
+	StartedAt              *time.Time    `json:"started_at"`
+	FinishedAt             *time.Time    `json:"finished_at"`
+	Steps                  []TaskStep    `json:"steps,omitempty"`
+	Failure                *TaskFailure  `json:"failure,omitempty"`
+	Recovery               *TaskRecovery `json:"recovery,omitempty"`
+	ReconciliationRequired bool          `json:"reconciliation_required"`
 }
 
 // The existing Retry action resumes this captured hook, not the Blueprint.

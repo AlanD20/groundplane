@@ -5476,6 +5476,31 @@
         ],
         "type": "object"
       },
+      "PageTaskExecution": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaskExecution"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "PageVolume": {
         "additionalProperties": false,
         "properties": {
@@ -8765,6 +8790,9 @@
           "environment_id": {
             "type": "string"
           },
+          "executions": {
+            "$ref": "#/components/schemas/PageTaskExecution"
+          },
           "executor": {
             "enum": [
               "agent",
@@ -9109,6 +9137,81 @@
           "attempt",
           "ordinal",
           "received_at"
+        ],
+        "type": "object"
+      },
+      "TaskExecution": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/TaskFailure"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "reconciliation_required": {
+            "type": "boolean"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/TaskRecovery"
+          },
+          "resource_kind": {
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "target": {
+            "type": "string"
+          },
+          "target_name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "target",
+          "status",
+          "created_at",
+          "updated_at",
+          "started_at",
+          "finished_at",
+          "reconciliation_required"
         ],
         "type": "object"
       },
@@ -18514,6 +18617,25 @@
             "required": true,
             "schema": {
               "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "execution_limit",
+            "schema": {
+              "format": "int64",
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "execution_cursor",
+            "schema": {
               "type": "string"
             }
           }

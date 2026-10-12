@@ -31,7 +31,9 @@ type taskListInput struct {
 }
 
 type taskShowInput struct {
-	ID string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
+	ID              string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
+	ExecutionLimit  int    `query:"execution_limit" minimum:"1" maximum:"50"`
+	ExecutionCursor string `query:"execution_cursor"`
 }
 
 type taskMutationInput struct {
@@ -245,6 +247,9 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 		}
 	}
 	if err := s.applyBlueprintFailureDetails(ctx, task.Record, &response); err != nil {
+		return nil, normalizeTaskRouteError(err)
+	}
+	if err := s.applyBlueprintExecutionDetails(ctx, task, request, &response); err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
 	return &taskOutput{Body: response}, nil

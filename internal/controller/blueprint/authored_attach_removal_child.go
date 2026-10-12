@@ -238,6 +238,7 @@ func newAuthoredAttachRemovalTask(
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), PlanID: ids.New(ids.KindPlan),
 		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
 		Type: taskjournal.TaskDetach, Target: source.ID,
+		TargetName:       "Attach " + source.Name,
 		RenderGeneration: int32(parent.RenderGeneration),
 		Params: map[string]string{
 			blueprints.EnvironmentDesiredRevisionParam: parent.ID,

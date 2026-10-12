@@ -4046,6 +4046,13 @@ type PageTask struct {
 	Revision   *int64  `json:"revision,omitempty"`
 }
 
+// PageTaskExecution defines model for PageTaskExecution.
+type PageTaskExecution struct {
+	Items      *[]TaskExecution `json:"items"`
+	NextCursor *string          `json:"next_cursor,omitempty"`
+	Revision   *int64           `json:"revision,omitempty"`
+}
+
 // PageVolume defines model for PageVolume.
 type PageVolume struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -5145,6 +5152,7 @@ type Task struct {
 	AttemptHistory         *TaskAttemptHistory `json:"attempt_history,omitempty"`
 	CreatedAt              time.Time           `json:"created_at"`
 	EnvironmentId          *string             `json:"environment_id,omitempty"`
+	Executions             *PageTaskExecution  `json:"executions,omitempty"`
 	Executor               TaskExecutor        `json:"executor"`
 	Failure                *TaskFailure        `json:"failure,omitempty"`
 	FinishedAt             *time.Time          `json:"finished_at"`
@@ -5244,6 +5252,24 @@ type TaskEvent struct {
 
 // TaskEventState defines model for TaskEvent.State.
 type TaskEventState string
+
+// TaskExecution defines model for TaskExecution.
+type TaskExecution struct {
+	CreatedAt              time.Time     `json:"created_at"`
+	Failure                *TaskFailure  `json:"failure,omitempty"`
+	FinishedAt             *time.Time    `json:"finished_at"`
+	Id                     string        `json:"id"`
+	ReconciliationRequired bool          `json:"reconciliation_required"`
+	Recovery               *TaskRecovery `json:"recovery,omitempty"`
+	ResourceKind           *string       `json:"resource_kind,omitempty"`
+	StartedAt              *time.Time    `json:"started_at"`
+	Status                 string        `json:"status"`
+	Steps                  *[]TaskStep   `json:"steps,omitempty"`
+	Target                 string        `json:"target"`
+	TargetName             *string       `json:"target_name,omitempty"`
+	Type                   string        `json:"type"`
+	UpdatedAt              time.Time     `json:"updated_at"`
+}
 
 // TaskFailure defines model for TaskFailure.
 type TaskFailure struct {
@@ -6185,6 +6211,12 @@ type TaskListParams struct {
 
 // TaskListParamsStatus defines parameters for TaskList.
 type TaskListParamsStatus string
+
+// TaskShowParams defines parameters for TaskShow.
+type TaskShowParams struct {
+	ExecutionLimit  *int64  `form:"execution_limit,omitempty" json:"execution_limit,omitempty"`
+	ExecutionCursor *string `form:"execution_cursor,omitempty" json:"execution_cursor,omitempty"`
+}
 
 // TaskAbortParams defines parameters for TaskAbort.
 type TaskAbortParams struct {
@@ -9048,7 +9080,7 @@ type ClientInterface interface {
 	// TaskShow Show a task
 	//
 	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
-	TaskShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	TaskShow(ctx context.Context, id string, params *TaskShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TaskAbort Abort an in-flight task
 	//
@@ -12332,8 +12364,8 @@ func (c *Client) TaskList(ctx context.Context, params *TaskListParams, reqEditor
 // TaskShow Show a task
 //
 // Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
-func (c *Client) TaskShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTaskShowRequest(c.Server, id)
+func (c *Client) TaskShow(ctx context.Context, id string, params *TaskShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskShowRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -20627,7 +20659,7 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 }
 
 // NewTaskShowRequest constructs an http.Request for the TaskShow method
-func NewTaskShowRequest(server string, id string) (*http.Request, error) {
+func NewTaskShowRequest(server string, id string, params *TaskShowParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -20650,6 +20682,45 @@ func NewTaskShowRequest(server string, id string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.ExecutionLimit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "execution_limit", *params.ExecutionLimit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ExecutionCursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "execution_cursor", *params.ExecutionCursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -23171,7 +23242,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
-	TaskShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*TaskShowResponse, error)
+	TaskShowWithResponse(ctx context.Context, id string, params *TaskShowParams, reqEditors ...RequestEditorFn) (*TaskShowResponse, error)
 
 	// TaskAbortWithResponse Abort an in-flight task
 	//
@@ -34330,8 +34401,8 @@ func (c *ClientWithResponses) TaskListWithResponse(ctx context.Context, params *
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
-func (c *ClientWithResponses) TaskShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*TaskShowResponse, error) {
-	rsp, err := c.TaskShow(ctx, id, reqEditors...)
+func (c *ClientWithResponses) TaskShowWithResponse(ctx context.Context, id string, params *TaskShowParams, reqEditors ...RequestEditorFn) (*TaskShowResponse, error) {
+	rsp, err := c.TaskShow(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

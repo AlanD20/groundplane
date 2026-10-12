@@ -57,6 +57,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintNetworkUnit(
 		return etcd.TaskRecord{}, nil, err
 	}
 	prepared.PlanHash = hex.EncodeToString(plan.GetPlanHash())
+	prepared.TargetName = "Zone " + plan.GetArtifacts()[0].GetNetworks()[0].GetComposeName()
 	prepared.Steps = taskjournal.CaptureStepDescriptions(prepared.Steps, plan)
 	return prepared, plan, nil
 }

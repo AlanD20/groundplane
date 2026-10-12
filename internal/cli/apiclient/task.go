@@ -231,13 +231,26 @@ func taskPageFromGenerated(parsed generated.PageTask) (apiTypes.Page[apiTypes.Ta
 	return page, nil
 }
 
-func (c *Client) ShowTask(ctx context.Context, id string) (apiTypes.Task, error) {
+type TaskDetailOptions struct {
+	ExecutionLimit  int
+	ExecutionCursor string
+}
+
+func (c *Client) ShowTask(ctx context.Context, id string, options TaskDetailOptions) (apiTypes.Task, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.Task{}, err
 	}
 	path := "/api/v1/tasks/" + id
-	response, err := client.TaskShowWithResponse(ctx, id)
+	params := &generated.TaskShowParams{}
+	if options.ExecutionLimit != 0 {
+		limit := int64(options.ExecutionLimit)
+		params.ExecutionLimit = &limit
+	}
+	if options.ExecutionCursor != "" {
+		params.ExecutionCursor = &options.ExecutionCursor
+	}
+	response, err := client.TaskShowWithResponse(ctx, id, params)
 	if err != nil {
 		return apiTypes.Task{}, generatedCallError(ctx, http.MethodGet, path, err)
 	}
@@ -284,6 +297,10 @@ func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
 		return apiTypes.Task{}, err
 	}
 	result.AttemptHistory = history
+	result.Executions, err = taskExecutionsFromGenerated(task.Executions)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
 	if task.RetryOf != nil {
 		result.RetryOf = *task.RetryOf
 	}
@@ -361,7 +378,7 @@ func (c *Client) StreamTaskEvents(
 			continue
 		}
 
-		task, err := c.ShowTask(ctx, id)
+		task, err := c.ShowTask(ctx, id, TaskDetailOptions{})
 		if err != nil {
 			if !errs.IsRetryable(err) {
 				return err

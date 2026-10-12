@@ -63,6 +63,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintVolumeUnit(
 		return etcd.TaskRecord{}, nil, err
 	}
 	prepared := task
+	prepared.TargetName = "Volume " + input.identity.Name
 	prepared.Steps = make([]taskjournal.TaskStepRecord, len(stepIDs))
 	for index, stepID := range stepIDs {
 		prepared.Steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID}

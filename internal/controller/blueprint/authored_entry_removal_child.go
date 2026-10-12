@@ -10,6 +10,7 @@ import (
 	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -56,6 +57,7 @@ func (service *Service) prepareAuthoredEntryRemovalChild(
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), PlanID: ids.New(ids.KindPlan),
 		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
 		Type: taskjournal.TaskRemove, Target: unit.Target.ID, RenderGeneration: parent.RenderGeneration,
+		TargetName:     taskjournal.CaptureTargetName("Entry " + entries.BlueprintIdentityKey(entry.Record)),
 		Params:         map[string]string{taskjournal.TaskBlueprintParentParam: parent.ID},
 		TimeoutSeconds: timeoutSeconds, Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,

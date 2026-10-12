@@ -11,6 +11,15 @@ captured inputs, progress and an eventual completed, failed, timed-out or aborte
 outcome. Rename or deletion does not move its history to a different owner.
 Step completion is not Task completion.
 
+A Blueprint Apply remains one visible Task. Its inspector lists the retained
+resource executions with their own outcome, captured stages, health observations
+and recovery state. These are not separate operator Tasks; their routes and
+controls stay private. The list defaults to five executions per page, with
+5/10/25/50 choices. CLI Task Show accepts `--execution-limit` and
+`--execution-cursor` for the same fixed-revision pages. Older executions without
+captured names remain unnamed; GP does not reconstruct them from current state.
+Controller-only Entry settlement does not invent an Agent execution record.
+
 The API and structured CLI response also expose `reconciliation_required`.
 When true, terminal status does not prove that effects were restored or cleanup
 settled: the affected resources may remain fenced. Keep the original Task and

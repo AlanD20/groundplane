@@ -43,7 +43,7 @@ func TestShowTaskUsesGeneratedOperation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	task, err := New(server.URL).ShowTask(context.Background(), taskID)
+	task, err := New(server.URL).ShowTask(context.Background(), taskID, TaskDetailOptions{})
 	if err != nil {
 		t.Fatalf("ShowTask() error = %v", err)
 	}
@@ -174,7 +174,7 @@ func TestShowTaskRejectsInvalidStepProjection(t *testing.T) {
 			}))
 			defer server.Close()
 
-			if _, err := New(server.URL).ShowTask(context.Background(), taskID); err == nil {
+			if _, err := New(server.URL).ShowTask(context.Background(), taskID, TaskDetailOptions{}); err == nil {
 				t.Fatal("ShowTask() error = nil, want invalid step projection error")
 			} else if kind, ok := errs.KindOf(err); !ok || kind != errs.KindInternal {
 				t.Fatalf("ShowTask() error = %v, want internal error", err)

@@ -13,9 +13,15 @@ type TaskAbortResponse =
 export async function requestTask(
   taskId: string,
   signal?: AbortSignal,
+  executions?: { limit: number; cursor?: string },
 ): Promise<TaskResponse> {
+  const query = new URLSearchParams();
+  if (executions) {
+    query.set("execution_limit", String(executions.limit));
+    if (executions.cursor) query.set("execution_cursor", executions.cursor);
+  }
   const task = await controllerRequest<TaskResponse>(
-    `/tasks/${encodeURIComponent(taskId)}`,
+    `/tasks/${encodeURIComponent(taskId)}${query.size ? `?${query}` : ""}`,
     200,
     { signal },
   );
