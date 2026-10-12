@@ -40,7 +40,8 @@ export function ResourceActionMenu({ label, actions }: { label: string; actions:
             <DropdownMenuItem
               variant={action.destructive ? 'destructive' : 'default'}
               disabled={action.disabled}
-              onClick={() => {
+              onClick={(event) => {
+                event.stopPropagation()
                 if (action.href) navigate(action.href)
                 else action.onSelect?.()
               }}

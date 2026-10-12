@@ -93,7 +93,7 @@ export function DNSEditor({
                 onChange={(e) => setLabel(e.target.value)}
                 required
                 maxLength={63}
-                pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+                pattern={"[a-z0-9](?:[a-z0-9\\-]*[a-z0-9])?"}
                 placeholder="api"
                 autoFocus
               />
