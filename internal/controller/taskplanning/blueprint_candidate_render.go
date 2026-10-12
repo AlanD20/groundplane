@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	"slices"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -81,8 +82,12 @@ func renderBlueprintCandidateArtifact(
 			return nil, err
 		}
 		if _, enabled := project.Services[name]; enabled {
+			// DNS in the frozen runtime includes GP-generated upstreams. Keep
+			// authored DNS here; RenderCompose selects managed upstreams once.
+			service.DNS = slices.Clone(project.Services[name].DNS)
 			project.Services[name] = service
 		} else if _, disabled := project.DisabledServices[name]; disabled {
+			service.DNS = slices.Clone(project.DisabledServices[name].DNS)
 			project.DisabledServices[name] = service
 		} else {
 			return nil, errs.New(errs.KindInternal, "Blueprint candidate is not an authored native Service")
@@ -118,6 +123,8 @@ func renderBlueprintCandidateArtifact(
 		if err != nil {
 			return nil, errs.New(errs.KindInternal, "Blueprint generated Service runtime is absent")
 		}
+		// Components cannot author DNS; their upstreams are renderer output.
+		resolved.DNS = nil
 		project.Services[identity.Name] = resolved
 		identities.Services = append(identities.Services, identity)
 		delete(owners, service.ServiceId)
