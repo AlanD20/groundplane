@@ -26705,37 +26705,23 @@ func (r EnvironmentDnsCreateResponse) ContentType() string {
 	return ""
 }
 
-// EnvironmentDnsRemoveResponse200Headers the declared response headers of an HTTP 200 response for EnvironmentDnsRemove
-type EnvironmentDnsRemoveResponse200Headers struct {
-	ContentType *string
-}
-
-// EnvironmentDnsRemoveResponse201Headers the declared response headers of an HTTP 201 response for EnvironmentDnsRemove
-type EnvironmentDnsRemoveResponse201Headers struct {
+// EnvironmentDnsRemoveResponse204Headers the declared response headers of an HTTP 204 response for EnvironmentDnsRemove
+type EnvironmentDnsRemoveResponse204Headers struct {
 	ContentType *string
 }
 
 type EnvironmentDnsRemoveResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *EnvironmentDNSSaved
-	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *EnvironmentDNSSaved
-	// Headers200 the parsed response headers for an HTTP 200 response
-	Headers200 *EnvironmentDnsRemoveResponse200Headers
-	// Headers201 the parsed response headers for an HTTP 201 response
-	Headers201 *EnvironmentDnsRemoveResponse201Headers
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *EnvironmentDnsRemoveResponse204Headers
 }
 
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r EnvironmentDnsRemoveResponse) GetJSON200() *EnvironmentDNSSaved {
-	return r.JSON200
-}
-
-// GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r EnvironmentDnsRemoveResponse) GetJSON201() *EnvironmentDNSSaved {
-	return r.JSON201
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentDnsRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
@@ -37307,25 +37293,21 @@ func ParseEnvironmentDnsRemoveResponse(rsp *http.Response) (*EnvironmentDnsRemov
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest EnvironmentDNSSaved
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
+	case rsp.StatusCode == 204:
+		break // No content-type
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest EnvironmentDNSSaved
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON201 = &dest
+		response.ApplicationproblemJSONDefault = &dest
 
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		var headers EnvironmentDnsRemoveResponse200Headers
+	case rsp.StatusCode == 204:
+		var headers EnvironmentDnsRemoveResponse204Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -37333,17 +37315,7 @@ func ParseEnvironmentDnsRemoveResponse(rsp *http.Response) (*EnvironmentDnsRemov
 			}
 			headers.ContentType = &value
 		}
-		response.Headers200 = &headers
-	case rsp.StatusCode == 201:
-		var headers EnvironmentDnsRemoveResponse201Headers
-		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
-			var value string
-			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			}
-			headers.ContentType = &value
-		}
-		response.Headers201 = &headers
+		response.Headers204 = &headers
 	}
 
 	return response, nil

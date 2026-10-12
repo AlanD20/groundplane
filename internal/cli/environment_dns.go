@@ -42,7 +42,7 @@ func newEnvironmentDNSCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				result, err := fromContext(
+				err = fromContext(
 					cmd,
 				).Client.RemoveEnvironmentDNS(
 					cmd.Context(),
@@ -53,7 +53,10 @@ func newEnvironmentDNSCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return renderDNSSaved(cmd, result)
+				return renderDNSSaved(
+					cmd,
+					apiTypes.EnvironmentDNSSaved{EnvironmentID: view.EnvironmentID, RecordID: record.ID},
+				)
 			},
 		},
 	)

@@ -7178,24 +7178,21 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description DNS intention saved; read DNS status for resolver activation */
-            200: {
+            /** @description DNS removal saved; read DNS status for resolver withdrawal */
+            204: {
                 headers: {
                     "Content-Type"?: string;
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["EnvironmentDNSSaved"];
-                };
+                content?: never;
             };
-            /** @description DNS intention created; read DNS status for resolver activation */
-            201: {
+            /** @description Error */
+            default: {
                 headers: {
-                    "Content-Type"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EnvironmentDNSSaved"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
         };

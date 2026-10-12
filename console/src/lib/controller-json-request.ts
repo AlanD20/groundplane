@@ -47,7 +47,7 @@ export async function controllerRequest<Response>(
     throw await controllerResponseError(response, method, path);
   }
   init.onResponseHeaders?.(response.headers);
-  const body: unknown = await response.json();
+  const body: unknown = expectedStatus === 204 ? undefined : await response.json();
   if (method !== "GET") {
     mutationVersion++;
     reportAcceptedTasks(body);

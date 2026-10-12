@@ -64,16 +64,20 @@ export async function saveDNS(
     (change.action === "create"
       ? ""
       : `/${encodeURIComponent(change.recordId)}`);
+  if (change.action === "remove") {
+    await controllerRequest<void>(endpoint, 204, {
+      method: "DELETE",
+      ifMatch: `"${change.revision}"`,
+      idempotencyKey: key,
+      signal,
+    });
+    return;
+  }
   const result = await controllerRequest<
     components["schemas"]["EnvironmentDNSSaved"]
   >(endpoint, change.action === "create" ? 201 : 200, {
-    method:
-      change.action === "create"
-        ? "POST"
-        : change.action === "edit"
-          ? "PUT"
-          : "DELETE",
-    body: change.action === "remove" ? undefined : change.body,
+    method: change.action === "create" ? "POST" : "PUT",
+    body: change.body,
     ifMatch: `"${change.revision}"`,
     idempotencyKey: key,
     signal,

@@ -96,25 +96,18 @@ func (c *Client) EditEnvironmentDNS(
 func (c *Client) RemoveEnvironmentDNS(
 	ctx context.Context,
 	environmentID, recordID, revision string,
-) (apiTypes.EnvironmentDNSSaved, error) {
+) error {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.EnvironmentDNSSaved{}, err
+		return err
 	}
 	path := "/api/v1/environments/" + environmentID + "/dns-records/" + recordID
 	response, err := client.EnvironmentDnsRemoveWithResponse(ctx, environmentID, recordID,
 		&generated.EnvironmentDnsRemoveParams{IdempotencyKey: ids.NewULID(), IfMatch: "\"" + revision + "\""})
 	if err != nil {
-		return apiTypes.EnvironmentDNSSaved{}, generatedCallError(ctx, http.MethodDelete, path, err)
+		return generatedCallError(ctx, http.MethodDelete, path, err)
 	}
-	return environmentDNSSaved(
-		http.MethodDelete,
-		path,
-		environmentID,
-		response.HTTPResponse,
-		response.Body,
-		http.StatusOK,
-	)
+	return generatedResponseError(http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusNoContent)
 }
 
 func environmentDNSBody(input apiTypes.EnvironmentDNSWrite) (generated.EnvironmentDNSWrite, error) {

@@ -13925,15 +13925,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EnvironmentDNSSaved"
-                }
-              }
-            },
-            "description": "DNS intention saved; read DNS status for resolver activation",
+          "204": {
+            "description": "DNS removal saved; read DNS status for resolver withdrawal",
             "headers": {
               "Content-Type": {
                 "schema": {
@@ -13942,22 +13935,15 @@
               }
             }
           },
-          "201": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EnvironmentDNSSaved"
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             },
-            "description": "DNS intention created; read DNS status for resolver activation",
-            "headers": {
-              "Content-Type": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+            "description": "Error"
           }
         },
         "summary": "Withdraw an Environment DNS record",

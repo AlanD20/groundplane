@@ -79,7 +79,9 @@ func (s *Server) registerEnvironmentDNS() {
 		DefaultStatus: http.StatusOK, Responses: responses}, s.editEnvironmentDNS)
 	huma.Register(s.API, huma.Operation{OperationID: "environment.dns.remove", Method: http.MethodDelete,
 		Path: "/environments/{id}/dns-records/{record}", Summary: "Withdraw an Environment DNS record", Tags: []string{"Environment DNS"},
-		DefaultStatus: http.StatusOK, Responses: responses,
+		DefaultStatus: http.StatusNoContent, Responses: map[string]*huma.Response{
+			"204": {Description: "DNS removal saved; read DNS status for resolver withdrawal"},
+		},
 		Middlewares: huma.Middlewares{s.rejectTaskMutationBody, s.rejectTaskMutationQuery}}, s.removeEnvironmentDNS)
 	s.setRoutePolicy("POST /api/v1/environments/{id}/dns-records", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PUT /api/v1/environments/{id}/dns-records/{record}", routePolicy{body: jsonBody})
@@ -147,5 +149,7 @@ func (s *Server) removeEnvironmentDNS(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return componentMutationResponse(response), nil
+	output := componentMutationResponse(response)
+	output.ContentType = ""
+	return output, nil
 }

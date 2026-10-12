@@ -151,12 +151,15 @@ func (service *Service) mutate(ctx context.Context, environmentID, recordID, rev
 		scope := model.NamespaceScope(*input.Scope)
 		request.Scope = &scope
 	}
-	body, err := json.Marshal(apiTypes.EnvironmentDNSSaved{EnvironmentID: environmentID, RecordID: recordID})
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+	response := idempotency.IdempotencyResponse{Status: http.StatusNoContent, ContentKind: "none"}
+	if action != desiredauthoring.DNSRemove {
+		body, err := json.Marshal(apiTypes.EnvironmentDNSSaved{EnvironmentID: environmentID, RecordID: recordID})
+		if err != nil {
+			return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		}
+		defer clear(body)
+		response = idempotency.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: body}
 	}
-	defer clear(body)
-	response := idempotency.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: body}
 	durable, err := evidence.DurableRecord()
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
