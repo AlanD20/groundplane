@@ -3,7 +3,7 @@ package network
 import (
 	"context"
 	"crypto/sha256"
-	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -28,6 +28,7 @@ import (
 	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	runtimeconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 )
 
@@ -152,8 +153,15 @@ func (store *routeRemovalTransactionStore) GetMany(
 func (store *routeRemovalTransactionStore) Range(
 	_ context.Context, request testkeyvalue.RangeRequest,
 ) (*testkeyvalue.RangeResult, error) {
-	if request.Prefix != testedgechecks.RouteReferencePrefix(store.routeID) || request.Revision <= 0 {
-		return nil, errors.New("unexpected Route removal reference read")
+	// This fixture has neither external Route references nor active configuration
+	// writers. The real planner still checks both at the captured revision.
+	if request.Revision <= 0 || request.Prefix != testedgechecks.RouteReferencePrefix(store.routeID) &&
+		request.Prefix != testtaskjournal.TaskEnvironmentIndexPrefix+store.environmentID+"/" {
+		return nil, fmt.Errorf(
+			"unexpected Route removal reference read: prefix %q revision %d",
+			request.Prefix,
+			request.Revision,
+		)
 	}
 	return &testkeyvalue.RangeResult{
 		ReadRevision: request.Revision, ResponseRevision: store.revision,
