@@ -139,7 +139,9 @@ func (repository *EnvironmentBlueprintRepository) TrySettleBlueprintDNS(
 		return false, err
 	}
 	if !result.Succeeded {
-		return false, errs.New(errs.KindStateConflict, "Blueprint DNS settlement raced a configuration change")
+		// A compare miss applied no receipt or claim mutation. Re-read the same
+		// Apply and resolver authority on the next pass; stale proof cannot settle.
+		return false, nil
 	}
 	return !more, nil
 }
