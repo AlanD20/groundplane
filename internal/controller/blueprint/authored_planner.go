@@ -70,6 +70,13 @@ func (service *Service) Plan(
 			errs.KindStateConflict, "Blueprint runtime projection changed",
 		)
 	}
+	// Completion seals unit membership and inputs. Retiring an omission or
+	// acknowledging DNS must not derive a different plan for the same Apply.
+	// Runtime sealing above still proceeds when its prerequisites settle.
+	if snapshot.Desired != nil && snapshot.Desired.Record.ParentTaskID == parent.ID &&
+		snapshot.Desired.Record.Complete {
+		return snapshot.Desired.Record, nil
+	}
 	targets, err := selectAuthoredOwnedUnitTargets(input.identities)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err

@@ -130,10 +130,9 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 	}
 	published, err := runner.tasks.PublishBlueprintDesiredPlan(ctx, parent.ID, desired)
 	if err != nil {
-		if isStateRace(err) {
-			return false, nil
-		}
-		return false, err
+		// Only a changed head/epoch makes this a publication race. A stable
+		// invalid plan must close the forward gate, not retry indefinitely.
+		return runner.forwardFailed(ctx, parent, snapshot, "planning", err)
 	}
 	planChanged := snapshot.Desired == nil || published.Revision != snapshot.Desired.Revision
 	snapshot, err = runner.ledger.Load(ctx, parent.Owner.EnvironmentID)

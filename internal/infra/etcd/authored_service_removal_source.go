@@ -9,13 +9,13 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // AuthoredServiceRemovalSource captures actual applied state when available,
-// otherwise the exact last declared definition. Declared state is not absence
-// proof: the Agent must independently observe the sealed physical identities.
+// otherwise the exact last declared definition. A direct Deploy can acknowledge
+// runtime without applying that Environment projection. Its separate runtime
+// capture remains mandatory; a declaration is never runtime or absence proof.
 type AuthoredServiceRemovalSource struct {
 	Projection                keyvalue.Versioned[projectionrecord.EnvironmentComposeProjection]
 	Service                   keyvalue.Versioned[servicerecord.ServiceRecord]
@@ -36,7 +36,6 @@ func (repository *ServiceRepository) GetAuthoredServiceRemovalSource(
 	keys := []string{
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
 		blueprints.EnvironmentBlueprintEffectiveProjectionKey(environmentID, declaredRevisionID),
-		serviceruntimerecord.Key(serviceID),
 	}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
@@ -57,7 +56,7 @@ func (repository *ServiceRepository) GetAuthoredServiceRemovalSource(
 	if read.Values[0] != nil && projectionContainsService(source.Projection.Record, serviceID) {
 		source.Kind = environmentchanges.ServiceRemovalAppliedProjection
 	} else {
-		if read.Values[1] == nil || read.Values[2] != nil {
+		if read.Values[1] == nil {
 			return AuthoredServiceRemovalSource{}, errs.New(errs.KindStateConflict, "Service declared removal source is unavailable")
 		}
 		index = 1

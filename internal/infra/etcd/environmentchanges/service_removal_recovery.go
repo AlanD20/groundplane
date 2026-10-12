@@ -22,52 +22,27 @@ type ServiceRemovalRecovery struct {
 // ResolveAuthoredServiceRemovalRecovery opens only the captured acknowledged
 // runtime and derives the removal candidate from its real serving workload.
 func ResolveAuthoredServiceRemovalRecovery(intent ServiceRemovalIntent) (ServiceRemovalRecovery, error) {
-	if intent.Authored == nil || intent.AcknowledgedRuntime == nil ||
-		executionplan.ValidateNativePredecessorWitness(
-			intent.EnvironmentID, intent.ServiceID,
-			intent.AcknowledgedRuntime.Runtime.CurrentArtifact,
-			intent.AcknowledgedRuntime.Runtime.RetainedPriorArtifact,
-		) != nil {
+	if intent.Authored == nil || intent.AcknowledgedRuntime == nil {
 		return ServiceRemovalRecovery{}, errs.New(
 			errs.KindValidationFailed, "authored Service removal predecessor is invalid",
 		)
 	}
-	current := new(agentpb.ComposeArtifact)
-	if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(
-		intent.AcknowledgedRuntime.Runtime.CurrentArtifact, current,
-	) != nil {
-		return ServiceRemovalRecovery{}, errs.New(
-			errs.KindValidationFailed,
-			"authored Service removal predecessor is corrupt",
-		)
+	serving, err := executionplan.OpenNativeServingRuntime(
+		intent.EnvironmentID, intent.ServiceID,
+		intent.AcknowledgedRuntime.Runtime.CurrentArtifact,
+		intent.AcknowledgedRuntime.Runtime.RetainedPriorArtifact,
+	)
+	if err != nil {
+		return ServiceRemovalRecovery{}, err
 	}
+	current := serving.Artifact
 	result := ServiceRemovalRecovery{
 		ComposeProjectName: current.GetProjectName(), PriorArtifactID: current.GetArtifactId(),
 		PriorArtifacts: []*agentpb.ComposeArtifact{current},
-	}
-	for _, service := range current.GetServices() {
-		if service.GetServiceId() != intent.ServiceID ||
-			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-			continue
-		}
-		if result.PriorReleaseID != "" {
-			return ServiceRemovalRecovery{}, errs.New(
-				errs.KindStateConflict,
-				"authored Service removal predecessor is ambiguous",
-			)
-		}
-		for _, label := range service.GetExpectedLabels() {
-			if label.GetKey() == "com.groundplane.release-id" {
-				result.PriorReleaseID = label.GetValue()
-			}
-		}
-		result.PriorTarget = service.GetSlot()
-		if result.PriorTarget == "" {
-			result.PriorTarget = "singleton"
-		}
-		result.CandidateArtifactID = ids.DeriveAt(
-			ids.KindConfig, intent.CreatedAt, intent.TaskID, service.GetComposeName(),
-		)
+		PriorReleaseID: serving.ReleaseID, PriorTarget: serving.Target,
+		CandidateArtifactID: ids.DeriveAt(
+			ids.KindConfig, intent.CreatedAt, intent.TaskID, serving.Workloads[0].GetComposeName(),
+		),
 	}
 	result.CandidateReleaseID = result.PriorReleaseID
 	if ids.Validate(ids.KindConfig, result.CandidateArtifactID) != nil ||

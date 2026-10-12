@@ -162,8 +162,10 @@ func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 				return errs.New(errs.KindValidationFailed, "Service removal applied source revision changed")
 			}
 		case ServiceRemovalDeclaredProjection:
-			if intent.AcknowledgedRuntime != nil || intent.Authored.AppliedProjectionRevision < 0 {
-				return errs.New(errs.KindValidationFailed, "Service definition removal cannot claim an applied runtime")
+			// The definition and acknowledged native runtime have independent
+			// authority. Direct Deploy need not apply the Environment projection.
+			if intent.Authored.AppliedProjectionRevision < 0 {
+				return errs.New(errs.KindValidationFailed, "Service definition removal applied revision is invalid")
 			}
 		default:
 			return errs.New(errs.KindValidationFailed, "Service removal projection source is invalid")
