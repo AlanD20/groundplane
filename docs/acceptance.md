@@ -1220,9 +1220,20 @@ confirmed both obsolete slots absent and the exact proxy ID/start time retained.
 Container queries confirmed the managed name and local alias still reached that
 proxy, public UDP forwarding worked, and direct bridge TCP DNS returned its address.
 
-Recreate/scaled transitions, other replica counts, rollback, interruption,
-held connections and persistent data were NOT RUN in these journeys. The
-observer failure and original 502 run remain failed evidence. No reset, manual
+An additional SVC-21/22 journey started from two scaled Recreate workloads and
+aborted a rolling replacement at final verification, after both traffic switches
+and retirements. GP restored two healthy predecessors with the captured command
+and Compose replica numbers 1 and 2, removed every candidate, and retained the
+exact proxy container. A subsequent ordinary rolling Deploy completed with two
+healthy replicas. The full ten-minute run covering recovery and that next Deploy
+passed 1,200 HTTP requests without errors. Recreate's baseline transition was
+not claimed uninterrupted. The first Abort request returned a conflict; a bounded
+second request succeeded. Its cause remains unproven, and this run does not
+qualify Abort during the second candidate's startup.
+
+Other replica counts, rollback, process interruption, held connections and
+persistent data were NOT RUN in these journeys. The observer failure, first
+Abort conflict and original 502 run remain failed evidence. No reset, manual
 workload repair, Task rewrite, tag or release was used to qualify these cases.
 
 ## Interpretation limit
