@@ -75,10 +75,10 @@ func mergeBlueprintCandidateTerminalChange(
 		return conditions, mutations, nil
 	}
 	byKey := make(map[string]etcdstore.Condition, len(conditions)+len(change.conditions))
-	for _, condition := range conditions {
-		byKey[condition.Key] = condition
-	}
-	for _, condition := range change.conditions {
+	// Earlier journal and projection contributions can share the same pinned
+	// Release publication. Merge both sides without dropping conflicting proof.
+	combined := make([]etcdstore.Condition, 0, len(conditions)+len(change.conditions))
+	for _, condition := range append(slices.Clone(conditions), change.conditions...) {
 		if existing, duplicate := byKey[condition.Key]; duplicate {
 			if existing != condition {
 				return nil, nil, errs.New(
@@ -89,10 +89,10 @@ func mergeBlueprintCandidateTerminalChange(
 			continue
 		}
 		byKey[condition.Key] = condition
-		conditions = append(conditions, condition)
+		combined = append(combined, condition)
 	}
 	mutations = append(mutations, change.mutations...)
-	return conditions, mutations, nil
+	return combined, mutations, nil
 }
 
 func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgement(
