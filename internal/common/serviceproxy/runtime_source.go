@@ -17,8 +17,9 @@ const (
 	EnvoyBootstrapPath     = EnvoyRuntimeDirectory + "/bootstrap.json"
 	EnvoyClusterConfigPath = EnvoyRuntimeDirectory + "/clusters.json"
 	EnvoyRoutingPath       = EnvoyRuntimeDirectory + "/routing.json"
-	EnvoyRunningCommand    = "envoy\x00--config-path\x00" + EnvoyBootstrapPath + "\x00--disable-hot-restart\x00"
-	EnvoyStartup           = "umask 077; command -v bash timeout sed sync mv cmp cat tr >/dev/null; " +
+	EnvoyRunningCommand    = "envoy\x00--config-path\x00" + EnvoyBootstrapPath + "\x00--disable-hot-restart\x00" +
+		"--service-node\x00groundplane-service-proxy\x00--service-cluster\x00groundplane-service-proxy\x00"
+	EnvoyStartup = "umask 077; command -v bash timeout sed sync mv cmp cat tr >/dev/null; " +
 		"test ! -L " + EnvoyRuntimeDirectory + "; mkdir -p " + EnvoyRuntimeDirectory + "; " +
 		"if [ ! -e " + EnvoyBootstrapPath + " ]; then sed -n '1p' " + EnvoyInitialConfigPath + " > " + EnvoyBootstrapPath + ".next; " +
 		"sync; mv -f " + EnvoyBootstrapPath + ".next " + EnvoyBootstrapPath + "; sync; fi; " +
@@ -26,7 +27,8 @@ const (
 		"sync; mv -f " + EnvoyClusterConfigPath + ".next " + EnvoyClusterConfigPath + "; sync; fi; " +
 		"if [ ! -e " + EnvoyRoutingPath + " ]; then sed -n '3p' " + EnvoyInitialConfigPath + " > " + EnvoyRoutingPath + ".next; " +
 		"sync; mv -f " + EnvoyRoutingPath + ".next " + EnvoyRoutingPath + "; sync; fi; " +
-		"exec envoy --config-path " + EnvoyBootstrapPath + " --disable-hot-restart"
+		"exec envoy --config-path " + EnvoyBootstrapPath + " --disable-hot-restart " +
+		"--service-node groundplane-service-proxy --service-cluster groundplane-service-proxy"
 	// Activation receives the compiled three-line runtime source over stdin.
 	// An unchanged bootstrap is required before writes; changing listeners needs
 	// the protected proxy replacement path. Partial publication cannot pass proof.

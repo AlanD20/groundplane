@@ -23,7 +23,8 @@ const MaximumObservationBytes = 4 * MaximumSourceBytes
 // by the live admin response. Exec completion, exact container ownership/image,
 // non-TTY framing and output bounds remain the infrastructure caller's duty.
 const ObservationCommand = "test \"$(tr '\\000' '\\n' < /proc/1/cmdline)\" = 'envoy\n--config-path\n" +
-	BootstrapTarget + "\n--disable-hot-restart'; " +
+	BootstrapTarget + "\n--disable-hot-restart\n--service-node\ngroundplane-http-router\n" +
+	"--service-cluster\ngroundplane-http-router'; " +
 	"test ! -L " + RuntimeDirectory + "; test ! -L " + BootstrapTarget + "; " +
 	"test ! -L " + ClustersTarget + "; test ! -L " + RoutesTarget + "; test ! -L " + ManifestTarget + "; " +
 	"cat " + BootstrapTarget + " " + ClustersTarget + " " + RoutesTarget + " " + ManifestTarget + "; " + envoyadmin.ReadCommand

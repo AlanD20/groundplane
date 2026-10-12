@@ -19,7 +19,8 @@ const MaximumObservationBytes = 4 * MaximumConfigurationBytes
 // input. PID1 must load these exact restart files; an unused matching file is
 // insufficient. Exec exit status and output bounds are checked by the caller.
 const EnvoyObservation = "test \"$(tr '\\000' '\\n' < /proc/1/cmdline)\" = 'envoy\n--config-path\n" +
-	EnvoyBootstrapPath + "\n--disable-hot-restart'; " +
+	EnvoyBootstrapPath + "\n--disable-hot-restart\n--service-node\ngroundplane-service-proxy\n" +
+	"--service-cluster\ngroundplane-service-proxy'; " +
 	"test ! -L " + EnvoyRuntimeDirectory + "; " +
 	"test ! -L " + EnvoyRoutingPath + "; test ! -L " + EnvoyBootstrapPath + "; test ! -L " + EnvoyClusterConfigPath + "; " +
 	"cat " + EnvoyRoutingPath + " " + EnvoyBootstrapPath + " " + EnvoyClusterConfigPath + "; " + envoyadmin.ReadCommand

@@ -132,7 +132,8 @@ const startupCommand = "umask 077; command -v bash timeout sed sync mv cat tr sh
 	"sync; mv -f " + ManifestTarget + ".next " + ManifestTarget + "; sync; fi; " +
 	"chown envoy:envoy " + RuntimeDirectory + " " + BootstrapTarget + " " + ClustersTarget + " " +
 	RoutesTarget + " " + ManifestTarget + "; " +
-	"exec su-exec envoy envoy --config-path " + BootstrapTarget + " --disable-hot-restart"
+	"exec su-exec envoy envoy --config-path " + BootstrapTarget + " --disable-hot-restart " +
+	"--service-node groundplane-http-router --service-cluster groundplane-http-router"
 
 const readyCommand = "exec 3<>/dev/tcp/127.0.0.1/9901; " +
 	"printf 'GET /ready HTTP/1.0\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; " +
