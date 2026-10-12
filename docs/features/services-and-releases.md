@@ -84,7 +84,7 @@ Old and new versions overlap during rolling. Their commands, configuration and
 shared data must support that overlap; GP does not reverse database migrations.
 Task steps identify the replica and action. An interrupted rollout retains its
 original recovery authority rather than replaying completed forward steps.
-The current rolling implementation still requires behavioral and live qualification.
+Rolling qualification remains partial; see [capability status](../capabilities.md).
 
 After a blue-green switch, both slots remain running. The next Deploy replaces
 only the inactive slot, then switches traffic after candidate health passes.

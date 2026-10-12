@@ -1185,6 +1185,46 @@ were NOT RUN. This is a software Prepare/Apply journey, not fresh installation
 or a blanket production-readiness pass. Published artifact QA is explicitly
 deferred; no tag or release was created.
 
+## Rolling handoff, scaling and strategy transitions
+
+**H98 — selected rolling and Blueprint supersession variants PASS on
+2026-10-12; broader qualification remains open.**
+
+The Ubuntu 24.04 amd64 run used Controller `e439f647c` and Agent `f717257dd`,
+storage epoch 33 and channel schema 18. Controller binary digest was
+`sha256:47c57d68e2340841c080342a35e647215144bc562600bb0c9befc6c1c1fb734e`;
+Agent image digest was
+`sha256:3d32373f825ac18a59bdb8b38c8c902401de87fd53c56579c023005f1a692d82`.
+Both commits passed full local CI and remote CI. Normal Agent and Controller
+updates completed; the Controller update preserved all runtime container IDs.
+
+BP-13/SVC-22 originally produced three HTTP 502s in 1,200 requests: recovery
+removed a routed candidate before restoring the predecessor and its routing.
+The repaired A/B handoff passed 718 requests without errors. The old Apply
+aborted after verified recovery; the new Apply completed without another rollout
+because the recovered runtime already matched its input. Exact etcd revisions
+proved old health completion after new-head publication, but no subsequent old
+traffic-switch start. Captured restoration, not latest desired state, ran.
+
+SVC-20 initially rejected ordinary 2→3 scaling before Task creation because
+proxy validation ran before candidate proxy preparation. The scoped repair
+allowed Deploy to complete with three independently healthy replicas. Its
+combined observer stopped on a five-second Docker inventory timeout: 124 HTTP
+requests succeeded, but complete update/scale-up continuity was not established.
+The separate 3→1 run passed 710 HTTP requests with no errors; 347 inventory
+samples measured peak four and final one, with the same stable proxy.
+
+SVC-21 rolling singleton→blue-green, a second blue-green Deploy, and
+blue-green→rolling two completed under 1,200 error-free HTTP requests. Docker
+confirmed both obsolete slots absent and the exact proxy ID/start time retained.
+Container queries confirmed the managed name and local alias still reached that
+proxy, public UDP forwarding worked, and direct bridge TCP DNS returned its address.
+
+Recreate/scaled transitions, other replica counts, rollback, interruption,
+held connections and persistent data were NOT RUN in these journeys. The
+observer failure and original 502 run remain failed evidence. No reset, manual
+workload repair, Task rewrite, tag or release was used to qualify these cases.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
