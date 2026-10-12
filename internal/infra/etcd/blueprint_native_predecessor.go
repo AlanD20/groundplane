@@ -186,21 +186,11 @@ func validateNativeRestorationDescriptor(
 			}
 			continue
 		}
-		artifact, err := taskassignments.OpenRestorationWitness(authority.EnvironmentID, witness.CurrentArtifact)
-		if err != nil || artifact.GetArtifactId() != prior.GetPriorArtifactId() {
+		runtime, err := executionplan.OpenNativeServingRuntime(authority.EnvironmentID, witness.ServiceID,
+			witness.CurrentArtifact, witness.RetainedPriorArtifact)
+		if err != nil || runtime.Artifact.GetArtifactId() != prior.GetPriorArtifactId() ||
+			runtime.ReleaseID != prior.GetPriorReleaseId() || runtime.Target != prior.GetPriorTarget() {
 			return taskassignments.CorruptTaskAssignment()
-		}
-		for _, service := range artifact.Services {
-			if service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-				continue
-			}
-			target := service.GetSlot()
-			if target == "" {
-				target = "singleton"
-			}
-			if composeServiceReleaseID(service) != prior.GetPriorReleaseId() || target != prior.GetPriorTarget() {
-				return taskassignments.CorruptTaskAssignment()
-			}
 		}
 		if len(witness.RetainedPriorArtifact) != 0 {
 			retained, err := taskassignments.OpenRestorationWitness(
