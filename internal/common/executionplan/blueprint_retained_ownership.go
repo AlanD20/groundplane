@@ -79,6 +79,7 @@ func validBlueprintRetainedOwnership(
 	candidates := make(map[string]bool)
 	nativePriorRemoves := make(map[string]map[string]string)
 	nativePriorArtifacts := make(map[string]map[string]bool)
+	rollingSteps := make(map[string]bool)
 	candidateArtifactID := ""
 	if procedure := plan.GetCandidateReleaseProcedure(); procedure != nil {
 		if len(procedure.Members) == 0 {
@@ -87,6 +88,17 @@ func validBlueprintRetainedOwnership(
 		for _, member := range procedure.Members {
 			if member == nil || validateID(ids.KindConfig, member.CandidateArtifactId) != nil {
 				return retainedOwnershipReject(retainedOwnershipCandidate)
+			}
+			if rolling := member.GetRolling(); rolling != nil {
+				if len(member.GetForwardStepIds()) == 0 || validateRollingMemberSteps(plan, member) != nil {
+					return retainedOwnershipReject(retainedOwnershipProcedure)
+				}
+				for _, change := range rolling.GetChanges() {
+					for _, stepID := range change.GetStepIds() {
+						rollingSteps[stepID] = true
+					}
+				}
+				rollingSteps[rolling.GetAcknowledgeStepId()] = true
 			}
 			if serving := member.GetServingPredecessor(); serving != nil {
 				if serving.GetPriorArtifactId() != "" && len(member.GetForwardStepIds()) == 3 {
@@ -160,6 +172,10 @@ func validBlueprintRetainedOwnership(
 			if !validManagedComposeImage(service) || !retainedProxyHasRelease(artifact, service) {
 				return retainedOwnershipReject(retainedOwnershipRetainedRole)
 			}
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_ROLLING_REPLICA:
+			if validateRollingReplica(service) != nil {
+				return retainedOwnershipReject(retainedOwnershipRetainedRole)
+			}
 		default:
 			return retainedOwnershipReject(retainedOwnershipRetainedRole)
 		}
@@ -194,6 +210,11 @@ func validBlueprintRetainedOwnership(
 	for _, step := range plan.Steps {
 		if step == nil {
 			return retainedOwnershipReject(retainedOwnershipStepSelection)
+		}
+		// Exact rolling phase payloads and retirement selections were checked
+		// against their captured member above; no arbitrary historical selection.
+		if rollingSteps[step.GetStepId()] {
+			continue
 		}
 		switch payload := step.Payload.(type) {
 		case *agentpb.ExecutionStep_ComposeApply:

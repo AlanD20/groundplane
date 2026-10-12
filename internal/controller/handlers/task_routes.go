@@ -299,13 +299,7 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 }
 
 func taskAPIType(taskType taskjournal.TaskType, actor taskjournal.TaskActor) (string, error) {
-	switch taskType {
-	case taskjournal.TaskDeploy, taskjournal.TaskRollback, taskjournal.TaskBackup, taskjournal.TaskBackupPrune,
-		taskjournal.TaskRestore, taskjournal.TaskAttach, taskjournal.TaskDetach, taskjournal.TaskRun,
-		taskjournal.TaskScript, taskjournal.TaskProvision, taskjournal.TaskCreate, taskjournal.TaskUpdate,
-		taskjournal.TaskRemove, taskjournal.TaskStart, taskjournal.TaskStop, taskjournal.TaskDestroy,
-		taskjournal.TaskRotate, taskjournal.TaskFetch, taskjournal.TaskPrepare, taskjournal.TaskApply:
-	default:
+	if !taskjournal.ValidTaskType(taskType) {
 		return "", errs.New(errs.KindInternal, "task has an invalid durable type")
 	}
 	if taskType == taskjournal.TaskBackupPrune && actor != taskjournal.TaskActorSystem {
