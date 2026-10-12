@@ -46,6 +46,23 @@ func executeServingPredecessor(
 	if err != nil {
 		return failedResponse(1), nil
 	}
+	// Rolling compensation reverses traffic before retiring its candidates. The
+	// ordinary absence path below is safe only after that handoff is proven.
+	if step.GetCandidateRestorationCompensate() != nil && proxy != nil && inventory.proxyID != "" {
+		for _, member := range request.GetPlan().GetCandidateReleaseProcedure().GetMembers() {
+			if member.GetServiceId() == serviceID && member.GetRolling() != nil {
+				if err := restoreRollingTraffic(executionCtx, taskRunner, complete, candidate, serving, member); err != nil {
+					return failedProxyResponse(), nil
+				}
+				inventory, err = inspectServingInventory(executionCtx, taskRunner, complete, candidate,
+					serviceID, restorationStepCandidateReleaseID(step), proxy)
+				if err != nil {
+					return failedResponse(1), nil
+				}
+				break
+			}
+		}
+	}
 	if len(inventory.candidates) != 0 {
 		if step.GetCandidateRestorationCompensate() == nil {
 			return restorationRequiredResponse(), nil
