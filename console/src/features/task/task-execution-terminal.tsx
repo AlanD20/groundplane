@@ -202,6 +202,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
                   <TaskStepDetails
                     index={index}
                     step={step}
+                    terminal={terminal}
                     events={events.filter(
                       (event) => event.step_id === step.label,
                     )}
@@ -224,10 +225,12 @@ export function TaskStepDetails({
   index,
   step,
   events,
+  terminal = false,
 }: {
   index: number;
   step: TaskStep;
   events: TaskEventResponse[];
+  terminal?: boolean;
 }) {
   const latest = events.reduce<TaskEventResponse | undefined>(
     (current, event) =>
@@ -289,7 +292,7 @@ export function TaskStepDetails({
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-2">
-            <StatusBadge status={state} label={eventStateLabel(state)} />
+            <StatusBadge status={state} label={state === "pending" && terminal ? "No recorded run" : eventStateLabel(state)} />
             <ChevronDown
               className="size-3.5 text-muted-foreground transition-transform group-data-[open=true]:rotate-180"
               aria-hidden

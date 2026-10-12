@@ -93,6 +93,12 @@ export function BlueprintExecutions({
                     index={index}
                     events={[]}
                     step={taskStepFromAPI(step)}
+                    terminal={[
+                      "completed",
+                      "failed",
+                      "timed_out",
+                      "aborted",
+                    ].includes(unit.status)}
                   />
                 </li>
               ))}
