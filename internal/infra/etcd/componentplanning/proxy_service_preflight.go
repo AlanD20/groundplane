@@ -287,12 +287,11 @@ func validateProxyServiceSource(preflight ProxyServicePreflight, source *ProxySe
 		}
 		previous = &domain.ProxySelection{}
 		if runtime.Proxy != nil {
-			implementation := serviceproxy.Implementation(runtime.Proxy.GetProxyImplementation())
 			configuration, err := executionplan.OpenProxyConfiguration(runtime.Proxy)
 			if err != nil {
 				return err
 			}
-			previous.Implementation = implementation
+			previous.Implementation = configuration.Implementation
 			for _, port := range configuration.Ports {
 				previous.Ports = append(
 					previous.Ports,

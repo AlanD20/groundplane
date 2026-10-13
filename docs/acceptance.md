@@ -1294,6 +1294,39 @@ absent by the prior Apply: immutable omission intent was mistaken for unfinished
 removal work. The failed Task remains retained. Protected engine switching and
 the correction's installed result are not qualified by this record.
 
+**H101 — Normal Controller updates, default DNS diagnostics and selected browser
+terminal lifecycle PASS on 2026-10-13; engine switching remains FAIL.**
+
+Ubuntu 24.04 amd64 updated the Controller normally to `a7ad9f850`, then
+`0be302cd4`, retaining Agent `df6bf950e` and epoch 33/channel 19. Both update
+Tasks completed without repair or reset. Independent container comparisons
+allowed only the permitted Agent restart; its image and container ID remained
+unchanged. All other container identities, images, running states and start
+times—including etcd—were unchanged. HTTP checks returned the expected nginx
+response after each update. No continuous traffic or held-connection assertion
+is made for these windows.
+
+On Controller `a7ad9f850`, CHK-03 returned fresh successful root-NS answers through
+the actual CoreDNS resolver and both configured upstreams, with per-server query,
+answer and timing details. Configuration and workloads were not changed.
+Per-domain forwarding, timeout and result-staleness variants were NOT RUN.
+
+HOST-14 used a separate test browser context. The shell reported UID 0; Keep in
+background and reopen preserved its process and a shell variable. Keyboard resize
+worked; maximize filled the tab without browser fullscreen. Terminate removed the
+exact shell process, independently verified on the host. The UI showed the default
+15-minute input limit, but expiry, foreign-session/Origin rejection, CLI, browser
+close and Controller shutdown were NOT RUN. Existing page-level 409 responses
+while the Environment projection was pending prevent a clean-console claim.
+
+HTTP-only engine switching still failed before child publication or host effects.
+The second attempt rejected an already-removed Service whose historical Release
+remained; `0be302cd4` corrected that capture using its pinned absence receipt.
+The next attempt reached listener validation and rejected a numeric machine enum
+incorrectly cast to text. Its stored native configuration remained valid. These
+failures and original Tasks are retained; neither normal update nor the other
+passes qualify protected engine switching.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
