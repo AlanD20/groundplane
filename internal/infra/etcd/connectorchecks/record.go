@@ -61,7 +61,7 @@ type Record struct {
 	Draft               bool                                  `json:"draft"`
 	CredentialDigest    string                                `json:"credential_digest"`
 	ConfigurationSHA256 string                                `json:"configuration_sha256"`
-	SecretSources       []SecretSource                        `json:"secret_sources,omitempty"`
+	SecretSources       []SecretSource                        `json:"secret_sources"`
 	Credentials         *connectorrecord.EncryptedCredentials `json:"credentials,omitempty"`
 	Phase               Phase                                 `json:"phase"`
 	Cleanup             s3connector.ConnectionCheckCleanup    `json:"cleanup"`
