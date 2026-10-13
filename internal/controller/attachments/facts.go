@@ -470,7 +470,7 @@ func validAttachFactBundle(bundle attachFactBundle, record attachrecord.Record) 
 	}
 	for setIndex, set := range bundle.Sets {
 		metadata := record.FactSets[setIndex]
-		if set.GrantAttachID != metadata.GrantAttachID || len(set.Facts) != len(metadata.Facts) {
+		if set.GrantAttachID != metadata.GrantAttachID {
 			return false
 		}
 		if record.Status == core.AttachReady && len(set.Facts) != len(metadata.Facts) {
