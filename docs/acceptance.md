@@ -1468,6 +1468,30 @@ CoreDNS and registry containers remained present with their retained identities.
 This qualifies the selected recreate transition, not uninterrupted traffic,
 alternate deployment strategies, failed listener withdrawal or recovery.
 
+**H107 — Private-registry tag movement, failed Fetch and stale Retry PASS on
+2026-10-13.**
+
+Controller `daa94a3a5` and Agent `df6bf950e` ran on the same Ubuntu 24.04 amd64
+host. Isolated images reused nginx layers; each generation had distinct verified
+content. Two completed Fetches moved one private-registry tag between those
+generations. Independent Docker inspection confirmed the assignments. GP's
+inventory retained the older untagged image and each historical request/digest.
+
+A third generation had one uniquely owned layer temporarily withheld, with its
+bytes preserved. Fetch failed during download; the previous local tag and every
+existing container id, image and start time remained unchanged. The layer was
+restored before continuing. A newer generation then fetched successfully. Retry
+of the older failed Task downloaded its captured content but failed before tag
+commit with “image tag selection was superseded before commit.” The newer tag
+remained selected, and both failed attempts remained visible in Fetch history.
+
+The existing Service's Release entries and sealed container configuration were
+unchanged, and its HTTP Route returned the expected page. This qualifies private
+tag movement, a real download failure and sequential stale Retry fencing. It does
+not qualify simultaneous Fetches, process interruption during tag commit, rollback
+execution, or every core-component presentation surface. Isolated registry content
+and failed Task evidence remain retained; no application data was removed.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
