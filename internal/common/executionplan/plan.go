@@ -184,7 +184,7 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		return validateComponentApplyPlan(plan, nil)
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY && len(plan.Artifacts) == 0 {
-		return validateBlueprintAttachProvisionPlan(plan)
+		return validateBlueprintAttachPlan(plan)
 	}
 	if len(plan.Artifacts) == 0 && validateID(ids.KindNetwork, plan.TargetId) == nil {
 		return validateArtifactFreeManagedNetworkRemovePlan(plan)

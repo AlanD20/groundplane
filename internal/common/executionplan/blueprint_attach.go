@@ -6,9 +6,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// A native Attach child provisions one captured credential owner. Consumer
-// deployment is a separate unit; no Compose or arbitrary execution belongs here.
-func validateBlueprintAttachProvisionPlan(plan *agentpb.ExecutionPlan) error {
+// A Blueprint Attach child executes its captured native provision or Custom
+// Attach hook. Consumer deployment remains a separate unit.
+func validateBlueprintAttachPlan(plan *agentpb.ExecutionPlan) error {
 	if validateID(ids.KindEnvironment, plan.TargetId) != nil || len(plan.Steps) == 0 ||
 		len(plan.ScriptRunnerSnapshots) != 0 || len(plan.ScriptRunnerProjections) != 0 ||
 		len(plan.ScriptBodyArtifacts) != 0 ||
@@ -19,6 +19,13 @@ func validateBlueprintAttachProvisionPlan(plan *agentpb.ExecutionPlan) error {
 			errs.KindValidationFailed,
 			"Blueprint Attach provisioning plan shape is invalid",
 		)
+	}
+	if hook := plan.Steps[0].GetBackingHookProcedure(); hook != nil {
+		if len(plan.Steps) != 1 || hook.GetEvent() != agentpb.BackingHookEvent_BACKING_HOOK_EVENT_ATTACH ||
+			hook.GetEnvironmentId() != plan.TargetId {
+			return errs.New(errs.KindValidationFailed, "Blueprint Custom Attach hook target is invalid")
+		}
+		return validateStep(plan, plan.Steps[0], nil, nil)
 	}
 	owner := plan.Steps[0].GetAdapterProcedure()
 	if owner == nil ||
