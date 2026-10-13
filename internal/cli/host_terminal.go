@@ -136,7 +136,7 @@ func readCLITerminal(
 	for {
 		kind, body, err := conn.Read(ctx)
 		if err != nil {
-			result <- cliTerminalResult{err: err}
+			result <- cliTerminalResult{err: hostTerminalConnectionError(ctx)}
 			return
 		}
 		switch kind {
@@ -185,5 +185,18 @@ func writeCLIControl(ctx context.Context, conn *websocket.Conn, control cliTermi
 	}
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return conn.Write(writeCtx, websocket.MessageText, body)
+	if err := conn.Write(writeCtx, websocket.MessageText, body); err != nil {
+		return hostTerminalConnectionError(ctx)
+	}
+	return nil
+}
+
+func hostTerminalConnectionError(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errs.New(
+		errs.KindRequestUnavailable,
+		"host terminal connection closed; check whether the Controller restarted or became unreachable before opening another terminal. Commands were not replayed",
+	)
 }

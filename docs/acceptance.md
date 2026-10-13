@@ -1327,6 +1327,40 @@ incorrectly cast to text. Its stored native configuration remained valid. These
 failures and original Tasks are retained; neither normal update nor the other
 passes qualify protected engine switching.
 
+**H102 — Selected terminal expiry, ownership and shutdown PASS on 2026-10-13;
+unsaved Connector permission check FAIL before provider access.**
+
+Ubuntu 24.04 amd64 used Controller `c89c1dc99`, Agent `df6bf950e`, storage
+epoch 33 and channel 19. An ordinary CLI terminal opened as root and exited
+cleanly. A foreign Origin returned HTTP 403. A different terminal owner received
+WebSocket close 1008; the real owner disconnected and reconnected to the same
+session and live shell PID. After Terminate, replay returned the terminated
+session rather than opening a replacement. Host process checks confirmed cleanup.
+
+The operator-input limit was temporarily saved as one minute and activated by
+an ordinary Controller restart. A shell producing output every two seconds
+expired with `input_inactivity` without further input; its process was gone.
+The exact original configuration was restored and activated. Restart with a live
+shell also removed its background child. The Agent kept its container identity
+and generation; etcd's identity, start time and restart count were unchanged.
+The retained application returned its expected HTTP response after activation.
+This is not continuous-traffic or held-connection qualification.
+
+The deployed CLI reported a generic internal error when restart closed its socket.
+A separately built local CLI reported connection loss and stated that commands
+were not replayed. That local correction was not installed or signed during this
+run. Browser-close/route-change behavior, displayed restart reasons and the
+eight-hour configuration boundary remain NOT RUN.
+
+CHK-01's unsaved direct-credential draft was accepted but its result read returned
+HTTP 500. The stored configuration digest encoded an empty Secret-source list as
+`[]`; persistence omitted the field and decoding produced `null`, invalidating
+that identity. The captured record remained ready, with no started time, stages
+or pending cleanup. Execution rejected it before constructing the provider
+adapter. The original Task and evidence were preserved. A local writer correction
+preserved both list forms through save/read, but provider access, remote cleanup,
+saved/edited Connectors, denied permissions and staleness remain unqualified.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
