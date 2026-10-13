@@ -1678,6 +1678,51 @@ application credentials, repository tests, compatibility paths or release tags
 were changed. Wrong-credential/network/database probes, diagnostic interruption,
 Runner dependency-failure variants and Tunnel helper cleanup remain unqualified.
 
+**H116 — Direct Attach roundtrip, fact/reuse, Component omission and Abort
+response PASS on 2026-10-13–14; new provisioning remains BLOCKED.**
+
+Ubuntu 24.04 amd64 ran Controller `21000133c`, then `10d1c37d5`, with
+Agent `225fe59d2`. A consumer deployed through the direct Service action and
+attached to MySQL 8.4. Full Blueprint reapply retained its exact Attach identity
+after removing an obsolete requirement for a whole-Environment applied artifact.
+Independent Docker inspection found one running consumer, both expected networks
+and the expected HTTP page. The original failed Apply remains retained.
+
+A subsequent full Apply added a second consumer, reused the original credential
+and resolved fact-derived Entries, including a secret Entry. The Apply completed.
+The reused consumer's access check passed network, authentication and database
+access; its result was current with no pending cleanup. Independent Docker
+inspection found the exact temporary helper absent. Canonical export by name,
+stable ID and API succeeded without exposing secret values.
+
+Caddy Enable and Blueprint omission completed on `10d1c37d5`. Independent runtime
+inspection showed the enabled router healthy and existing consumers unchanged.
+The omission child removed the router workload, and its visible Apply completed
+without a reconciliation fence. Explicit Abort of the subsequent re-enable
+returned success and durably terminated that same visible Apply. After the
+authoring repair in `8995e2531`, a new Apply reintroduced that same Component ID
+and completed without a reconciliation fence. Independent Docker inspection
+confirmed its healthy router and unchanged consumer containers; the consumer
+still served its expected HTTP page.
+
+An isolated missing-image Apply failed before workload execution and retained the
+specific safe image-unavailable reason in its public Task failure. Internal errors
+remain masked; missing historical detail is not reconstructed or rewritten.
+
+Normal Agent and Controller updates to `8995e2531` completed after frozen local
+CI passed. Exact application, database and etcd container identities, images and
+start times were unchanged. Post-Abort Blueprint export then succeeded using
+authored consumer identities rather than an unfinished runtime projection.
+This is preservation evidence, not a new sustained-traffic qualification.
+
+New Blueprint-native credential provisioning remains blocked: its child was
+published but quarantined before dispatch because the reconstruction reader
+lacked the captured input-generation capability. Original Tasks and authority
+remain intact. The shared-reader correction is not live-qualified by this record.
+Tunnel diagnostics/public access and joint Service/Zone/Attach/Route omission
+remain unqualified. No provider configuration,
+compatibility path, history rewrite, new test or release tag was introduced.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
