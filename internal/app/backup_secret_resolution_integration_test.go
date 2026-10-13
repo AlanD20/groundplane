@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -926,6 +927,7 @@ func appBackupSecretAuthenticate(agentID string) *agentpb.AgentMessage {
 		Authenticate: &agentpb.Authenticate{
 			AgentId: agentID, Token: bytes.Repeat([]byte{7}, 32),
 			ExecutionPlanSchema: executionplan.SchemaVersion,
+			ChannelSchema:       agentprotocol.SchemaVersion,
 			ProcessGeneration:   bytes.Repeat([]byte{1}, 16),
 		},
 	}}

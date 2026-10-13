@@ -181,8 +181,9 @@ func runAdapterProcedure(
 					TaskId: progress.TaskID, AssignmentId: progress.AssignmentID,
 					StepId: progress.StepID, PlanHash: progress.PlanHash[:],
 					ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
-					State:         agentpb.TaskState_TASK_STATE_RUNNING,
-					StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+					State:            agentpb.TaskState_TASK_STATE_RUNNING,
+					StartDecision:    agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+					EventOrdinalBase: 1,
 				}); err != nil {
 					t.Fatal(err)
 				}

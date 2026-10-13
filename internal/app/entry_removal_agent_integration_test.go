@@ -106,7 +106,8 @@ func runEntryRemovalAgent(
 				}
 				if err := pool.AcceptTaskEventAck(ctx, &agentpb.TaskEventAck{TaskId: task.ID, AssignmentId: assigned.AssignmentID,
 					PlanHash: progress.PlanHash[:], StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch,
-					Ordinal: progress.Ordinal, State: wireState, StartDecision: fixtureStepStartDecision(t, appended.StartDecision)}); err != nil {
+					Ordinal: progress.Ordinal, State: wireState, StartDecision: fixtureStepStartDecision(t, appended.StartDecision),
+					EventOrdinalBase: appended.EventOrdinalBase}); err != nil {
 					t.Fatal(err)
 				}
 			} else if output.Result != nil {

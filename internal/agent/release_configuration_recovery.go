@@ -19,15 +19,6 @@ func hasConfigurationRestoration(plan *agentpb.ExecutionPlan) bool {
 	return executionplan.ConfigurationRestorationForPlan(plan) != nil
 }
 
-func isConfigurationForwardStep(plan *agentpb.ExecutionPlan, stepID string) bool {
-	for _, file := range executionplan.ConfigurationRestorationForPlan(plan).GetFiles() {
-		if file.GetForwardStepId() == stepID {
-			return true
-		}
-	}
-	return false
-}
-
 func releaseRecoveryPair(
 	plan *agentpb.ExecutionPlan,
 	stepID string,
@@ -311,19 +302,25 @@ func (p *WorkerPool) completeReleaseRecoveryNoop(
 	state *releaseExecutionState,
 ) error {
 	planHash := taskassignment.PlanDigest(reservation.assignment.Plan)
-	for ordinal, progressState := range []TaskProgressState{TaskProgressRunning, TaskProgressCompleted} {
+	ordinal := uint64(1)
+	for _, progressState := range []TaskProgressState{TaskProgressRunning, TaskProgressCompleted} {
 		progress := TaskProgress{
 			AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID,
 			PlanHash: planHash, StepID: step.GetStepId(), ExecutionEpoch: reservation.assignment.ExecutionEpoch,
-			Ordinal: uint64(ordinal + 1), State: progressState,
+			Ordinal: ordinal, State: progressState,
 		}
 		if reservation.eventsDurable {
-			if err := p.emitProgressAndWait(reservation.ctx, progress); err != nil {
+			receipt, err := p.emitProgressForReceipt(reservation.ctx, progress)
+			if err != nil {
 				return err
+			}
+			if progressState == TaskProgressRunning {
+				ordinal = receipt.GetEventOrdinalBase()
 			}
 		} else {
 			p.emitProgress(reservation.ctx, progress)
 		}
+		ordinal++
 	}
 	state.completed[step.GetStepId()] = struct{}{}
 	return nil

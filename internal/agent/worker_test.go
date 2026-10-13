@@ -522,8 +522,9 @@ func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *test
 		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
 		StepId: output.Progress.StepID, PlanHash: output.Progress.PlanHash[:],
 		ExecutionEpoch: output.Progress.ExecutionEpoch, Ordinal: output.Progress.Ordinal,
-		State:         agentpb.TaskState_TASK_STATE_RUNNING,
-		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+		State:            agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision:    agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+		EventOrdinalBase: 1,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
 		t.Fatalf("AcceptTaskEventAck(receipt) error = %v", err)
@@ -537,6 +538,7 @@ func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *test
 	changed := proto.CloneOf(ack)
 	changed.Ordinal++
 	changed.StartDecision = agentpb.StepStartDecision_STEP_START_DECISION_UNSPECIFIED
+	changed.EventOrdinalBase = 0
 	if err := pool.AcceptTaskEventAck(context.Background(), changed); !errors.Is(
 		err,
 		errs.New(errs.KindStateConflict, ""),
@@ -565,8 +567,9 @@ func TestWorkerPoolReceiptCleanupPreservesReplacementRegistration(t *testing.T) 
 	ack := &agentpb.TaskEventAck{
 		TaskId: progress.TaskID, AssignmentId: progress.AssignmentID, StepId: progress.StepID,
 		PlanHash: progress.PlanHash[:], ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
-		State:         agentpb.TaskState_TASK_STATE_RUNNING,
-		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+		State:            agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision:    agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+		EventOrdinalBase: 1,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
 		t.Fatalf("AcceptTaskEventAck(first) error = %v", err)
@@ -624,6 +627,7 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 	if capacity := pool.Capacity(); capacity != 1 {
 		t.Fatalf("Capacity() = %d, want 1 reservation remaining", capacity)
 	}
+	acknowledgeWorkerStart(t, pool, (<-pool.Outputs()).Progress)
 	select {
 	case <-started:
 	case <-time.After(time.Second):
@@ -753,6 +757,7 @@ func TestWorkerPoolCancellationJoinsActiveWorkers(t *testing.T) {
 		pool.Run(ctx)
 		close(done)
 	}()
+	acknowledgeWorkerStart(t, pool, (<-pool.Outputs()).Progress)
 	<-started
 	cancel()
 	select {
@@ -850,9 +855,27 @@ func nextWorkerResult(t *testing.T, pool *WorkerPool) TaskResult {
 			if output.Result != nil {
 				return *output.Result
 			}
+			if output.Progress != nil && output.Progress.State == TaskProgressRunning && output.Progress.Ordinal == 1 {
+				acknowledgeWorkerStart(t, pool, output.Progress)
+			}
 		case <-time.After(time.Second):
 			t.Fatal("timed out waiting for worker result")
 		}
+	}
+}
+
+func acknowledgeWorkerStart(t *testing.T, pool *WorkerPool, progress *TaskProgress) {
+	t.Helper()
+	if progress == nil || progress.State != TaskProgressRunning || progress.Ordinal != 1 {
+		t.Fatal("expected a step start request")
+	}
+	if err := pool.AcceptTaskEventAck(context.Background(), &agentpb.TaskEventAck{
+		TaskId: progress.TaskID, AssignmentId: progress.AssignmentID, StepId: progress.StepID,
+		PlanHash: progress.PlanHash[:], ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
+		State:         agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED, EventOrdinalBase: 1,
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

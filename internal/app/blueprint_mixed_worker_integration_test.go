@@ -251,7 +251,8 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *ExecutedArtifactFixture, 
 			if err := pool.AcceptTaskEventAck(ctx, &agentpb.TaskEventAck{
 				TaskId: progress.TaskID, AssignmentId: progress.AssignmentID, PlanHash: progress.PlanHash[:],
 				StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal, State: wireState,
-				StartDecision: decision,
+				StartDecision:    decision,
+				EventOrdinalBase: appended.EventOrdinalBase,
 			}); err != nil {
 				t.Fatalf("Worker event ACK: %v", err)
 			}

@@ -51,11 +51,12 @@ type PlatformResolverComponentSelector func(
 // TaskEventAppend reports the durable sequence allocated by the Controller.
 // Duplicate is true only when the same Agent event was already committed.
 type TaskEventAppend struct {
-	StartDecision taskjournal.StepStartDecision
-	Sequence      uint64
-	Revision      int64
-	Duplicate     bool
-	RollingBudget *rollingrelease.StepBudget
+	StartDecision    taskjournal.StepStartDecision
+	EventOrdinalBase uint64
+	Sequence         uint64
+	Revision         int64
+	Duplicate        bool
+	RollingBudget    *rollingrelease.StepBudget
 }
 
 // TaskEventSnapshot is one complete, fixed-revision event journal. A Task has

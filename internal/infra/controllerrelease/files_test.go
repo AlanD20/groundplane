@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -144,7 +144,7 @@ func testReleaseStore(t *testing.T) (*Store, upgrade.Digest, []byte) {
 			Kind: "release", Commit: strings.Repeat("c", 40),
 		},
 		AgentImage:   "registry.example/agent@sha256:" + strings.Repeat("a", 64),
-		StorageEpoch: upgrade.StorageEpoch, ChannelSchema: executionplan.SchemaVersion,
+		StorageEpoch: upgrade.StorageEpoch, ChannelSchema: agentprotocol.SchemaVersion,
 	})
 	if err != nil {
 		t.Fatal(err)

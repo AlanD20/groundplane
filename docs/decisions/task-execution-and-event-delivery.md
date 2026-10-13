@@ -181,6 +181,14 @@ preceding epoch has durable effect evidence; an eventless failed delivery may
 reuse the same next epoch. This prevents two executions from sharing one event
 identity without adding a public delivery record.
 
+Within an epoch, each durable step waits for its start receipt. An allowed receipt
+also supplies the journal's committed ordinal watermark; new observations and
+outcomes increment from it. Restarting the Agent therefore cannot reuse an old
+health observation's identity with new timing or failure data. The original start
+remains an exact replay, and conflicting payloads remain rejected. Channel schema
+is checked independently of sealed plan schema: changing delivery receipts requires
+matching binaries, not rewriting or invalidating unchanged plans.
+
 Trimming raw events also updates a bounded Task-owned attempt-summary record in
 the same transaction. Keeping it outside the Task record preserves the Task's
 existing size limit without replacing per-step replay checkpoints. It retains

@@ -49,7 +49,8 @@ func (p *WorkerPool) executeManagedNetworkRecovery(runCtx context.Context, reser
 			Ordinal:        1,
 			State:          TaskProgressRunning,
 		}
-		if err := p.emitProgressAndWait(reservation.ctx, running); err != nil {
+		receipt, err := p.emitProgressForReceipt(reservation.ctx, running)
+		if err != nil {
 			state.err, state.failedStepID = err, stepID
 			break
 		}
@@ -68,7 +69,10 @@ func (p *WorkerPool) executeManagedNetworkRecovery(runCtx context.Context, reser
 			state.failedStepID = stepID
 		}
 		completed := running
-		completed.Ordinal, completed.State = 2, progressStateFor(reservation.ctx, state.err)
+		completed.Ordinal, completed.State = receipt.GetEventOrdinalBase()+1, progressStateFor(
+			reservation.ctx,
+			state.err,
+		)
 		completed.Failure = taskprogress.CaptureFailure(state.err, state.exitCode, state.diagnostic)
 		if err := p.emitProgressAndWait(reservation.ctx, completed); err != nil && state.err == nil {
 			state.err, state.failedStepID = err, stepID

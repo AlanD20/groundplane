@@ -2832,6 +2832,7 @@ type Authenticate struct {
 	ExecutionPlanSchema            uint32                 `protobuf:"varint,3,opt,name=execution_plan_schema,json=executionPlanSchema,proto3" json:"execution_plan_schema,omitempty"`                                   // must match the current compiled schema
 	ProcessGeneration              []byte                 `protobuf:"bytes,4,opt,name=process_generation,json=processGeneration,proto3" json:"process_generation,omitempty"`                                            // exactly 16 bytes, distinct from durable Agent generation
 	Postgres16ManagedReleaseSha256 []byte                 `protobuf:"bytes,5,opt,name=postgres16_managed_release_sha256,json=postgres16ManagedReleaseSha256,proto3" json:"postgres16_managed_release_sha256,omitempty"` // exactly 32 bytes
+	ChannelSchema                  uint32                 `protobuf:"varint,6,opt,name=channel_schema,json=channelSchema,proto3" json:"channel_schema,omitempty"`                                                       // must match the current channel, independently of sealed plan format
 	unknownFields                  protoimpl.UnknownFields
 	sizeCache                      protoimpl.SizeCache
 }
@@ -2899,6 +2900,13 @@ func (x *Authenticate) GetPostgres16ManagedReleaseSha256() []byte {
 		return x.Postgres16ManagedReleaseSha256
 	}
 	return nil
+}
+
+func (x *Authenticate) GetChannelSchema() uint32 {
+	if x != nil {
+		return x.ChannelSchema
+	}
+	return 0
 }
 
 type AgentConfig struct {
@@ -5067,18 +5075,19 @@ func (x *HealthWaitProgress) GetDiagnostic() ComposeHelperDiagnostic {
 }
 
 type TaskEventAck struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	TaskId         string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	PlanHash       []byte                 `protobuf:"bytes,2,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`
-	StepId         string                 `protobuf:"bytes,3,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	ExecutionEpoch uint32                 `protobuf:"varint,4,opt,name=execution_epoch,json=executionEpoch,proto3" json:"execution_epoch,omitempty"`
-	Ordinal        uint64                 `protobuf:"varint,5,opt,name=ordinal,proto3" json:"ordinal,omitempty"`
-	State          TaskState              `protobuf:"varint,6,opt,name=state,proto3,enum=groundplane.agent.v1.TaskState" json:"state,omitempty"`
-	AssignmentId   string                 `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
-	RollingBudget  *RollingStepBudget     `protobuf:"bytes,8,opt,name=rolling_budget,json=rollingBudget,proto3" json:"rolling_budget,omitempty"`                                              // first Running acknowledgement only; captured durable budget
-	StartDecision  StepStartDecision      `protobuf:"varint,9,opt,name=start_decision,json=startDecision,proto3,enum=groundplane.agent.v1.StepStartDecision" json:"start_decision,omitempty"` // first Running only; denied/waiting starts are not journal events
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	TaskId           string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	PlanHash         []byte                 `protobuf:"bytes,2,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`
+	StepId           string                 `protobuf:"bytes,3,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	ExecutionEpoch   uint32                 `protobuf:"varint,4,opt,name=execution_epoch,json=executionEpoch,proto3" json:"execution_epoch,omitempty"`
+	Ordinal          uint64                 `protobuf:"varint,5,opt,name=ordinal,proto3" json:"ordinal,omitempty"`
+	State            TaskState              `protobuf:"varint,6,opt,name=state,proto3,enum=groundplane.agent.v1.TaskState" json:"state,omitempty"`
+	AssignmentId     string                 `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
+	RollingBudget    *RollingStepBudget     `protobuf:"bytes,8,opt,name=rolling_budget,json=rollingBudget,proto3" json:"rolling_budget,omitempty"`                                              // first Running acknowledgement only; captured durable budget
+	StartDecision    StepStartDecision      `protobuf:"varint,9,opt,name=start_decision,json=startDecision,proto3,enum=groundplane.agent.v1.StepStartDecision" json:"start_decision,omitempty"` // first Running only; denied/waiting starts are not journal events
+	EventOrdinalBase uint64                 `protobuf:"varint,10,opt,name=event_ordinal_base,json=eventOrdinalBase,proto3" json:"event_ordinal_base,omitempty"`                                 // allowed first Running only; subsequent events increment from this durable watermark
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *TaskEventAck) Reset() {
@@ -5172,6 +5181,13 @@ func (x *TaskEventAck) GetStartDecision() StepStartDecision {
 		return x.StartDecision
 	}
 	return StepStartDecision_STEP_START_DECISION_UNSPECIFIED
+}
+
+func (x *TaskEventAck) GetEventOrdinalBase() uint64 {
+	if x != nil {
+		return x.EventOrdinalBase
+	}
+	return 0
 }
 
 type RollingStepBudget struct {
@@ -34417,13 +34433,14 @@ var File_proto_agent_proto protoreflect.FileDescriptor
 
 const file_proto_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x11proto/agent.proto\x12\x14groundplane.agent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xed\x01\n" +
+	"\x11proto/agent.proto\x12\x14groundplane.agent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x94\x02\n" +
 	"\fAuthenticate\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\fR\x05token\x122\n" +
 	"\x15execution_plan_schema\x18\x03 \x01(\rR\x13executionPlanSchema\x12-\n" +
 	"\x12process_generation\x18\x04 \x01(\fR\x11processGeneration\x12I\n" +
-	"!postgres16_managed_release_sha256\x18\x05 \x01(\fR\x1epostgres16ManagedReleaseSha256\"\xad\x01\n" +
+	"!postgres16_managed_release_sha256\x18\x05 \x01(\fR\x1epostgres16ManagedReleaseSha256\x12%\n" +
+	"\x0echannel_schema\x18\x06 \x01(\rR\rchannelSchema\"\xad\x01\n" +
 	"\vAgentConfig\x122\n" +
 	"\x15pull_interval_seconds\x18\x01 \x01(\x05R\x13pullIntervalSeconds\x120\n" +
 	"\x14max_concurrent_tasks\x18\x02 \x01(\x05R\x12maxConcurrentTasks\x128\n" +
@@ -34599,7 +34616,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\n" +
 	"diagnostic\x18\n" +
 	" \x01(\x0e2-.groundplane.agent.v1.ComposeHelperDiagnosticR\n" +
-	"diagnostic\"\x9c\x03\n" +
+	"diagnostic\"\xca\x03\n" +
 	"\fTaskEventAck\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12\x17\n" +
@@ -34609,7 +34626,9 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x05state\x18\x06 \x01(\x0e2\x1f.groundplane.agent.v1.TaskStateR\x05state\x12#\n" +
 	"\rassignment_id\x18\a \x01(\tR\fassignmentId\x12N\n" +
 	"\x0erolling_budget\x18\b \x01(\v2'.groundplane.agent.v1.RollingStepBudgetR\rrollingBudget\x12N\n" +
-	"\x0estart_decision\x18\t \x01(\x0e2'.groundplane.agent.v1.StepStartDecisionR\rstartDecision\"\x88\x01\n" +
+	"\x0estart_decision\x18\t \x01(\x0e2'.groundplane.agent.v1.StepStartDecisionR\rstartDecision\x12,\n" +
+	"\x12event_ordinal_base\x18\n" +
+	" \x01(\x04R\x10eventOrdinalBase\"\x88\x01\n" +
 	"\x11RollingStepBudget\x126\n" +
 	"\bdeadline\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\x12;\n" +
 	"\vdrain_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +

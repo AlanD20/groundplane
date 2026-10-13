@@ -107,6 +107,7 @@ func (s *Server) recordTaskEvent(
 		TaskId: event.GetTaskId(), AssignmentId: event.GetAssignmentId(),
 		PlanHash: append([]byte(nil), event.GetPlanHash()...), StepId: event.GetStepId(),
 		ExecutionEpoch: event.GetExecutionEpoch(), Ordinal: event.GetOrdinal(), State: event.GetState(),
+		EventOrdinalBase: appended.EventOrdinalBase,
 	}
 	switch appended.StartDecision {
 	case taskjournal.StepStartAllowed:

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 )
 
 // Rationale: release compatibility comes from the built source's Go constants,
@@ -31,7 +31,7 @@ func TestReleaseBuildMetadataPinsSourceAndBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	if metadata.ControllerSHA256 != upgrade.Hash(raw) || metadata.ControllerVersion != "0.1.0-test" ||
-		metadata.StorageEpoch != upgrade.StorageEpoch || metadata.ChannelSchema != executionplan.SchemaVersion {
+		metadata.StorageEpoch != upgrade.StorageEpoch || metadata.ChannelSchema != agentprotocol.SchemaVersion {
 		t.Fatalf("build metadata = %#v", metadata)
 	}
 	if err := run([]string{"-controller", binary, "-version", "bad version", "-output", output}); err == nil {

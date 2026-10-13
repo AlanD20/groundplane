@@ -27,6 +27,7 @@ message Authenticate {
   uint32 execution_plan_schema = 3; // must match the current compiled schema
   bytes process_generation = 4; // exactly 16 bytes, distinct from durable Agent generation
   bytes postgres16_managed_release_sha256 = 5; // exactly 32 bytes
+  uint32 channel_schema = 6; // must match the current channel, independently of sealed plan format
 }
 
 message AgentConfig {
@@ -266,6 +267,7 @@ message TaskEventAck {
   string assignment_id = 7;
   RollingStepBudget rolling_budget = 8; // first Running acknowledgement only; captured durable budget
   StepStartDecision start_decision = 9; // first Running only; denied/waiting starts are not journal events
+  uint64 event_ordinal_base = 10; // allowed first Running only; subsequent events increment from this durable watermark
 }
 
 enum StepStartDecision {

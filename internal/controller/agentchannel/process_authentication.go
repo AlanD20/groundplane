@@ -2,6 +2,7 @@ package agentchannel
 
 import (
 	"crypto/sha256"
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,6 +14,7 @@ import (
 // A missing managed release digest does not attest to PostgreSQL support.
 type ProcessAuthentication struct {
 	ExecutionPlanSchema             uint32
+	ChannelSchema                   uint32
 	ProcessGeneration               [16]byte
 	Postgres16ManagedReleaseSHA256  [sha256.Size]byte
 	Postgres16ManagedReleasePresent bool
@@ -31,6 +33,9 @@ func processAuthenticationFromWire(authenticate *agentpb.Authenticate) (ProcessA
 			"Agent execution plan schema is unsupported",
 		)
 	}
+	if authenticate.GetChannelSchema() != agentprotocol.SchemaVersion {
+		return ProcessAuthentication{}, errs.New(errs.KindValidationFailed, "Agent channel schema is unsupported")
+	}
 	if len(authenticate.ProcessGeneration) != 16 {
 		return ProcessAuthentication{}, errs.New(
 			errs.KindValidationFailed,
@@ -46,6 +51,7 @@ func processAuthenticationFromWire(authenticate *agentpb.Authenticate) (ProcessA
 	}
 	tuple := ProcessAuthentication{
 		ExecutionPlanSchema:             authenticate.ExecutionPlanSchema,
+		ChannelSchema:                   authenticate.ChannelSchema,
 		Postgres16ManagedReleasePresent: len(authenticate.Postgres16ManagedReleaseSha256) != 0,
 	}
 	copy(tuple.ProcessGeneration[:], authenticate.ProcessGeneration)

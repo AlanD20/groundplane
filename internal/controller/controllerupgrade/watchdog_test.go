@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -206,7 +206,7 @@ func watchdogJournal() upgrade.Journal {
 				64,
 			),
 			StorageEpoch:  upgrade.StorageEpoch,
-			ChannelSchema: executionplan.SchemaVersion,
+			ChannelSchema: agentprotocol.SchemaVersion,
 		},
 		StartedAt:   now,
 		Deadline:    now.Add(600 * time.Second),

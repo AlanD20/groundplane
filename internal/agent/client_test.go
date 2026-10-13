@@ -705,23 +705,26 @@ func configMessage(pullInterval, capacity int32) *agentpb.ControllerMessage {
 }
 
 type fakeStream struct {
-	mu          sync.Mutex
-	ctx         context.Context
-	receive     []*agentpb.ControllerMessage
-	receiveErr  error
-	sent        []*agentpb.AgentMessage
-	sendErr     error
-	closed      bool
-	readySent   chan struct{}
-	readyOnce   sync.Once
-	taskAckSent chan struct{}
-	taskAckOnce sync.Once
-	connection  *fakeCloser
+	mu            sync.Mutex
+	ctx           context.Context
+	receive       []*agentpb.ControllerMessage
+	receiveErr    error
+	sent          []*agentpb.AgentMessage
+	sendErr       error
+	closed        bool
+	readySent     chan struct{}
+	readyOnce     sync.Once
+	taskAckSent   chan struct{}
+	taskAckOnce   sync.Once
+	connection    *fakeCloser
+	receipts      chan *agentpb.ControllerMessage
+	eventSequence uint64
 }
 
 func newFakeStream(messages ...*agentpb.ControllerMessage) *fakeStream {
 	return &fakeStream{
 		receive: messages, readySent: make(chan struct{}), taskAckSent: make(chan struct{}), connection: &fakeCloser{},
+		receipts: make(chan *agentpb.ControllerMessage, 64),
 	}
 }
 
@@ -776,6 +779,15 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 			StepId:   event.StepId, ExecutionEpoch: event.ExecutionEpoch, Ordinal: event.Ordinal,
 			State: event.State, Chunk: append([]byte(nil), event.Chunk...),
 		}}
+		s.eventSequence++
+		ack := &agentpb.TaskEventAck{
+			TaskId: event.TaskId, AssignmentId: event.AssignmentId, PlanHash: append([]byte(nil), event.PlanHash...),
+			StepId: event.StepId, ExecutionEpoch: event.ExecutionEpoch, Ordinal: event.Ordinal, State: event.State,
+		}
+		if event.State == agentpb.TaskState_TASK_STATE_RUNNING && event.Ordinal == 1 {
+			ack.StartDecision, ack.EventOrdinalBase = agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED, s.eventSequence
+		}
+		s.receipts <- &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_TaskEventAck{TaskEventAck: ack}}
 	}
 	s.sent = append(s.sent, copyMessage)
 	return nil
@@ -797,8 +809,12 @@ func (s *fakeStream) Recv() (*agentpb.ControllerMessage, error) {
 	}
 	ctx := s.ctx
 	s.mu.Unlock()
-	<-ctx.Done()
-	return nil, ctx.Err()
+	select {
+	case receipt := <-s.receipts:
+		return receipt, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (s *fakeStream) CloseSend() error {

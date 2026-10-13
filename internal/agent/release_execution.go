@@ -266,28 +266,25 @@ func (p *WorkerPool) runReleaseStep(
 	running := TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
 		TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId,
 		ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: 1, State: TaskProgressRunning}
-	blueprintComponent := reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
-		step.GetComponentApply() != nil
 	rolling := rollingStepMember(reservation.assignment.Plan, step.GetStepId())
 	var rollingBudget *agentpb.RollingStepBudget
+	ordinalBase := uint64(1)
 	if rolling != nil {
 		var err error
-		rollingBudget, err = p.beginRollingStep(reservation, step, rolling, running)
+		var receipt *agentpb.TaskEventAck
+		receipt, err = p.beginRollingStep(reservation, step, rolling, running)
 		if err != nil {
 			state.err, state.failedStepID, state.reconciliation = err, step.GetStepId(), true
 			return
 		}
-	} else if reservation.eventsDurable && (candidateMutationStep(step) || blueprintComponent ||
-		componentRecoveryForwardStep(reservation.assignment.Plan, step.GetStepId()) ||
-		isConfigurationForwardStep(reservation.assignment.Plan, step.GetStepId()) ||
-		reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
-			(step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD ||
-				step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK ||
-				step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK)) {
-		if err := p.emitProgressAndWait(reservation.ctx, running); err != nil {
+		rollingBudget, ordinalBase = receipt.GetRollingBudget(), receipt.GetEventOrdinalBase()
+	} else if reservation.eventsDurable {
+		receipt, err := p.emitProgressForReceipt(reservation.ctx, running)
+		if err != nil {
 			state.err, state.failedStepID = err, step.GetStepId()
 			return
 		}
+		ordinalBase = receipt.GetEventOrdinalBase()
 	} else {
 		p.emitProgress(runCtx, running)
 	}
@@ -296,7 +293,7 @@ func (p *WorkerPool) runReleaseStep(
 		deadline = rollingBudget.GetDeadline().AsTime()
 	}
 	stepCtx, cancel := context.WithDeadline(reservation.ctx, deadline)
-	reportHealth, ordinal := p.healthWaitEvents(stepCtx, running)
+	reportHealth, ordinal := p.healthWaitEvents(stepCtx, running, ordinalBase)
 	var result composeruntime.StepResult
 	var err error
 	if step.GetRollingReplicaDrain() != nil {
@@ -425,31 +422,6 @@ func (p *WorkerPool) runReleaseStep(
 	} else {
 		p.emitProgress(runCtx, completedProgress)
 	}
-}
-
-func componentRecoveryForwardStep(plan *agentpb.ExecutionPlan, stepID string) bool {
-	for _, selected := range plan.GetComponentRecoveryProcedure().GetForwardStepIds() {
-		if selected == stepID {
-			return true
-		}
-	}
-	return false
-}
-
-func candidateMutationStep(step *agentpb.ExecutionStep) bool {
-	if step.GetComposeRemove() != nil {
-		return true
-	}
-	if apply := step.GetComposeApply(); apply != nil {
-		return apply.GetForceRecreate() && apply.GetNoDependencies()
-	}
-	return step.GetComposeWorkloadApply() != nil || step.GetComposeWorkloadRemove() != nil ||
-		step.GetServiceProxySwitch() != nil ||
-		step.GetRollingTrafficSwitch() != nil ||
-		step.GetServiceProxyCompensate() != nil ||
-		step.GetServiceRecreateCompensate() != nil ||
-		step.GetCandidateRestorationCompensate() != nil ||
-		step.GetComponentRestorationCompensate() != nil
 }
 
 func releaseFailureHookExecution(

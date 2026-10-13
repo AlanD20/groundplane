@@ -37,6 +37,7 @@ func (c *Client) runSession(
 	authenticate := &agentpb.Authenticate{
 		AgentId: c.agentID, Token: authToken,
 		ExecutionPlanSchema: executionplan.SchemaVersion,
+		ChannelSchema:       agentprotocol.SchemaVersion,
 		ProcessGeneration:   append([]byte(nil), c.processGeneration[:]...),
 	}
 	message := &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Authenticate{Authenticate: authenticate}}

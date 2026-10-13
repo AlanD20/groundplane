@@ -32,7 +32,8 @@ func (p *WorkerPool) executeAttachRemovalRecovery(runCtx context.Context, reserv
 				PlanHash: taskassignment.PlanDigest(assignment.Plan), StepID: step.GetStepId(),
 				ExecutionEpoch: assignment.ExecutionEpoch, Ordinal: 1, State: TaskProgressRunning,
 			}
-			if state.err = p.emitProgressAndWait(reservation.ctx, progress); state.err != nil {
+			var receipt *agentpb.TaskEventAck
+			if receipt, state.err = p.emitProgressForReceipt(reservation.ctx, progress); state.err != nil {
 				state.failedStepID = step.GetStepId()
 				break
 			}
@@ -63,7 +64,10 @@ func (p *WorkerPool) executeAttachRemovalRecovery(runCtx context.Context, reserv
 			if state.exitCode != 0 && state.err == nil {
 				state.err = errs.New(errs.KindStateConflict, "agent: Detach cleanup did not succeed")
 			}
-			progress.Ordinal, progress.State = 2, progressStateFor(reservation.ctx, state.err)
+			progress.Ordinal, progress.State = receipt.GetEventOrdinalBase()+1, progressStateFor(
+				reservation.ctx,
+				state.err,
+			)
 			progress.Failure = taskprogress.CaptureFailure(state.err, state.exitCode, state.diagnostic)
 			progressErr := p.emitProgressAndWait(reservation.ctx, progress)
 			state.err = errors.Join(state.err, progressErr)

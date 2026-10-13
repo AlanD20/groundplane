@@ -11,8 +11,9 @@ import (
 func (p *WorkerPool) healthWaitEvents(
 	ctx context.Context,
 	start TaskProgress,
+	base uint64,
 ) (func(*agentpb.HealthWaitProgress), *uint64) {
-	ordinal := uint64(1)
+	ordinal := base
 	return func(observation *agentpb.HealthWaitProgress) {
 		ordinal++
 		progress := start

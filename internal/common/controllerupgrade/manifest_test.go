@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 )
 
 // Rationale: a release is immutable input, not a path/URL or a mutable tag;
@@ -15,7 +15,7 @@ func TestManifestBoundary(t *testing.T) {
 	valid := []byte(`{"agent_image":"registry.example/agent@sha256:` + strings.Repeat("a", 64) +
 		fmt.Sprintf(
 			`","channel_schema":%d,"controller_sha256":"sha256:`,
-			executionplan.SchemaVersion,
+			agentprotocol.SchemaVersion,
 		) + strings.Repeat("b", 64) +
 		fmt.Sprintf(
 			`","controller_source":{"commit":"%s","kind":"release"},"controller_version":"0.1.0","schema":%d,"storage_epoch":%d}`,
@@ -44,8 +44,8 @@ func TestManifestBoundary(t *testing.T) {
 		)),
 		"tag":     []byte(strings.Replace(string(valid), "@sha256:"+strings.Repeat("a", 64), ":latest", 1)),
 		"storage": []byte(strings.Replace(string(valid), fmt.Sprintf(`"storage_epoch":%d`, StorageEpoch), `"storage_epoch":3`, 1)),
-		"protocol": []byte(strings.Replace(string(valid), fmt.Sprintf(`"channel_schema":%d`, executionplan.SchemaVersion),
-			fmt.Sprintf(`"channel_schema":%d`, executionplan.SchemaVersion+1), 1)),
+		"protocol": []byte(strings.Replace(string(valid), fmt.Sprintf(`"channel_schema":%d`, agentprotocol.SchemaVersion),
+			fmt.Sprintf(`"channel_schema":%d`, agentprotocol.SchemaVersion+1), 1)),
 		"version control character": []byte(strings.Replace(string(valid), "0.1.0", `0.1.0\n`, 1)),
 		"oversized":                 []byte(strings.Repeat(" ", MaxManifestBytes+1)),
 	} {

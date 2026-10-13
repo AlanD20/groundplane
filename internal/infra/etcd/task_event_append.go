@@ -134,6 +134,16 @@ func (repository *TaskRepository) appendTaskEvent(ctx context.Context,
 			}
 			return TaskEventAppend{Revision: result.ReadRevision, StartDecision: startDecision}, nil
 		}
+		ordinalBase, err := repository.taskEventOrdinalBase(
+			ctx,
+			startDecision,
+			task,
+			input.Identity,
+			result.ReadRevision,
+		)
+		if err != nil {
+			return TaskEventAppend{}, err
+		}
 		if prepared.Duplicate {
 			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, prepared.Dedup); err != nil {
 				return TaskEventAppend{}, err
@@ -151,11 +161,12 @@ func (repository *TaskRepository) appendTaskEvent(ctx context.Context,
 				return TaskEventAppend{}, err
 			}
 			return TaskEventAppend{
-				StartDecision: startDecision,
-				Sequence:      prepared.Sequence,
-				Revision:      result.ReadRevision,
-				Duplicate:     true,
-				RollingBudget: rolling.budget,
+				StartDecision:    startDecision,
+				EventOrdinalBase: ordinalBase,
+				Sequence:         prepared.Sequence,
+				Revision:         result.ReadRevision,
+				Duplicate:        true,
+				RollingBudget:    rolling.budget,
 			}, nil
 		}
 		if result.Values[4] != nil || result.Values[5] != nil || result.Values[6] != nil {
@@ -335,10 +346,11 @@ func (repository *TaskRepository) appendTaskEvent(ctx context.Context,
 			continue
 		}
 		return TaskEventAppend{
-			StartDecision: startDecision,
-			Sequence:      prepared.Sequence,
-			Revision:      transaction.Revision,
-			RollingBudget: rolling.budget,
+			StartDecision:    startDecision,
+			EventOrdinalBase: ordinalBase,
+			Sequence:         prepared.Sequence,
+			Revision:         transaction.Revision,
+			RollingBudget:    rolling.budget,
 		}, nil
 	}
 }

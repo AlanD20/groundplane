@@ -21,7 +21,7 @@ func rollingStepMember(plan *agentpb.ExecutionPlan, stepID string) *agentpb.Cand
 
 func (p *WorkerPool) beginRollingStep(reservation *taskReservation, step *agentpb.ExecutionStep,
 	member *agentpb.CandidateReleaseMember, running TaskProgress,
-) (*agentpb.RollingStepBudget, error) {
+) (*agentpb.TaskEventAck, error) {
 	if !reservation.eventsDurable ||
 		reservation.assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD {
 		return nil, errs.New(errs.KindStateConflict, "agent: rolling execution requires durable forward event receipts")
@@ -42,7 +42,7 @@ func (p *WorkerPool) beginRollingStep(reservation *taskReservation, step *agentp
 	if !time.Now().Before(budget.GetDeadline().AsTime()) {
 		return nil, context.DeadlineExceeded
 	}
-	return budget, nil
+	return ack, nil
 }
 
 // The durable switch completion selected this deadline. Repeated delivery or

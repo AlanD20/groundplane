@@ -1,7 +1,7 @@
 package controllerupgrade
 
 import (
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -28,6 +28,6 @@ func DescribeBuild(binary Digest, version string, source buildversion.BuildProve
 		ControllerVersion: version,
 		ControllerSource:  source,
 		StorageEpoch:      StorageEpoch,
-		ChannelSchema:     executionplan.SchemaVersion,
+		ChannelSchema:     agentprotocol.SchemaVersion,
 	}, nil
 }

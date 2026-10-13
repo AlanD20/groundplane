@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
@@ -78,7 +78,7 @@ func (manifest Manifest) Validate() error {
 		return err
 	}
 	if manifest.StorageEpoch != StorageEpoch ||
-		manifest.ChannelSchema != executionplan.SchemaVersion {
+		manifest.ChannelSchema != agentprotocol.SchemaVersion {
 		return errs.New(
 			errs.KindValidationFailed,
 			"controller release has incompatible storage or protocol format",

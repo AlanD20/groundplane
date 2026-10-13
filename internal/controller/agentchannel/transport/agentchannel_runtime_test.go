@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -191,6 +192,7 @@ func TestAgentChannelRuntimeEnforcesExactSendMessageLimit(t *testing.T) {
 					AgentId:             agentChannelTransportTestAgentID,
 					Token:               make([]byte, 32),
 					ExecutionPlanSchema: executionplan.SchemaVersion,
+					ChannelSchema:       agentprotocol.SchemaVersion,
 					ProcessGeneration:   bytes.Repeat([]byte{1}, 16),
 				},
 			}}); err != nil {

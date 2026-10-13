@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -146,6 +147,11 @@ func (p *WorkerPool) AcceptTaskEventAck(_ context.Context, ack *agentpb.TaskEven
 	}
 	start := ack.GetState() == agentpb.TaskState_TASK_STATE_RUNNING && ack.GetOrdinal() == 1
 	decision := ack.GetStartDecision()
+	allowed := decision == agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED
+	if allowed && (ack.GetEventOrdinalBase() == 0 || ack.GetEventOrdinalBase() == math.MaxUint64) ||
+		!allowed && ack.GetEventOrdinalBase() != 0 {
+		return errs.New(errs.KindValidationFailed, "agent: Task event acknowledgement has an invalid ordinal base")
+	}
 	if start && decision != agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED &&
 		decision != agentpb.StepStartDecision_STEP_START_DECISION_WAIT && decision != agentpb.StepStartDecision_STEP_START_DECISION_STOP ||
 		!start && decision != agentpb.StepStartDecision_STEP_START_DECISION_UNSPECIFIED ||

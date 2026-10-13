@@ -162,7 +162,8 @@ func TestExecuteReleaseWaitsForDurableRunningEventBeforeCandidateMutation(t *tes
 		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
 		PlanHash: output.Progress.PlanHash[:], StepId: output.Progress.StepID,
 		ExecutionEpoch: 1, Ordinal: output.Progress.Ordinal, State: agentpb.TaskState_TASK_STATE_RUNNING,
-		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+		StartDecision:    agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+		EventOrdinalBase: 1,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err == nil {
 		t.Fatal("accepted stale execution epoch")
@@ -218,6 +219,14 @@ func TestExecuteReleaseRecoveryProofFailurePublishesFailedProgress(t *testing.T)
 	if running.Progress == nil || running.Progress.State != TaskProgressRunning {
 		t.Fatalf("first recovery progress = %#v", running)
 	}
+	if err := pool.AcceptTaskEventAck(context.Background(), &agentpb.TaskEventAck{
+		TaskId: running.Progress.TaskID, AssignmentId: running.Progress.AssignmentID,
+		PlanHash: running.Progress.PlanHash[:], StepId: running.Progress.StepID, ExecutionEpoch: running.Progress.ExecutionEpoch,
+		Ordinal: running.Progress.Ordinal, State: agentpb.TaskState_TASK_STATE_RUNNING,
+		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED, EventOrdinalBase: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	failed := <-pool.Outputs()
 	if failed.Progress == nil || failed.Progress.State != TaskProgressFailed {
 		t.Fatalf("proof failure progress = %#v, want failed", failed)
@@ -263,7 +272,8 @@ func TestExecuteReleaseRejectedRunningEventRemainsTerminalWithoutRecovery(t *tes
 		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
 		PlanHash: output.Progress.PlanHash[:], StepId: output.Progress.StepID,
 		ExecutionEpoch: 1, Ordinal: output.Progress.Ordinal, State: agentpb.TaskState_TASK_STATE_RUNNING,
-		StartDecision: agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+		StartDecision:    agentpb.StepStartDecision_STEP_START_DECISION_ALLOWED,
+		EventOrdinalBase: 1,
 	}
 	if err := pool.AcceptTaskEventAck(context.Background(), stale); err == nil {
 		t.Fatal("accepted rejected running-event authority")
@@ -645,15 +655,6 @@ func releaseForwardApply(stepID string) *agentpb.ExecutionStep {
 				NoDependencies: true,
 			},
 		},
-	}
-}
-
-func TestComposeRemoveIsCandidateMutation(t *testing.T) {
-	step := &agentpb.ExecutionStep{
-		Payload: &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{}},
-	}
-	if !candidateMutationStep(step) {
-		t.Fatal("ComposeRemove did not require the durable running-event barrier")
 	}
 }
 

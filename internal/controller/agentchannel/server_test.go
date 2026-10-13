@@ -6,6 +6,7 @@ import (
 	sha256 "crypto/sha256"
 	hex "encoding/hex"
 	errors "errors"
+	agentprotocol "github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	executionplan "github.com/AlanD20/groundplane/internal/common/executionplan"
 	ids "github.com/AlanD20/groundplane/internal/common/ids"
 	etcd "github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -239,7 +240,11 @@ func (store *fakeTaskStore) AppendTaskEvent(
 	if input.State == testtaskjournal.TaskEventStateRunning && input.Identity.Ordinal == 1 {
 		decision = testtaskjournal.StepStartAllowed
 	}
-	return etcd.TaskEventAppend{Sequence: sequence, Revision: 6, StartDecision: decision}, nil
+	base := uint64(0)
+	if decision == testtaskjournal.StepStartAllowed {
+		base = sequence
+	}
+	return etcd.TaskEventAppend{Sequence: sequence, Revision: 6, StartDecision: decision, EventOrdinalBase: base}, nil
 }
 
 func (store *fakeTaskStore) AcknowledgeTask(
@@ -787,7 +792,7 @@ func authorizedAuthenticator() *fakeAuthenticator {
 func authenticateMessage(id string, token []byte) *agentpb.AgentMessage {
 	return &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Authenticate{
 		Authenticate: &agentpb.Authenticate{
-			AgentId: id, Token: token, ExecutionPlanSchema: executionplan.SchemaVersion,
+			AgentId: id, Token: token, ExecutionPlanSchema: executionplan.SchemaVersion, ChannelSchema: agentprotocol.SchemaVersion,
 			ProcessGeneration: bytes.Repeat([]byte{1}, 16),
 		},
 	}}
