@@ -1557,6 +1557,28 @@ id. This diagnostic defect remains open for repair and a fresh retest; restorati
 success does not close it. Continuous traffic, lost-response races and other
 interruption boundaries remain NOT RUN for this sequence.
 
+**H111 — Interrupted forward cancellation survives recovery PASS on 2026-10-13.**
+
+Signed Controller `9c4e36af1` passed full local CI and installed through the normal
+Controller-only updater on the H110 host, retaining Agent `df6bf950e`. Reconnect
+now records the Controller's cancellation of the interrupted forward execution
+in the existing safe failure field, separately from restoration. It does not
+invent an Agent error, failed-step event or subprocess exit code. Existing Task
+history and all recovery checks remain unchanged.
+
+A fresh Apply started a delayed blue-green candidate. Independent Docker
+inspection confirmed it was still starting before the Controller restarted and
+accepted a newer Apply. The original parent and child retained `execution_canceled`
+after completed recovery, instead of the missing-cause summary in H110. Its
+traffic-switch step remained unstarted. The newer Apply completed; final runtime
+was the intended healthy recreate singleton, with no old slots or interrupted
+candidate remaining. Actual HTTP returned the expected page.
+
+One Task GET during the restart returned HTTP 500; a subsequent read of the same
+Task returned its terminal failure and recovery evidence. No Apply was replayed
+because of that read failure. Continuous API/application availability, other
+reconnect recovery types and additional interruption boundaries remain unqualified.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
