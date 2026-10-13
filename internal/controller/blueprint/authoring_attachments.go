@@ -18,9 +18,17 @@ import (
 // same bindings that Apply must preserve.
 func (service *Service) authoringAttachmentSpecs(
 	ctx context.Context,
-	environmentID string,
+	snapshot environmentBlueprintSnapshot,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 ) (map[string]core.AttachmentSpec, error) {
+	environmentID := snapshot.environment.Record.ID
+	consumerNames := make(map[string]string, len(snapshot.identities.Record.Services))
+	for _, identity := range snapshot.identities.Record.Services {
+		if identity.Name == "" || consumerNames[identity.ID] != "" {
+			return nil, errs.New(errs.KindStateConflict, "Blueprint consumer Service identity is inconsistent")
+		}
+		consumerNames[identity.ID] = identity.Name
+	}
 	byID := make(map[string]attachrecord.Record, len(attaches))
 	byName := make(map[string]struct{}, len(attaches))
 	for _, current := range attaches {
@@ -80,9 +88,11 @@ func (service *Service) authoringAttachmentSpecs(
 	specs := make(map[string]core.AttachmentSpec, len(attaches))
 	for _, current := range attaches {
 		record := current.Record
-		consumer, err := readService(record.ServiceID)
-		if err != nil {
-			return nil, err
+		// Export describes authored topology, not readiness of its runtime.
+		// A stopped Apply may never have sealed the new effective projection.
+		consumerName, found := consumerNames[record.ServiceID]
+		if !found {
+			return nil, errs.New(errs.KindStateConflict, "Attach consumer is absent from the Environment Blueprint")
 		}
 		backing, err := readService(record.BackingServiceID)
 		if err != nil {
@@ -96,8 +106,7 @@ func (service *Service) authoringAttachmentSpecs(
 		if err != nil {
 			return nil, err
 		}
-		if consumer.EnvironmentID != environmentID ||
-			backingEnvironment.Record.ID != record.BackingEnvironmentID ||
+		if backingEnvironment.Record.ID != record.BackingEnvironmentID ||
 			backingEnvironment.Record.ProjectID != project.ID ||
 			backing.EnvironmentID != backingEnvironment.Record.ID ||
 			backing.BackingNetworkID != record.BackingNetworkID {
@@ -106,7 +115,7 @@ func (service *Service) authoringAttachmentSpecs(
 		spec := core.AttachmentSpec{
 			BackingProject: project.Slug,
 			BackingService: backing.Desired.Name,
-			Service:        consumer.Desired.Name,
+			Service:        consumerName,
 		}
 		if record.CredentialAttachID == record.ID {
 			spec.Credential.Mode = "new"

@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -64,7 +65,19 @@ func TestDirectAttachTopologyExportsAndValidates(t *testing.T) {
 		{Record: newAttach(grantID, "reporting", grantServiceID, grantID, nil)},
 	}
 	service := &Service{repository: repository}
-	specs, err := service.authoringAttachmentSpecs(t.Context(), environmentID, current)
+	snapshot := environmentBlueprintSnapshot{
+		environment: etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
+			Record: hierarchyrecord.EnvironmentRecord{ID: environmentID},
+		},
+		identities: etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{
+			Record: projectionrecord.EnvironmentOwnedIdentities{Services: []projectionrecord.OwnedIdentity{
+				{ID: ownerServiceID, Name: "api"},
+				{ID: dependentServiceID, Name: "worker"},
+				{ID: grantServiceID, Name: "reports"},
+			}},
+		},
+	}
+	specs, err := service.authoringAttachmentSpecs(t.Context(), snapshot, current)
 	if err != nil {
 		t.Fatal(err)
 	}

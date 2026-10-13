@@ -321,7 +321,7 @@ func (service *Service) environmentBlueprintAuthoringDocument(
 		input.Backup = desired.Backup
 		input.ReleaseGroups = desired.ReleaseGroups
 	}
-	current, err := service.authoringAttachmentSpecs(ctx, snapshot.environment.Record.ID, attaches)
+	current, err := service.authoringAttachmentSpecs(ctx, snapshot, attaches)
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
