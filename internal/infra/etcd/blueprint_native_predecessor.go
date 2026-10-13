@@ -307,12 +307,9 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 		if err != nil {
 			return nil, err
 		}
-		applied, present, err := ledger.GetPlanningAppliedProjection(ctx, scope)
+		applied, _, err := ledger.GetPlanningAppliedProjection(ctx, scope)
 		if err != nil {
 			return nil, err
-		}
-		if captured.Serving != nil && !present {
-			return nil, releases.CorruptReleaseRecord()
 		}
 		conditions = append(conditions, guards...)
 		conditions = append(

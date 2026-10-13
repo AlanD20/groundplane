@@ -94,12 +94,8 @@ func (service *Service) capturePredecessor(
 		return predecessorSnapshot{}, err
 	}
 	if exists {
-		if !captured.appliedPresent {
-			return predecessorSnapshot{}, errs.New(
-				errs.KindStateConflict,
-				"Blueprint serving predecessor has no acknowledged artifact",
-			)
-		}
+		// Serving proof comes from the exact per-Service runtime below. A
+		// direct Deploy need not have an applied whole-Environment projection.
 		captured.serving = &serving
 		captured.historical, err = service.ledger.GetReleaseRenderInputAt(ctx, serving.ID, scope.ReadRevision)
 		if err != nil {
