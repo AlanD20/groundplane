@@ -32,7 +32,8 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	result *taskjournal.TaskResultRecord,
 	revision int64,
 ) (platformComponentTaskChange, error) {
-	if dnsCheckTask(task) || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
+	if task.Type == taskjournal.TaskCheck ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return platformComponentTaskChange{}, nil
 	}

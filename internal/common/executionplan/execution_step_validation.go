@@ -222,7 +222,18 @@ func validateStep(
 		if apply.GetGeneration() != renderGeneration {
 			return errs.New(errs.KindValidationFailed, "Component action generation does not match its plan")
 		}
-		return validateComponentContainerActionTarget(operation, apply, step, artifacts, steps)
+		targetArtifacts := artifacts
+		if recovery := plan.GetComponentRecoveryProcedure(); recovery != nil &&
+			recovery.GetConfigurationActionStepId() == step.GetStepId() {
+			candidate := artifacts[recovery.GetCandidateArtifactId()]
+			if recovery.GetComponentId() != apply.GetComponentId() || candidate == nil {
+				return errs.New(errs.KindValidationFailed, "Component action does not match its captured recovery candidate")
+			}
+			// The predecessor is retained solely for recovery; it is not a
+			// second forward target. The recovery procedure was validated first.
+			targetArtifacts = map[string]*agentpb.ComposeArtifact{candidate.GetArtifactId(): candidate}
+		}
+		return validateComponentContainerActionTarget(operation, apply, step, targetArtifacts, steps)
 	case *agentpb.ExecutionStep_HostResolutionApply:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY ||
 			!validHostResolutionAction(payload.HostResolutionApply.GetComponentId(),
