@@ -466,7 +466,9 @@ func environmentBlueprintChanges(
 			action := apiTypes.BlueprintChangeRetain
 			if resource == "entry" || resource == "script" || resource == "backup" ||
 				resource == "config" || resource == "secret" ||
-				resource == "component" || resource == "release-group" {
+				resource == "component" || resource == "release-group" ||
+				resource == "service" || resource == "zone" || resource == "attach" ||
+				resource == "route" || resource == "dns" {
 				action = apiTypes.BlueprintChangeRemove
 			}
 			changes = append(changes, apiTypes.EnvironmentBlueprintChange{

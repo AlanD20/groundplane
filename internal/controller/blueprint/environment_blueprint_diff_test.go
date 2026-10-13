@@ -11,7 +11,8 @@ import (
 )
 
 // Rationale: a reapply must not advertise existing native resources as new;
-// unsupported omission paths cannot promise removal in Validate.
+// supported omission paths must advertise removal, while persistent Volumes
+// retain their separate protected-removal contract.
 func TestBlueprintDiffRecognizesExistingNativeResources(t *testing.T) {
 	current := &composetypes.Project{
 		Services: composetypes.Services{"api": {Name: "api"}},
@@ -20,7 +21,7 @@ func TestBlueprintDiffRecognizesExistingNativeResources(t *testing.T) {
 	}
 	for _, included := range []bool{false, true} {
 		project := &composetypes.Project{}
-		want := apiTypes.BlueprintChangeRetain
+		want := apiTypes.BlueprintChangeRemove
 		if included {
 			project.DisabledServices = composetypes.Services{"api": {Name: "api"}}
 			project.Networks = composetypes.Networks{"private": {}}
@@ -35,9 +36,13 @@ func TestBlueprintDiffRecognizesExistingNativeResources(t *testing.T) {
 				continue
 			}
 			found++
-			if change.Action != want {
+			expected := want
+			if !included && change.Resource == "volume" {
+				expected = apiTypes.BlueprintChangeRetain
+			}
+			if change.Action != expected {
 				t.Fatalf("included=%v: %s %s action=%s, want %s",
-					included, change.Resource, change.Key, change.Action, want)
+					included, change.Resource, change.Key, change.Action, expected)
 			}
 		}
 		if found != 3 {
