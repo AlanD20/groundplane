@@ -16,6 +16,7 @@ import (
 	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/localdiag"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Scope carries the resolved tenant/project/environment slugs (or ids,
@@ -107,6 +108,12 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 		BoolVar(&flags.asID, "id", false, "treat targets as ids instead of slugs (ids never change; slugs can be renamed)")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Cobra's required-flag error names only registered flags, not their
+		// values. Classify it before configuration or any API operation.
+		if err := cmd.ValidateRequiredFlags(); err != nil {
+			return errs.Newf(errs.KindMalformedRequest, "%s: %s; use %s --help",
+				cmd.CommandPath(), err.Error(), cmd.CommandPath())
+		}
 		cfg := config.DefaultCLIConfig()
 		switch commandExecutionClass(cmd) {
 		case executionTool:
