@@ -1579,6 +1579,24 @@ Task returned its terminal failure and recovery evidence. No Apply was replayed
 because of that read failure. Continuous API/application availability, other
 reconnect recovery types and additional interruption boundaries remain unqualified.
 
+**H112 — Unsupported UDP strategy admission repaired and retested PASS on
+2026-10-13.**
+
+Before the repair, Blueprint Validate accepted an active UDP-only declaration
+with either blue-green or rolling. Runtime preparation enforced the restriction,
+but early admission did not. The existing transport rule now participates in
+shared deployment readiness, including Blueprint Validate/Apply, ordinary
+Deploy/Rollback and Component preflight. No strategy fallback was added.
+
+Signed Controller `56590d020` passed full local CI and installed through the
+normal Controller-only updater. On the isolated Environment, both unsupported
+Validate requests and a blue-green Apply returned the UDP port restriction and
+explicit recreate alternative. Exact desired-head/identity metadata and every
+container id, image and start time remained unchanged. The same declaration
+validated successfully with recreate. No test workload was deployed; this is
+admission proof, not additional UDP communication or session-continuity proof.
+Earlier real TCP/UDP communication remains bounded to H99.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
