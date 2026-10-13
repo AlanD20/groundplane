@@ -41,14 +41,17 @@ func (service *Service) orderAuthoredDNSWithdrawal(ctx context.Context,
 		if binding.Address == "" {
 			continue
 		}
-		dependency, found := targets[binding.Record.ID]
-		if !found {
-			return errs.New(errs.KindStateConflict, "Blueprint has no withdrawal unit for an acknowledged DNS record")
-		}
 		for index := range omissions {
 			target := omissions[index].Target
 			if target.Kind == ids.KindService && target.ID == binding.ServiceID ||
 				target.Kind == ids.KindNetwork && target.ID == binding.Record.ZoneID {
+				dependency, found := targets[binding.Record.ID]
+				if !found {
+					return errs.New(
+						errs.KindStateConflict,
+						"Blueprint has no withdrawal unit for an acknowledged DNS record",
+					)
+				}
 				omissions[index].After = append(omissions[index].After, dependency)
 				omissions[index].After = canonicalAuthoredUnitKeys(omissions[index].After)
 			}
