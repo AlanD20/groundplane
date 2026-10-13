@@ -178,6 +178,10 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 func Execute(ctx context.Context, deps Dependencies) int {
 	root := NewRootCmd(deps)
 	root.SetContext(ctx)
+	if _, _, err := root.Find(os.Args[1:]); err != nil {
+		return clicommon.HandleErrors(errs.New(errs.KindMalformedRequest,
+			"unknown command; use groundplane --help to see available actions"))
+	}
 	return clicommon.HandleErrors(root.Execute())
 }
 
