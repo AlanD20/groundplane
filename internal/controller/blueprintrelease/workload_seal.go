@@ -62,7 +62,9 @@ func (service *Service) prepareSelectedWorkloads(
 		if strategyErr != nil {
 			return workloadPreparation{}, strategyErr
 		}
-		if err := domain.ValidateDeploymentReadiness(desired.Name, strategy, uint32(desired.Replicas), desired.Healthcheck.Enabled()); err != nil {
+		if err := domain.ValidateDeploymentReadiness(
+			desired.Name, strategy, uint32(desired.Replicas), desired.Healthcheck.Enabled(), desired.ProxyExposures(),
+		); err != nil {
 			return workloadPreparation{}, err
 		}
 		exposures := desired.ProxyExposures()

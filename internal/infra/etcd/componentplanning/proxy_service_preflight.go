@@ -315,7 +315,9 @@ func validateProxyServiceSource(preflight ProxyServicePreflight, source *ProxySe
 	if desired.Replicas < 1 || uint64(desired.Replicas) > uint64(^uint32(0)) {
 		return errs.New(errs.KindValidationFailed, "router Service preflight replica count is invalid")
 	}
-	if err := domain.ValidateDeploymentReadiness(desired.Name, strategy, uint32(desired.Replicas), desired.Healthcheck.Enabled()); err != nil {
+	if err := domain.ValidateDeploymentReadiness(
+		desired.Name, strategy, uint32(desired.Replicas), desired.Healthcheck.Enabled(), desired.ProxyExposures(),
+	); err != nil {
 		return err
 	}
 	selection := domain.ProxySelection{}

@@ -9,6 +9,12 @@ func ValidateTrafficSwitchPorts(implementation Implementation, ports []Port) err
 	if err := ValidatePorts(implementation, ports); err != nil {
 		return err
 	}
+	return ValidateTrafficSwitchTransports(ports)
+}
+
+// ValidateTrafficSwitchTransports applies before a runtime or proxy exists.
+// Its callers supply already parsed port declarations.
+func ValidateTrafficSwitchTransports(ports []Port) error {
 	for _, port := range ports {
 		if port.Protocol == UDP {
 			return errs.Newf(

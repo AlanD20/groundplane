@@ -34,7 +34,9 @@ func selectReleaseExecution(planning releasequeries.ReleasePlanningService, imag
 	if replicas < 1 || uint64(replicas) > uint64(^uint32(0)) {
 		return releaseExecutionSettings{}, errs.New(errs.KindValidationFailed, "release replica count is invalid")
 	}
-	if err := domain.ValidateDeploymentReadiness(desired.Name, strategy, uint32(replicas), desired.Healthcheck.Enabled()); err != nil {
+	if err := domain.ValidateDeploymentReadiness(
+		desired.Name, strategy, uint32(replicas), desired.Healthcheck.Enabled(), desired.ProxyExposures(),
+	); err != nil {
 		return releaseExecutionSettings{}, err
 	}
 	if planning.Service.Record.BackingNetworkID != "" {
