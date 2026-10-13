@@ -69,8 +69,15 @@ func taskFailureSummary(record etcd.TaskRecord) string {
 			"planning": "planning changes", "selection": "selecting the next change",
 			"settlement": "saving a resource change", "child": "preparing an execution Task",
 		}[failure.Phase]
+		if failure.Detail != "" {
+			return fmt.Sprintf(
+				"Blueprint Apply failed while %s: %s GP stopped scheduling new changes; a new Apply is required.",
+				stage,
+				failure.Detail,
+			)
+		}
 		return fmt.Sprintf(
-			"Blueprint Apply failed while %s (error code: %s). GP stopped scheduling new changes; a new Apply is required.",
+			"Blueprint Apply failed while %s (error code: %s). Specific failure details were not retained for this Task. GP stopped scheduling new changes; a new Apply is required.",
 			stage,
 			failure.Code,
 		)

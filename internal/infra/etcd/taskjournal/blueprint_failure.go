@@ -2,6 +2,7 @@ package taskjournal
 
 import (
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -9,10 +10,13 @@ import (
 )
 
 // BlueprintFailure preserves the first stop cause after its transient stop gate
-// is retired. It contains only closed stages, error codes and immutable IDs.
+// is retired. Detail contains only the error taxonomy's safe public projection.
+const MaximumBlueprintFailureDetailBytes = 2048
+
 type BlueprintFailure struct {
 	Phase       string    `json:"phase"`
 	Code        errs.Code `json:"code,omitempty"`
+	Detail      string    `json:"detail,omitempty"`
 	ChildTaskID string    `json:"child_task_id,omitempty"`
 	ChildPlanID string    `json:"child_plan_id,omitempty"`
 	FailedAt    time.Time `json:"failed_at"`
@@ -22,8 +26,11 @@ func ValidateBlueprintFailure(failure BlueprintFailure) error {
 	if err := recordcodec.ValidateTimestamp("Blueprint failure", failure.FailedAt); err != nil {
 		return err
 	}
+	if len(failure.Detail) > MaximumBlueprintFailureDetailBytes || !utf8.ValidString(failure.Detail) {
+		return errs.New(errs.KindInternal, "Blueprint failure detail is invalid")
+	}
 	if failure.Phase == "child_execution" {
-		if failure.Code != "" || ids.Validate(ids.KindTask, failure.ChildTaskID) != nil ||
+		if failure.Code != "" || failure.Detail != "" || ids.Validate(ids.KindTask, failure.ChildTaskID) != nil ||
 			ids.Validate(ids.KindPlan, failure.ChildPlanID) != nil {
 			return errs.New(errs.KindInternal, "Blueprint child failure identity is corrupt")
 		}

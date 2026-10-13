@@ -134,7 +134,15 @@ type taskStore interface {
 	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
 	RequestBlueprintParentAbort(context.Context, string, time.Time) error
 	RequestBlueprintParentTimeout(context.Context, string, time.Time) error
-	RequestBlueprintForwardFailure(context.Context, string, blueprintunits.Snapshot, string, errs.Code, time.Time) error
+	RequestBlueprintForwardFailure(
+		context.Context,
+		string,
+		blueprintunits.Snapshot,
+		string,
+		errs.Code,
+		string,
+		time.Time,
+	) error
 	BlueprintParentStopRequested(context.Context, string) (taskjournal.TaskStatus, error)
 	FailBlueprintParent(
 		context.Context,

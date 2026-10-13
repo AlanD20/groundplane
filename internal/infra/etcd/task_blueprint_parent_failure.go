@@ -15,13 +15,14 @@ import (
 const blueprintParentFailurePrefix = "/v1/runtime/blueprint-parent-failures/"
 
 type blueprintParentFailureRecord struct {
-	Schema           int       `json:"schema"`
-	ParentTaskID     string    `json:"parent_task_id"`
-	ChildTaskID      string    `json:"child_task_id"`
-	ChildPlanID      string    `json:"child_plan_id"`
-	CoordinatorPhase string    `json:"coordinator_phase,omitempty"`
-	CoordinatorCode  errs.Code `json:"coordinator_code,omitempty"`
-	FailedAt         time.Time `json:"failed_at"`
+	Schema            int       `json:"schema"`
+	ParentTaskID      string    `json:"parent_task_id"`
+	ChildTaskID       string    `json:"child_task_id"`
+	ChildPlanID       string    `json:"child_plan_id"`
+	CoordinatorPhase  string    `json:"coordinator_phase,omitempty"`
+	CoordinatorCode   errs.Code `json:"coordinator_code,omitempty"`
+	CoordinatorDetail string    `json:"coordinator_detail,omitempty"`
+	FailedAt          time.Time `json:"failed_at"`
 }
 
 func blueprintParentFailureKey(taskID string) string {
@@ -41,7 +42,7 @@ func validateBlueprintParentFailureRecord(record blueprintParentFailureRecord) e
 			return err
 		}
 	} else if ids.Validate(ids.KindTask, record.ChildTaskID) != nil ||
-		ids.Validate(ids.KindPlan, record.ChildPlanID) != nil || record.CoordinatorCode != "" {
+		ids.Validate(ids.KindPlan, record.ChildPlanID) != nil || record.CoordinatorCode != "" || record.CoordinatorDetail != "" {
 		return errs.New(errs.KindInternal, "Blueprint child failure record is corrupt")
 	}
 	return nil
@@ -53,7 +54,7 @@ func (record blueprintParentFailureRecord) terminalFailure() taskjournal.Bluepri
 		phase = "child_execution"
 	}
 	return taskjournal.BlueprintFailure{
-		Phase: phase, Code: record.CoordinatorCode, ChildTaskID: record.ChildTaskID,
+		Phase: phase, Code: record.CoordinatorCode, Detail: record.CoordinatorDetail, ChildTaskID: record.ChildTaskID,
 		ChildPlanID: record.ChildPlanID, FailedAt: record.FailedAt,
 	}
 }

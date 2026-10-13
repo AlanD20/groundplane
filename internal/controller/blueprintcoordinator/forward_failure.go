@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -36,7 +38,10 @@ func (runner *Runner) forwardFailed(
 		problem := domainError.ToProblem()
 		code, detail = problem.Code, problem.Detail
 	}
-	if err := runner.tasks.RequestBlueprintForwardFailure(ctx, parent.ID, snapshot, phase, code, runner.now().UTC()); err != nil {
+	if len(detail) > taskjournal.MaximumBlueprintFailureDetailBytes || !utf8.ValidString(detail) {
+		detail = "The error detail could not be retained; inspect the Controller log for this Task."
+	}
+	if err := runner.tasks.RequestBlueprintForwardFailure(ctx, parent.ID, snapshot, phase, code, detail, runner.now().UTC()); err != nil {
 		if isStateRace(err) {
 			return true, nil
 		}

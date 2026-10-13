@@ -17,7 +17,13 @@ import (
 // settles already-started children. It never invents an Agent execution or proof
 // of restoration for a unit that could not be prepared.
 func (repository *TaskRepository) RequestBlueprintForwardFailure(
-	ctx context.Context, taskID string, expected blueprintunits.Snapshot, phase string, code errs.Code, at time.Time,
+	ctx context.Context,
+	taskID string,
+	expected blueprintunits.Snapshot,
+	phase string,
+	code errs.Code,
+	detail string,
+	at time.Time,
 ) error {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return err
@@ -27,7 +33,7 @@ func (repository *TaskRepository) RequestBlueprintForwardFailure(
 		return errs.New(errs.KindValidationFailed, "Blueprint failure decision snapshot is invalid")
 	}
 	record := blueprintParentFailureRecord{
-		Schema: 2, ParentTaskID: taskID, CoordinatorPhase: phase, CoordinatorCode: code, FailedAt: at,
+		Schema: 2, ParentTaskID: taskID, CoordinatorPhase: phase, CoordinatorCode: code, CoordinatorDetail: detail, FailedAt: at,
 	}
 	failureValue, err := encodeBlueprintParentFailureRecord(record)
 	if err != nil {
