@@ -4,7 +4,7 @@ import (
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"path/filepath"
-	"strings"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
@@ -21,8 +21,10 @@ func backingComposeProject(
 	volume *core.Volume,
 	environment hierarchyrecord.EnvironmentRecord,
 ) *composetypes.Project {
+	// Commands are literal normalized values. The Compose CLI transport owns
+	// dollar quoting; pre-quoting here changes the command the container runs.
 	service := composetypes.ServiceConfig{
-		Name: spec.ServiceName, Image: spec.Image, Command: composetypes.ShellCommand(backingComposeShell(spec.Command)),
+		Name: spec.ServiceName, Image: spec.Image, Command: composetypes.ShellCommand(slices.Clone(spec.Command)),
 		Expose: composetypes.StringOrNumberList(spec.Expose), Restart: "unless-stopped",
 		CapAdd: append([]string(nil), spec.CapAdd...), CapDrop: append([]string(nil), spec.CapDrop...),
 		SecurityOpt: append([]string(nil), spec.SecurityOpt...),
@@ -54,7 +56,7 @@ func backingComposeProject(
 	}
 	if spec.HasHealthcheck() {
 		service.HealthCheck = &composetypes.HealthCheckConfig{
-			Test: composetypes.HealthCheckTest(backingComposeShell(spec.HealthCommand)),
+			Test: composetypes.HealthCheckTest(slices.Clone(spec.HealthCommand)),
 		}
 	}
 	project.Services[spec.ServiceName] = service
@@ -78,17 +80,4 @@ func backingDesiredComposeProject(
 	}
 	project.Services[spec.ServiceName] = service
 	return project
-}
-
-// Compiled adapter commands are runtime shell inputs, never Compose template
-// inputs. Escape once at this serialization boundary without changing the spec.
-func backingComposeShell(command []string) []string {
-	if command == nil {
-		return nil
-	}
-	escaped := make([]string, len(command))
-	for index, argument := range command {
-		escaped[index] = strings.ReplaceAll(argument, "$", "$$")
-	}
-	return escaped
 }

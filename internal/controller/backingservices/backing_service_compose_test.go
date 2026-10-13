@@ -3,7 +3,6 @@ package backingservices
 import (
 	"context"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/compose-spec/compose-go/v2/loader"
@@ -16,8 +15,8 @@ import (
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 )
 
-// Rationale: compiled bootstrap commands must survive the real Compose parser,
-// without substituting Controller/helper environment values into shell code.
+// Rationale: normalized bootstrap commands must retain their literal runtime
+// values; dollar quoting belongs to the separate Compose CLI transport.
 func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 	registerAdapters()
 	for _, input := range []struct {
@@ -57,9 +56,6 @@ func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(string(artifact.CanonicalYaml), "${") {
-				t.Error("bootstrap contains forbidden unresolved interpolation syntax")
-			}
 			parsed, err := loader.LoadWithContext(context.Background(), composetypes.ConfigDetails{
 				WorkingDir:  environment.VolumeDir,
 				ConfigFiles: []composetypes.ConfigFile{{Filename: "compose.yaml", Content: artifact.CanonicalYaml}},
@@ -67,7 +63,10 @@ func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 					"VALKEY_PASSWORD": "must-not-be-substituted", "VALKEY_AUTHENTICATION": "wrong",
 					"POSTGRES_USER": "wrong", "POSTGRES_DB": "wrong",
 				},
-			}, func(options *loader.Options) { options.SkipResolveEnvironment = true })
+			}, func(options *loader.Options) {
+				options.SkipResolveEnvironment = true
+				options.SkipInterpolation = true
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -116,7 +115,10 @@ func TestBackingServiceComposePublishesStableEndpointAlias(t *testing.T) {
 	parsed, err := loader.LoadWithContext(context.Background(), composetypes.ConfigDetails{
 		WorkingDir:  environment.VolumeDir,
 		ConfigFiles: []composetypes.ConfigFile{{Filename: "compose.yaml", Content: artifact.CanonicalYaml}},
-	}, func(options *loader.Options) { options.SkipResolveEnvironment = true })
+	}, func(options *loader.Options) {
+		options.SkipResolveEnvironment = true
+		options.SkipInterpolation = true
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

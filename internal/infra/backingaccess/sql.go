@@ -19,8 +19,10 @@ func (check *observation) postgres(ctx context.Context, request access.Request) 
 	// ParseConfig supplies required private driver initialization. Explicit
 	// bootstrap settings suppress service/pass files, TLS files and environment
 	// selections; only the captured consumer input is used on the connection.
+	// The helper clears PGSERVICE. An explicit service='' would select a blank
+	// service and still make the driver try to read a service file.
 	config, err := pgconn.ParseConfig("host=localhost port=5432 user=groundplane dbname=postgres password=unused " +
-		"service='' servicefile='' passfile='' sslmode=disable sslnegotiation=postgres " +
+		"servicefile='' passfile='' sslmode=disable sslnegotiation=postgres " +
 		"connect_timeout=20 target_session_attrs=any channel_binding=disable require_auth='' " +
 		"min_protocol_version=3.0 max_protocol_version=3.0")
 	started := time.Now()

@@ -332,7 +332,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		ID: serviceID, Name: spec.ServiceName, Image: spec.Image,
 		Zones: []string{
 			zone.Desired.Name,
-		}, Healthcheck: core.Healthcheck{Test: backingComposeShell(spec.HealthCommand)},
+		}, Healthcheck: core.Healthcheck{Test: append([]string(nil), spec.HealthCommand...)},
 		Strategy: core.StrategyRecreate, OnFailure: core.OnFailureLeaveActive, Replicas: 1,
 		Command: append([]string(nil), spec.Command...),
 		Mounts:  mounts,

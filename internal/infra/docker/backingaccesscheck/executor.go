@@ -276,6 +276,7 @@ func (executor *Executor) createOptions(
 	return client.ContainerCreateOptions{
 		Name: backingaccess.HelperName(taskID),
 		Config: &container.Config{
+			Env:   []string{"PGSERVICE="},
 			Image: executor.image, User: "65534:65534", WorkingDir: "/",
 			Cmd:         []string{backingaccess.HelperArgument},
 			AttachStdin: true, AttachStdout: true, AttachStderr: true, OpenStdin: true, StdinOnce: true,
