@@ -24,13 +24,15 @@ func (authority FrozenProjectionAuthority) WithDisabledProxyRollouts(
 		)
 	}
 	preparation := ComponentTaskPreparation{
-		proxyServicePreflight:  cloneProxyServicePreflight(authority.proxyServicePreflight),
-		proxyServiceConditions: slices.Clone(authority.proxyServiceConditions),
+		proxyServicePreflight:      cloneProxyServicePreflight(authority.proxyServicePreflight),
+		proxyServiceConditions:     slices.Clone(authority.proxyServiceConditions),
+		proxyServiceConditionCount: authority.proxyServiceConditionCount,
 	}
 	owned := input.Record
 	preparation.proxyServicePreflight.CandidateInput = &owned
 	preparation.proxyServiceConditions = append(preparation.proxyServiceConditions,
 		keyvalue.Condition{Key: ProxyCandidateInputKey(owned), ModRevision: input.Revision})
+	preparation.proxyServiceConditionCount++
 	preparation, err := preparation.WithProxyServiceRollouts(rollouts)
 	if err != nil {
 		return FrozenProjectionAuthority{}, err
@@ -45,6 +47,7 @@ func (authority FrozenProjectionAuthority) WithDisabledProxyRollouts(
 	}
 	authority.proxyServicePreflight = preparation.proxyServicePreflight
 	authority.proxyServiceConditions = preparation.proxyServiceConditions
+	authority.proxyServiceConditionCount = preparation.proxyServiceConditionCount
 	authority.proxySourceMutations = preparation.proxySourceMutations
 	return authority, nil
 }

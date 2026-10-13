@@ -74,7 +74,8 @@ func (authority FrozenProjectionAuthority) PrepareControllerProxySelection(ctx c
 		)
 	}
 	preparation := ComponentTaskPreparation{proxyServicePreflight: authority.proxyServicePreflight,
-		proxyServiceConditions: authority.proxyServiceConditions, proxySourceMutations: authority.proxySourceMutations}
+		proxyServiceConditions: authority.proxyServiceConditions, proxySourceMutations: authority.proxySourceMutations,
+		proxyServiceConditionCount: authority.proxyServiceConditionCount}
 	if err := validateProxyRolloutPublication(ctx, store, preparation); err != nil {
 		return ControllerProxyPublication{}, err
 	}

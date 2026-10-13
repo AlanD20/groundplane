@@ -108,10 +108,12 @@ func (repository *Planner) PrepareFrozenProxyServicePreflight(
 		preflight.Services = append(preflight.Services, ProxyServiceSource{ServiceID: identity.ID,
 			ReplacementRequired: service.Adapter == "" && len(service.ProxyExposures()) != 0})
 	}
+	omissionCount := 0
 	for _, omission := range owned.Record.PendingOmissions {
 		if omission.Kind != ids.KindService {
 			continue
 		}
+		omissionCount++
 		// Immutable omission intent survives cleanup. Only a durable absence
 		// receipt at this snapshot can exclude its historical Release from
 		// runtime capture; missing runtime records alone never prove removal.
@@ -206,6 +208,7 @@ func (repository *Planner) PrepareFrozenProxyServicePreflight(
 	}
 	authority.proxyServicePreflight = &preflight
 	authority.proxyServiceConditions = conditions
+	authority.proxyServiceConditionCount = 2 + 3*len(preflight.Services) + omissionCount
 	return authority, nil
 }
 

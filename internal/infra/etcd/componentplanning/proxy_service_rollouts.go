@@ -114,5 +114,6 @@ func (preparation ComponentTaskPreparation) WithProxyServiceRollouts(
 			},
 		)
 	}
+	result.proxyServiceConditionCount += 2 * len(rollouts)
 	return result, nil
 }

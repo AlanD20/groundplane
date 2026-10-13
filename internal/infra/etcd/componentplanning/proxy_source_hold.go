@@ -98,7 +98,9 @@ func (preparation ComponentTaskPreparation) WithProxySourceHold(hold ProxySource
 	result := cloneComponentTaskPreparation(preparation)
 	owned := hold
 	result.proxyServicePreflight.SourceHold = &owned
-	result.proxyServiceConditions = append(result.proxyServiceConditions, fragment.Conditions()...)
+	conditions := fragment.Conditions()
+	result.proxyServiceConditions = append(result.proxyServiceConditions, conditions...)
+	result.proxyServiceConditionCount += len(conditions)
 	result.proxySourceMutations = cloneProxySourceMutations(fragment.Mutations())
 	return result, nil
 }

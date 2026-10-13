@@ -37,7 +37,9 @@ type FrozenProjectionAuthority struct {
 	unitRuntimeCondition     *etcdstore.Condition
 	proxyServicePreflight    *ProxyServicePreflight
 	proxyServiceConditions   []etcdstore.Condition
-	proxySourceMutations     []etcdstore.Mutation
+	// Frozen from captured membership, then extended only by validated inputs.
+	proxyServiceConditionCount int
+	proxySourceMutations       []etcdstore.Mutation
 }
 
 type FrozenProjectionAuthorityInput struct {

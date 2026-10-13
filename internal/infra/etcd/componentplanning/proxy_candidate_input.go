@@ -192,6 +192,7 @@ func (preparation ComponentTaskPreparation) WithProxyCandidateInput(
 		result.proxyServiceConditions,
 		keyvalue.Condition{Key: ProxyCandidateInputKey(owned), ModRevision: reference.Revision},
 	)
+	result.proxyServiceConditionCount++
 	return result, nil
 }
 

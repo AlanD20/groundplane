@@ -33,17 +33,18 @@ type EnvironmentComponentCandidateInput struct {
 // ApplyEnvironmentBlueprintWithTask consumes its private CAS evidence in the
 // same transaction that publishes its Intent and Task.
 type ComponentTaskPreparation struct {
-	Intent                    environmentchanges.ComponentTaskIntent
-	managedRuntimeSources     []projectionrecord.ManagedComponentRuntimeSource
-	appliedComponentRuntime   []byte
-	appliedProjectionPresent  bool
-	appliedProjectionRevision int64
-	desiredProjectionRevision int64
-	unitRuntimeCondition      *etcdstore.Condition
-	proxyServicePreflight     *ProxyServicePreflight
-	proxyServiceConditions    []etcdstore.Condition
-	proxySourceMutations      []etcdstore.Mutation
-	addresses                 []componentTaskAddressPreparation
+	Intent                     environmentchanges.ComponentTaskIntent
+	managedRuntimeSources      []projectionrecord.ManagedComponentRuntimeSource
+	appliedComponentRuntime    []byte
+	appliedProjectionPresent   bool
+	appliedProjectionRevision  int64
+	desiredProjectionRevision  int64
+	unitRuntimeCondition       *etcdstore.Condition
+	proxyServicePreflight      *ProxyServicePreflight
+	proxyServiceConditions     []etcdstore.Condition
+	proxyServiceConditionCount int
+	proxySourceMutations       []etcdstore.Mutation
+	addresses                  []componentTaskAddressPreparation
 }
 
 type componentTaskAddressPreparation struct {
@@ -354,16 +355,17 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		return ComponentTaskPreparation{}, err
 	}
 	preparation := ComponentTaskPreparation{
-		Intent:                    intent,
-		managedRuntimeSources:     managedRuntimeSources,
-		appliedComponentRuntime:   append([]byte(nil), selected.Record.ComposeArtifact...),
-		appliedProjectionPresent:  found,
-		appliedProjectionRevision: selected.Revision,
-		desiredProjectionRevision: authority.desiredHeadRevision,
-		unitRuntimeCondition:      authority.unitRuntimeCondition,
-		proxyServicePreflight:     cloneProxyServicePreflight(authority.proxyServicePreflight),
-		proxyServiceConditions:    append([]etcdstore.Condition(nil), authority.proxyServiceConditions...),
-		addresses:                 addresses,
+		Intent:                     intent,
+		managedRuntimeSources:      managedRuntimeSources,
+		appliedComponentRuntime:    append([]byte(nil), selected.Record.ComposeArtifact...),
+		appliedProjectionPresent:   found,
+		appliedProjectionRevision:  selected.Revision,
+		desiredProjectionRevision:  authority.desiredHeadRevision,
+		unitRuntimeCondition:       authority.unitRuntimeCondition,
+		proxyServicePreflight:      cloneProxyServicePreflight(authority.proxyServicePreflight),
+		proxyServiceConditions:     append([]etcdstore.Condition(nil), authority.proxyServiceConditions...),
+		proxyServiceConditionCount: authority.proxyServiceConditionCount,
+		addresses:                  addresses,
 	}
 	if err := ValidateComponentTaskPreparation(preparation); err != nil {
 		return ComponentTaskPreparation{}, err
@@ -477,10 +479,11 @@ func ValidateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 			) != string(
 				preparation.Intent.Candidates[0].Candidate.Desired.Kind,
 			) ||
-			len(preparation.proxyServiceConditions) != 2+3*len(preparation.proxyServicePreflight.Services) {
+			preparation.proxyServiceConditionCount < 2+3*len(preparation.proxyServicePreflight.Services) ||
+			len(preparation.proxyServiceConditions) != preparation.proxyServiceConditionCount {
 			return errs.New(errs.KindValidationFailed, "Component router Service preflight changed")
 		}
-	} else if len(preparation.proxyServiceConditions) != 0 {
+	} else if len(preparation.proxyServiceConditions) != 0 || preparation.proxyServiceConditionCount != 0 {
 		return errs.New(errs.KindValidationFailed, "Component router Service preflight is missing")
 	}
 	if len(preparation.managedRuntimeSources) > projectionrecord.MaximumManagedComponentRuntimeSources {
@@ -533,15 +536,16 @@ func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) Compone
 		managedRuntimeSources: append(
 			[]projectionrecord.ManagedComponentRuntimeSource(nil),
 			preparation.managedRuntimeSources...),
-		appliedComponentRuntime:   append([]byte(nil), preparation.appliedComponentRuntime...),
-		appliedProjectionPresent:  preparation.appliedProjectionPresent,
-		appliedProjectionRevision: preparation.appliedProjectionRevision,
-		desiredProjectionRevision: preparation.desiredProjectionRevision,
-		unitRuntimeCondition:      preparation.unitRuntimeCondition,
-		proxyServicePreflight:     cloneProxyServicePreflight(preparation.proxyServicePreflight),
-		proxyServiceConditions:    append([]etcdstore.Condition(nil), preparation.proxyServiceConditions...),
-		proxySourceMutations:      cloneProxySourceMutations(preparation.proxySourceMutations),
-		addresses:                 make([]componentTaskAddressPreparation, len(preparation.addresses)),
+		appliedComponentRuntime:    append([]byte(nil), preparation.appliedComponentRuntime...),
+		appliedProjectionPresent:   preparation.appliedProjectionPresent,
+		appliedProjectionRevision:  preparation.appliedProjectionRevision,
+		desiredProjectionRevision:  preparation.desiredProjectionRevision,
+		unitRuntimeCondition:       preparation.unitRuntimeCondition,
+		proxyServicePreflight:      cloneProxyServicePreflight(preparation.proxyServicePreflight),
+		proxyServiceConditions:     append([]etcdstore.Condition(nil), preparation.proxyServiceConditions...),
+		proxyServiceConditionCount: preparation.proxyServiceConditionCount,
+		proxySourceMutations:       cloneProxySourceMutations(preparation.proxySourceMutations),
+		addresses:                  make([]componentTaskAddressPreparation, len(preparation.addresses)),
 	}
 	if preparation.unitRuntimeCondition != nil {
 		condition := *preparation.unitRuntimeCondition

@@ -177,6 +177,7 @@ func ComponentTaskPreparationIsZero(preparation ComponentTaskPreparation) bool {
 		preparation.desiredProjectionRevision == 0 &&
 		preparation.unitRuntimeCondition == nil &&
 		preparation.proxyServicePreflight == nil && len(preparation.proxyServiceConditions) == 0 &&
+		preparation.proxyServiceConditionCount == 0 &&
 		len(preparation.addresses) == 0
 }
 
