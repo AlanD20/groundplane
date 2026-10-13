@@ -1269,6 +1269,31 @@ nonempty member set. Its original Task and failure evidence remain intact.
 Entry omission, proxy-engine switching, held connections and protocol-specific
 rejection remain unqualified by this record. Earlier Envoy failures are retained.
 
+**H100 — Configuration-only omission resumes; subsequent router selection FAIL
+on 2026-10-13.**
+
+Ubuntu 24.04 amd64 used matching Controller/Agent `df6bf950e`, storage epoch 33,
+channel schema 19 and sealed-plan schema 18. Full local CI passed. After a
+data-preserving paired repair, the same original Apply and Entry-cleanup child
+completed without rewriting Task, assignment or history. This is repaired
+execution, not a normal updater qualification.
+
+Controller binary digest was
+`sha256:dbcfbca54141cded1eda45d5ba1036e0d4dde89225ec8245ee10399b672946e3`;
+Agent image digest was
+`sha256:97b629f0357063b98395c67612bd74dedf6c85711eef7e636762aa83e91a93bb`.
+
+The omitted DNS Service returned not-found; independent Docker observation found
+neither its workload nor its proxy. The retained HTTP Route returned 200 with the
+expected nginx response. This qualifies one Entry-plus-Service omission, not all
+resource kinds, dependency protections or failure boundaries.
+
+A subsequent HTTP-only Envoy-to-Caddy Apply failed during selection before any
+child or host effects. Its router dependency named an Entry already acknowledged
+absent by the prior Apply: immutable omission intent was mistaken for unfinished
+removal work. The failed Task remains retained. Protected engine switching and
+the correction's installed result are not qualified by this record.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

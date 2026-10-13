@@ -212,9 +212,11 @@ func (planner *authoredUnitPlanner) componentDependencies(
 				dependencies = append(dependencies, key)
 			}
 		}
-		for _, omission := range planner.input.identities.PendingOmissions {
-			if omission.Kind == ids.KindEnvEntry || omission.Kind == ids.KindAttach {
-				dependencies = append(dependencies, authoredResourceKey(omission.Kind, omission.ID))
+		// Retained omission intent can already have acknowledged absence. Only
+		// removals selected from this snapshot remain execution dependencies.
+		for _, omission := range planner.omissions {
+			if omission.Target.Kind == ids.KindEnvEntry || omission.Target.Kind == ids.KindAttach {
+				dependencies = append(dependencies, omission.Target)
 			}
 		}
 		for _, identity := range planner.identities[ids.KindRoute] {

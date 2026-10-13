@@ -21,6 +21,7 @@ type authoredUnitPlanner struct {
 	project        *composetypes.Project
 	identities     map[ids.Kind]map[string]projectionrecord.OwnedIdentity
 	targets        map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
+	omissions      []blueprintunits.Unit
 	units          map[blueprintunits.ResourceKey]blueprintunits.Unit
 	blocked        map[blueprintunits.ResourceKey]bool
 	runtimeReady   bool
@@ -45,10 +46,17 @@ func newAuthoredUnitPlanner(
 	if err != nil {
 		return nil, err
 	}
+	omissions, err := planAcknowledgedOwnedOmissions(
+		input.desired.EnvironmentID, targets, snapshot, input.identities.PendingOmissions,
+	)
+	if err != nil {
+		return nil, err
+	}
 	planner := &authoredUnitPlanner{
 		input: input, project: project,
 		identities:     make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
 		targets:        make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
+		omissions:      omissions,
 		units:          make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
 		blocked:        make(map[blueprintunits.ResourceKey]bool),
 		runtimeReady:   runtime != nil,

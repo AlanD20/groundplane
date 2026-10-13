@@ -93,16 +93,7 @@ func (service *Service) Plan(
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
-	omissions, err := planAcknowledgedOwnedOmissions(
-		parent.Owner.EnvironmentID,
-		targets,
-		snapshot,
-		input.identities.PendingOmissions,
-	)
-	if err != nil {
-		return blueprintunits.DesiredPlan{}, err
-	}
-	omissions = orderAuthoredRemovalUnits(omissions)
+	omissions := orderAuthoredRemovalUnits(planner.omissions)
 	componentTargets := make([]blueprintunits.ResourceKey, 0)
 	for _, candidates := range [][]blueprintunits.Unit{units, omissions} {
 		for _, candidate := range candidates {
