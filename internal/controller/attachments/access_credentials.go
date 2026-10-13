@@ -71,15 +71,24 @@ func (service *FactService) ResolveStoredAccessCredentials(
 		default:
 			return errs.New(errs.KindValidationFailed, "this Backing adapter does not provide an access check")
 		}
-		switch bundle.Identity.Authentication {
-		case core.BackingAuthenticationUsernamePassword:
-			request.Authentication = backingaccess.UsernamePassword
-		case core.BackingAuthenticationPassword:
-			request.Authentication = backingaccess.Password
-		case core.BackingAuthenticationNone:
-			request.Authentication = backingaccess.None
-		default:
+		authentication, err := core.ResolveBackingAuthentication(
+			adapter.SupportsAuthenticationModes(), bundle.Identity.Authentication,
+		)
+		if err != nil {
 			return errs.New(errs.KindInternal, "captured Backing authentication is invalid")
+		}
+		if !adapter.SupportsAuthenticationModes() {
+			request.Authentication = backingaccess.UsernamePassword
+		} else {
+			switch authentication {
+			case core.BackingAuthenticationUsernamePassword:
+				request.Authentication = backingaccess.UsernamePassword
+			case core.BackingAuthenticationPassword:
+				request.Authentication = backingaccess.Password
+				request.Username = ""
+			case core.BackingAuthenticationNone:
+				request.Authentication = backingaccess.None
+			}
 		}
 		if grantID != "" {
 			found := false
