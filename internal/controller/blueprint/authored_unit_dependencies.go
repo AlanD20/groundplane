@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/zonedns"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -237,11 +238,40 @@ func (planner *authoredUnitPlanner) componentDependencies(
 	return dependencies, canonicalAuthoredUnitKeys(after), true, nil
 }
 
-func (planner *authoredUnitPlanner) componentRoutes(capability string) []core.RouteSpec {
+type authoredComponentRouteInput struct {
+	Spec      core.RouteSpec
+	RecordID  string
+	ServiceID string
+}
+
+func (planner *authoredUnitPlanner) componentRoutes(capability string) ([]authoredComponentRouteInput, error) {
 	if core.ComponentCapability(capability) != core.ComponentCapabilityHTTPRouter {
-		return nil
+		return nil, nil
 	}
-	return slices.Clone(planner.input.desired.Input.Routes)
+	var result []authoredComponentRouteInput
+	for _, spec := range planner.input.desired.Input.Routes {
+		name := projectionrecord.RouteIdentityName(spec.Hostname, spec.Path)
+		record, hasRecord := planner.identities[ids.KindRoute][name]
+		service, hasService := planner.identities[ids.KindService][spec.Target]
+		if !hasRecord || !hasService {
+			return nil, planner.missingInput("Component Route target", spec.Target)
+		}
+		result = append(result, authoredComponentRouteInput{Spec: spec, RecordID: record.ID, ServiceID: service.ID})
+	}
+	return result, nil
+}
+
+func (planner *authoredUnitPlanner) componentDNSUpstreams(spec core.ComponentSpec) (composetypes.StringList, error) {
+	service := composetypes.ServiceConfig{Networks: make(map[string]*composetypes.ServiceNetworkConfig)}
+	for _, zoneID := range spec.Settings.ZoneIDs {
+		for name, identity := range planner.identities[ids.KindNetwork] {
+			if identity.ID == zoneID {
+				service.Networks[name] = nil
+				break
+			}
+		}
+	}
+	return zonedns.Upstreams(service, planner.project.Networks)
 }
 
 func (planner *authoredUnitPlanner) scriptDependencies(

@@ -353,11 +353,20 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			continue
 		}
 		forwardingClaims := planner.componentForwardingClaims(name)
+		routes, err := planner.componentRoutes(name)
+		if err != nil {
+			return nil, false, err
+		}
+		dnsUpstreams, err := planner.componentDNSUpstreams(spec)
+		if err != nil {
+			return nil, false, err
+		}
 		fingerprint, err := authoredUnitFingerprint("component", struct {
-			Capability string
-			Spec       core.ComponentSpec
-			Routes     []core.RouteSpec
-		}{name, spec, planner.componentRoutes(name)})
+			Capability   string
+			Spec         core.ComponentSpec
+			Routes       []authoredComponentRouteInput
+			DNSUpstreams composetypes.StringList
+		}{name, spec, routes, dnsUpstreams})
 		if err != nil {
 			return nil, false, err
 		}
