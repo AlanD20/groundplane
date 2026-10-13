@@ -271,6 +271,10 @@ the result identifies the retained helper and blocks removal of its protected
 resources. **Retry cleanup** only removes that helper; it does not run the probe
 again. After interruption, submit a new check to obtain new access evidence.
 
+PostgreSQL and password-only Valkey checks passed on deployed consumers in
+[H114](../acceptance.md#historical-evidence-register), with independent helper
+absence checks. MySQL, other Valkey modes and interrupted cleanup remain unqualified.
+
 This capability is implemented locally but has not completed live qualification;
 see [current limitations](../capabilities.md).
 

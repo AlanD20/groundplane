@@ -1614,6 +1614,35 @@ capture. Independent HTTP returned the expected application page. No Apply,
 removal Task or new workload was created. This proves the corrected live preview,
 not additional removal execution coverage for every resource kind.
 
+**H114 — PostgreSQL and password-only Valkey access checks PASS on
+2026-10-13; post-Deploy Attach capture repaired.**
+
+Ubuntu 24.04 amd64 installed matching Controller/Agent `72e362741`, then
+Controller `d0ce4a9f9`, then matching `1932b3418` through normal updates.
+The required full local CI passed for each repair batch; no new tests were added.
+Storage epoch 33, channel schema 19 and plan schema 18 remained unchanged.
+
+A PostgreSQL consumer check passed its network, authentication and `SELECT 1`
+stages. A fresh password-only Valkey instance started healthy. Its first Attach
+provisioned successfully but failed while applying the consumer configuration:
+runtime capture had invented a required environment file for an Environment
+with no Entries. Capture now preserves that runtime's existing bindings.
+A new isolated consumer deployed first, then its Attach completed successfully.
+
+Valkey check admission separately exposed a generic Attach identity incorrectly
+projected as a protocol database selection. The family-specific projection now
+omits that selection without changing the explicit authentication mode. The
+installed check passed network, password authentication and `PING`; its result
+was current and cleanup was complete. Independent Docker inspection found both
+checks' exact helpers absent. Existing HTTP returned its expected page, and
+etcd retained its container identity and start time across the updates.
+
+Original failures remain retained; the failed Attach's recorded effects still
+require reconciliation. This record does not qualify that reconciliation,
+MySQL checks, wrong-credential/network/database faults, interrupted cleanup,
+Runner checks or Tunnel diagnostics. A fresh R2 draft recheck also passed all
+permission and cleanup stages; it adds no Backup/Restore qualification.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
