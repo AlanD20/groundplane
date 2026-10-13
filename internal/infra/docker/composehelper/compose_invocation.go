@@ -28,6 +28,10 @@ func commandsFor(
 	step *agentpb.ExecutionStep,
 	artifact *agentpb.ComposeArtifact,
 ) ([]runner.RunCmdOpts, error) {
+	input, err := composeCLIInput(artifact.GetCanonicalYaml())
+	if err != nil {
+		return nil, err
+	}
 	prefix := []string{
 		"compose", "--project-name", artifact.ProjectName,
 		"--project-directory", composeProjectDirectory(artifact), "--file", "-",
@@ -35,7 +39,7 @@ func commandsFor(
 	base := runner.RunCmdOpts{
 		Name: DockerExecutable, Dir: WorkDirectory,
 		Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true,
-		Stdin: append([]byte(nil), artifact.CanonicalYaml...),
+		Stdin: input,
 	}
 	var commands []runner.RunCmdOpts
 	if apply := step.GetComposeApply(); apply != nil {

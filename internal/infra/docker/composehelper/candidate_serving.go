@@ -91,6 +91,10 @@ func executeServingPredecessor(
 		return failedResponse(1), nil
 	}
 	if step.GetCandidateRestorationCompensate() != nil && !proven {
+		input, err := composeCLIInput(predecessor.GetCanonicalYaml())
+		if err != nil {
+			return nil, err
+		}
 		names := servingPredecessorNames(services, proxy)
 		base := []string{
 			"compose", "--project-name", predecessor.GetProjectName(), "--project-directory",
@@ -101,7 +105,7 @@ func executeServingPredecessor(
 			result, runErr := taskRunner.Run(executionCtx, runner.RunCmdOpts{
 				Name: DockerExecutable, Args: append(append([]string(nil), base...), suffix...),
 				Dir: composeProjectDirectory(predecessor), Env: append([]string(nil), fixedEnvironment...),
-				ReplaceEnv: true, Stdin: append([]byte(nil), predecessor.GetCanonicalYaml()...),
+				ReplaceEnv: true, Stdin: input,
 			})
 			if runErr != nil || result.ExitCode != 0 {
 				diagnostic := agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED
@@ -124,13 +128,17 @@ func executeServingPredecessor(
 			return failedResponse(1), nil
 		}
 		if !retainedProven && step.GetCandidateRestorationCompensate() != nil {
+			input, err := composeCLIInput(retained.GetCanonicalYaml())
+			if err != nil {
+				return nil, err
+			}
 			base := []string{"compose", "--project-name", retained.GetProjectName(), "--project-directory",
 				composeProjectDirectory(retained), "--file", "-"}
 			for _, suffix := range [][]string{{"config", "--quiet"}, {"up", "--detach", "--no-deps", "--", retainedService.GetComposeName()}} {
 				result, err := taskRunner.Run(executionCtx, runner.RunCmdOpts{
 					Name: DockerExecutable, Args: append(slices.Clone(base), suffix...),
 					Dir: composeProjectDirectory(retained), Env: slices.Clone(fixedEnvironment), ReplaceEnv: true,
-					Stdin: slices.Clone(retained.GetCanonicalYaml()),
+					Stdin: input,
 				})
 				if err != nil || result.ExitCode != 0 {
 					return failedResponse(1), nil

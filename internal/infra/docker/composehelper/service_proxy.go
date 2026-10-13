@@ -39,6 +39,10 @@ func executeServiceProxy(
 	if _, err := executionplan.OpenProxyConfiguration(proxy); err != nil {
 		return nil, err
 	}
+	input, err := composeCLIInput(artifact.GetCanonicalYaml())
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(WorkDirectory, 0o700); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
@@ -52,7 +56,7 @@ func executeServiceProxy(
 		file.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	if _, err := file.Write(artifact.CanonicalYaml); err != nil {
+	if _, err := file.Write(input); err != nil {
 		file.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
@@ -273,6 +277,10 @@ func composeArtifactByID(plan *agentpb.ExecutionPlan, artifactID string) *agentp
 }
 
 func releaseComposeBase(artifact *agentpb.ComposeArtifact) ([]string, func(), error) {
+	input, err := composeCLIInput(artifact.GetCanonicalYaml())
+	if err != nil {
+		return nil, nil, err
+	}
 	file, err := os.CreateTemp(WorkDirectory, "release-topology-*.yaml")
 	if err != nil {
 		return nil, nil, errs.Wrap(errs.KindInternal, err)
@@ -284,7 +292,7 @@ func releaseComposeBase(artifact *agentpb.ComposeArtifact) ([]string, func(), er
 		cleanup()
 		return nil, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	if _, err := file.Write(artifact.GetCanonicalYaml()); err != nil {
+	if _, err := file.Write(input); err != nil {
 		file.Close()
 		cleanup()
 		return nil, nil, errs.Wrap(errs.KindInternal, err)

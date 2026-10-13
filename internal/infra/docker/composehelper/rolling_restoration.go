@@ -237,6 +237,10 @@ func restoreScaledRollingTraffic(ctx context.Context, taskRunner runner.Runner,
 	partial := proto.CloneOf(service)
 	partial.ExpectedReplicas = max(count, 1)
 	if count == 0 {
+		input, err := composeCLIInput(serving.Artifact.GetCanonicalYaml())
+		if err != nil {
+			return err
+		}
 		base := []string{"compose", "--project-name", serving.Artifact.GetProjectName(), "--project-directory",
 			composeProjectDirectory(serving.Artifact), "--file", "-"}
 		result, err := taskRunner.Run(ctx, runner.RunCmdOpts{Name: DockerExecutable,
@@ -252,7 +256,7 @@ func restoreScaledRollingTraffic(ctx context.Context, taskRunner runner.Runner,
 				service.GetComposeName(),
 			),
 			Dir: composeProjectDirectory(serving.Artifact), Env: slices.Clone(fixedEnvironment), ReplaceEnv: true,
-			Stdin: slices.Clone(serving.Artifact.GetCanonicalYaml())})
+			Stdin: input})
 		if err != nil || result.ExitCode != 0 {
 			return errs.New(errs.KindRequestFailed, "scaled predecessor startup failed")
 		}
@@ -333,13 +337,17 @@ func restoreScaledRollingTraffic(ctx context.Context, taskRunner runner.Runner,
 func startRestorationService(ctx context.Context, taskRunner runner.Runner,
 	artifact *agentpb.ComposeArtifact, service *agentpb.ComposeService,
 ) error {
+	input, err := composeCLIInput(artifact.GetCanonicalYaml())
+	if err != nil {
+		return err
+	}
 	base := []string{"compose", "--project-name", artifact.GetProjectName(), "--project-directory",
 		composeProjectDirectory(artifact), "--file", "-"}
 	for _, suffix := range [][]string{{"config", "--quiet"},
 		{"up", "--detach", "--no-deps", "--no-recreate", "--", service.GetComposeName()}} {
 		result, err := taskRunner.Run(ctx, runner.RunCmdOpts{Name: DockerExecutable,
 			Args: append(slices.Clone(base), suffix...), Dir: composeProjectDirectory(artifact),
-			Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: slices.Clone(artifact.GetCanonicalYaml())})
+			Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: input})
 		if err != nil || result.ExitCode != 0 {
 			return errs.New(errs.KindRequestFailed, "captured predecessor startup failed")
 		}
