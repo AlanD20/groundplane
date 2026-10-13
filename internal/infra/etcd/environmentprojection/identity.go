@@ -120,8 +120,15 @@ func OwnedIdentitiesFromProjection(projection EnvironmentComposeProjection) (Env
 				"Component identity has wrong Environment",
 			)
 		}
+		capability, supported := component.Desired.Kind.EnvironmentCapability()
+		if !supported {
+			return EnvironmentOwnedIdentities{}, errs.New(
+				errs.KindValidationFailed,
+				"Component identity has no Environment capability",
+			)
+		}
 		value.Components[index] = OwnedIdentity{
-			ID: component.Desired.ID, Name: string(component.Desired.Kind), BirthRevisionID: projection.RevisionID,
+			ID: component.Desired.ID, Name: string(capability), BirthRevisionID: projection.RevisionID,
 		}
 	}
 	sort.Slice(value.Services, func(i, j int) bool { return value.Services[i].Name < value.Services[j].Name })
