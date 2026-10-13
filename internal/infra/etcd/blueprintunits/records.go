@@ -53,6 +53,7 @@ type AppliedRecord struct {
 	ExecutionEpoch                      uint32                     `json:"execution_epoch,omitempty"`
 	NativeOperationID                   string                     `json:"native_operation_id,omitempty"`
 	ControllerOperationID               string                     `json:"controller_operation_id,omitempty"`
+	ControllerAttachInputRevision       int64                      `json:"controller_attach_input_revision,omitempty"`
 	ControllerValueGenerationID         string                     `json:"controller_value_generation_id,omitempty"`
 	ControllerRuntimeRevision           int64                      `json:"controller_runtime_revision,omitempty"`
 	ControllerAuthoredRevision          int64                      `json:"controller_authored_revision,omitempty"`
@@ -219,6 +220,11 @@ func validateApplied(record AppliedRecord) error {
 			record.NativeOperationID != "" || record.SourceTaskID != "" || record.State != Applied) {
 		return invalidRecord()
 	}
+	if record.ControllerAttachInputRevision != 0 && (record.ControllerAttachInputRevision < 0 ||
+		record.Target.Kind != ids.KindAttach || record.ControllerOperationID == "" || record.State != Applied ||
+		record.NativeOperationID != "" || record.SourceTaskID != "") {
+		return invalidRecord()
+	}
 	if record.ControllerDNS != nil && (record.Target.Kind != ids.KindDNSRecord ||
 		(record.ControllerOperationID == "" && record.NativeOperationID == "") || !validDNSReceipt(record)) {
 		return invalidRecord()
@@ -246,6 +252,11 @@ func validateApplied(record AppliedRecord) error {
 			return invalidRecord()
 		}
 	} else if record.ControllerOperationID != "" {
+		validAttachBinding := record.Target.Kind == ids.KindAttach && record.ControllerAttachInputRevision > 0 &&
+			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision == 0 &&
+			record.ControllerAuthoredRevision == 0 && record.ControllerComponentRecordRevision == 0 &&
+			record.ControllerComponentRuntimeRevision == 0 && record.ControllerScriptSetRevision == 0 &&
+			record.ControllerDNS == nil && record.ControllerServiceDeclarationAbsence == nil
 		validEntry := record.Target.Kind == ids.KindEnvEntry &&
 			ids.Validate(ids.KindConfig, record.ControllerValueGenerationID) == nil &&
 			record.ControllerRuntimeRevision == 0 && record.ControllerAuthoredRevision == 0 &&
@@ -275,7 +286,7 @@ func validateApplied(record AppliedRecord) error {
 			record.ControllerAuthoredRevision > 0 && record.ControllerValueGenerationID == "" &&
 			record.ControllerRuntimeRevision == 0 && record.ControllerComponentRecordRevision == 0 &&
 			record.ControllerComponentRuntimeRevision == 0 && record.ControllerScriptSetRevision == 0
-		if (!validEntry && !validServiceConfiguration && !validServiceDeclaration && !validRoute && !validDisabledComponent && !validScript && !validDNS) ||
+		if (!validAttachBinding && !validEntry && !validServiceConfiguration && !validServiceDeclaration && !validRoute && !validDisabledComponent && !validScript && !validDNS) ||
 			(record.State != Applied && !((validScript || validEntry || validServiceDeclaration || validRoute || validDisabledComponent || validDNS) && record.State == Absent)) ||
 			ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
 			ids.Validate(ids.KindOperation, record.ControllerOperationID) != nil ||

@@ -58,7 +58,8 @@ func (service *Service) loadAuthoredAttachGenerationAuthority(
 		if !current {
 			if !hasApplied || appliedAttach.State != blueprintunits.Applied ||
 				ids.Validate(ids.KindTask, appliedAttach.ParentTaskID) != nil ||
-				ids.Validate(ids.KindTask, appliedAttach.SourceTaskID) != nil {
+				(appliedAttach.ControllerAttachInputRevision == 0 &&
+					ids.Validate(ids.KindTask, appliedAttach.SourceTaskID) != nil) {
 				continue
 			}
 			generation, current, err = reader.GetBlueprintAttachInputGeneration(
@@ -72,26 +73,35 @@ func (service *Service) loadAuthoredAttachGenerationAuthority(
 			}
 		}
 		parentOwned := generation.Record.OwnerKind == blueprintattachinputs.OwnerParent &&
-			generation.Record.OwnerTaskID == input.desired.RevisionID && generation.Record.Transfer == nil
+			generation.Record.OwnerTaskID == generation.Record.ParentTaskID && generation.Record.Transfer == nil
 		childOwned := generation.Record.OwnerKind == blueprintattachinputs.OwnerChild &&
 			generation.Record.Transfer != nil &&
 			generation.Record.Transfer.ParentTaskID == generation.Record.ParentTaskID &&
 			generation.Record.Transfer.ChildTaskID == generation.Record.OwnerTaskID
 		if generation.Record.EnvironmentID != input.desired.EnvironmentID ||
 			generation.Record.AttachID != identity.ID ||
-			(generation.Record.ParentTaskID != input.desired.RevisionID && !childOwned) ||
 			(!parentOwned && !childOwned) {
 			blueprintattachinputs.Clear(&generation.Record)
 			return nil, errs.New(errs.KindStateConflict, "Blueprint Attach input generation ownership changed")
 		}
+		if generation.Record.SettlesInController() && hasApplied && appliedAttach.State == blueprintunits.Applied &&
+			appliedAttach.ParentTaskID == generation.Record.ParentTaskID &&
+			appliedAttach.ControllerAttachInputRevision != generation.Revision {
+			blueprintattachinputs.Clear(&generation.Record)
+			return nil, errs.New(errs.KindStateConflict, "Applied Attach binding input revision changed")
+		}
 		if generation.Record.ParentTaskID != input.desired.RevisionID &&
 			(!hasApplied || appliedAttach.State != blueprintunits.Applied ||
 				appliedAttach.ParentTaskID != generation.Record.ParentTaskID ||
-				appliedAttach.SourceTaskID != generation.Record.OwnerTaskID) {
+				(generation.Record.SettlesInController() &&
+					appliedAttach.ControllerAttachInputRevision != generation.Revision) ||
+				(!generation.Record.SettlesInController() &&
+					appliedAttach.SourceTaskID != generation.Record.OwnerTaskID)) {
 			blueprintattachinputs.Clear(&generation.Record)
 			return nil, errs.New(errs.KindStateConflict, "Retained Blueprint Attach input is not applied")
 		}
-		if childOwned && hasApplied && appliedAttach.State == blueprintunits.Applied &&
+		if generation.Record.Provision == nil && childOwned && hasApplied &&
+			appliedAttach.State == blueprintunits.Applied &&
 			appliedAttach.SourceTaskID == generation.Record.OwnerTaskID {
 			output, found, err := reader.GetBlueprintAttachOutputGeneration(
 				ctx, identity.ID, appliedAttach.SourceTaskID, snapshot.ReadRevision,

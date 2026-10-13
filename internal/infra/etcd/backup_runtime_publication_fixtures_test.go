@@ -504,6 +504,16 @@ func seedBackupRuntimePublicationEvidence(
 				return testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(backingServiceProjection)
 			},
 		},
+		{
+			testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(backingEnvironment.ID, backingServiceRevisionID),
+			func() ([]byte, error) {
+				identities, err := testenvironmentprojection.OwnedIdentitiesFromProjection(backingServiceProjection)
+				if err != nil {
+					return nil, err
+				}
+				return testenvironmentprojection.EncodeEnvironmentOwnedIdentities(identities)
+			},
+		},
 		{testblueprints.EnvironmentBlueprintChunkKeyFor(
 			backingEnvironment.ID, backingServiceRevisionID, testblueprints.EnvironmentBlueprintChunkProjection, 0,
 		), func() ([]byte, error) {

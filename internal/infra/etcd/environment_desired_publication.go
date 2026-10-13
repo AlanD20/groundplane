@@ -407,9 +407,13 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			}
 		}
 		for index := identityConditionOffset; index < identityConditionOffset+len(identityPublication.conditions); index++ {
-			if values[index] != nil {
+			if etcdstore.ConditionMatchesRead(conditions[index], values[index]) {
+				continue
+			}
+			if conditions[index].ModRevision == 0 {
 				return errs.New(errs.KindInternal, "Environment desired publication collided with identity authority")
 			}
+			return errs.New(errs.KindStateConflict, "Environment retained identity authority changed")
 		}
 		for _, index := range []int{4, 5, 6} {
 			if values[index] == nil {

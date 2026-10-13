@@ -85,25 +85,30 @@ func (repository *TaskRepository) prepareBlueprintAttachChildPublication(
 		publication.clear()
 		return blueprintAttachChildPublication{}, cause
 	}
-	record, err := attachrecord.NewPendingAttachRecord(
-		generation.AttachID,
-		generation.EnvironmentID,
-		generation.AttachName,
-		generation.BackingProjectID,
-		generation.BackingEnvironmentID,
-		generation.BackingServiceID,
-		generation.BackingNetworkID,
-		generation.ConsumerServiceID,
-		generation.CredentialOwnerID,
-		nil,
-		generation.FactSets,
-		child.ID,
-		child.CreatedAt,
-	)
+	var record attachrecord.Record
+	if generation.Provision != nil {
+		record, err = generation.PendingRecord(child.ID, child.CreatedAt)
+	} else {
+		record, err = attachrecord.NewPendingAttachRecord(
+			generation.AttachID,
+			generation.EnvironmentID,
+			generation.AttachName,
+			generation.BackingProjectID,
+			generation.BackingEnvironmentID,
+			generation.BackingServiceID,
+			generation.BackingNetworkID,
+			generation.ConsumerServiceID,
+			generation.CredentialOwnerID,
+			nil,
+			generation.FactSets,
+			child.ID,
+			child.CreatedAt,
+		)
+		record.HookBundle = true
+	}
 	if err != nil {
 		return fail(err)
 	}
-	record.HookBundle = true
 	if err := attachrecord.ValidateAttachRecord(record); err != nil {
 		return fail(err)
 	}

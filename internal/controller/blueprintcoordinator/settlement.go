@@ -24,6 +24,18 @@ func (runner *Runner) tryControllerSettlement(
 	ctx context.Context, parent etcd.TaskRecord, unit blueprintunits.Unit, snapshot blueprintunits.Snapshot,
 ) (settlementDisposition, error) {
 	switch unit.Target.Kind {
+	case ids.KindAttach:
+		if unit.Removal {
+			return settlementNeedsAgent, nil
+		}
+		settler, ok := runner.planner.(AttachBindingSettler)
+		if !ok {
+			return settlementNeedsAgent, errs.New(
+				errs.KindInternal,
+				"Blueprint Attach binding settlement is unavailable",
+			)
+		}
+		return controllerSettlementResult(settler.TrySettleAttachBinding(ctx, parent, unit, snapshot))
 	case ids.KindScript:
 		settler, ok := runner.planner.(ScriptSettler)
 		if !ok {

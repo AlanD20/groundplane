@@ -42,6 +42,7 @@ type blueprintAttachProcedure struct {
 
 type preparedBlueprintAttaches struct {
 	publication blueprintplanning.BlueprintAttachTaskPreparation
+	candidates  []blueprintplanning.EnvironmentBlueprintAttachCandidateInput
 	effective   []etcdstore.Versioned[attachrecord.Record]
 	procedures  []blueprintAttachProcedure
 	facts       *blueprintAttachFactOverlay
@@ -58,6 +59,11 @@ func (prepared *preparedBlueprintAttaches) clear() {
 		prepared.facts.clear()
 	}
 	blueprintplanning.ClearBlueprintAttachTaskPreparation(&prepared.publication)
+	for index := range prepared.candidates {
+		if prepared.candidates[index].Facts != nil {
+			clear(prepared.candidates[index].Facts.Ciphertext)
+		}
+	}
 }
 
 func (service *Service) prepareBlueprintAttaches(
@@ -70,6 +76,30 @@ func (service *Service) prepareBlueprintAttaches(
 	namedID func(ids.Kind, string) string,
 	ownsEnvironmentFence bool,
 	createdAt time.Time,
+) (preparedBlueprintAttaches, error) {
+	prepared, err := service.prepareBlueprintAttachCandidates(
+		ctx, environmentID, taskID, specs, serviceChanges, current, namedID, createdAt,
+	)
+	if err != nil {
+		return preparedBlueprintAttaches{}, err
+	}
+	publication, err := blueprintplanning.PrepareEnvironmentBlueprintAttachTask(
+		taskID, environmentID, prepared.candidates, ownsEnvironmentFence, createdAt,
+	)
+	if err != nil {
+		prepared.clear()
+		return preparedBlueprintAttaches{}, err
+	}
+	prepared.publication = publication
+	return prepared, nil
+}
+
+// Candidate preparation is shared by whole-Environment planning and resource
+// units. It resolves and seals credentials without publishing or executing them.
+func (service *Service) prepareBlueprintAttachCandidates(
+	ctx context.Context, environmentID, taskID string, specs map[string]core.AttachmentSpec,
+	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
+	current []etcdstore.Versioned[attachrecord.Record], namedID func(ids.Kind, string) string, createdAt time.Time,
 ) (preparedBlueprintAttaches, error) {
 	prepared := preparedBlueprintAttaches{
 		effective: append([]etcdstore.Versioned[attachrecord.Record](nil), current...),
@@ -194,6 +224,11 @@ func (service *Service) prepareBlueprintAttaches(
 		}
 	}
 	identities := make(map[string]*taskplanning.AttachPlanIdentity)
+	defer func() {
+		for _, identity := range identities {
+			identity.Clear()
+		}
+	}()
 	for _, name := range names {
 		item := resolved[name]
 		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "new" || item.adapter.Custom() {
@@ -230,6 +265,11 @@ func (service *Service) prepareBlueprintAttaches(
 	failed := true
 	defer func() {
 		if failed {
+			for _, input := range inputs {
+				if input.Facts != nil {
+					clear(input.Facts.Ciphertext)
+				}
+			}
 			prepared.clear()
 			for _, identity := range identities {
 				identity.Clear()
@@ -373,19 +413,7 @@ func (service *Service) prepareBlueprintAttaches(
 		})
 		prepared.facts.addAlias(name, item.spec.Credential.Attach)
 	}
-	publication, err := blueprintplanning.PrepareEnvironmentBlueprintAttachTask(
-		taskID, environmentID, inputs, ownsEnvironmentFence, createdAt,
-	)
-	if err != nil {
-		return preparedBlueprintAttaches{}, err
-	}
-	for index := range inputs {
-		if inputs[index].Facts != nil {
-			clear(inputs[index].Facts.Ciphertext)
-			inputs[index].Facts.Ciphertext = nil
-		}
-	}
-	prepared.publication = publication
+	prepared.candidates = inputs
 	for _, name := range names {
 		if record, created := records[name]; created {
 			prepared.effective = append(prepared.effective, etcdstore.Versioned[attachrecord.Record]{Record: record})
@@ -395,6 +423,11 @@ func (service *Service) prepareBlueprintAttaches(
 		return prepared.procedures[left].record.ID < prepared.procedures[right].record.ID
 	})
 	failed = false
+	// Procedure identities remain owned by the returned preparation until its
+	// caller has compiled the immutable plan.
+	for _, procedure := range prepared.procedures {
+		delete(identities, procedure.record.Name)
+	}
 	return prepared, nil
 }
 

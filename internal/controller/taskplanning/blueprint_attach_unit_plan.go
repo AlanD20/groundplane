@@ -93,6 +93,13 @@ func (resolver *TaskPlanResolver) resolveBlueprintAttachUnitPlan(
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Attach input generation is unavailable")
 	}
 	defer attachinputs.Clear(&generation.Record)
+	if generation.Record.Provision != nil {
+		identities, ok := resolver.attachIdentities.(blueprintAttachProvisionIdentityResolver)
+		if !ok {
+			return nil, errs.New(errs.KindInternal, "Blueprint Attach provisioning identity resolver is unavailable")
+		}
+		return buildBlueprintAttachProvisionPlan(ctx, resolver.volumeRoot, identities, generation.Record, task)
+	}
 	return buildBlueprintAttachUnitPlan(ctx, resolver.volumeRoot, inputs, generation.Record, task)
 }
 

@@ -40,6 +40,7 @@ func (repository *TaskRepository) pruneParentOwnedBlueprintAttachInput(
 		return true, errs.New(errs.KindStateConflict, "Blueprint Attach input generation scan is incomplete")
 	}
 	defer etcdstore.ClearRangeValues(page.Values)
+	held := false
 	for _, value := range page.Values {
 		generation, err := attachinputs.Decode(value.Value)
 		if err != nil {
@@ -64,6 +65,45 @@ func (repository *TaskRepository) pruneParentOwnedBlueprintAttachInput(
 			{Key: retention.Key, ModRevision: retention.ModRevision},
 			{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 			{Key: value.Key, ModRevision: value.ModRevision},
+		}
+		if generation.SettlesInController() {
+			key := blueprintunits.AppliedKey(task.Owner.EnvironmentID,
+				blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: generation.AttachID})
+			read, err := repository.store.GetMany(
+				ctx,
+				etcdstore.GetManyRequest{Keys: []string{key}, Revision: readRevision},
+			)
+			if err != nil {
+				attachinputs.Clear(&generation)
+				return true, err
+			}
+			if read == nil || read.ReadRevision != readRevision || len(read.Values) != 1 {
+				if read != nil {
+					etcdstore.ClearValues(read.Values)
+				}
+				attachinputs.Clear(&generation)
+				return true, errs.New(errs.KindInternal, "Attach binding prune capture is incomplete")
+			}
+			appliedValue := read.Values[0]
+			if appliedValue != nil {
+				applied, err := blueprintunits.DecodeApplied(appliedValue.Value)
+				if err != nil {
+					etcdstore.ClearValues(read.Values)
+					attachinputs.Clear(&generation)
+					return true, err
+				}
+				if applied.ParentTaskID == task.ID && applied.ControllerAttachInputRevision == value.ModRevision {
+					held = true
+					etcdstore.ClearValues(read.Values)
+					attachinputs.Clear(&generation)
+					continue
+				}
+			}
+			conditions = append(
+				conditions,
+				etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(appliedValue)},
+			)
+			etcdstore.ClearValues(read.Values)
 		}
 		mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: value.Key}}
 		if generation.SecretPins != nil {
@@ -120,7 +160,7 @@ func (repository *TaskRepository) pruneParentOwnedBlueprintAttachInput(
 		}
 		return true, nil
 	}
-	return false, nil
+	return held, nil
 }
 
 // Once a hidden child has no execution claim, assignment or recovery owner,

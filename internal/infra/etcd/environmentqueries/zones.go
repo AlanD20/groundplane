@@ -49,6 +49,20 @@ func FindZoneAtRevision(
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return etcdstore.Versioned[zonerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
+			owns, ownershipErr := environmentOwnsDesiredResource(
+				ctx,
+				store,
+				environmentID,
+				ids.KindNetwork,
+				zoneID,
+				fixedRevision,
+			)
+			if ownershipErr != nil {
+				return etcdstore.Versioned[zonerecord.Record]{}, ownershipErr
+			}
+			if !owns {
+				continue
+			}
 			projection, found, projectionErr := blueprints.ReadCurrentProjection(
 				ctx, store, environmentID, fixedRevision,
 			)

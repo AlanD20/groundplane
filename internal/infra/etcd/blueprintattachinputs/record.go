@@ -1,5 +1,5 @@
 // Package blueprintattachinputs owns the immutable private input generation
-// prepared for one Blueprint-authored Custom Attach.
+// prepared for one Blueprint-authored Attach.
 package blueprintattachinputs
 
 import (
@@ -75,6 +75,8 @@ type Generation struct {
 	AdapterKey           string                                        `json:"adapter_key"`
 	Authentication       core.BackingAuthentication                    `json:"authentication"`
 	Hook                 HookPlan                                      `json:"hook"`
+	Binding              *CapturedBinding                              `json:"binding,omitempty"`
+	Provision            *Provision                                    `json:"provision,omitempty"`
 	FactSets             []attachrecord.FactSetMetadata                `json:"fact_sets,omitempty"`
 	GeneratedInputs      attachrecord.EncryptedFacts                   `json:"generated_inputs"`
 	ResolvedInputs       *taskconfiguration.BackingHookEncryptedInputs `json:"resolved_inputs,omitempty"`
@@ -102,7 +104,7 @@ func Validate(record Generation) error {
 }
 
 func MatchesConfiguration(record Generation, configuration backinghook.Configuration) bool {
-	if configuration.Attach == nil {
+	if configuration.Attach == nil && configuration.Detach == nil {
 		return false
 	}
 	cloned := backinghook.CloneConfiguration(&configuration)
@@ -199,7 +201,8 @@ func validate(record Generation, bound bool) error {
 			record.AttachID,
 		) != nil || attachrecord.ValidateAttachName(record.AttachName) != nil ||
 		!recordcodec.ValidSHA256(record.AuthoredSpecSHA256) ||
-		ids.Validate(ids.KindService, record.ConsumerServiceID) != nil || record.CredentialOwnerID != record.AttachID ||
+		ids.Validate(ids.KindService, record.ConsumerServiceID) != nil ||
+		ids.Validate(ids.KindAttach, record.CredentialOwnerID) != nil ||
 		ids.Validate(ids.KindProject, record.BackingProjectID) != nil ||
 		ids.Validate(ids.KindEnvironment, record.BackingEnvironmentID) != nil ||
 		ids.Validate(ids.KindService, record.BackingServiceID) != nil ||
@@ -209,35 +212,50 @@ func validate(record Generation, bound bool) error {
 	if _, err := core.ResolveBackingAuthentication(false, record.Authentication); err != nil {
 		return err
 	}
-	probe := backinghook.Configuration{
-		Attach: record.Hook.Attach, Detach: record.Hook.Detach,
-		Facts: append([]backinghook.FactDefinition(nil), record.Hook.Facts...),
-	}
-	empty := ""
-	for _, input := range record.Hook.Inputs {
-		definition := backinghook.InputDefinition{Key: input.Key, Value: &empty}
-		if input.Source == HookInputGenerated {
-			definition.Value = nil
-			definition.Generate = backinghook.GeneratePassword
-		} else if input.Source != HookInputResolved {
-			return errs.New(errs.KindValidationFailed, "Blueprint Attach hook input source is invalid")
+	if record.Provision != nil {
+		if err := validateProvision(record); err != nil {
+			return err
 		}
-		probe.Inputs = append(probe.Inputs, definition)
-	}
-	if record.Hook.Attach == nil || !slices.IsSortedFunc(record.Hook.Inputs, func(left, right HookInput) int {
-		if left.Key < right.Key {
-			return -1
+	} else if record.Binding != nil {
+		if err := validateCapturedBinding(record); err != nil {
+			return err
 		}
-		if left.Key > right.Key {
-			return 1
+	} else {
+		if record.CredentialOwnerID != record.AttachID {
+			return errs.New(errs.KindValidationFailed, "Attach hook must own its credential")
 		}
-		return 0
-	}) ||
-		backinghook.ValidateConfiguration(
-			probe,
-		) != nil || attachrecord.ValidateAttachEncryptedFacts(record.GeneratedInputs) != nil ||
-		record.GeneratedInputs.AttachID != record.AttachID || !matchingFactSets(record.Hook.Facts, record.FactSets) {
-		return errs.New(errs.KindValidationFailed, "Blueprint Attach hook generation is invalid")
+		probe := backinghook.Configuration{
+			Attach: record.Hook.Attach, Detach: record.Hook.Detach,
+			Facts: append([]backinghook.FactDefinition(nil), record.Hook.Facts...),
+		}
+		empty := ""
+		for _, input := range record.Hook.Inputs {
+			definition := backinghook.InputDefinition{Key: input.Key, Value: &empty}
+			if input.Source == HookInputGenerated {
+				definition.Value = nil
+				definition.Generate = backinghook.GeneratePassword
+			} else if input.Source != HookInputResolved {
+				return errs.New(errs.KindValidationFailed, "Blueprint Attach hook input source is invalid")
+			}
+			probe.Inputs = append(probe.Inputs, definition)
+		}
+		if (record.Hook.Attach == nil && record.Hook.Detach == nil) ||
+			(record.Hook.Attach == nil && record.OwnerKind == OwnerChild) ||
+			!slices.IsSortedFunc(record.Hook.Inputs, func(left, right HookInput) int {
+				if left.Key < right.Key {
+					return -1
+				}
+				if left.Key > right.Key {
+					return 1
+				}
+				return 0
+			}) ||
+			backinghook.ValidateConfiguration(
+				probe,
+			) != nil || attachrecord.ValidateAttachEncryptedFacts(record.GeneratedInputs) != nil ||
+			record.GeneratedInputs.AttachID != record.AttachID || !matchingFactSets(record.Hook.Facts, record.FactSets) {
+			return errs.New(errs.KindValidationFailed, "Blueprint Attach hook generation is invalid")
+		}
 	}
 	if record.ResolvedInputs != nil {
 		if taskconfiguration.ValidateBackingHookEncryptedInputs(*record.ResolvedInputs) != nil ||

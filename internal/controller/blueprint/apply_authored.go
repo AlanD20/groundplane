@@ -201,12 +201,15 @@ func (service *Service) applyAuthoredOnce(
 		}
 	}
 	previous := baseline.previousIdentities.Record
-	attaches := selectAuthoredNamedResources(
+	attaches, err := selectAuthoredAttachIdentities(
 		parsed.Extensions.Attachments,
 		previous.Attaches,
-		ids.KindAttach,
+		preflight.currentAttaches,
 		allocator.Named,
 	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	components, err := service.authoredComponentIdentities(
 		ctx, environmentID, parsed.Extensions.Components, previous.Components,
 	)

@@ -44,6 +44,7 @@ func prepareEnvironmentDesiredIdentityPublication(
 	if err != nil {
 		return environmentDesiredIdentityPublication{}, err
 	}
+	var birthConditions []etcdstore.Condition
 	if expectedHeadRevision != 0 {
 		previous, found, readErr := blueprints.ReadCurrentOwnedIdentities(
 			ctx,
@@ -66,6 +67,12 @@ func prepareEnvironmentDesiredIdentityPublication(
 			ownedIdentities.DNSRecords = append([]projectionrecord.OwnedIdentity(nil), previous.Record.DNSRecords...)
 		}
 		ownedIdentities, err = projectionrecord.RetainOwnedIdentityBirths(ownedIdentities, previous.Record)
+		if err != nil {
+			return environmentDesiredIdentityPublication{}, err
+		}
+		ownedIdentities, birthConditions, err = restoreOmittedComponentBirths(
+			ctx, store, ownedIdentities, readRevision,
+		)
 		if err != nil {
 			return environmentDesiredIdentityPublication{}, err
 		}
@@ -105,6 +112,7 @@ func prepareEnvironmentDesiredIdentityPublication(
 		},
 	}
 	publication.conditions = append(publication.conditions, initialAbsence.Conditions()...)
+	publication.conditions = append(publication.conditions, birthConditions...)
 	publication.conditions = append(publication.conditions, dnsConditions...)
 	publication.conditions = append(publication.conditions, nameConditions...)
 	for _, mutation := range nameMutations {

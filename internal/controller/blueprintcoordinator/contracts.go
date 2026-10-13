@@ -26,6 +26,10 @@ type EntrySettler interface {
 	SettleEntry(context.Context, etcd.TaskRecord, blueprintunits.Unit, blueprintunits.Snapshot) error
 }
 
+type AttachBindingSettler interface {
+	TrySettleAttachBinding(context.Context, etcd.TaskRecord, blueprintunits.Unit, blueprintunits.Snapshot) (bool, error)
+}
+
 // EntryOmissionSettler atomically retires omitted metadata with proven runtime
 // absence. It returns false when an Agent must clean the managed files first.
 type EntryOmissionSettler interface {

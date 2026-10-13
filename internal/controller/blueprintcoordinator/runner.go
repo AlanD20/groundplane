@@ -269,7 +269,9 @@ func (runner *Runner) AbortTask(ctx context.Context, taskID string) error {
 		return err
 	}
 	runner.Wake()
-	ticker := time.NewTicker(runner.interval)
+	// The recovery scan interval can equal the HTTP deadline. Observe its
+	// durable result promptly without changing the coordinator's work cadence.
+	ticker := time.NewTicker(min(runner.interval, 250*time.Millisecond))
 	defer ticker.Stop()
 	for {
 		current, err := runner.tasks.GetTask(ctx, taskID)
@@ -280,7 +282,7 @@ func (runner *Runner) AbortTask(ctx context.Context, taskID string) error {
 		case taskjournal.TaskStatusAborted:
 			return nil
 		case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusTimedOut:
-			return errs.New(errs.KindStateConflict, "blueprint parent became terminal before abort completed")
+			return errs.New(errs.KindTaskNotAbortable, "Blueprint Apply finished before cancellation completed")
 		}
 		select {
 		case <-ctx.Done():

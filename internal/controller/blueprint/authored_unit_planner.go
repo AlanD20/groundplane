@@ -181,8 +181,11 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			generation, hasInput := planner.attachInputs[attach.ID]
 			applied, hasApplied := planner.appliedAttach[attach.ID]
 			if !hasInput || !hasApplied || applied.State != blueprintunits.Applied ||
-				generation.OwnerKind != attachinputs.OwnerChild ||
-				generation.OwnerTaskID != applied.SourceTaskID {
+				(generation.Binding == nil && (generation.Provision == nil || generation.Provision.RequiresProvisioning) &&
+					(generation.OwnerKind != attachinputs.OwnerChild ||
+						generation.OwnerTaskID != applied.SourceTaskID)) ||
+				((generation.Binding != nil || (generation.Provision != nil && !generation.Provision.RequiresProvisioning)) &&
+					(applied.ParentTaskID != generation.ParentTaskID || applied.ControllerAttachInputRevision == 0)) {
 				planner.block(identity)
 				complete = false
 				continue
@@ -232,7 +235,20 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if err != nil {
 			return nil, false, err
 		}
-		planner.addUnit(identity, fingerprint, nil, nil)
+		reads := make([]blueprintunits.ResourceKey, 0)
+		if generation.Provision != nil {
+			if generation.CredentialOwnerID != generation.AttachID {
+				reads = append(
+					reads,
+					blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: generation.CredentialOwnerID},
+				)
+			} else {
+				for _, grant := range generation.Provision.Grants {
+					reads = append(reads, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: grant.Record.ID})
+				}
+			}
+		}
+		planner.addUnit(identity, fingerprint, reads, reads)
 	}
 	serviceBlocked := make(map[string]bool, len(planner.identities[ids.KindService]))
 	// Service children share one complete Environment runtime projection.

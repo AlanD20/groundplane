@@ -21,7 +21,7 @@ import (
 const blueprintAttachInputCleanupTimeout = 30 * time.Second
 
 // BlueprintAttachInputGenerationPublication pins every mutable backing source
-// used to prepare one immutable Custom Attach input generation.
+// used to prepare one immutable Attach input generation.
 type BlueprintAttachInputGenerationPublication struct {
 	Generation         attachinputs.Generation
 	BackingProject     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
@@ -109,10 +109,13 @@ func (repository *EnvironmentBlueprintRepository) prepareBlueprintAttachInputGen
 			candidate.BackingService.Record.BackingNetworkID != generation.BackingNetworkID ||
 			candidate.BackingService.Record.Desired.Adapter != generation.AdapterKey ||
 			candidate.BackingService.Record.Desired.Authentication != generation.Authentication ||
-			candidate.BackingService.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning ||
-			candidate.BackingService.Record.Desired.Hooks == nil ||
-			!attachinputs.MatchesConfiguration(generation, *candidate.BackingService.Record.Desired.Hooks) {
+			candidate.BackingService.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
 			return fail(errs.New(errs.KindValidationFailed, "Blueprint Attach input source identity is invalid"))
+		}
+		if generation.Binding == nil && generation.Provision == nil &&
+			(candidate.BackingService.Record.Desired.Hooks == nil ||
+				!attachinputs.MatchesConfiguration(generation, *candidate.BackingService.Record.Desired.Hooks)) {
+			return fail(errs.New(errs.KindValidationFailed, "Blueprint Attach hook input differs from its source"))
 		}
 		if err := appendCondition(etcdstore.Condition{
 			Key: hierarchyrecord.ProjectKey(generation.BackingProjectID), ModRevision: candidate.BackingProject.Revision,
@@ -124,13 +127,23 @@ func (repository *EnvironmentBlueprintRepository) prepareBlueprintAttachInputGen
 		}); err != nil {
 			return fail(err)
 		}
-		for _, condition := range []etcdstore.Condition{
+		sourceConditions := []etcdstore.Condition{
 			servicerecord.ServiceDesiredCondition(candidate.BackingService),
 			servicerecord.ServiceRuntimeCondition(candidate.BackingService),
-			{Key: attachrecord.AttachKey(generation.AttachID)},
-			{Key: attachrecord.AttachNameKey(generation.EnvironmentID, generation.AttachName)},
 			{Key: attachinputs.Key(generation.RevisionID, generation.AttachID)},
-		} {
+		}
+		if generation.Binding != nil {
+			sourceConditions = append(sourceConditions, generation.Binding.Conditions()...)
+		} else {
+			if generation.Provision != nil {
+				sourceConditions = append(sourceConditions, generation.Provision.Conditions()...)
+			}
+			sourceConditions = append(sourceConditions,
+				etcdstore.Condition{Key: attachrecord.AttachKey(generation.AttachID)},
+				etcdstore.Condition{Key: attachrecord.AttachNameKey(generation.EnvironmentID, generation.AttachName)},
+			)
+		}
+		for _, condition := range sourceConditions {
 			if err := appendCondition(condition); err != nil {
 				return fail(err)
 			}

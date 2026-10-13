@@ -84,6 +84,7 @@ type pinnedEntryFactResolver struct {
 	environmentID string
 	inputs        map[string]blueprintattachinputs.Generation
 	outputs       map[string]blueprintattachoutputs.Generation
+	bindings      map[string]bool
 }
 
 func (service *Service) authoredEntryFactResolver(
@@ -101,7 +102,8 @@ func (service *Service) authoredEntryFactResolver(
 	}
 	resolver := &pinnedEntryFactResolver{
 		service: service, environmentID: input.desired.EnvironmentID, inputs: inputs,
-		outputs: make(map[string]blueprintattachoutputs.Generation),
+		outputs:  make(map[string]blueprintattachoutputs.Generation),
+		bindings: make(map[string]bool),
 	}
 	failed := true
 	defer func() {
@@ -114,6 +116,13 @@ func (service *Service) authoredEntryFactResolver(
 			continue
 		}
 		generation, found := inputs[applied.Record.Target.ID]
+		if found && (generation.Binding != nil || generation.Provision != nil) &&
+			applied.Record.ParentTaskID == generation.ParentTaskID &&
+			(applied.Record.ControllerAttachInputRevision > 0 ||
+				(generation.OwnerKind == blueprintattachinputs.OwnerChild && generation.OwnerTaskID == applied.Record.SourceTaskID)) {
+			resolver.bindings[generation.AttachID] = true
+			continue
+		}
 		if !found || generation.OwnerKind != blueprintattachinputs.OwnerChild ||
 			generation.OwnerTaskID != applied.Record.SourceTaskID {
 			continue
@@ -152,6 +161,32 @@ func (resolver *pinnedEntryFactResolver) ResolveFact(
 	for attachID, generation := range resolver.inputs {
 		if generation.AttachName != reference.Attach {
 			continue
+		}
+		if generation.Binding != nil || generation.Provision != nil {
+			if !resolver.bindings[attachID] {
+				return errs.New(errs.KindStateConflict, "Blueprint Attach binding is not applied")
+			}
+			if generation.Provision != nil && generation.Provision.HookOwnerOperationID != "" {
+				ownerID := generation.CredentialOwnerID
+				owner, found := resolver.inputs[ownerID]
+				output, produced := resolver.outputs[ownerID]
+				if !found || !produced || owner.OperationID != generation.Provision.HookOwnerOperationID ||
+					owner.ParentTaskID != generation.ParentTaskID {
+					return errs.New(errs.KindStateConflict, "Blueprint Attach credential hook result is not applied")
+				}
+				reference.Attach = owner.AttachName
+				return resolver.service.attachFacts.ResolveBlueprintOutputFact(
+					ctx,
+					owner,
+					output,
+					reference,
+					destinationSecret,
+					consume,
+				)
+			}
+			return resolver.service.attachFacts.ResolveCapturedAttachFact(
+				ctx, generation, reference, destinationSecret, consume,
+			)
 		}
 		output, found := resolver.outputs[attachID]
 		if !found {

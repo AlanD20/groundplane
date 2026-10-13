@@ -54,6 +54,20 @@ func FindRouteAtRevision(
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return etcdstore.Versioned[routerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
+			owns, ownershipErr := environmentOwnsDesiredResource(
+				ctx,
+				store,
+				environmentID,
+				ids.KindRoute,
+				routeID,
+				fixedRevision,
+			)
+			if ownershipErr != nil {
+				return etcdstore.Versioned[routerecord.Record]{}, ownershipErr
+			}
+			if !owns {
+				continue
+			}
 			projection, found, projectionErr := blueprints.ReadCurrentProjection(
 				ctx,
 				store,

@@ -296,12 +296,21 @@ func (service *Service) prepareAuthoredAttachChild(
 			child.Configuration.SecretPins = &pins
 		}
 	}
-	prepared, plan, err := taskplanning.PrepareBlueprintAttachUnit(
-		ctx, service.volumeRoot, service.attachFacts, transferred, child,
-	)
+	var prepared etcd.TaskRecord
+	var plan *agentpb.ExecutionPlan
+	if transferred.Provision != nil {
+		prepared, plan, err = taskplanning.PrepareBlueprintAttachProvisionUnit(
+			ctx, service.volumeRoot, service.attachFacts, transferred, child,
+		)
+	} else {
+		prepared, plan, err = taskplanning.PrepareBlueprintAttachUnit(
+			ctx, service.volumeRoot, service.attachFacts, transferred, child,
+		)
+	}
 	if plan != nil {
 		for _, step := range plan.GetSteps() {
 			taskplan.ClearBackingHookProcedure(step.GetBackingHookProcedure())
+			clear(step.GetAdapterProcedure().GetPassword())
 		}
 	}
 	if err != nil {

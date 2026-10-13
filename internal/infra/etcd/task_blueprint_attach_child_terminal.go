@@ -34,7 +34,9 @@ func blueprintAttachChildTaskMatches(task TaskRecord, unit blueprintunits.Unit) 
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] == parentID &&
 		ids.Validate(ids.KindTask, parentID) == nil && parentID != task.ID &&
 		ids.Validate(ids.KindAttach, attachID) == nil && len(task.Params) == 3 &&
-		len(task.Steps) == 1 && task.Steps[0].Kind == taskjournal.TaskStepOperation &&
+		len(
+			task.Steps,
+		) >= 1 && len(task.Steps) <= attachrecord.MaximumAttachGrants+1 && task.Steps[0].Kind == taskjournal.TaskStepOperation &&
 		len(task.Materializations) == 0 && task.EntryRuntime == nil &&
 		len(task.ComponentActionStepIDs) == 0 && len(task.ManagedComponentTeardownSources) == 0
 }
@@ -76,7 +78,7 @@ func (repository *TaskRepository) prepareBlueprintAttachChildTerminal(
 		task.Executor != taskjournal.TaskExecutorAgent || task.Target != task.Owner.EnvironmentID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != parentID ||
 		ids.Validate(ids.KindTask, parentID) != nil || ids.Validate(ids.KindAttach, attachID) != nil ||
-		len(task.Params) != 3 || len(task.Steps) != 1 ||
+		len(task.Params) != 3 || len(task.Steps) < 1 || len(task.Steps) > attachrecord.MaximumAttachGrants+1 ||
 		task.Steps[0].Kind != taskjournal.TaskStepOperation {
 		return errs.New(errs.KindStateConflict, "Blueprint Attach child terminal authority is invalid")
 	}
@@ -110,16 +112,21 @@ func (repository *TaskRepository) prepareBlueprintAttachChildTerminal(
 		return err
 	}
 	defer clear(currentFacts.Ciphertext)
-	expected, err := attachrecord.NewPendingAttachRecord(
-		input.AttachID, input.EnvironmentID, input.AttachName,
-		input.BackingProjectID, input.BackingEnvironmentID, input.BackingServiceID,
-		input.BackingNetworkID, input.ConsumerServiceID, input.CredentialOwnerID,
-		nil, input.FactSets, task.ID, task.CreatedAt,
-	)
+	var expected attachrecord.Record
+	if input.Provision != nil {
+		expected, err = input.PendingRecord(task.ID, task.CreatedAt)
+	} else {
+		expected, err = attachrecord.NewPendingAttachRecord(
+			input.AttachID, input.EnvironmentID, input.AttachName,
+			input.BackingProjectID, input.BackingEnvironmentID, input.BackingServiceID,
+			input.BackingNetworkID, input.ConsumerServiceID, input.CredentialOwnerID,
+			nil, input.FactSets, task.ID, task.CreatedAt,
+		)
+		expected.HookBundle = true
+	}
 	if err != nil {
 		return err
 	}
-	expected.HookBundle = true
 	if input.OwnerKind != attachinputs.OwnerChild || input.OwnerTaskID != task.ID ||
 		input.Transfer == nil || input.Transfer.ParentTaskID != parentID ||
 		input.Transfer.ChildTaskID != task.ID || input.ParentTaskID != parentID ||
@@ -130,6 +137,21 @@ func (repository *TaskRepository) prepareBlueprintAttachChildTerminal(
 		!attachrecord.SameBlueprintAttachCandidateRecord(intent.Candidates[0], expected) ||
 		!sameBlueprintAttachEncryptedFacts(currentFacts, input.GeneratedInputs) {
 		return errs.New(errs.KindStateConflict, "Blueprint Attach child input authority changed")
+	}
+	if input.Provision != nil {
+		if !input.Provision.RequiresProvisioning || len(task.Steps) != 1+len(expected.GrantAttachIDs) ||
+			taskjournal.ValidateTaskResult(*task.Result, task.Steps, task.Status) != nil {
+			return errs.New(errs.KindStateConflict, "Blueprint Attach provisioning result is invalid")
+		}
+		change.conditions = append(change.conditions,
+			etcdstore.Condition{Key: inputKey, ModRevision: read.Values[0].ModRevision},
+			etcdstore.Condition{Key: attachrecord.AttachFactsKey(attachID), ModRevision: read.Values[2].ModRevision},
+		)
+		change.verifiedChildResult = true
+		return nil
+	}
+	if len(task.Steps) != 1 {
+		return errs.New(errs.KindStateConflict, "Blueprint Attach hook result step count changed")
 	}
 	checkpoint, checkpointCondition, err := repository.requireBackingHookResultCheckpoint(
 		ctx, task, assignment, task.Steps[0].ID, attachID, backinghook.Attach, revision,

@@ -306,6 +306,16 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 		conditions = append(conditions, etcdstore.Condition{
 			Key: attachrecord.AttachKey(attach.Record.ID), ModRevision: attach.Revision,
 		})
+		authority, err := repository.blueprintRuntimeAttachConditions(
+			ctx,
+			projection.EnvironmentID,
+			attach,
+			input.SnapshotReadRevision,
+		)
+		if err != nil {
+			return err
+		}
+		conditions = append(conditions, authority...)
 	}
 	for _, component := range input.Components {
 		conditions = append(conditions, etcdstore.Condition{

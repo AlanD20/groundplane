@@ -309,7 +309,7 @@ func validAppliedAdvance(
 			!((next.Target.Kind == ids.KindScript || next.Target.Kind == ids.KindEnvEntry ||
 				next.Target.Kind == ids.KindRoute || next.Target.Kind == ids.KindComponent || next.Target.Kind == ids.KindDNSRecord ||
 				validServiceDeclarationAbsence(next)) && next.State == Absent)) ||
-			(next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService &&
+			(next.Target.Kind != ids.KindAttach && next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService &&
 				next.Target.Kind != ids.KindRoute && next.Target.Kind != ids.KindScript && next.Target.Kind != ids.KindComponent && next.Target.Kind != ids.KindDNSRecord) ||
 			snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 			next.ParentTaskID != snapshot.HeadTaskID {

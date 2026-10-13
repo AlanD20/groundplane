@@ -37,9 +37,9 @@ func (service *Service) prepareAuthoredAttachInputGenerations(
 	for _, candidate := range services {
 		serviceByName[candidate.Name] = candidate
 	}
-	currentByName := make(map[string]struct{}, len(current))
+	currentByName := make(map[string]etcdstore.Versioned[attachrecord.Record], len(current))
 	for _, candidate := range current {
-		currentByName[candidate.Record.Name] = struct{}{}
+		currentByName[candidate.Record.Name] = candidate
 	}
 	attachIDByName := make(map[string]string, len(owned.Attaches))
 	for _, identity := range owned.Attaches {
@@ -51,6 +51,7 @@ func (service *Service) prepareAuthoredAttachInputGenerations(
 	}
 	sort.Strings(names)
 	publications := make([]etcd.BlueprintAttachInputGenerationPublication, 0, len(names))
+	provisionSpecs := make(map[string]core.AttachmentSpec)
 	failed := true
 	defer func() {
 		if failed {
@@ -59,7 +60,13 @@ func (service *Service) prepareAuthoredAttachInputGenerations(
 	}()
 	for _, name := range names {
 		spec := specs[name]
-		if _, exists := currentByName[name]; exists || spec.Credential.Mode != "new" {
+		if binding, exists := currentByName[name]; exists {
+			captured, err := service.captureAuthoredAttachBinding(ctx, revisionID, spec, binding, current, allocator)
+			if err != nil {
+				return nil, err
+			}
+			publications = append(publications, captured)
+			provisionSpecs[name] = spec
 			continue
 		}
 		consumer, exists := serviceByName[spec.Service]
@@ -92,11 +99,13 @@ func (service *Service) prepareAuthoredAttachInputGenerations(
 			return nil, errs.New(errs.KindServiceNotFound, "Blueprint Attach backing Service was not found")
 		}
 		adapter, registered := adapters.Get(backingService.Record.Desired.Adapter)
-		if !registered || !adapter.Custom() {
-			continue
+		if !registered {
+			return nil, errs.New(errs.KindValidationFailed, "Blueprint Attach adapter is unavailable")
 		}
 		hooks := backingService.Record.Desired.Hooks
-		if hooks == nil || hooks.Attach == nil {
+		if spec.Credential.Mode == "existing" || !adapter.Custom() || hooks == nil ||
+			(hooks.Attach == nil && hooks.Detach == nil) {
+			provisionSpecs[name] = spec
 			continue
 		}
 		authentication, authErr := core.ResolveBackingAuthentication(
@@ -166,6 +175,12 @@ func (service *Service) prepareAuthoredAttachInputGenerations(
 			BackingEnvironment: backingEnvironment, BackingService: backingService,
 		})
 	}
+	provisions, err := service.prepareAuthoredAttachProvisionInputs(ctx, environmentID, revisionID,
+		provisionSpecs, services, current, owned, allocator, publications)
+	if err != nil {
+		return nil, err
+	}
+	publications = append(publications, provisions...)
 	failed = false
 	return publications, nil
 }

@@ -95,6 +95,32 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Blueprint Script set belongs to another revision")
 		}
 	}
+	if err := idempotency.ValidateIdempotencyMarker(input.Marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil ||
+		found {
+		return existing, err
+	}
+	var birthConditions []keyvalue.Condition
+	if input.ExpectedHeadRevision > 0 && len(input.OwnedIdentities.Components) > 0 {
+		previous, found, err := blueprints.ReadCurrentOwnedIdentities(ctx, repository.store, claim.EnvironmentID, 0)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		if !found || previous.Revision != input.ExpectedHeadRevision {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindStateConflict,
+				"Environment Component identity predecessor changed",
+			)
+		}
+		input.OwnedIdentities, birthConditions, err = restoreOmittedComponentBirths(
+			ctx, repository.store, input.OwnedIdentities, previous.ReadRevision,
+		)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+	}
 	ownedIdentityValue, err := projectionrecord.EncodeEnvironmentOwnedIdentities(input.OwnedIdentities)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -109,13 +135,6 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return IdempotencyTransactionResult{}, err
 	}
 	defer initialAbsence.Clear()
-	if err := idempotency.ValidateIdempotencyMarker(input.Marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil ||
-		found {
-		return existing, err
-	}
 	desiredValue, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(input.DesiredInput)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -203,6 +222,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	conditions = append(conditions, nameConditions...)
 	mutations = append(mutations, nameMutations...)
 	conditions = append(conditions, initialAbsence.Conditions()...)
+	conditions = append(conditions, birthConditions...)
 	mutations = append(mutations, initialAbsence.Mutations()...)
 	conditions = append(conditions, input.ScriptPublication.conditions...)
 	mutations = append(mutations, input.ScriptPublication.mutations...)
