@@ -91,6 +91,7 @@ func (executor *Executor) Execute(ctx context.Context, task etcd.TaskRecord) err
 		return finishUnstarted(ctx, journal, context.DeadlineExceeded)
 	}
 	started := false
+	var result *agentpb.BackingAccessResult
 	err = executor.withInput(ctx, record, func(input backingaccess.Request) error {
 		request, err := requestFor(record, input, false)
 		if err != nil {
@@ -101,13 +102,16 @@ func (executor *Executor) Execute(ctx context.Context, task etcd.TaskRecord) err
 			return err
 		}
 		started = true
-		result, probeErr := executor.exchange.CheckBackingAccess(ctx, record.Source.AgentID, request)
-		if probeErr != nil {
-			return probeErr
-		}
-		return executor.recordResult(ctx, record, journal, result)
+		var probeErr error
+		result, probeErr = executor.exchange.CheckBackingAccess(ctx, record.Source.AgentID, request)
+		return probeErr
 	})
-	if err == nil || started {
+	if err == nil {
+		// The closed public result contains no credentials. Settle it outside
+		// the plaintext callback so its safe failure reason survives redaction.
+		return executor.recordResult(ctx, record, journal, result)
+	}
+	if started {
 		return err
 	}
 	// If Start was uncertain, the Ready compare fails rather than permitting a

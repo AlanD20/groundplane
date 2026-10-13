@@ -105,16 +105,20 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 			return EntryMutationRuntime{}, err
 		}
 	}
-	baseline, err = composerender.MutateEnvironmentEntryArtifact(
-		baseline,
-		current.Record,
-		composerender.EnvironmentEntryArtifactMutation{
-			ArtifactID: baseline.ArtifactId,
-			Entries:    current.Record.Entries,
-		},
-	)
-	if err != nil {
-		return EntryMutationRuntime{}, err
+	// Match Release reconstruction: an Entry-free Environment may never have
+	// materialized a generated env file. Capture its existing runtime bindings.
+	if len(current.Record.Entries) != 0 {
+		baseline, err = composerender.MutateEnvironmentEntryArtifact(
+			baseline,
+			current.Record,
+			composerender.EnvironmentEntryArtifactMutation{
+				ArtifactID: baseline.ArtifactId,
+				Entries:    current.Record.Entries,
+			},
+		)
+		if err != nil {
+			return EntryMutationRuntime{}, err
+		}
 	}
 	projection := current.Record
 	projection.BackingRuntime = nil
