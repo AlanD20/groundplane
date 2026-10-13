@@ -1492,6 +1492,22 @@ not qualify simultaneous Fetches, process interruption during tag commit, rollba
 execution, or every core-component presentation surface. Isolated registry content
 and failed Task evidence remain retained; no application data was removed.
 
+**H108 — Named-Service DNS Stop, Start, Destroy and Deploy PASS on 2026-10-13.**
+
+The H107 installation exercised an isolated named target under recreate. Stop
+completed and actual UDP/TCP queries returned no address; the same DNS record
+remained waiting. Start completed and restored its address. Destroy then completed,
+withdrew the answer and retained that record. An ordinary Deploy recreated the
+runtime, after which GP's separate CoreDNS update completed and real UDP/TCP
+answers returned. A query made while that update was pending did not yet return
+the expected address; this observation is retained, not counted as a pass.
+
+All four states retained the DNS record id. Final container-to-container HTTP
+through the named target returned the expected nginx page. The unrelated web,
+router, Agent, etcd, CoreDNS and registry container identities and start times
+remained unchanged. Failed Start, failed withdrawal, process interruption and
+alternate release strategies remain NOT RUN for this lifecycle sequence.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
