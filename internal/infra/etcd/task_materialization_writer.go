@@ -439,7 +439,9 @@ func (repository *TaskRepository) prepareBackingRuntimeProjection(
 }
 
 func taskHasSpecializedProjectionAcknowledgement(record TaskRecord) bool {
-	return record.Type == taskjournal.TaskRemove &&
+	// Preparation children settle their own captured unit, not the Environment
+	// runtime that the coordinator can seal only after preparation completes.
+	return IsAuthoredBlueprintPreparationTask(record) || record.Type == taskjournal.TaskRemove &&
 		(recordcodec.ValidateID(ids.KindRoute, record.Target) == nil ||
 			recordcodec.ValidateID(ids.KindEnvEntry, record.Target) == nil)
 }
