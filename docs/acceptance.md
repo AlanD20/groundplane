@@ -1597,6 +1597,23 @@ validated successfully with recreate. No test workload was deployed; this is
 admission proof, not additional UDP communication or session-continuity proof.
 Earlier real TCP/UDP communication remains bounded to H99.
 
+**H113 — Blueprint omission preview corrected PASS on 2026-10-13.**
+
+The shared review incorrectly labeled omitted Services, Zones, Attaches, Routes
+and Environment DNS records as retained, although full Apply already plans their
+protected removal. Signed Controller `bb3c6839c` corrects that shared preview;
+persistent Volumes retain their separate protected-removal requirement. The
+existing affected behavior assertion was updated; no new test was added.
+Full local CI passed and the normal Controller-only updater completed, retaining
+the existing Agent and etcd.
+
+A read-only Validate on an isolated Environment now reported removal of its
+omitted DNS record. Exact desired-head and owned-identity metadata, plus every
+container id, image, running state and start time, matched the pre-Validate
+capture. Independent HTTP returned the expected application page. No Apply,
+removal Task or new workload was created. This proves the corrected live preview,
+not additional removal execution coverage for every resource kind.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
