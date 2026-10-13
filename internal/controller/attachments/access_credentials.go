@@ -68,6 +68,8 @@ func (service *FactService) ResolveStoredAccessCredentials(
 			request.Family = backingaccess.MySQL
 		case "valkey":
 			request.Family = backingaccess.Valkey
+			// The Attach identity names its credential, not a Valkey database.
+			request.Database = ""
 		default:
 			return errs.New(errs.KindValidationFailed, "this Backing adapter does not provide an access check")
 		}

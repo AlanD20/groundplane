@@ -109,7 +109,7 @@ func captureFailure(err error, exitCode int32, code string) *Failure {
 			code = "permission_denied"
 		case errors.Is(err, fs.ErrNotExist):
 			code = "file_not_found"
-		case exitCode != 0:
+		case exitCode != 0 && code == "":
 			code = "process_failed"
 		case kind == errs.KindWorkloadImageResolutionUnavailable:
 			code = "image_unavailable"
