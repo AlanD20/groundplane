@@ -18,7 +18,9 @@ func ValidateNativeRestorationAuthority(
 	authority *agentpb.ReleaseRestorationAuthority,
 ) error {
 	members := plan.GetCandidateReleaseProcedure().GetMembers()
-	if authority == nil || len(members) != len(authority.GetCandidates()) ||
+	if authority == nil || RejectUnknown(authority) != nil ||
+		ids.Validate(ids.KindEnvironment, authority.GetEnvironmentId()) != nil ||
+		len(members) != len(authority.GetCandidates()) ||
 		len(authority.GetPlanHash()) != sha256.Size || !bytes.Equal(authority.GetPlanHash(), plan.GetPlanHash()) ||
 		len(authority.GetAuthoritySha256()) != sha256.Size ||
 		ids.Validate(
@@ -33,7 +35,9 @@ func ValidateNativeRestorationAuthority(
 			len(authority.GetNativePredecessors()) != 0 {
 			return invalidNativeRestorationAuthority()
 		}
-		return validateRestorationMemberSelection(plan, authority)
+		// Configuration-only recovery has no native workload targets to select.
+		// Its file authority is already bound by the validated sealed procedure.
+		return nil
 	}
 	if err := validateRestorationMemberSelection(plan, authority); err != nil {
 		return err
@@ -55,10 +59,6 @@ func validateRestorationMemberSelection(
 	plan *agentpb.ExecutionPlan,
 	authority *agentpb.ReleaseRestorationAuthority,
 ) error {
-	if RejectUnknown(authority) != nil ||
-		ids.Validate(ids.KindEnvironment, authority.GetEnvironmentId()) != nil {
-		return invalidNativeRestorationAuthority()
-	}
 	if witness := authority.GetAppliedPredecessor(); witness != nil {
 		encoded := witness.GetComposeArtifact()
 		if witness.GetKeyRevision() <= 0 || ids.Validate(ids.KindTask, witness.GetRevisionId()) != nil ||

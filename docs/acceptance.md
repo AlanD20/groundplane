@@ -1236,6 +1236,39 @@ persistent data were NOT RUN in these journeys. The observer failure, first
 Abort conflict and original 502 run remain failed evidence. No reset, manual
 workload repair, Task rewrite, tag or release was used to qualify these cases.
 
+**H99 — Envoy transport replies and original-Task resumption PASS on
+2026-10-13; omission and engine switching remain open.**
+
+Ubuntu 24.04 amd64 used matching Controller/Agent `7f2860cb3`, storage epoch 33,
+channel schema 19 and unchanged sealed-plan schema 18. Controller binary digest
+was `sha256:6a7b12dcd579cdee7d4460b2098b88a317965b3849036613add8e62aa42fce51`;
+Agent image digest was
+`sha256:2d1cd90da78c4af445bb50af33360ac9af8aac0062e76fd587db496cf333d916`.
+Full local CI and remote CI/Pages passed.
+
+The original Apply was stuck after restart because health observations reused
+delivery identities with different timing. The Controller retained its payload
+integrity check. After a one-time, data-preserving paired software repair, GP
+recorded the actual Agent build through authenticated Ready at the same credential
+generation. The same visible Apply and original Component child completed; no
+Task, assignment or history was rewritten. Unrelated container IDs, images,
+running state and start times—including etcd—were independently unchanged.
+This qualifies resumption with the repaired producer, not the normal updater or
+every interruption boundary. The offline repair is mitigation, not an upgrade pass.
+
+SVC-23 returned HTTP 200 with the expected nginx body through both the Envoy TCP
+Service proxy and Environment HTTP Route. DNS requests through both UDP and TCP
+returned the exact authored address. Ordinary DNS Recreate completed and those
+four communication checks passed again. No uninterrupted Recreate claim is made.
+
+Blue-green/rolling requests for this no-healthcheck DNS fixture were rejected on
+the healthcheck requirement; these do not prove the protocol-specific guard.
+The subsequent HTTP-only Apply blocked before its first Entry-cleanup step:
+configuration-only restoration was passed to a workload selector requiring a
+nonempty member set. Its original Task and failure evidence remain intact.
+Entry omission, proxy-engine switching, held connections and protocol-specific
+rejection remain unqualified by this record. Earlier Envoy failures are retained.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
