@@ -64,9 +64,9 @@ func (planner *authoredUnitPlanner) componentForwardingClaims(capability string)
 	for _, identity := range planner.identities[ids.KindService] {
 		claims = append(claims, authoredResourceKey(ids.KindService, identity.ID))
 	}
-	for _, omission := range planner.input.identities.PendingOmissions {
-		if omission.Kind == ids.KindService {
-			claims = append(claims, authoredResourceKey(ids.KindService, omission.ID))
+	for _, omission := range planner.omissions {
+		if omission.Target.Kind == ids.KindService {
+			claims = append(claims, omission.Target)
 		}
 	}
 	return canonicalAuthoredUnitKeys(claims)

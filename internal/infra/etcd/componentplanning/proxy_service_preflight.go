@@ -14,6 +14,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/core/serviceports"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -97,6 +98,8 @@ func (repository *Planner) PrepareFrozenProxyServicePreflight(
 	preflight := ProxyServicePreflight{EnvironmentID: authority.environmentID,
 		ParentTaskID: parentID, ReadRevision: authority.readRevision,
 		Implementation: serviceproxy.Implementation(kind)}
+	conditions := []keyvalue.Condition{{Key: blueprints.EnvironmentBlueprintOwnedIdentitiesKey(
+		authority.environmentID, parentID), ModRevision: owned.Revision}}
 	for _, identity := range owned.Record.Services {
 		service, exists := requested[identity.ID]
 		if !exists || service.Name != identity.Name {
@@ -106,15 +109,47 @@ func (repository *Planner) PrepareFrozenProxyServicePreflight(
 			ReplacementRequired: service.Adapter == "" && len(service.ProxyExposures()) != 0})
 	}
 	for _, omission := range owned.Record.PendingOmissions {
-		if omission.Kind == ids.KindService {
+		if omission.Kind != ids.KindService {
+			continue
+		}
+		// Immutable omission intent survives cleanup. Only a durable absence
+		// receipt at this snapshot can exclude its historical Release from
+		// runtime capture; missing runtime records alone never prove removal.
+		target := blueprintunits.ResourceKey{Kind: ids.KindService, ID: omission.ID}
+		key := blueprintunits.AppliedKey(authority.environmentID, target)
+		read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+			Keys: []string{key}, Revision: authority.readRevision,
+		})
+		if err != nil {
+			return FrozenProjectionAuthority{}, err
+		}
+		if read == nil || read.ReadRevision != authority.readRevision || len(read.Values) != 1 {
+			return FrozenProjectionAuthority{}, errs.New(
+				errs.KindInternal,
+				"router Service omission read is incomplete",
+			)
+		}
+		absent := false
+		if read.Values[0] != nil {
+			receipt, err := blueprintunits.DecodeApplied(read.Values[0].Value)
+			if err != nil || receipt.EnvironmentID != authority.environmentID || receipt.Target != target {
+				keyvalue.ClearValues(read.Values)
+				return FrozenProjectionAuthority{}, errs.New(
+					errs.KindStateConflict,
+					"router Service omission receipt is invalid",
+				)
+			}
+			absent = receipt.State == blueprintunits.Absent
+		}
+		conditions = append(conditions, keyvalue.Condition{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])})
+		keyvalue.ClearValues(read.Values)
+		if !absent {
 			preflight.Services = append(preflight.Services, ProxyServiceSource{ServiceID: omission.ID, Removal: true})
 		}
 	}
 	slices.SortFunc(preflight.Services, func(a, b ProxyServiceSource) int {
 		return cmp.Compare(a.ServiceID, b.ServiceID)
 	})
-	conditions := []keyvalue.Condition{{Key: blueprints.EnvironmentBlueprintOwnedIdentitiesKey(
-		authority.environmentID, parentID), ModRevision: owned.Revision}}
 	fenceKey := releases.ReleaseFenceSetKey(authority.environmentID)
 	fence, err := repository.store.GetMany(
 		ctx,
