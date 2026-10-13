@@ -147,8 +147,10 @@ An active check or pending cleanup also blocks removal of its Environment and
 containing hierarchy. This includes unsaved drafts: removing their parent must
 not strand temporary remote content or prevent cleanup retry.
 
-These actions are implemented locally but have not yet been qualified against
-a live provider in the current implementation batch.
+An unsaved direct-credential R2 draft passed live permission and independently
+checked cleanup in [H104](../acceptance.md#historical-evidence-register). Saved/edited
+Connectors, Secret-backed credentials, interrupted cleanup and staleness remain
+unqualified.
 
 ## Security and availability
 

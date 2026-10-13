@@ -1394,6 +1394,25 @@ replayed or marked clean. A working credential/permission baseline is still
 required for positive permission and remote-cleanup qualification. Saved/edited
 and Secret-backed variants remain NOT RUN.
 
+**H104 — Selected R2 draft connection check and independent cleanup PASS
+on 2026-10-13.**
+
+The H103 installation remained on Controller `f61af3456` and Agent `df6bf950e`.
+The operator confirmed the earlier credentials had expired and refreshed the
+private credential file. A new unsaved direct-credential check used bucket
+`test`; no Connector was created or edited. Its original Task completed with
+successful object write, read/content verification, multipart creation/part upload
+and delete/abort/cleanup verification. The result was `passed` and
+`cleanup_required: false`.
+
+An independent AWS CLI read used only this operation's unique prefix and found
+zero objects and zero unfinished multipart uploads. No existing Backup objects
+were read or changed. The earlier denied check and its captured cleanup authority
+remain retained; this new pass does not settle that old record. Saved/edited
+Connectors, Secret-backed credentials, interrupted cleanup, staleness and other
+permission-failure variants remain NOT RUN. This connection check is not a new
+Backup/Restore qualification.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
