@@ -13,7 +13,7 @@ import (
 // fixed bounded read is admitted; the destructive admin API stays on loopback.
 const ReadCommand = "env -i PATH=/usr/local/bin:/usr/bin:/bin timeout 4 bash --noprofile --norc -ec '" +
 	"exec 3<>/dev/tcp/127.0.0.1/9901; " +
-	"printf \"GET /config_dump HTTP/1.0\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; cat <&3'"
+	"printf \"GET /config_dump HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; cat <&3'"
 
 // ReadResponse opens captured output; it performs no network or process I/O.
 // Both the transport bytes and decoded HTTP body must fit the caller's bound.

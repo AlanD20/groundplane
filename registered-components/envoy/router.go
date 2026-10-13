@@ -136,7 +136,7 @@ const startupCommand = "umask 077; command -v bash timeout sed sync mv cat tr sh
 	"--service-node groundplane-http-router --service-cluster groundplane-http-router"
 
 const readyCommand = "exec 3<>/dev/tcp/127.0.0.1/9901; " +
-	"printf 'GET /ready HTTP/1.0\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; " +
+	"printf 'GET /ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; " +
 	"IFS= read -r status <&3; case \"$status\" in 'HTTP/1.0 200 '*|'HTTP/1.1 200 '*) exit 0;; *) exit 1;; esac"
 
 func PreflightConfigCommand() []string {
