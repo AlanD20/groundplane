@@ -1450,6 +1450,24 @@ unchanged router. Concurrent claims, failed withdrawal, Stop/Start/Destroy,
 interruption, held connections and other strategies remain NOT RUN for this
 sequence. This does not establish continuous availability or blanket DNS coverage.
 
+**H106 — Internal-Zone DNS opt-out and restoration PASS on 2026-10-13.**
+
+The same Ubuntu 24.04 amd64 installation used Controller `daa94a3a5`, Agent
+`df6bf950e`, storage epoch 33 and channel 19. Full Blueprint Apply disabled the
+internal Zone's GP DNS opt-in and completed under the declared recreate strategy.
+Inspection showed no explicit DNS server on the router, either Service proxy or
+either workload. The Zone bridge refused TCP port 53 and returned no UDP DNS
+answer. Docker-local Service resolution still worked; the host resolver continued
+answering the scoped record over UDP and TCP, and the HTTP Route returned the
+expected nginx page.
+
+A later full Apply restored opt-in and completed. A real TCP DNS query from the
+workload returned the expected managed address, with one internal network and no
+default gateway. The HTTP Route again returned the expected page. Agent, etcd,
+CoreDNS and registry containers remained present with their retained identities.
+This qualifies the selected recreate transition, not uninterrupted traffic,
+alternate deployment strategies, failed listener withdrawal or recovery.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
