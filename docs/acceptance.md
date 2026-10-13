@@ -1643,6 +1643,41 @@ MySQL checks, wrong-credential/network/database faults, interrupted cleanup,
 Runner checks or Tunnel diagnostics. A fresh R2 draft recheck also passed all
 permission and cleanup stages; it adds no Backup/Restore qualification.
 
+**H115 — MySQL and registered-Runner connection checks PASS on 2026-10-13;
+Tunnel qualification BLOCKED by Blueprint bookkeeping.**
+
+A fresh Ubuntu 24.04 amd64 QA host installed matching Controller, Agent and
+Runner artifacts from signed `1a2f530889c36f6d8f18ab1ee4c2fd904a69d99f` through the
+published installer with `--ref main`. A deployed consumer attached to upstream
+MySQL 8.4. Its connection check passed network, authentication and database
+access, reported a current result and no outstanding cleanup. Independent Docker
+inspection found the exact temporary check container absent.
+
+A new Project-owned Runner registered with a fresh operator-supplied token and
+remained online. A separate diagnostic inside that registered container passed
+GitHub HTTPS, rootless Docker, private GP API and authenticated registry access.
+The check did not re-register the Runner, build or push an image, or restart it.
+Its retained result was current. This adds diagnostic evidence, not a new CI/CD
+build-and-deploy qualification or proof of registry push permission.
+
+Preparing an isolated Tunnel origin exposed two Blueprint failures. A full Apply
+adopted an existing direct MySQL Attach with a newly allocated identity but
+published no input generation; only its Zone children ran, leaving the router
+blocked. A normal Abort returned HTTP 500, although later observation showed the
+Task aborted without outstanding reconciliation. That response mismatch remains
+unresolved. A separate minimal router and origin Blueprint completed, but enabling
+its previously omitted Tunnel published a second birth receipt for the same
+Component ID. The coordinator and Task inspection then rejected the duplicate
+ledger as corrupt. No Tunnel check ran and public access is not qualified.
+
+Direct exposed-Service Deploy also rejected missing proxy-selection or pending
+projection authority before Task publication. Full Blueprint application of the
+independent origin succeeded; that does not repair or qualify direct Deploy.
+All original failure evidence and history are retained. No provider DNS/ingress,
+application credentials, repository tests, compatibility paths or release tags
+were changed. Wrong-credential/network/database probes, diagnostic interruption,
+Runner dependency-failure variants and Tunnel helper cleanup remain unqualified.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

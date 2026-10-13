@@ -105,7 +105,9 @@ Runner preserves shared registry data and application images. See the
 The Console Runner inspector offers **Test connections**. Equivalent CLI actions
 are `runner check <slug>` and `runner check-result <slug>`; the result command
 accepts `--task` to inspect a particular check rather than the latest retained one.
-This capability is implemented locally but has not been live-qualified or deployed.
+The successful four-dependency diagnostic on a registered Project Runner passed
+[H115](../acceptance.md#historical-evidence-register). Dependency-failure and
+interruption variants remain unqualified.
 
 The check runs inside the existing registered Runner. It reports GitHub HTTPS
 reachability, the dedicated Docker daemon's rootless status, private GP API access
