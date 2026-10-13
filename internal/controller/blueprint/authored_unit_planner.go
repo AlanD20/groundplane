@@ -354,11 +354,10 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		}
 		forwardingClaims := planner.componentForwardingClaims(name)
 		fingerprint, err := authoredUnitFingerprint("component", struct {
-			Capability       string
-			Spec             core.ComponentSpec
-			Routes           []core.RouteSpec
-			ForwardingClaims []blueprintunits.ResourceKey
-		}{name, spec, planner.componentRoutes(name), forwardingClaims})
+			Capability string
+			Spec       core.ComponentSpec
+			Routes     []core.RouteSpec
+		}{name, spec, planner.componentRoutes(name)})
 		if err != nil {
 			return nil, false, err
 		}
