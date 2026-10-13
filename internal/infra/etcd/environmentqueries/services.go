@@ -79,7 +79,7 @@ func FindServiceAtRevision(
 					ctx,
 					store,
 					servicerecord.DesiredSelection{
-						Services:     servicesWithVolumeMounts(projection.Record),
+						Services:     ServicesWithVolumeMounts(projection.Record),
 						Revision:     projection.Revision,
 						ReadRevision: projection.ReadRevision,
 					},

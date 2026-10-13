@@ -6,8 +6,9 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
-// The mount inventory also covers Services authored through native Compose.
-func servicesWithVolumeMounts(
+// ServicesWithVolumeMounts joins native Compose mounts for scoped reads and
+// captured Release planning without rediscovering the current desired head.
+func ServicesWithVolumeMounts(
 	projection projectionrecord.EnvironmentComposeProjection,
 ) []servicerecord.EnvironmentServiceProjection {
 	services := append([]servicerecord.EnvironmentServiceProjection(nil), projection.DesiredServices...)

@@ -50,13 +50,12 @@ func (service *Service) CaptureProxyServiceRollout(ctx context.Context,
 			"pre-switch Service has no frozen replacement images",
 		)
 	}
-	scope, err := service.ledger.LoadPlanningScopeAtRevision(ctx, candidate.EnvironmentID, preflight.ReadRevision)
+	scope, err := service.ledger.LoadPlanningScopeForCapturedInput(ctx, stored.Record, preflight.ReadRevision)
 	if err != nil {
 		return componentplanning.ProxyServiceRolloutReference{}, err
 	}
 	// This is a rendering input only. The actual predecessor owner continues
 	// reading acknowledged runtime at scope.ReadRevision, never this override.
-	scope.Compose.Record = projectionrecord.CloneEnvironmentComposeProjection(stored.Record)
 	prepared, err := service.prepareServiceUnitInput(ctx, input, scope, replacement)
 	if err != nil {
 		return componentplanning.ProxyServiceRolloutReference{}, err

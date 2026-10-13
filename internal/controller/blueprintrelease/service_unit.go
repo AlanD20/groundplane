@@ -117,6 +117,7 @@ func (service *Service) prepareServiceUnitInput(ctx context.Context,
 	}
 	workloads, err := service.prepareSelectedWorkloads(
 		ctx,
+		scope,
 		input.Projection,
 		[]blueprints.EnvironmentBlueprintServiceChange{change},
 		replacement,

@@ -19,6 +19,7 @@ import (
 )
 
 type predecessorSnapshot struct {
+	scope          releasequeries.ReleasePlanningScope
 	planning       releasequeries.ReleasePlanningService
 	serving        *domain.Intent
 	historical     etcdstore.Versioned[releaserender.ReleaseRenderInput]
@@ -44,13 +45,10 @@ func (service *Service) preparePredecessor(
 	if !exists {
 		return errs.New(errs.KindStateConflict, "Blueprint predecessor was not captured by image preflight")
 	}
-	scope, err := service.ledger.LoadPlanningScopeAtRevision(
-		ctx,
-		input.Environment.Record.ID,
-		candidate.Current.ReadRevision,
-	)
-	if err != nil {
-		return err
+	scope := captured.scope
+	if scope.ReadRevision != candidate.Current.ReadRevision ||
+		scope.Environment.Record.ID != input.Environment.Record.ID {
+		return errs.New(errs.KindStateConflict, "Blueprint predecessor planning scope changed")
 	}
 	planning, err := service.ledger.LoadPlanningServices(ctx, scope, []string{candidate.Record.Desired.ID})
 	if err != nil {
@@ -86,7 +84,7 @@ func (service *Service) capturePredecessor(
 	scope releasequeries.ReleasePlanningScope,
 	planning releasequeries.ReleasePlanningService,
 ) (predecessorSnapshot, error) {
-	captured := predecessorSnapshot{planning: planning}
+	captured := predecessorSnapshot{scope: scope.Clone(), planning: planning}
 	serving, exists, err := service.ledger.GetPlanningServingIntent(ctx, scope, planning)
 	if err != nil {
 		return predecessorSnapshot{}, err

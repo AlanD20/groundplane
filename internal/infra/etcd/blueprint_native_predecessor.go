@@ -208,6 +208,7 @@ func validateNativeRestorationDescriptor(
 }
 
 type BlueprintReleasePublicationEvidence struct {
+	RenderingInput             projectionrecord.EnvironmentComposeProjection
 	ServiceRollout             *etcdstore.Versioned[releaserender.BlueprintServiceRolloutCapture]
 	ProxyAddresses             networkreservations.ProxyAddresses
 	NativePredecessors         []BlueprintNativePredecessorCapture
@@ -227,6 +228,9 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 	ctx context.Context,
 	evidence BlueprintReleasePublicationEvidence,
 ) ([]etcdstore.Condition, error) {
+	if len(evidence.NativePredecessors) > 0 && evidence.RenderingInput.EnvironmentID != evidence.EnvironmentID {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint predecessor rendering input changed")
+	}
 	native := make([]BlueprintNativePredecessor, len(evidence.NativePredecessors))
 	for index, capture := range evidence.NativePredecessors {
 		native[index] = capture.Runtime()
@@ -259,7 +263,7 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 		return nil, err
 	}
 	for _, captured := range evidence.NativePredecessors {
-		scope, err := ledger.LoadPlanningScopeAtRevision(ctx, evidence.EnvironmentID, captured.FixedReadRevision)
+		scope, err := ledger.LoadPlanningScopeForCapturedInput(ctx, evidence.RenderingInput, captured.FixedReadRevision)
 		if err != nil {
 			return nil, err
 		}

@@ -598,6 +598,7 @@ func proveSecondAddressableBlueprint(
 		etcd.BlueprintReleasePublicationEvidence{
 			Manifest:                   manifest,
 			NativePredecessors:         []etcd.BlueprintNativePredecessorCapture{capture},
+			RenderingInput:             scope.Compose.Record,
 			EnvironmentID:              render.EnvironmentID,
 			Task:                       task,
 			Plan:                       plan,

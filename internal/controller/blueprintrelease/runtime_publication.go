@@ -105,6 +105,7 @@ func (service *Service) finishSelectedRuntime(
 		ctx,
 		service.sources,
 		etcd.BlueprintReleasePublicationEvidence{
+			RenderingInput:     input.Projection,
 			ServiceRollout:     rollout,
 			ProxyAddresses:     addresses,
 			NativePredecessors: captured.predecessors,

@@ -70,6 +70,59 @@ func (ledger *Reader) loadPlanningScope(
 	environmentID string,
 	revision int64,
 ) (ReleasePlanningScope, error) {
+	scope, err := ledger.loadPlanningHierarchy(ctx, environmentID, revision)
+	if err != nil {
+		return ReleasePlanningScope{}, err
+	}
+	compose, found, err := blueprints.ReadProjectionAtRevision(ctx, ledger.store, environmentID, scope.ReadRevision)
+	if err != nil {
+		return ReleasePlanningScope{}, err
+	}
+	if !found || compose.ReadRevision != scope.ReadRevision {
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
+	}
+	scope.Compose = compose
+	return scope, nil
+}
+
+// LoadPlanningScopeForCapturedInput joins already verified inert input to the
+// same hierarchy/lifecycle snapshot used for predecessor capture. Its caller
+// must retain the input root's separate publication fence; this is not an
+// acknowledged runtime projection and cannot satisfy that acknowledgement.
+func (ledger *Reader) LoadPlanningScopeForCapturedInput(ctx context.Context,
+	captured projectionrecord.EnvironmentComposeProjection, revision int64,
+) (ReleasePlanningScope, error) {
+	if revision <= 0 {
+		return ReleasePlanningScope{}, errs.New(errs.KindValidationFailed, "captured release planning input is invalid")
+	}
+	scope, err := ledger.loadPlanningHierarchy(ctx, captured.EnvironmentID, revision)
+	if err != nil {
+		return ReleasePlanningScope{}, err
+	}
+	owned, found, err := blueprints.ReadCurrentOwnedIdentities(ctx, ledger.store,
+		captured.EnvironmentID, scope.ReadRevision)
+	if err != nil {
+		return ReleasePlanningScope{}, err
+	}
+	if !found || owned.Record.RevisionID != captured.RevisionID ||
+		owned.Record.RenderGeneration != captured.RenderGeneration {
+		return ReleasePlanningScope{}, errs.New(
+			errs.KindStateConflict,
+			"captured release planning input lost its Blueprint head",
+		)
+	}
+	scope.Compose = etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
+		Record:   projectionrecord.CloneEnvironmentComposeProjection(captured),
+		Revision: owned.Revision, ReadRevision: scope.ReadRevision,
+	}
+	return scope, nil
+}
+
+func (ledger *Reader) loadPlanningHierarchy(
+	ctx context.Context,
+	environmentID string,
+	revision int64,
+) (ReleasePlanningScope, error) {
 	if ctx == nil || ledger == nil || ledger.store == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return ReleasePlanningScope{}, errs.New(errs.KindValidationFailed, "release planning environment is invalid")
 	}
@@ -113,13 +166,6 @@ func (ledger *Reader) loadPlanningScope(
 	}
 	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
-		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
-	}
-	compose, found, err := blueprints.ReadProjectionAtRevision(ctx, ledger.store, environmentID, initial.ReadRevision)
-	if err != nil {
-		return ReleasePlanningScope{}, err
-	}
-	if !found || compose.ReadRevision != initial.ReadRevision {
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	keys := []string{
@@ -192,7 +238,6 @@ func (ledger *Reader) loadPlanningScope(
 			Revision:     tenantRevision,
 			ReadRevision: loaded.ReadRevision,
 		},
-		Compose:                  compose,
 		EnvironmentEpochRevision: loaded.Values[3].ModRevision,
 		EnvironmentEpochValue:    slices.Clone(loaded.Values[3].Value), ReadRevision: loaded.ReadRevision,
 	}, nil
@@ -236,11 +281,15 @@ func (ledger *Reader) LoadPlanningServices(
 		if loaded.Values[base] != nil {
 			return nil, errs.New(errs.KindResourceInUse, "release service ownership changed or is deleting")
 		}
-		service, serviceErr := environmentqueries.FindServiceAtRevision(
+		service, serviceErr := servicerecord.ReadJoined(
 			ctx,
 			ledger.store,
+			servicerecord.DesiredSelection{
+				Services: environmentqueries.ServicesWithVolumeMounts(scope.Compose.Record),
+				Revision: scope.Compose.Revision, ReadRevision: scope.ReadRevision,
+			},
 			serviceID,
-			scope.ReadRevision,
+			blueprints.EnvironmentBlueprintHeadKey(scope.Environment.Record.ID),
 		)
 		if serviceErr != nil {
 			return nil, serviceErr

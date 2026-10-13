@@ -25,6 +25,7 @@ type workloadPreparation struct {
 
 func (service *Service) prepareSelectedWorkloads(
 	ctx context.Context,
+	scope releasequeries.ReleasePlanningScope,
 	projection projectionrecord.EnvironmentComposeProjection,
 	candidates []blueprints.EnvironmentBlueprintServiceChange,
 	replacement *componentplanning.ProxyReplacementImage,
@@ -41,7 +42,6 @@ func (service *Service) prepareSelectedWorkloads(
 		)
 	}
 	var err error
-	environmentID := projection.EnvironmentID
 	if len(candidates) != 1 {
 		return workloadPreparation{}, errs.New(
 			errs.KindInternal,
@@ -49,7 +49,6 @@ func (service *Service) prepareSelectedWorkloads(
 		)
 	}
 	selections := make([]workloadseal.Selection, len(candidates))
-	var scope *releasequeries.ReleasePlanningScope
 	var proxyImplementation serviceproxy.Implementation
 	for index, candidate := range candidates {
 		desired := candidate.Record.Desired
@@ -112,28 +111,17 @@ func (service *Service) prepareSelectedWorkloads(
 		if candidate.Current == nil {
 			continue
 		}
-		if scope == nil {
-			loaded, scopeErr := service.ledger.LoadPlanningScopeAtRevision(
-				ctx,
-				environmentID,
-				candidate.Current.ReadRevision,
-			)
-			if scopeErr != nil {
-				return workloadPreparation{}, scopeErr
-			}
-			scope = &loaded
-		}
 		if scope.ReadRevision != candidate.Current.ReadRevision {
 			return workloadPreparation{}, errs.New(
 				errs.KindStateConflict,
 				"Blueprint predecessor capture revisions disagree",
 			)
 		}
-		planning, planningErr := service.ledger.LoadPlanningServices(ctx, *scope, []string{desired.ID})
+		planning, planningErr := service.ledger.LoadPlanningServices(ctx, scope, []string{desired.ID})
 		if planningErr != nil {
 			return workloadPreparation{}, planningErr
 		}
-		predecessor, captureErr := service.capturePredecessor(ctx, *scope, planning[0])
+		predecessor, captureErr := service.capturePredecessor(ctx, scope, planning[0])
 		if captureErr != nil {
 			return workloadPreparation{}, captureErr
 		}
