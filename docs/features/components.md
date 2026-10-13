@@ -25,8 +25,9 @@ CLI and API. Changing the engine of an existing Service proxy requires that
 Service's explicit Recreate strategy; GP does not silently replace a blue-green
 or rolling proxy. Routes and stable resource identities are retained. Both enabled
 router replacement and disabled-router selection capture affected Service work
-before accepting the change. These paths are locally implemented, not yet
-behavior-qualified.
+before accepting the change. Selected HTTP-only Recreate switching in both
+directions passed [H103](../acceptance.md#historical-evidence-register). Disabled-router
+selection, failed switching and interruption remain unqualified.
 
 Envoy supports UDP forwarding with Recreate. Blue-green and rolling reject UDP
 before effects; choose Recreate and accept its interruption. Caddy remains

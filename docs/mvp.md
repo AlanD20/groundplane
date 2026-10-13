@@ -162,8 +162,8 @@ certificate issuance remain operator responsibilities.
 
 Proxy selection belongs to the Environment: Caddy is HTTP-only; Envoy supports
 HTTP, TCP and UDP. At most one choice may be enabled, and switching must preserve
-Environment-owned Routes and exact recovery authority. Envoy operator selection
-and protected switching are locally implemented but unqualified; see
+Environment-owned Routes and exact recovery authority. Selected HTTP-only
+switching is qualified; other switching and recovery variants remain open. See
 [Components](features/components.md).
 
 ### Credentials and configuration

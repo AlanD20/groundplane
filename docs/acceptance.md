@@ -1361,6 +1361,39 @@ adapter. The original Task and evidence were preserved. A local writer correctio
 preserved both list forms through save/read, but provider access, remote cleanup,
 saved/edited Connectors, denied permissions and staleness remain unqualified.
 
+**H103 — Selected HTTP-only proxy switching PASS on 2026-10-13;
+R2 check reached the provider but permissions and cleanup FAIL.**
+
+Ubuntu 24.04 amd64 used signed Controller `f61af3456`, Agent `df6bf950e`, storage
+epoch 33 and channel 19. Full local CI and GitHub CI passed for this source;
+the installation-site workflow passed. The old malformed Connector check blocked
+the normal updater. GP aborted that pending update before activation. An approved
+disposable installation reset retained the old disk state and Tasks privately;
+the managed registry and unrelated VM were unchanged. Fresh installation and
+normal Agent enrollment completed. This mitigation does not qualify recovery
+from the malformed record or a normal upgrade under that condition.
+
+An isolated Envoy Blueprint with an HTTP Service and TCP/UDP DNS Service applied.
+A later full Apply omitted the DNS Service and its Entry and completed. Host
+inspection confirmed their containers were absent and the HTTP Route still
+returned the expected nginx page. The HTTP-only Environment then switched from
+Envoy to Caddy and back through two completed Applies. Actual containers showed
+the selected engine in both the Service proxy and Environment router, with no
+other engine remaining. Expected Route responses passed after both switches;
+direct Service-proxy HTTP also passed after the reverse switch. Agent, etcd,
+CoreDNS and registry identities and start times remained unchanged during these
+switches. Service identity and Route intent were retained. Continuous traffic,
+held connections, disabled-router selection, failed switching and interruption
+remain NOT RUN for this sequence.
+
+The corrected Connector writer persisted the unsaved direct-credential draft
+and its empty Secret-source list without a corrupt identity. The check reached
+R2, which denied object write and subsequent cleanup verification. The Task failed
+with `permissions` stages and retained `cleanup_required` authority; it was not
+replayed or marked clean. A working credential/permission baseline is still
+required for positive permission and remote-cleanup qualification. Saved/edited
+and Secret-backed variants remain NOT RUN.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
