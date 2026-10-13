@@ -294,7 +294,8 @@ and Blueprint preflight before workload execution.
 **Current Validate and Apply limits:** native `configs` and Compose `secrets`,
 including external definitions, are rejected after parsing. Use Entries for configuration.
 External networks are unavailable. Network extensions are limited to
-`x-gp-allow-dns`; its resolver activation is locally implemented but unqualified, as explained in
+`x-gp-allow-dns`; selected activation and container access passed H105, with remaining
+failure and opt-out limits explained in
 [internal-Zone DNS](features/components.md#internal-zone-dns).
 Volumes must be
 GP-managed: `external` Volumes, non-`local` drivers and any `driver_opts` are rejected, including
@@ -671,7 +672,8 @@ the target. Routes do not publish host ports. See
 
 Parsing, canonical export, Apply and direct edits share the same DNS intention.
 Resolver acknowledgement, not Blueprint publication, proves an answer is active
-or withdrawn. The implementation is local and not behavior-qualified; see
+or withdrawn. Selected namespace, withdrawal and rebinding behavior passed H105;
+concurrent and failure variants remain unqualified. See
 [Environment DNS](features/components.md#environment-dns).
 
 The map key is one lowercase DNS label. Each record selects either an explicit

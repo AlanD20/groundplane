@@ -127,12 +127,12 @@ GP does not repeatedly publish new resolver Tasks over uncertain effects.
 
 ### Internal-Zone DNS
 
-Locally implemented, not yet qualified: an internal Zone can opt into shared
+An internal Zone can opt into shared
 CoreDNS while retaining Docker's Service names and network aliases. Resolving a
 public name does not grant a route to that address or access to another Zone.
 The setting defaults off and requires a private IPv4 subnet.
 
-Local authoring and creation controls exist in Blueprint, Console, CLI and API.
+Authoring and creation controls exist in Blueprint, Console, CLI and API.
 Use `x-gp-allow-dns` in the [Blueprint](../blueprint.md#native-compose-with-groundplane-policy).
 Changing the decision does not reconfigure an existing container in place;
 workload deployment must use its configured release strategy.
@@ -155,8 +155,9 @@ ownership and configuration settles that uncertainty; GP preserves the failure
 and does not replay the workload. Unknown or conflicting bridges retain the
 release fence. Task details show the preparation, reconciliation and CoreDNS
 waiting phases through the existing Console, CLI and API.
-Container connectivity is not qualified. Do not treat the
-saved setting or a successful build as proof that container DNS works.
+Selected container UDP/TCP, managed/local/upstream resolution and named-target
+HTTP passed [H105](../acceptance.md#historical-evidence-register). Opt-out and
+failure/recovery variants remain unqualified; a saved setting is not serving proof.
 
 ## Environment DNS
 
@@ -187,10 +188,10 @@ CoreDNS confirms withdrawal. Edit forms retain the reviewed revision; if another
 change wins, refresh and review before retrying. Namespace edits explicitly adopt
 the current owner labels; target-only edits preserve the existing hostname.
 
-This implementation is local and not behavior-qualified. Per-internal-Zone
-container DNS opt-in is implemented through the shared resolver activation path,
-but still needs container-connectivity qualification. These are shared resolver
-answers, not private per-Environment DNS views.
+Selected namespace, rename, owning-Environment lookup, withdrawal and same-name
+rebinding passed [H105](../acceptance.md#historical-evidence-register), including
+unchanged-router preservation. Concurrent claims and failed/interrupted withdrawal
+remain unqualified. These are shared resolver answers, not private DNS views.
 
 ## Configuration and owned resources
 

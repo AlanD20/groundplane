@@ -1413,6 +1413,43 @@ Connectors, Secret-backed credentials, interrupted cleanup, staleness and other
 permission-failure variants remain NOT RUN. This connection check is not a new
 Backup/Restore qualification.
 
+**H105 — Selected scoped DNS, internal-container access and named-Service
+rebinding PASS on 2026-10-13; unchanged-router preservation repaired.**
+
+Ubuntu 24.04 amd64 first used Controller `f61af3456` with Agent `df6bf950e`,
+storage epoch 33 and channel 19. Environment, Project and Tenant namespace records
+returned their exact IPv4 answers over UDP and TCP. Export retained their captured
+namespace labels; Environment, Project and Tenant renames preserved the names.
+A conflicting Tenant hostname was rejected with its owning Environment. A shorter
+Tenant name in another Environment waited for its own missing Service rather than
+binding the same-named Service elsewhere; real queries returned no answer.
+
+Full Apply enabled shared DNS on an internal Zone. The workload resolved managed
+records, Docker-local Service names and an upstream domain, and reached nginx by
+its scoped hostname. A real TCP DNS query from that container also returned the
+expected answer. Inspection showed one internal bridge and no default gateway.
+The opt-out transition and failed listener withdrawal were not run.
+
+Omitting a named DNS target removed its workload/proxy and withdrew its UDP/TCP
+answer while retaining the record as waiting. Recreating the same name bound that
+record to a new Service id and restored expected DNS/HTTP. The first recreation
+unnecessarily replaced the unchanged router: its change hash included execution
+lock membership. A scoped repair retained those locks and hashed actual router
+configuration, routed identities and DNS inputs. Its baseline Apply exposed a
+second planner defect requiring withdrawal for an unaffected record while runtime
+inputs were pending; that check now applies only to actually removed targets.
+The original failed Task and incident evidence remain retained.
+
+Controller `daa94a3a5` passed full local CI and installed through the normal
+Controller-only updater, without reset or maintenance repair. A fresh baseline,
+probe omission and same-name recreation completed. Actual DNS answers, new proxy
+ownership and internal HTTP passed. Router, retained web workload/proxy, Agent,
+etcd, CoreDNS and registry container identities and start times were unchanged
+through omission and recreation. No Component child was published for the
+unchanged router. Concurrent claims, failed withdrawal, Stop/Start/Destroy,
+interruption, held connections and other strategies remain NOT RUN for this
+sequence. This does not establish continuous availability or blanket DNS coverage.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

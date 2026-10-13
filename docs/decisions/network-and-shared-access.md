@@ -60,8 +60,9 @@ Status: accepted design; authoring, stable record identities, shared rendering,
 atomic claims, resolver-backed settlement and update scheduling are locally implemented.
 Scoped direct edits, activation reads and Console/CLI/API actions are locally
 connected, as are resolver-backed direct-removal receipts and Blueprint admission.
-These paths are not behavior-qualified. Container DNS opt-in is separate,
-unfinished work.
+Selected namespace, container access, withdrawal and rebinding passed
+[H105](../acceptance.md#historical-evidence-register). Concurrent claims and failed
+withdrawal remain unqualified; container opt-out is a separate remaining case.
 
 An Environment owns a record regardless of its chosen hostname namespace.
 Namespace labels are captured decisions, not a live projection of renamable
