@@ -1529,6 +1529,34 @@ single-replica recreate nginx configuration through normal Edit and Deploy.
 Continuous traffic, held connections, rollback failure/interruption and broader
 mixed or repeated-tag selection remain NOT RUN for this sequence.
 
+**H110 — Direct-edit/Blueprint Component identity roundtrip repaired;
+interrupted handoff restored service, but failure diagnostics FAIL on 2026-10-13.**
+
+On Controller `daa94a3a5`, a full Apply after direct Service edits failed before
+Task publication. The metadata publisher had used Component implementation names
+where authored Apply required stable capability names. The shared producer now
+uses the capability for every Environment Component. Signed Controller `77f500baf`
+passed full local CI and installed through the normal Controller-only updater,
+retaining Agent `df6bf950e`. An ordinary Service edit published the correct names,
+and a subsequent full Apply completed. No history or malformed record was rewritten.
+The original uncertain request later received a definite stale-revision rejection.
+
+The first interruption attempt missed its candidate window; no restart was
+performed and it is not interruption proof. A fresh Apply then started a
+120-second delayed blue-green candidate. Independent Docker inspection confirmed
+it was still starting before the Controller restarted and accepted a newer Apply.
+The original Apply failed with completed recovery; its traffic-switch step never
+started. The newer Apply completed, and actual runtime showed its healthy
+single-replica recreate configuration without the delayed command. Unrelated web,
+router, etcd, CoreDNS and registry identities and start times remained unchanged;
+the HTTP Route returned the expected page.
+
+The interrupted Task nevertheless showed “No specific failure reason was
+recorded.” Its retained primary result had no failure diagnostic or failed-step
+id. This diagnostic defect remains open for repair and a fresh retest; restoration
+success does not close it. Continuous traffic, lost-response races and other
+interruption boundaries remain NOT RUN for this sequence.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

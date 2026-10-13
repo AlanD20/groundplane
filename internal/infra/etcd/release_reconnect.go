@@ -5,6 +5,8 @@ import (
 	"errors"
 	"math"
 
+	"github.com/AlanD20/groundplane/internal/common/taskprogress"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -15,6 +17,8 @@ import (
 // ReconnectAgentAssignment fences the previous execution epoch before a
 // recovered assignment is returned to an Agent. Only fixed-revision durable
 // event and Script checkpoint evidence can force recovery.
+// Recovery retains the Controller's cancellation of the interrupted forward
+// execution separately from the later restoration outcome.
 func (repository *TaskRepository) ReconnectAgentAssignment(
 	ctx context.Context,
 	expected TaskAssignment,
@@ -66,6 +70,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 				}
 				if len(evidence) != 0 {
 					result := taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultCompose,
+						Failure:                taskprogress.CaptureControllerFailure(context.Canceled),
 						Diagnostic:             taskjournal.TaskResultDiagnosticNone,
 						ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch}
 					taskBytes, _ := EncodeTaskRecord(task)
@@ -132,6 +137,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 				}
 				if len(evidence) != 0 {
 					result := taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultCompose,
+						Failure:                taskprogress.CaptureControllerFailure(context.Canceled),
 						ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch}
 					taskBytes, _ := EncodeTaskRecord(task)
 					assignmentBytes, _ := taskassignments.EncodeTaskAssignment(assignment)
@@ -204,6 +210,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 			}
 			if assignment.ExecutionMode == taskassignments.TaskExecutionModeForward {
 				result := taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultCompose,
+					Failure:                taskprogress.CaptureControllerFailure(context.Canceled),
 					ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch}
 				taskBytes, _ := EncodeTaskRecord(task)
 				assignmentBytes, _ := taskassignments.EncodeTaskAssignment(assignment)
@@ -280,6 +287,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 			if effect {
 				result := taskjournal.TaskResultRecord{
 					Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
+					Failure:                taskprogress.CaptureControllerFailure(context.Canceled),
 					ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
 				}
 				taskBytes, _ := EncodeTaskRecord(task)
