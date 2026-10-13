@@ -1508,6 +1508,27 @@ router, Agent, etcd, CoreDNS and registry container identities and start times
 remained unchanged. Failed Start, failed withdrawal, process interruption and
 alternate release strategies remain NOT RUN for this lifecycle sequence.
 
+**H109 — Rolling image-only rollback PASS on 2026-10-13.**
+
+The H108 installation reused two isolated nginx-derived image generations with
+distinct tags. The probe changed from recreate to two rolling replicas with a
+60-second per-replica timeout. Generation A Deploy completed; independent Docker
+inspection showed two healthy replicas and HTTP returned the expected page.
+The current Service command was then changed to write a recognizable HTTP marker,
+and generation B Deploy completed with that command and two healthy B replicas.
+
+Automatic Rollback selected the previous successful tag A and completed through
+the rolling path. Independent inspection proved both replicas used A's exact image
+while retaining B's current command; the HTTP marker confirmed that command ran.
+Current replica count, rolling strategy and timeout remained unchanged. The stable
+proxy id and start time matched across A, B and Rollback. Release history retained
+both Deploys and recorded a separate serving Rollback to A.
+
+The isolated probe declaration and runtime were restored to the original
+single-replica recreate nginx configuration through normal Edit and Deploy.
+Continuous traffic, held connections, rollback failure/interruption and broader
+mixed or repeated-tag selection remain NOT RUN for this sequence.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
