@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { AnimatedSection } from "@/components/common/animated-section";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
@@ -157,9 +158,13 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
               destinations
             </CardTitle>
           </div>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <CreationButton
+            active={createOpen}
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+          >
             <Plus className="size-3.5" /> Add destination
-          </Button>
+          </CreationButton>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           <ConnectorEditorDrawer

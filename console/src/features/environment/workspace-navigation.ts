@@ -37,7 +37,7 @@ export const environmentSections = [
       { key: "dns", label: "DNS records", icon: Network },
       { key: "attaches", label: "Backing connections", icon: Plug },
       { key: "facts", label: "Connection values", icon: KeyRound },
-      { key: "router", label: "Router", icon: Router },
+      { key: "router", label: "Proxy & tunnel", icon: Router },
     ],
   },
   {

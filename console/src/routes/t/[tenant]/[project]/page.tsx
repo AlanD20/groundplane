@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { EnvironmentsTable } from "@/features/environment/environments-table";
 
 import { EmptyState } from "@/components/common/empty-state";
@@ -111,9 +112,9 @@ export default function TenantProjectPage() {
                 <KeyRound className="size-4" /> Secrets
               </Button>
             </Link>
-            <Button onClick={() => setOpen(true)}>
+            <CreationButton active={open} onClick={() => setOpen(true)}>
               <Plus className="size-4" /> New environment
-            </Button>
+            </CreationButton>
           </>
         }
       />
@@ -121,7 +122,7 @@ export default function TenantProjectPage() {
         <DialogHeader>
           <DialogTitle>New environment · {project.name}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <div className="grid max-w-5xl items-start gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="e-name">Name</Label>
             <Input
@@ -187,15 +188,7 @@ export default function TenantProjectPage() {
 
       {/* Environment selector */}
       {envs.length === 0 ? (
-        <EmptyState
-          icon={<Boxes />}
-          title="No environments yet"
-          action={
-            <Button onClick={() => setOpen(true)}>
-              <Plus className="size-4" /> New environment
-            </Button>
-          }
-        />
+        <EmptyState icon={<Boxes />} title="No environments yet" />
       ) : (
         <EnvironmentsTable
           tenant={tenant}

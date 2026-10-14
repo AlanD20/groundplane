@@ -1,4 +1,5 @@
-"use client";
+import { CreationButton } from "@/components/common/creation-button";
+("use client");
 
 import { useSearchParams } from "react-router-dom";
 
@@ -122,8 +123,9 @@ export default function RunnerManager({
     (runner) => runner.id !== editing?.id && runner.slug === normalizedSlug,
   );
 
-  const createAction = creating ? null : (
-    <Button
+  const createAction = (
+    <CreationButton
+      active={creating}
       disabled={store.runnersLoading || runners.length >= 5}
       onClick={() => {
         setCreateOwner(owner === "all" ? "tenant" : owner);
@@ -132,7 +134,7 @@ export default function RunnerManager({
       }}
     >
       <Plus className="size-4" /> Create Runner
-    </Button>
+    </CreationButton>
   );
   const rowEditor = (
     <>

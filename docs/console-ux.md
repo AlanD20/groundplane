@@ -288,7 +288,8 @@ The shared draft owner blocks page/tab navigation when the edited values differ
 from their baseline, offering Keep editing or Discard. Refresh, tab close and
 external navigation use the browser beforeunload warning. Untouched forms and
 changes reverted to the baseline do not prompt. Editor search, folding, preview
-and fullscreen are viewing state, not edits. Cancel/save ends draft ownership.
+and fullscreen are viewing state, not edits. Cancel/save ends draft ownership. Discarding for navigation must preserve the
+requested destination; editor cleanup must not issue a competing navigation.
 
 Editor workspaces use the shared CodeEditor, including bulk variable editing.
 Expand editors within the browser tab workspace, retaining the left navigation,
@@ -297,7 +298,9 @@ the document, undo and selection, with an explicit exit and Escape support.
 Fullscreen changes viewing space, never saves or applies changes. Preview, search and read-only rules are identical in both sizes.
 
 Collection creation has one header action, without a duplicate empty-state action.
-Hide that entry action while its form is open; submission belongs to the form footer.
+Use the shared CreationButton to hide that entry action while its form is open;
+submission belongs to the form footer. Keep Add buttons inside an existing draft
+when they append members or fields rather than open a second creation form.
 
 Forms group related fields and use two columns when space permits; stack on narrow
 screens. Give multiline editors, long values and multi-select exposure full rows.
@@ -329,8 +332,9 @@ JSON comments. Inserting a sample is explicit and must not overwrite existing co
 Topology uses the shared pan/zoom board with Zone-membership groups, Routes,
 Services, declared dependencies, backing connections and mounted Volumes.
 It visualizes saved relationships, not inferred reachability or unsaved YAML.
-Keep Add Zone, Add Service and Manage Zones visible; preserve the existing
-management actions. Relationship layers start enabled and expose their counts.
+Keep Add Zone and Manage Zones in the topology workspace. Add Service belongs
+only to the Environment Services page; neither its action nor its form appears
+on other Environment pages. Relationship layers start enabled and expose their counts.
 Selecting a node highlights each direct connection from endpoint to endpoint
 above dimmed unrelated paths, including the complete shared-trunk segment and
 arrowhead. Never highlight unrelated branches of a shared trunk. Use theme tokens.
@@ -353,6 +357,10 @@ flow animation; reduced-motion preferences disable it.
 Use familiar, specific labels with one meaning throughout the Console. Action
 labels use a verb and object when the object is otherwise ambiguous. Avoid
 implementation vocabulary in operator instructions and vague section names.
+
+Name configurable infrastructure by its role: the Environment proxy may use Caddy
+or Envoy. Show the saved implementation separately from an unsaved selection and
+from installed software identity.
 
 Friendly labels must preserve domain distinctions. “Variables & files” can explain
 Entry exposure; “Backing connections” can introduce Attaches. Keep canonical terms

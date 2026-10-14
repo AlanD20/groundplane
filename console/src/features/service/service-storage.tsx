@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { FormActions } from "@/components/common/form-actions";
 import { AnimatedSection } from "@/components/common/animated-section";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
@@ -291,7 +292,8 @@ export function ServiceStorage({
     <ResourcePanel
       title="Storage"
       actions={
-        <Button
+        <CreationButton
+          active={!!draft}
           variant="outline"
           size="sm"
           disabled={!!draft}
@@ -301,7 +303,7 @@ export function ServiceStorage({
           onClick={() => edit(null)}
         >
           <Plus className="size-3.5" /> Add mount
-        </Button>
+        </CreationButton>
       }
     >
       <AnimatedSection open={!!draft && !draft.original}>

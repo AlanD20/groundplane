@@ -69,7 +69,7 @@ export function TenantCreateForm({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>New tenant</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <div className="grid max-w-5xl items-start gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="t-name">Display name</Label>
             <Input
@@ -89,7 +89,7 @@ export function TenantCreateForm({ onClose }: { onClose: () => void }) {
               placeholder="acme"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label htmlFor="t-desc">Description</Label>
             <Input
               id="t-desc"
@@ -99,7 +99,7 @@ export function TenantCreateForm({ onClose }: { onClose: () => void }) {
             />
           </div>
           {createError && (
-            <p role="alert" className="text-xs text-destructive">
+            <p role="alert" className="text-xs text-destructive md:col-span-2">
               {createError}
             </p>
           )}

@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import { AnimatedSection } from "@/components/common/animated-section";
 import { ResourceForm } from "@/components/common/resource-form";
@@ -88,7 +89,8 @@ export function ScriptsCard({ env }: { env: Environment }) {
           <CardTitle className="flex items-center gap-2">
             <Terminal className="size-4 text-muted-foreground" /> Scripts
           </CardTitle>
-          <Button
+          <CreationButton
+            active={addOpen || !!editing}
             variant="outline"
             size="sm"
             onClick={() => {
@@ -97,7 +99,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
             }}
           >
             <Plus className="size-3.5" /> Add Script
-          </Button>
+          </CreationButton>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <AnimatedSection open={addOpen}>{addOpen && editor}</AnimatedSection>

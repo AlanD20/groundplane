@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { ProjectsTable } from "@/features/project/projects-table";
 
 import { EmptyState } from "@/components/common/empty-state";
@@ -75,11 +76,9 @@ export default function TenantPage() {
           </>
         }
         actions={
-          !open && (
-            <Button onClick={() => setOpen(true)}>
-              <Plus className="size-4" /> New project
-            </Button>
-          )
+          <CreationButton active={open} onClick={() => setOpen(true)}>
+            <Plus className="size-4" /> New project
+          </CreationButton>
         }
       />
       <ResourceForm open={open} onOpenChange={setOpen}>

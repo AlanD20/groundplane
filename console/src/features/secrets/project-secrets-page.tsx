@@ -1,4 +1,5 @@
-"use client";
+import { CreationButton } from "@/components/common/creation-button";
+("use client");
 
 import { EmptyState } from "@/components/common/empty-state";
 import { MetaPill } from "@/components/common/meta-pill";
@@ -100,9 +101,9 @@ export default function ProjectSecretsPage() {
           </MetaPill>
         }
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <CreationButton active={open} onClick={() => setOpen(true)}>
             <Plus className="size-4" /> New secret
-          </Button>
+          </CreationButton>
         }
       />
       <ResourceForm
@@ -115,8 +116,8 @@ export default function ProjectSecretsPage() {
         <DialogHeader>
           <DialogTitle>New secret · {project.name}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
+        <div className="grid max-w-5xl items-start gap-4 md:grid-cols-2">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label>Type</Label>
             <div className="flex gap-2">
               {(["env", "file"] as const).map((candidate) => (
@@ -178,7 +179,7 @@ export default function ProjectSecretsPage() {
                   placeholder="config/acme/ca.pem"
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 md:col-span-2">
                 <Label htmlFor="pf-content">Content</Label>
                 <Textarea
                   id="pf-content"
@@ -194,7 +195,7 @@ export default function ProjectSecretsPage() {
               </div>
             </>
           )}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground md:col-span-2">
             Stored encrypted in the Controller. Project values override matching
             platform keys.
           </p>

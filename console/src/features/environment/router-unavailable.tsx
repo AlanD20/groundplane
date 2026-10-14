@@ -6,12 +6,12 @@ export function EnvironmentRouterUnavailable() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <RouterIcon className="size-4 text-muted-foreground" /> Router
+          <RouterIcon className="size-4 text-muted-foreground" /> Proxy & tunnel
         </CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-xs text-muted-foreground">
-          Router configuration is unavailable.
+          Proxy and tunnel configuration is unavailable.
         </p>
       </CardContent>
     </Card>

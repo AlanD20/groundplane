@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import { RouteAccessCheck } from "./edge-check-panel";
 import { AnimatedSection } from "@/components/common/animated-section";
@@ -219,9 +220,14 @@ export function RoutesCard({ env }: { env: Environment }) {
         <CardTitle className="flex items-center gap-2">
           <RouterIcon className="size-4 text-muted-foreground" /> Routes
         </CardTitle>
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <CreationButton
+          active={open}
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+        >
           <Plus className="size-3.5" /> Add Route
-        </Button>
+        </CreationButton>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <RouteFormDialog env={env} open={open} onOpenChange={setOpen} />

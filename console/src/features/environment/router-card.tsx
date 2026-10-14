@@ -10,6 +10,7 @@ import { useStore } from "@/lib/store";
 import { EnvironmentRouterUnavailable } from "@/features/environment/router-unavailable";
 import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -125,16 +126,10 @@ export function RouterCard({ env }: { env: Environment }) {
           (tunnelCredentialMode === "existing"
             ? !tunnelSecret
             : !tunnelSecretName || !tunnelToken)));
-  const selectedKind =
-    configuring && operation?.component.kind !== "cloudflare-tunnel"
-      ? routerImplementation
-      : operation?.component.kind;
   const componentName =
-    selectedKind === "caddy"
-      ? "Caddy"
-      : selectedKind === "envoy"
-        ? "Envoy"
-        : "Cloudflare Tunnel";
+    operation?.component.kind === "cloudflare-tunnel"
+      ? "Cloudflare Tunnel"
+      : "Environment proxy";
 
   const operationView = operation && (
     <TaskRunnerDialog
@@ -401,8 +396,8 @@ export function RouterCard({ env }: { env: Environment }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <RouterIcon className="size-4 text-muted-foreground" /> Router and
-            tunnel components
+            <RouterIcon className="size-4 text-muted-foreground" /> Proxy &
+            tunnel
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -422,14 +417,18 @@ export function RouterCard({ env }: { env: Environment }) {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">
-                          {component.kind === "caddy"
-                            ? "Caddy"
-                            : component.kind === "envoy"
-                              ? "Envoy"
-                              : "Cloudflare Tunnel"}
+                          {component.kind === "cloudflare-tunnel"
+                            ? "Cloudflare Tunnel"
+                            : "Environment proxy"}
                         </span>
+                        {component.kind !== "cloudflare-tunnel" && (
+                          <Badge variant="outline">
+                            Saved:{" "}
+                            {component.kind === "envoy" ? "Envoy" : "Caddy"}
+                          </Badge>
+                        )}
                         <StatusBadge status={component.status} />
                       </div>
                       <CompactReference
@@ -443,40 +442,46 @@ export function RouterCard({ env }: { env: Environment }) {
                         unavailable="Installed identity not reported by the Controller"
                       />
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openConfig(component)}
-                      >
-                        Configure
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setOperation({ component, action: "update" })
-                        }
-                      >
-                        Reapply configuration
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={component.enabled ? "destructive" : "default"}
-                        onClick={() =>
-                          component.enabled
-                            ? setOperation({ component, action: "disable" })
-                            : openConfig(component, "enable")
-                        }
-                      >
-                        {component.enabled ? "Disable" : "Enable"}
-                      </Button>
-                    </div>
+                    {!(
+                      configuring && operation?.component.id === component.id
+                    ) && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openConfig(component)}
+                        >
+                          Configure
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setOperation({ component, action: "update" })
+                          }
+                        >
+                          Reapply configuration
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={
+                            component.enabled ? "destructive" : "default"
+                          }
+                          onClick={() =>
+                            component.enabled
+                              ? setOperation({ component, action: "disable" })
+                              : openConfig(component, "enable")
+                          }
+                        >
+                          {component.enabled ? "Disable" : "Enable"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   {component.kind !== "cloudflare-tunnel" ? (
                     <div className="grid gap-3 border-t border-border pt-4 text-sm text-muted-foreground [overflow-wrap:anywhere] sm:grid-cols-2">
                       <span>
-                        Networks:
+                        Networks:{" "}
                         {component.config?.zone_ids
                           .map(
                             (id) =>
@@ -497,7 +502,7 @@ export function RouterCard({ env }: { env: Environment }) {
                         {component.config?.secret_id || "not configured"}
                       </span>
                       <span>
-                        Networks:
+                        Networks:{" "}
                         {component.config?.zone_ids
                           .map(
                             (id) =>

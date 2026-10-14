@@ -122,8 +122,8 @@ function AttachForm({
       <DialogHeader>
         <DialogTitle>Connect backing service · {env.name}</DialogTitle>
       </DialogHeader>
-      <div className="flex flex-col gap-4">
-        <p className="text-xs text-muted-foreground">
+      <div className="grid min-w-0 items-start gap-4 md:grid-cols-2">
+        <p className="text-xs text-muted-foreground md:col-span-2">
           {custom ? (
             <>
               Attaching grants a{" "}
@@ -288,7 +288,7 @@ function AttachForm({
           </div>
         )}
         {!custom && credentialMode === "new" && grantOptions.length > 0 && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label>
               Also grant access to (other attaches' databases, same role)
             </Label>
@@ -316,7 +316,7 @@ function AttachForm({
           </div>
         )}
         {authenticationDetails && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label>
               {credentialMode === "new"
                 ? "Provisioning for this mode"
@@ -350,7 +350,7 @@ function AttachForm({
           </div>
         )}
         {custom && !customProvisioning ? (
-          <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
+          <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground md:col-span-2">
             <span>
               <span className="font-medium text-foreground">
                 Network-only attach.
@@ -362,13 +362,13 @@ function AttachForm({
         ) : authenticationUnavailable ? (
           <p
             role="alert"
-            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive md:col-span-2"
           >
             The Controller did not return this Valkey backing instance&apos;s
             authentication mode. Refresh before attaching.
           </p>
         ) : (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label>
               Connection values available after provisioning (map them in
               Variables & files)

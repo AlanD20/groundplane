@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import RunnerManager from "@/features/runners/runner-manager";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -129,7 +130,7 @@ export default function EnvironmentPage() {
     ),
     overview: <EnvironmentOverview env={env} now={observation.now} />,
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
-    zones: <Topology env={env} onAddService={() => setAddingService(true)} />,
+    zones: <Topology env={env} />,
     routes: <RoutesCard env={env} />,
     dns: <EnvironmentDNSPanel key={env.id} env={env} />,
     attaches: <AttachesCard env={env} />,
@@ -191,13 +192,16 @@ export default function EnvironmentPage() {
         eyebrow={`${params.tenant} / ${project.name} / Environment`}
         actions={
           <>
-            <Button
-              variant="outline"
-              disabled={deleting}
-              onClick={() => setAddingService(true)}
-            >
-              <Plus className="size-3.5" /> Add Service
-            </Button>
+            {panel.key === "overview" && (
+              <CreationButton
+                active={search.get("create") === "service"}
+                variant="outline"
+                disabled={deleting}
+                onClick={() => setAddingService(true)}
+              >
+                <Plus className="size-3.5" /> Add Service
+              </CreationButton>
+            )}
             <LogViewer
               target={{ kind: "environment", id: env.id }}
               label="Logs"

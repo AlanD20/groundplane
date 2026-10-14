@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
 
@@ -6,7 +7,6 @@ import { Link } from "react-router-dom";
 import { ChevronRight, Plus, Workflow } from "lucide-react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRequiredParams } from "@/lib/router";
 import type { Environment } from "@/lib/types";
@@ -30,12 +30,13 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
             <Badge variant="outline">{env.releaseGroups.length}</Badge>
           </CardTitle>
         </div>
-        <Button
+        <CreationButton
+          active={adding}
           onClick={() => setAdding(true)}
           disabled={env.services.length < 2}
         >
           <Plus className="size-4" /> Add group
-        </Button>
+        </CreationButton>
       </CardHeader>
       <CardContent>
         <ReleaseGroupFormDrawer
@@ -55,11 +56,6 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
             icon={<Workflow />}
             title="No deployment groups"
             description="Create an explicit ordered set when multiple services must release under one task lock."
-            action={
-              <Button onClick={() => setAdding(true)}>
-                <Plus className="size-4" /> Add group
-              </Button>
-            }
           />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">

@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { BlueprintTopology } from "./blueprint-topology";
 import { ResourceForm } from "@/components/common/resource-form";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
@@ -27,13 +28,7 @@ import { ChevronRight, Database, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-export function Topology({
-  env,
-  onAddService,
-}: {
-  env: Environment;
-  onAddService: () => void;
-}) {
+export function Topology({ env }: { env: Environment }) {
   const [zoneOpen, setZoneOpen] = useState(false);
   const [view, setView] = useState<"graph" | "zones">("graph");
   return (
@@ -61,12 +56,14 @@ export function Topology({
           </span>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setZoneOpen(true)}>
+          <CreationButton
+            active={zoneOpen}
+            variant="outline"
+            size="sm"
+            onClick={() => setZoneOpen(true)}
+          >
             <Plus className="size-3.5" /> Add Zone
-          </Button>
-          <Button variant="outline" size="sm" onClick={onAddService}>
-            <Plus className="size-3.5" /> Add Service
-          </Button>
+          </CreationButton>
         </div>
       </div>
       <ZoneFormDialog env={env} open={zoneOpen} onOpenChange={setZoneOpen} />

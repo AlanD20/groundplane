@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
@@ -500,9 +501,14 @@ export function EnvVarsCard({
                 Bulk edit
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            <CreationButton
+              active={open || bulkOpen}
+              variant="outline"
+              size="sm"
+              onClick={() => setOpen(true)}
+            >
               <Plus className="size-3.5" /> Add variable or file
-            </Button>
+            </CreationButton>
           </div>
         }
       >

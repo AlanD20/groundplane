@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
@@ -70,9 +71,14 @@ export function AttachesCard({
         <CardTitle className="flex items-center gap-2">
           <Plug className="size-4 text-muted-foreground" /> Backing connections
         </CardTitle>
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <CreationButton
+          active={open}
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+        >
           <Plus className="size-3.5" /> Connect backing service
-        </Button>
+        </CreationButton>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <AttachFormDialog
@@ -126,8 +132,16 @@ export function AttachesCard({
               <DetachAttach env={env} attach={a} />
             </div>
             <ConnectionValues attach={a} env={env} />
-            <BackingAccessCheck environmentId={env.id} attachId={a.id} disabled={a.status !== "healthy"}
-              grants={(a.grantAttachIds ?? []).map((id) => ({ id, name: env.attaches.find((attach) => attach.id === id)?.name ?? id }))} />
+            <BackingAccessCheck
+              environmentId={env.id}
+              attachId={a.id}
+              disabled={a.status !== "healthy"}
+              grants={(a.grantAttachIds ?? []).map((id) => ({
+                id,
+                name:
+                  env.attaches.find((attach) => attach.id === id)?.name ?? id,
+              }))}
+            />
           </div>
         ))}
         {attaches.length === 0 && (

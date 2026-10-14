@@ -163,7 +163,7 @@ function ReleaseGroupForm({
         </DialogTitle>
         <DialogDescription>Select at least two Services.</DialogDescription>
       </DialogHeader>
-      <div className="flex flex-col gap-5">
+      <div className="grid min-w-0 items-start gap-5 md:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="release-group-name">Name</Label>
           <Input
@@ -185,7 +185,27 @@ function ReleaseGroupForm({
             </p>
           )}
         </div>
-        <fieldset className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="release-group-failure">On failure</Label>
+          <Select
+            id="release-group-failure"
+            value={draft.onFailure}
+            onValueChange={(value) =>
+              setDraft((current) => ({
+                ...current,
+                onFailure: value as ReleaseGroupOnFailure,
+              }))
+            }
+            options={[
+              { value: "switch_back", label: "Switch back completed members" },
+              {
+                value: "leave_active",
+                label: "Leave completed members active",
+              },
+            ]}
+          />
+        </div>
+        <fieldset className="flex flex-col gap-2 md:col-span-2">
           <legend className="mb-1 text-xs font-medium text-muted-foreground">
             Member services
           </legend>
@@ -235,7 +255,7 @@ function ReleaseGroupForm({
             </p>
           )}
         </fieldset>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 md:col-span-2">
           <Label>Release order</Label>
           {draft.order.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
@@ -287,26 +307,6 @@ function ReleaseGroupForm({
               ))}
             </ReorderList>
           )}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="release-group-failure">On failure</Label>
-          <Select
-            id="release-group-failure"
-            value={draft.onFailure}
-            onValueChange={(value) =>
-              setDraft((current) => ({
-                ...current,
-                onFailure: value as ReleaseGroupOnFailure,
-              }))
-            }
-            options={[
-              { value: "switch_back", label: "Switch back completed members" },
-              {
-                value: "leave_active",
-                label: "Leave completed members active",
-              },
-            ]}
-          />
         </div>
       </div>
       {error && (

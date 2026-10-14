@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { BackingServicesTable } from "@/features/backing-service/backing-services-table";
 
 import { NetworkRange } from "@/components/common/network-range";
@@ -153,9 +154,9 @@ export default function PlatformBackingServicesPage() {
         title="Backing services"
         icon={<Database />}
         actions={
-          <Button onClick={openCreate}>
+          <CreationButton active={createOpen} onClick={openCreate}>
             <Plus className="size-4" /> New backing service
-          </Button>
+          </CreationButton>
         }
       />
       <ResourceForm open={createOpen} onOpenChange={setCreateOpen}>
@@ -429,11 +430,6 @@ export default function PlatformBackingServicesPage() {
           icon={<Database />}
           title="No backing services"
           description="Create a shared instance, then attach consumer Services to it."
-          action={
-            <Button onClick={openCreate}>
-              <Plus className="size-4" /> New backing service
-            </Button>
-          }
         />
       ) : (
         <div className="space-y-6">

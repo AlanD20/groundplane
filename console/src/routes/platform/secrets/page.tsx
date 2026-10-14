@@ -1,4 +1,5 @@
-"use client";
+import { CreationButton } from "@/components/common/creation-button";
+("use client");
 
 import { PageHeader } from "@/components/common/page-header";
 import { HelpHint, ResourcePanel } from "@/components/common/resource-panel";
@@ -68,9 +69,9 @@ export default function PlatformSecretsPage() {
         eyebrow="Settings"
         icon={<KeyRound />}
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <CreationButton active={open} onClick={() => setOpen(true)}>
             <Plus className="size-4" /> New secret
-          </Button>
+          </CreationButton>
         }
       />
       <ResourceForm
@@ -83,8 +84,8 @@ export default function PlatformSecretsPage() {
         <DialogHeader>
           <DialogTitle>New platform Secret</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
+        <div className="grid max-w-5xl items-start gap-4 md:grid-cols-2">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label>Type</Label>
             <div className="flex gap-2">
               {(["env", "file"] as const).map((candidate) => (
@@ -146,7 +147,7 @@ export default function PlatformSecretsPage() {
                   placeholder="config/identity-tls/ca.pem"
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 md:col-span-2">
                 <Label htmlFor="f-content">Content</Label>
                 <Textarea
                   id="f-content"
@@ -162,7 +163,7 @@ export default function PlatformSecretsPage() {
               </div>
             </>
           )}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground md:col-span-2">
             Stored encrypted in the Controller and materialized by the Agent
             only when referenced.
           </p>

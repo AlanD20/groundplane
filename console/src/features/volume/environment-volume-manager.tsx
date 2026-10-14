@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import { AnimatedSection } from "@/components/common/animated-section";
 import {
@@ -329,9 +330,14 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
         <CardTitle className="flex items-center gap-2">
           <Database className="size-4 text-muted-foreground" /> Named volumes
         </CardTitle>
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <CreationButton
+          active={open}
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+        >
           <Plus className="size-3.5" /> Add Volume
-        </Button>
+        </CreationButton>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {createForm}

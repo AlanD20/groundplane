@@ -1,3 +1,4 @@
+import { CreationButton } from "@/components/common/creation-button";
 import { Fragment, useState } from "react";
 import { Plus, RefreshCw, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -139,7 +140,8 @@ export function EnvironmentDNSPanel({ env }: { env: Environment }) {
             Environment-owned names on the shared CoreDNS resolver.
           </p>
         </div>
-        <Button
+        <CreationButton
+          active={!!editor}
           disabled={!dns.view || dns.saving}
           onClick={() => {
             if (dns.view) {
@@ -150,7 +152,7 @@ export function EnvironmentDNSPanel({ env }: { env: Environment }) {
         >
           <Plus />
           Add record
-        </Button>
+        </CreationButton>
       </div>
       {dns.loading && (
         <p role="status" className="text-sm text-muted-foreground">

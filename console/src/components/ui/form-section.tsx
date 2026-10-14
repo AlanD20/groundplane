@@ -23,7 +23,9 @@ export function FormSection({
       {description && (
         <p className="text-xs text-muted-foreground">{description}</p>
       )}
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">{children}</div>
+      <div className="grid min-w-0 items-start gap-4 sm:grid-cols-2">
+        {children}
+      </div>
     </fieldset>
   );
 }
