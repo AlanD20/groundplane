@@ -92,7 +92,7 @@ Docker daemon. A newer accepted Apply supersedes the Environment's earlier
 desired input, even while its Task is pending or running. Conflicting work waits
 for the older execution to stop and its effects to be accounted for; accepting
 the new input does not prove that the old work has stopped. Each Apply keeps its
-own Task and history. See [latest-wins](#latest-wins-implemented-locally-not-yet-qualified)
+own Task and history. See [latest-wins](#latest-wins-and-qualification)
 for the current qualification boundary.
 
 Apply uses each affected Service's declared release strategy and failure policy.
@@ -206,8 +206,10 @@ Environment-owned DNS records through their protected operation paths. Omitting
 an optional Component disables it. Validate previews these removals without
 executing them. References, dependency ordering and verified cleanup still apply;
 acceptance does not mean removal has completed. Selected-Service Apply preserves
-unrelated resources. These paths are implemented locally but are
-[not fully qualified](../issues/runtime-qualification.md#incomplete-features).
+unrelated resources. [H118](../acceptance.md#combined-blueprint-omission-and-route-recovery)
+qualifies one combined Service/Attach/Entry/router/Route/Zone cleanup journey.
+It does not qualify every removal or recovery variant; see
+[remaining qualification](../issues/runtime-qualification.md#incomplete-features).
 
 Blueprint Entry keys identify their reconciliation identity, separately from
 destination env keys or file paths. Source/exposure edits retain the Entry id;
@@ -227,9 +229,11 @@ those facts in the same Apply. The authored input remains fixed; only facts
 produced by that Apply may extend its effective plan. A failed hook leaves its
 dependent work pending or failed rather than substituting later values.
 
-This same-Apply path is locally implemented. Independent Zones and Volumes can
+This same-Apply path is implemented. Independent Zones and Volumes can
 proceed while Services wait for the complete fact-derived runtime projection.
-Its failure, interruption and supersession behavior still requires qualification.
+[H117](../acceptance.md#historical-evidence-register) records one successful
+hook-to-Entry-to-workload journey. Hook interruption, explicit Retry and further
+failure/supersession variants still require qualification.
 See [Custom backing hooks](backing-services.md).
 
 Retry/recovery use the captured input, not the latest desired document.
@@ -241,7 +245,7 @@ fails. GP does not retry that child automatically; the operator submits a new
 Apply after correcting the cause. Unknown effects keep their claims and prevent
 premature completion.
 
-## Latest-wins: implemented locally, not yet qualified
+## Latest-wins and qualification
 
 The accepted design compares resource-level effective inputs and cancels obsolete
 work when a newer valid input supersedes it. Conflicting work waits for proven
@@ -252,8 +256,9 @@ repair from accounted-but-diverged effects. Unknown effects remain restricted.
 This does not authorize replaying Scripts or superseding ordinary Deploy,
 Backup, upgrade or destructive operations.
 
-Public Apply, the coordinator and protected omission paths are connected locally;
-full runtime qualification remains incomplete. Preparation conflicts retry
+Public Apply, the coordinator and protected omission paths are delivered.
+H98/H110/H111 record selected supersession and interrupted recovery journeys,
+not every fault or workload variant. Preparation conflicts retry
 when the captured head or unit ledger changed. An unchanged prerequisite failure
 closes the Apply's forward-publication gate and records its failed phase; already
 started children still require settlement. Resource-in-use waits and transient

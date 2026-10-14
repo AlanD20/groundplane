@@ -1761,6 +1761,53 @@ application and etcd tuples unchanged. Repair is not normal-upgrade qualificatio
 Route admission still rejected before publication and requires a further scoped
 binding correction. Joint Service/Zone/Attach/Route omission is not a pass here.
 
+### Combined Blueprint omission and Route recovery
+
+**H118 — Combined omission PASS on 2026-10-14; earlier failures retained.**
+
+Ubuntu 24.04 amd64 used Controller `1efe5b71f` and retained Agent `4499c1701`,
+storage epoch 35, channel 19 and plan schema 18. Full local CI and remote CI
+passed for the final source. The Controller installed through its normal updater;
+no reset or repair was used for this final journey. No tag or release was created.
+
+The isolated consumer Environment contained three deployed nginx Services, a
+MySQL credential-owning Attach, a second Attach reusing it, two fact-derived
+Entries, Caddy, an internal Route and one Zone. The shared MySQL instance belonged
+to another Environment. An independent request through the actual router returned
+HTTP 200 and the expected nginx page before removal.
+
+Validate showed the intended omissions without replacement creates. One empty
+Blueprint Apply completed with no reconciliation fence. The dependent Attach
+finished before its credential owner. Router, Entry, Service and Zone children
+completed; all selected units retained exact Absent receipts. Public Service,
+Zone, Attach and Route lists were empty and both optional Components were disabled.
+Independent Docker inspection found no fixture containers or network. The subnet
+reservation was released only after native network removal. The generated
+environment file was empty and the per-consumer environment files were absent.
+Unused Component configuration and ownership markers remained retained.
+
+Every unrelated container kept its ID, image, running state and start time.
+Independent MySQL schema/table inventories were identical before and after.
+This fixture had no nonempty application table, so it does not establish
+nonempty-row preservation, load capacity or uninterrupted update traffic.
+
+Earlier runs exposed applied-versus-desired Entry capture, pending omission
+authoring, inherited Attach facts, missing reverse credential/grant indexes,
+router artifacts containing unexecuted application rows, historical Component
+selection and missing subnet-reservation publication. Their corrections retain
+the existing ownership, transaction and restoration checks. Authored admission
+now publishes reservations with its desired head and keeps them until protected
+retirement. Existing behavioral fixtures were migrated; no new tests or
+compatibility readers were added. The old missing-reservation Apply was normally
+aborted, not backfilled, rewritten or relabeled as passing.
+
+Separately, the original failed direct Route Task reached verified recovery and
+remained failed with its original cause. Later Route execution served the expected
+HTTP response. Recovery required earlier data-preserving maintenance; that is
+distinct from the final normal updates and does not prove uninterrupted upgrades.
+Persistent Volume removal, external-consumer backing Zone removal and every
+omission/interruption variant are not qualified by this combined case.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

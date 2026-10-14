@@ -110,8 +110,8 @@ replacement cannot release references still applied by the resolver.
 Environment-owned named DNS targets retain their authored record after Service
 removal, but must first withdraw the active answer successfully. A same-named
 replacement can bind only in that owning Environment and selected Zone.
-These Environment DNS lifecycle changes are locally implemented but unqualified;
-see [capability status](capabilities.md).
+See [capability status](capabilities.md) for the recorded Environment DNS
+lifecycle journeys and remaining qualification limits.
 
 Reusable Project and Platform Secrets are separate resources; an Environment
 Blueprint declares their Entry references, never their values.

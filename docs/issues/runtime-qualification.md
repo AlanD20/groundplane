@@ -113,15 +113,13 @@ synthetic secret value. A separate running-Service variant removed the managed
 file without restarting the container; its absence reached the new process on
 the next Deploy.
 
-Failure, Abort, recovery and other exposure variants remain unqualified on the
-current candidate. Protected Service, Zone, Route and Attach omission paths are
-locally connected to the public Apply coordinator, alongside Entry, Component
-and Environment DNS reconciliation. Scripts and Backup policy also have local
-reconciliation changes. Native Compose configs and secrets remain unavailable
-to Apply. No current live pass is established by these source changes.
-
-Closure requires proving the selected current candidate changes real
-Environment state without orphaning data or unrelated resources.
+[H118](../acceptance.md#combined-blueprint-omission-and-route-recovery) closes one
+combined Service/Zone/Attach/Entry/router/Route removal journey: actual containers
+and network disappeared, reservations released after removal, and unrelated
+container tuples/schema inventories remained unchanged. Earlier failures remain
+retained. It does not qualify every omission, exposure, Abort or recovery variant,
+persistent Volume removal or an external-consumer backing Zone. Native Compose
+configs and secrets remain unavailable to Apply.
 
 ### Other limits
 
@@ -130,14 +128,14 @@ Environment state without orphaning data or unrelated resources.
   A successful preview can still be rejected by Apply. Native configs/secrets,
   external networks and Volume driver options also remain unavailable to current
   Apply despite parser support. See the [Blueprint reference](../blueprint.md#native-compose-with-groundplane-policy).
-- Latest-wins Blueprint reconciliation is locally connected through publication,
-  late planning, hidden child Tasks and effect settlement. BP-13/14/15 still need
-  candidate-bound supersession, interruption and recovery evidence; source wiring
-  is not a pass.
-- Same-Apply Custom hook facts are locally connected: independent Zones and
-  Volumes can proceed, while Service work waits for a complete runtime projection.
-  Hook interruption, explicit Retry, supersession and Secret retention still need
-  live qualification.
+- Latest-wins Blueprint reconciliation is delivered. H98/H110/H111 record selected
+  supersession/interruption/restoration cases and persisted cancellation details.
+  Broader BP-13/14/15 variants remain unqualified; those passes are not blanket
+  recovery or continuity evidence.
+- H117 records one successful same-Apply Custom hook/fact/Entry/workload journey.
+  Independent Zones and Volumes may proceed while Services wait for the complete
+  runtime projection. Hook interruption, explicit Retry, supersession and Secret
+  retention variants remain unqualified.
 - [H84/H85](../acceptance.md#source-restore-retention-and-deletion-boundary) qualify
   selected Config, Volume and PostgreSQL Restore, key-era and retention variants.
   [H86](../acceptance.md#backup-owned-environment-deletion) proves Config/Volume
