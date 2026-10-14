@@ -209,7 +209,7 @@ func validate(record Generation, bound bool) error {
 		ids.Validate(ids.KindNetwork, record.BackingNetworkID) != nil || record.AdapterKey == "" {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach input generation identity is invalid")
 	}
-	if _, err := core.ResolveBackingAuthentication(false, record.Authentication); err != nil {
+	if _, err := core.ResolveBackingAuthentication(record.AdapterKey == "valkey", record.Authentication); err != nil {
 		return err
 	}
 	if record.Provision != nil {
