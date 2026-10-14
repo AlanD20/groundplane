@@ -310,7 +310,7 @@ func (resolver *TaskPlanResolver) buildRouteMutationInput(
 		revisionID,
 		artifactID,
 		candidate,
-		nil,
+		routeProviderCompose(pin),
 	)
 	if err != nil {
 		return taskplan.BuildInput{}, err

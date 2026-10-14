@@ -190,6 +190,27 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	if err != nil {
 		return nil, err
 	}
+	// A transformed execution project owns only the rows it actually renders.
+	serviceNames, err := composeidentity.OwnedServiceNames(project)
+	if err != nil {
+		return nil, err
+	}
+	selectedNames := make(map[string]bool, len(serviceNames))
+	for _, name := range serviceNames {
+		selectedNames[name] = true
+	}
+	selected := composeidentity.Snapshot{Networks: identities.Networks}
+	for _, identity := range identities.Services {
+		if selectedNames[identity.Name] {
+			selected.Services = append(selected.Services, identity)
+		}
+	}
+	for _, identity := range identities.Volumes {
+		if _, found := project.Volumes[identity.Name]; found {
+			selected.Volumes = append(selected.Volumes, identity)
+		}
+	}
+	identities = selected
 	return composerender.RenderCompose(composerender.ComposeRenderInput{
 		Project: project, ArtifactID: artifactID,
 		ProjectOwnerKind: pinnedProjectOwner(identity.TenantID),
