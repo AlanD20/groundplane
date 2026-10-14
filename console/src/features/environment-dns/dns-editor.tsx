@@ -7,6 +7,7 @@ import {
 } from "@/components/common/resource-form";
 import { FormSection } from "@/components/ui/form-section";
 import { Input } from "@/components/ui/input";
+import { AutocompleteInput } from "@/components/ui/autocomplete-input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -155,15 +156,18 @@ export function DNSEditor({
               <>
                 <div className="space-y-1.5">
                   <Label htmlFor="dns-service">Service name</Label>
-                  <Input
+                  <AutocompleteInput
                     id="dns-service"
                     value={service}
-                    onChange={(e) => setService(e.target.value)}
+                    onValueChange={setService}
+                    options={env.services.map((item) => item.name).sort()}
+                    disabled={saving}
                     placeholder="app"
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    The record can wait for a Service with this name.
+                    Choose an existing Service or enter a name. The record can
+                    wait for a Service with this name.
                   </p>
                 </div>
                 <div className="space-y-1.5">
