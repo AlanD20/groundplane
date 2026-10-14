@@ -64,6 +64,31 @@ func (repository *EnvironmentBlueprintRepository) prepareBlueprintAttachConnecti
 		return fail(err)
 	}
 	conditions = append(conditions, credentialConditions...)
+	// Controller-settled connections publish the same reverse references as
+	// provisioned Attaches, so removal cannot retire their credential or grants.
+	if !record.OwnsCredential() {
+		key := attachrecord.AttachCredentialByKey(record.CredentialAttachID, record.ID)
+		conditions = append(conditions, etcdstore.Condition{Key: key})
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: key, Value: []byte(record.ID),
+		})
+	}
+	for _, grantID := range record.GrantAttachIDs {
+		key := attachrecord.AttachGrantedByKey(grantID, record.ID)
+		conditions = append(conditions, etcdstore.Condition{Key: key})
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: key, Value: []byte(record.ID),
+		})
+	}
+	if len(record.GrantAttachIDs) != 0 {
+		value, err := attachrecord.EncodeAttachDependentGrantIndex(record.ID, record.GrantAttachIDs)
+		if err != nil {
+			return fail(err)
+		}
+		key := attachrecord.AttachDependentGrantKey(record.ID)
+		conditions = append(conditions, etcdstore.Condition{Key: key})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
+	}
 	if generation.Provision != nil {
 		conditions = append(conditions, generation.Provision.Conditions()...)
 	}
