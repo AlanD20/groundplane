@@ -33,6 +33,44 @@ func (observation *RestorationObservation) Artifact() *agentpb.ComposeArtifact {
 	return proto.CloneOf(observation.artifact)
 }
 
+// NewComponentRestorationObservation distinguishes a sealed failed candidate
+// from foreign runtime without counting it as predecessor restoration.
+func NewComponentRestorationObservation(plan *agentpb.ExecutionPlan, stepID string) (*RestorationObservation, error) {
+	owned, err := Validate(plan)
+	if err != nil {
+		return nil, err
+	}
+	procedure := owned.GetComponentRecoveryProcedure()
+	if procedure == nil || stepID == "" {
+		return nil, invalidRestorationObservation()
+	}
+	if _, _, found := ComponentRuntimeRecoveryPair(procedure, stepID); !found {
+		return nil, invalidRestorationObservation()
+	}
+	artifactID := procedure.GetCandidateArtifactId()
+	if prior := procedure.GetPredecessor(); prior != nil {
+		artifactID = prior.GetPriorArtifactId()
+	}
+	observation := &RestorationObservation{}
+	for _, artifact := range owned.GetArtifacts() {
+		if artifact.GetArtifactId() == artifactID {
+			observation.artifact = proto.CloneOf(artifact)
+		}
+		if procedure.GetPredecessor() != nil && artifact.GetArtifactId() == procedure.GetCandidateArtifactId() {
+			for _, service := range artifact.GetServices() {
+				if service.GetOwnerComponentId() == procedure.GetComponentId() &&
+					service.GetServiceId() == procedure.GetPredecessor().GetServiceId() {
+					observation.candidateWorkloads = append(observation.candidateWorkloads, proto.CloneOf(service))
+				}
+			}
+		}
+	}
+	if observation.artifact == nil {
+		return nil, invalidRestorationObservation()
+	}
+	return observation, nil
+}
+
 // NewRestorationObservation preserves historical labels and binds observation to
 // a declared serving recovery step of the original, fully validated plan.
 func NewRestorationObservation(

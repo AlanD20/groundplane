@@ -68,7 +68,11 @@ func (runtime *Runtime) componentRestoration(
 		}
 	}
 	if step.GetComponentRestorationProbe() != nil {
-		observed, err := runtime.observer.Observe(ctx, assignment.Plan, artifactID)
+		observation, err := executionplan.NewComponentRestorationObservation(assignment.Plan, step.GetStepId())
+		if err != nil {
+			return StepResult{ReconciliationRequired: true}, err
+		}
+		observed, err := runtime.observer.ObserveRestoration(ctx, observation)
 		result := StepResult{}
 		if err != nil {
 			result.ReconciliationRequired = true
