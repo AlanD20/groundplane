@@ -168,12 +168,11 @@ Controller encrypts stored fact values. Detach receives the saved provisioning
 facts. Lifecycle hooks cannot rotate consumer credentials by returning facts.
 GP removes its private temporary result files on success and failure.
 
-The accepted Blueprint behavior permits a new hook-based credential owner and
-dependent configuration in one Apply. The hook must finish and its exact facts
-must be captured before GP builds dependent files. This path is not available
-yet: create the owner through a standalone Attach, wait until it is ready,
-then reference its facts or reuse it from a Blueprint. Existing ready Attach
-facts remain usable.
+A Blueprint Apply can create a hook-based credential owner and its dependent
+configuration together. GP waits for the hook's validated facts before building
+dependent files and deploying Services. Independent Zones and Volumes can proceed
+while those Services wait. Existing ready Attach facts remain usable. See
+[Blueprint hooks and partial failure](blueprints.md#hooks-and-partial-failure).
 
 ### Attach identity and credential reuse
 
@@ -344,5 +343,6 @@ explains why credential ownership, network edges and hook results are separate.
 backing networks and authentication. [Resource deletion](../decisions/resource-deletion.md)
 records the deferred permanent-deletion boundary.
 
-Custom hooks are implemented but not freshly runtime-qualified. See
-[current limitations](../capabilities.md) and the [QA matrix](../qa-matrix.md).
+A new Custom hook owner and its fact-derived consumer configuration passed one
+same-Apply journey in [H117](../acceptance.md). Reuse, secret outputs and interrupted
+hooks remain unqualified; see the [QA matrix](../qa-matrix.md).

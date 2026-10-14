@@ -1723,6 +1723,44 @@ Tunnel diagnostics/public access and joint Service/Zone/Attach/Route omission
 remain unqualified. No provider configuration,
 compatibility path, history rewrite, new test or release tag was introduced.
 
+**H117 — Same-Apply Custom facts and fresh Tunnel diagnostics PASS on
+2026-10-14; joint omission remains unqualified.**
+
+Ubuntu 24.04 amd64 used Controller `0952bf48a` and Agent `48e14829e`, with
+storage epoch 35, channel 19 and plan schema 18. Full local CI passed before
+activation. GitHub publication remained blocked by missing credentials.
+
+A new Custom Attach declared a fact whose value is produced by its hook. The
+original Apply failed before hook publication: the fact reader unconditionally
+required complete values even for its pending-hook state. The scoped correction
+retained complete-value validation for ready Attaches and rejection of partial
+pending results. Existing Attach checks passed. A read-only probe prepared a
+validated child from the original captured inputs without executing a hook or
+writing Task state.
+
+A new full Apply completed its hook, dependent Entry and Service deployment.
+Independent execution in the actual consumer confirmed the exact expected
+Attach-ID-derived value and the expected HTTP page. The original failed Apply
+remains retained. This qualifies one new hook/fact journey, not interrupted
+hooks, secret-output variants or Custom credential reuse.
+
+A fresh Tunnel diagnostic completed all five stages: connector connection,
+private origin HTTP, public DNS, TLS and public HTTP. Its result was current with
+no pending cleanup; independent Docker inspection found its exact helper absent.
+Workstation HTTPS requests to both configured public hostnames returned 200 with
+the expected content. Provider DNS and ingress were unchanged. This is bounded
+access evidence, not external monitoring or a sustained-traffic result.
+
+The earlier check had passed its probes but could not acknowledge completion.
+After a Controller-only repair loaded the correction, that original Task became
+timed out because its deadline had expired; its history was not rewritten. The
+normal Agent update then completed. An initial all-container repair comparison
+failed while short-lived inspection containers were being created; a later
+comparison found the original
+application and etcd tuples unchanged. Repair is not normal-upgrade qualification.
+Route admission still rejected before publication and requires a further scoped
+binding correction. Joint Service/Zone/Attach/Route omission is not a pass here.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
