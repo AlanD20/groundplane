@@ -740,10 +740,10 @@ func (store *appBackupSecretTaskStore) ListAgentAssignments(
 }
 
 func (*appBackupSecretTaskStore) ReconnectAgentAssignment(
-	context.Context,
-	etcd.TaskAssignment,
+	_ context.Context,
+	assignment etcd.TaskAssignment,
 ) (etcd.TaskAssignment, error) {
-	return etcd.TaskAssignment{}, errs.New(errs.KindInternal, "unexpected assignment reconnect")
+	return assignment, nil
 }
 
 func (*appBackupSecretTaskStore) ClaimNextTask(
