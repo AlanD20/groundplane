@@ -60,6 +60,18 @@ func (service *EntryGenerationService) WithFactResolver(
 	return &configured
 }
 
+// ResolveSecretID uses the same scoped lookup as Entry generation without
+// loading or decrypting the Secret's value.
+func (service *EntryGenerationService) ResolveSecretID(
+	ctx context.Context, projectID string, reference string,
+) (string, error) {
+	current, err := service.secrets.ResolveSecret(ctx, projectID, reference)
+	if err != nil {
+		return "", err
+	}
+	return current.Record.Secret.ID, nil
+}
+
 // Generate resolves one live desired source and freezes its exact bytes into
 // an immutable generation for an atomic Entry mutation.
 func (service *EntryGenerationService) Generate(

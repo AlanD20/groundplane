@@ -28,6 +28,7 @@ type authoredUnitPlanner struct {
 	serviceProxies map[string]serviceproxy.Implementation
 	attachInputs   map[string]attachinputs.Generation
 	appliedAttach  map[string]blueprintunits.AppliedRecord
+	secretIDs      map[string]string
 }
 
 func newAuthoredUnitPlanner(

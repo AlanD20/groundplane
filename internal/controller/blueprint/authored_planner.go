@@ -89,6 +89,10 @@ func (service *Service) Plan(
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
+	planner.secretIDs, err = service.resolveAuthoredSecretIDs(ctx, input)
+	if err != nil {
+		return blueprintunits.DesiredPlan{}, err
+	}
 	units, complete, err := planner.plan()
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
