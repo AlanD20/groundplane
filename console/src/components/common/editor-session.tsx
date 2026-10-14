@@ -17,10 +17,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
+export type EditorDiscardReason = "navigation" | "editor";
+
 type Session = {
   id: string;
   element: HTMLElement;
-  discard: () => void;
+  discard: (reason: EditorDiscardReason) => void;
   dirty: () => boolean;
 };
 const Sessions = createContext<{
@@ -29,7 +31,9 @@ const Sessions = createContext<{
   leave: (id: string) => void;
   finish: () => void;
 } | null>(null);
-export const EditorDiscard = createContext<(() => void) | undefined>(undefined);
+export const EditorDiscard = createContext<
+  ((reason: EditorDiscardReason) => void) | undefined
+>(undefined);
 export const useEditorSession = () => useContext(Sessions);
 
 /** One editable draft owns the viewport action bar at a time. */
@@ -44,7 +48,7 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
       const draft = current.current;
       current.current = null;
       setActive(null);
-      draft?.discard();
+      draft?.discard("navigation");
     },
   );
   const enter = useCallback((session: Session) => {
@@ -59,7 +63,7 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
         setConfirm(true);
         return;
       }
-      current.current.discard();
+      current.current.discard("editor");
     }
     current.current = session;
     setActive(session.id);
@@ -78,7 +82,7 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
     const pending = next.current;
     next.current = null;
     setConfirm(false);
-    pending?.discard();
+    pending?.discard("editor");
     current.current?.element.querySelector<HTMLElement>("button")?.focus();
   };
   return (
@@ -127,7 +131,7 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
                 current.current = pending;
                 setActive(pending.id);
                 setConfirm(false);
-                previous?.discard();
+                previous?.discard("editor");
               }}
             >
               Discard and switch

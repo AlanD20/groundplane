@@ -37,9 +37,11 @@ export function EnvironmentServiceForm({
           env={env}
           workspace={params.tenant}
           onClose={close}
-          onDiscard={() => {
+          onDiscard={(reason) => {
             setDirty(false);
-            close();
+            // The blocked navigation owns the next URL; closing via search
+            // here would replace it with the current Services destination.
+            if (reason !== "navigation") onOpenChange(false);
           }}
           onDirtyChange={setDirty}
           onSaved={() => {

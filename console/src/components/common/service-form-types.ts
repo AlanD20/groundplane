@@ -1,3 +1,4 @@
+import type { EditorDiscardReason } from "./editor-session";
 import type { BackingHooks } from "@/features/backing-service/api";
 import type { Environment, Service } from "@/lib/types";
 
@@ -40,7 +41,7 @@ export type ServiceFormBodyProps = {
       backing?: never;
       onCreateBacking?: never;
       onClose: () => void;
-      onDiscard?: () => void;
+      onDiscard?: (reason: EditorDiscardReason) => void;
     }
   | {
       env?: never;
@@ -54,6 +55,6 @@ export type ServiceFormBodyProps = {
         prefix: string,
       ) => void;
       onClose: () => void;
-      onDiscard?: () => void;
+      onDiscard?: (reason: EditorDiscardReason) => void;
     }
 );

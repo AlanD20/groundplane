@@ -1,6 +1,7 @@
 import { editorDraftValue } from "@/lib/editor-draft-value";
 import {
   EditorSessionProvider,
+  type EditorDiscardReason,
   EditorDiscard,
   useEditorSession,
 } from "./editor-session";
@@ -69,7 +70,7 @@ export function FormActions({
 }: React.ComponentProps<"div"> & {
   pinned?: boolean;
   status?: string;
-  onDiscard?: () => void;
+  onDiscard?: (reason: EditorDiscardReason) => void;
   dirty?: boolean;
 }) {
   const dock = useContext(Dock);
@@ -149,7 +150,7 @@ export function FormActions({
     enter({
       id,
       element: ref.current,
-      discard: () => latestDiscard.current?.(),
+      discard: (reason) => latestDiscard.current?.(reason),
       dirty: () => latestDirty.current ?? (touched && snapshot() !== initial),
     });
     return () => {
