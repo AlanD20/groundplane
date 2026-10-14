@@ -33,7 +33,7 @@ func TestBlueprintCompletedHooksReleaseSourceFenceBeforeNextPublication(t *testi
 	scripts, _ := newScriptRepository(published.store)
 	task := published.task
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 19990)
-	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("claim = %t, %v", found, err)
 	}

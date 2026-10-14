@@ -19,6 +19,7 @@ export type HostInfo = {
     dbSize: string;
     version?: string;
     software?: HostResponse["etcd"]["software"];
+    maintenance?: HostResponse["etcd"]["maintenance"];
   };
   controller: {
     service: string;
@@ -64,6 +65,7 @@ export function hostFromAPI(host: HostResponse): HostInfo {
       dbSize: host.etcd.db_size,
       version: host.etcd.version,
       software: host.etcd.software,
+      maintenance: host.etcd.maintenance,
     },
     controller: {
       service: host.controller.service,

@@ -139,7 +139,7 @@ func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
 		}
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found || claim.Task.Record.ID != task.ID {
 		t.Fatalf("Entry projection claim = %t, %v", found, err)
 	}

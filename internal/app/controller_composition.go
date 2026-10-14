@@ -522,8 +522,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Config: cfg, Key: authority.controllerKey, Store: store, Agents: authority.agents, Tasks: authority.tasks,
 		Intents: authority.intentCoordinator, Idempotency: authority.idempotency, Channel: agentRuntime,
 		EtcdEndpoints: bootstrap.etcdEndpoints, Tick: bootstrap.tick, Logger: bootstrap.logger,
-		EtcdLifecycle: bootstrap.etcdLifecycle,
-		Protector:     authority.intentProtector,
+		EtcdLifecycle:      bootstrap.etcdLifecycle,
+		StorageMaintenance: bootstrap.storageMaintenance,
+		Protector:          authority.intentProtector,
 	})
 	if err != nil {
 		_ = store.Close()

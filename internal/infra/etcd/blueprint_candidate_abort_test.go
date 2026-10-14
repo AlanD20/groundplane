@@ -71,7 +71,7 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 			}
 			claim := func() (bool, error) {
 				_, claimed, claimErr := tasks.ClaimNextTask(
-					context.Background(), agentID, 1, published.task.CreatedAt.Add(time.Second),
+					context.Background(), agentID, 1, published.task.CreatedAt.Add(time.Second), 32,
 				)
 				return claimed, claimErr
 			}
@@ -107,7 +107,7 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 				if claim {
 					_, _, claimErr := tasks.ClaimNextTask(
 						context.Background(), ids.NewAt(ids.KindAgent, published.task.CreatedAt, 220), 1,
-						published.task.CreatedAt.Add(time.Second),
+						published.task.CreatedAt.Add(time.Second), 32,
 					)
 					if !isKind(claimErr, errs.KindInternal) {
 						t.Fatalf("ClaimNextTask(tampered root) error = %v", claimErr)

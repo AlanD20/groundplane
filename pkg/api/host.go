@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/storagemaintenance"
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"time"
 )
@@ -18,11 +19,12 @@ type HostResource struct {
 }
 
 type HostEtcd struct {
-	Software *version.ContainerIdentity `json:"software,omitempty"`
-	Version  *string                    `json:"version,omitempty"`
-	Node     string                     `json:"node"`
-	Status   HealthState                `json:"status"`
-	DBSize   string                     `json:"db_size"`
+	Maintenance *storagemaintenance.Status `json:"maintenance,omitempty"`
+	Software    *version.ContainerIdentity `json:"software,omitempty"`
+	Version     *string                    `json:"version,omitempty"`
+	Node        string                     `json:"node"`
+	Status      HealthState                `json:"status"`
+	DBSize      string                     `json:"db_size"`
 }
 
 type HostController struct {

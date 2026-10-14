@@ -504,7 +504,7 @@ func consumePublishedHierarchyDeletionComponent(
 	at time.Time,
 ) testhierarchydeletion.HierarchyDeletionOperation {
 	t.Helper()
-	claim, found, err := tasks.ClaimNextTask(ctx, agentID, generation, at)
+	claim, found, err := tasks.ClaimNextTask(ctx, agentID, generation, at, 32)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask(%d) = %#v/%t/%v", action.Ordinal, claim, found, err)
 	}

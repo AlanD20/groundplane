@@ -175,6 +175,12 @@ func (repository *TaskRepository) RetryInterruptedDetach(
 	parentID string,
 	marker idempotency.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
+	bounded, release, err := repository.lockAgentDispatch(ctx)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer release()
+	ctx = bounded
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
 	}
@@ -190,6 +196,9 @@ func (repository *TaskRepository) RetryInterruptedDetach(
 	}
 	defer clear(source.checkpoint.Value)
 	current := source.current
+	if err := repository.ensureRecoveryDispatchCapacity(ctx, current); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	assignment := current.Assignment.Record
 	if assignment.ExecutionEpoch == math.MaxUint32 {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Detach execution epoch is exhausted")
@@ -268,6 +277,14 @@ func (repository *TaskRepository) RetryInterruptedDetach(
 		{Key: historyKey},
 	}
 	conditions = append(conditions, claim.Conditions()...)
+	_, retryRevision, err := repository.readRecoveryRetryControl(ctx, assignment.TaskID, current.Task.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	conditions = append(
+		conditions,
+		keyvalue.Condition{Key: taskassignments.RecoveryRetryControlKey(assignment.TaskID), ModRevision: retryRevision},
+	)
 	taskBytes, err := EncodeTaskRecord(current.Task.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -286,6 +303,13 @@ func (repository *TaskRepository) RetryInterruptedDetach(
 		{Type: keyvalue.MutationPut, Key: historyKey, Value: permitBytes},
 	}
 	mutations = append(mutations, claim.Mutations()...)
+	mutations = append(
+		mutations,
+		keyvalue.Mutation{
+			Type: keyvalue.MutationDelete,
+			Key:  taskassignments.RecoveryRetryControlKey(assignment.TaskID),
+		},
+	)
 	plan, err := NewIdempotencyMutationPlan(conditions, mutations, func(int64, []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "Custom Detach Retry raced its captured execution; refresh the Task")
 	})

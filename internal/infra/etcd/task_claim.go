@@ -22,8 +22,20 @@ func (repository *TaskRepository) ClaimNextTask(
 	agentID string,
 	agentGeneration uint64,
 	assignedAt time.Time,
+	maximum int32,
 ) (TaskAssignment, bool, error) {
-	return repository.claimNextTask(ctx, taskjournal.TaskExecutorAgent, agentID, agentGeneration, assignedAt)
+	claimCtx, release, err := repository.lockAgentDispatch(ctx)
+	if err != nil {
+		return TaskAssignment{}, false, err
+	}
+	defer release()
+	if err := repository.ensureAgentDispatchCapacity(claimCtx, agentID, agentGeneration, maximum); err != nil {
+		if kind, ok := errs.KindOf(err); ok && kind == errs.KindResourceInUse {
+			return TaskAssignment{}, false, nil
+		}
+		return TaskAssignment{}, false, err
+	}
+	return repository.claimNextTask(claimCtx, taskjournal.TaskExecutorAgent, agentID, agentGeneration, assignedAt)
 }
 
 // ClaimNextControllerTask claims the oldest native Controller Task without

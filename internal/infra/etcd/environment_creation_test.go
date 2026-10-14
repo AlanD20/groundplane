@@ -145,7 +145,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	}
 	agentID := ids.NewAt(ids.KindAgent, now, 708)
 	assignedAt := now.Add(time.Second)
-	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 1, assignedAt); err != nil || !found {
+	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 1, assignedAt, 32); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
 	resultRecord := testtaskjournal.TaskResultRecord{

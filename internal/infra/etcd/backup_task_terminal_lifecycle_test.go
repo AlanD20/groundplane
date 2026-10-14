@@ -67,7 +67,7 @@ func TestBackupTaskTerminalTransactionFailureLeavesRunningAuthorityIntact(t *tes
 		_, store, tasks, dispatch, pointID := publishBackupPruneLifecycleTask(t)
 		agentID := ids.NewAt(ids.KindAgent, dispatch.CreatedAt, 4101)
 		claim, found, err := tasks.ClaimNextTask(
-			context.Background(), agentID, 1, dispatch.CreatedAt.Add(time.Second),
+			context.Background(), agentID, 1, dispatch.CreatedAt.Add(time.Second), 32,
 		)
 		if err != nil || !found || claim.Task.Record.ID != dispatch.TaskID {
 			t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
@@ -152,13 +152,13 @@ func TestTaskRepositoryMixedTimeoutCollectorsContinueAfterPrune(t *testing.T) {
 			createLifecycleTask(t, tasks, ordinary)
 			agentID := ids.NewAt(ids.KindAgent, dispatch.CreatedAt, 4102)
 			pruneClaim, found, err := tasks.ClaimNextTask(
-				context.Background(), agentID, 1, dispatch.CreatedAt.Add(2*time.Second),
+				context.Background(), agentID, 1, dispatch.CreatedAt.Add(2*time.Second), 32,
 			)
 			if err != nil || !found || pruneClaim.Task.Record.ID != dispatch.TaskID {
 				t.Fatalf("ClaimNextTask(prune) = %#v/%v/%v", pruneClaim, found, err)
 			}
 			ordinaryClaim, found, err := tasks.ClaimNextTask(
-				context.Background(), agentID, 1, dispatch.CreatedAt.Add(3*time.Second),
+				context.Background(), agentID, 1, dispatch.CreatedAt.Add(3*time.Second), 32,
 			)
 			if err != nil || !found || ordinaryClaim.Task.Record.ID != ordinary.ID {
 				t.Fatalf("ClaimNextTask(ordinary) = %#v/%v/%v", ordinaryClaim, found, err)
@@ -214,7 +214,7 @@ func TestTaskRepositoryMixedTimeoutCollectorsContinueAfterBackup(t *testing.T) {
 			agentID := backupClaim.Assignment.Record.AgentID
 			generation := backupClaim.Assignment.Record.AgentGeneration
 			ordinaryClaim, found, err := tasks.ClaimNextTask(
-				context.Background(), agentID, generation, run.CreatedAt.Add(3*time.Second),
+				context.Background(), agentID, generation, run.CreatedAt.Add(3*time.Second), 32,
 			)
 			if err != nil || !found || ordinaryClaim.Task.Record.ID != ordinary.ID {
 				t.Fatalf("ClaimNextTask(ordinary) = %#v/%v/%v", ordinaryClaim, found, err)
@@ -284,7 +284,7 @@ func publishBackupTerminalLifecycleTask(
 	}
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 4100)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != run.TaskID {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)

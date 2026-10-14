@@ -27,8 +27,31 @@ export function TaskExecutionSummary({
     return () => clearInterval(timer);
   }, [task.id, task.startedAt, active]);
 
+  if (task.diagnosticsExpiredAt) {
+    return (
+      <section className="space-y-3" aria-label="Retained Task outcome">
+        <StatusBadge status={task.status} />
+        <p className="text-sm text-muted-foreground">
+          Execution events expired under the diagnostic retention policy on{" "}
+          {new Date(task.diagnosticsExpiredAt).toLocaleString()}. The final
+          outcome and recorded first failure remain available.
+        </p>
+        {task.failure && (
+          <TaskFailureDetails
+            label="Recorded failure"
+            failure={task.failure}
+            steps={task.steps ?? []}
+          />
+        )}
+        <TaskRecoveryDetails task={task} />
+      </section>
+    );
+  }
+
   const steps = task.steps ?? [];
-  const nativeEvent = events.filter((event) => event.controller_operation).at(-1);
+  const nativeEvent = events
+    .filter((event) => event.controller_operation)
+    .at(-1);
   const latestFailure = events
     .filter((event) => ["failed", "timed_out", "aborted"].includes(event.state))
     .at(-1);
@@ -65,11 +88,14 @@ export function TaskExecutionSummary({
   const lastSuccessStep = lastSuccess
     ? steps.find((step) => step.label === lastSuccess.step_id)
     : undefined;
-  const failedAction = failedStep?.action ?? failureEvent?.controller_operation?.name;
-  const runningAction = nativeEvent?.state === "running"
-    ? nativeEvent.controller_operation?.name
-    : runningStep?.action;
-  const lastSuccessAction = lastSuccessStep?.action ?? lastSuccess?.controller_operation?.name;
+  const failedAction =
+    failedStep?.action ?? failureEvent?.controller_operation?.name;
+  const runningAction =
+    nativeEvent?.state === "running"
+      ? nativeEvent.controller_operation?.name
+      : runningStep?.action;
+  const lastSuccessAction =
+    lastSuccessStep?.action ?? lastSuccess?.controller_operation?.name;
   const started = task.startedAt ? Date.parse(task.startedAt) : undefined;
   const finished = task.finishedAt ? Date.parse(task.finishedAt) : undefined;
   const elapsed =
@@ -90,18 +116,18 @@ export function TaskExecutionSummary({
       : task.status === "pending"
         ? task.preparation
           ? {
-            network_queued: "Waiting to prepare internal networks",
-            network_preparing: "Preparing internal networks",
-            network_reconciling: "Checking interrupted network preparation",
-            network_proof_required: "Network preparation needs proof",
-            network_failed: "Network preparation failed",
-            dns_waiting: "Waiting for CoreDNS",
-            dns_failed: "CoreDNS activation failed",
-            ready: "Ready for workload deployment",
-          }[task.preparation.state]
+              network_queued: "Waiting to prepare internal networks",
+              network_preparing: "Preparing internal networks",
+              network_reconciling: "Checking interrupted network preparation",
+              network_proof_required: "Network preparation needs proof",
+              network_failed: "Network preparation failed",
+              dns_waiting: "Waiting for CoreDNS",
+              dns_failed: "CoreDNS activation failed",
+              ready: "Ready for workload deployment",
+            }[task.preparation.state]
           : "Queued for execution"
         : task.status === "running"
-          ? runningAction ?? "Execution in progress"
+          ? (runningAction ?? "Execution in progress")
           : task.status === "completed"
             ? "Completed"
             : task.status === "aborted"
@@ -116,7 +142,10 @@ export function TaskExecutionSummary({
     : task.status === "completed"
       ? CircleCheck
       : CircleAlert;
-  const summary = !task.failure && !recovery ? task.preparation?.summary ?? task.resultSummary : undefined;
+  const summary =
+    !task.failure && !recovery
+      ? (task.preparation?.summary ?? task.resultSummary)
+      : undefined;
 
   return (
     <div className="space-y-3 rounded-xl border border-border bg-card p-4">
@@ -135,7 +164,11 @@ export function TaskExecutionSummary({
             </p>
           )}
           {task.preparation?.failure && (
-            <TaskFailureDetails failure={task.preparation.failure} steps={[]} label="Network preparation failure" />
+            <TaskFailureDetails
+              failure={task.preparation.failure}
+              steps={[]}
+              label="Network preparation failure"
+            />
           )}
           {!task.failure && !summary && failed && (
             <p className="text-xs text-muted-foreground">
@@ -184,7 +217,9 @@ export function TaskExecutionSummary({
             {completed} of {steps.length} stages completed
           </span>
         )}
-        {task.preparation && <span>{task.preparation.network_count} internal DNS networks</span>}
+        {task.preparation && (
+          <span>{task.preparation.network_count} internal DNS networks</span>
+        )}
         {active && !recovery && deadline !== undefined && (
           <time
             dateTime={new Date(deadline).toISOString()}
@@ -243,7 +278,15 @@ export function TaskExecutionSummary({
   );
 }
 
-function StageReference({ label, action, target }: { label: string; action: string; target?: string }) {
+function StageReference({
+  label,
+  action,
+  target,
+}: {
+  label: string;
+  action: string;
+  target?: string;
+}) {
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 text-xs">
       <span className="text-muted-foreground">{label}</span>

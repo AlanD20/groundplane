@@ -50,6 +50,8 @@ type Task struct {
 	Preparation            *TaskPreparation     `json:"preparation,omitempty"`
 	AttemptHistory         *TaskAttemptHistory  `json:"attempt_history,omitempty"`
 	InterruptedDetachRetry *TaskDetachRetry     `json:"interrupted_detach_retry,omitempty"`
+	RecoveryRetryAvailable bool                 `json:"recovery_retry_available"`
+	DiagnosticsExpiredAt   *time.Time           `json:"diagnostics_expired_at,omitempty"`
 	ResultSummary          string               `json:"result_summary,omitempty"`
 	Status                 TaskStatus           `json:"status"`
 	ReconciliationRequired bool                 `json:"reconciliation_required"`
@@ -138,13 +140,17 @@ type TaskFailure struct {
 // TaskRecovery is returned by Task details from retained recovery authority at
 // the Task's read revision. A completed step is not a verified recovery outcome.
 type TaskRecovery struct {
-	State          string       `json:"state" enum:"pending,running,awaiting_confirmation,proof_required,completed"`
-	Summary        string       `json:"summary"`
-	StepIDs        []string     `json:"step_ids,omitempty"`
-	CompletedSteps *int32       `json:"completed_steps,omitempty" minimum:"0"`
-	TotalSteps     *int32       `json:"total_steps,omitempty" minimum:"1"`
-	Deadline       *time.Time   `json:"deadline,omitempty"`
-	LastFailure    *TaskFailure `json:"last_failure,omitempty"`
+	State             string       `json:"state" enum:"pending,running,awaiting_confirmation,proof_required,retry_wait,automatic_retries_stopped,completed"`
+	Summary           string       `json:"summary"`
+	StepIDs           []string     `json:"step_ids,omitempty"`
+	CompletedSteps    *int32       `json:"completed_steps,omitempty" minimum:"0"`
+	TotalSteps        *int32       `json:"total_steps,omitempty" minimum:"1"`
+	Deadline          *time.Time   `json:"deadline,omitempty"`
+	LastFailure       *TaskFailure `json:"last_failure,omitempty"`
+	AutomaticFailures uint32       `json:"automatic_failures"`
+	RetryAfter        *time.Time   `json:"retry_after,omitempty"`
+	RetryAvailable    bool         `json:"retry_available"`
+	StopReason        string       `json:"stop_reason,omitempty" enum:"non_transient_failure,retry_budget_exhausted,recovery_deadline,unsafe_replay"`
 }
 
 type TaskImageFetch struct {

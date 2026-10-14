@@ -103,7 +103,7 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	}
 	agentID := ids.NewAt(ids.KindAgent, now, 716)
 	assignedAt := now.Add(time.Second)
-	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, assignedAt)
+	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, assignedAt, 32)
 	if err != nil || !found || claim.Task.Record.ID != source.ID {
 		t.Fatalf("ClaimNextTask(source) = %#v, %t, %v", claim, found, err)
 	}
@@ -187,7 +187,7 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	}
 
 	retryAssignedAt := retryAt.Add(time.Second)
-	retryClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, retryAssignedAt)
+	retryClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, retryAssignedAt, 32)
 	if err != nil || !found || retryClaim.Task.Record.ID != retryID {
 		t.Fatalf("ClaimNextTask(retry) = %#v, %t, %v", retryClaim, found, err)
 	}

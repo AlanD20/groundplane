@@ -45,6 +45,11 @@ func (s *store) transactWithFailureReads(
 	deferred bool,
 ) (etcdstore.TransactionResult, error) {
 	conditions = etcdstore.ImageSelectionConditions(ctx, conditions)
+	s.historyGate.RLock()
+	defer s.historyGate.RUnlock()
+	if err := s.validateHistoricalPublication(mutations); err != nil {
+		return etcdstore.TransactionResult{}, err
+	}
 
 	prepared, err := s.prepareTransaction(conditions, mutations)
 	if err != nil {

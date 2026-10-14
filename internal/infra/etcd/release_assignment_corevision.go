@@ -23,7 +23,7 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 	record := current.Assignment.Record
 	record.ExecutionEpoch++
 	if current.RecoveryProofRequired && !record.RecoveryExecutionDeadline.After(time.Now().UTC()) {
-		record.RecoveryExecutionDeadline = time.Now().UTC().Add(releaseRecoveryProofExecutionBudget)
+		return errs.New(errs.KindResourceInUse, "automatic recovery stopped; explicit operator retry is required")
 	}
 	encoded, err := taskassignments.EncodeTaskAssignment(record)
 	if err != nil {

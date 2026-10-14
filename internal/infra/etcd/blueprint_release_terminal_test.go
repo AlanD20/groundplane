@@ -351,7 +351,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 	}
 	pendingTask := cloneTaskRecord(task)
 	seedBlueprintRequirementTask(t, store.memoryTaskStore, task)
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second), 32)
 	if err != nil || !found || claim.Task.Record.ID != task.ID {
 		t.Fatalf("claim original Blueprint Task = %#v, %t, %v", claim, found, err)
 	}
@@ -464,7 +464,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 		t.Fatal(err)
 	}
 	seedBlueprintRequirementTask(t, driftStore.memoryTaskStore, pendingTask)
-	driftClaim, found, err := driftRepository.ClaimNextTask(ctx, agentID, 2, now.Add(time.Second))
+	driftClaim, found, err := driftRepository.ClaimNextTask(ctx, agentID, 2, now.Add(time.Second), 32)
 	if err != nil || !found || driftClaim.Task.Record.ID != pendingTask.ID {
 		t.Fatalf("claim drift original Blueprint Task = %#v, %t, %v", driftClaim, found, err)
 	}
@@ -492,7 +492,22 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 		t.Fatalf("prepare drift Blueprint failure = %v", err)
 	}
 	driftFailureChange.mutations = append(
-		driftFailureChange.mutations, testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: writerKey},
+		driftFailureChange.mutations,
+		testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: writerKey},
+		// This fixture applies only the candidate-specific acknowledgement.
+		// Model the outer terminal owner's release of all assignment copies.
+		testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationDelete,
+			Key:  testtaskjournal.TaskExecutionClaimKey(driftClaim.Assignment.Record.Executor, agentID, pendingTask.ID),
+		},
+		testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationDelete,
+			Key:  testtaskjournal.TaskAssignmentIndexKey(pendingTask.ID),
+		},
+		testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationDelete,
+			Key:  testtaskjournal.TaskTimeoutIndexKey(pendingTask.ID, driftClaim.Assignment.Record.Deadline),
+		},
 	)
 	driftFailureTransaction, err := driftStore.Transact(
 		ctx, driftFailureChange.conditions, driftFailureChange.mutations,
@@ -517,7 +532,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 		t.Fatalf("commit Blueprint retry drift fixture = %#v, %v", driftRetryTransaction, err)
 	}
 	seedBlueprintRequirementTask(t, driftStore.memoryTaskStore, retry)
-	driftRetryClaim, found, err := driftRepository.ClaimNextTask(ctx, agentID, 3, now.Add(4*time.Second))
+	driftRetryClaim, found, err := driftRepository.ClaimNextTask(ctx, agentID, 3, now.Add(4*time.Second), 32)
 	if err != nil || !found || driftRetryClaim.Task.Record.ID != retry.ID {
 		t.Fatalf("claim drift Blueprint retry = %#v, %t, %v", driftRetryClaim, found, err)
 	}
@@ -589,7 +604,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 		t.Fatalf("sealed Release intent changed during retry = %#v, %v", retainedEvidence, err)
 	}
 	seedBlueprintRequirementTask(t, store.memoryTaskStore, retry)
-	retryClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(4*time.Second))
+	retryClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(4*time.Second), 32)
 	if err != nil || !found || retryClaim.Task.Record.ID != retry.ID {
 		t.Fatalf("claim exact Blueprint retry = %#v, %t, %v", retryClaim, found, err)
 	}

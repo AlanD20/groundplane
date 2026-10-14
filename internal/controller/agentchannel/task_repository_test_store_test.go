@@ -40,8 +40,9 @@ func (store *blockingClaimTaskStore) ClaimNextTask(
 	agentID string,
 	generation uint64,
 	at time.Time,
+	maximum int32,
 ) (etcd.TaskAssignment, bool, error) {
-	assignment, found, err := store.repository.ClaimNextTask(ctx, agentID, generation, at)
+	assignment, found, err := store.repository.ClaimNextTask(ctx, agentID, generation, at, maximum)
 	if err != nil || !found {
 		return assignment, found, err
 	}

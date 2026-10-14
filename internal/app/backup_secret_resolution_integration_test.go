@@ -751,6 +751,7 @@ func (*appBackupSecretTaskStore) ClaimNextTask(
 	string,
 	uint64,
 	time.Time,
+	int32,
 ) (etcd.TaskAssignment, bool, error) {
 	return etcd.TaskAssignment{}, false, nil
 }

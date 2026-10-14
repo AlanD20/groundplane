@@ -63,6 +63,9 @@ func (s *Server) dispatchReady(
 		if err != nil {
 			return err
 		}
+		if assignment.DispatchHeld {
+			continue
+		}
 		if controllerCompletedAssignment(assignment) {
 			claimCapacity++
 			continue
@@ -105,6 +108,7 @@ func (s *Server) dispatchReady(
 			agentID,
 			authorization.Generation,
 			s.now().UTC(),
+			authorization.Config.MaxConcurrentTasks,
 		)
 		if err != nil {
 			return err

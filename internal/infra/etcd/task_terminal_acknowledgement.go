@@ -109,11 +109,8 @@ func (repository *TaskRepository) acknowledgeTask(
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if !recoveryAcknowledgement.final {
-				return etcdstore.Versioned[TaskRecord]{
-					Record:       task,
-					Revision:     taskValue.ModRevision,
-					ReadRevision: primaryAndAssignment.ReadRevision,
-				}, nil
+				return repository.acknowledgeUnsettledRecovery(ctx, task, taskValue, assignmentValue,
+					assignment, terminalStatus, *result, primaryAndAssignment.ReadRevision, terminalAt)
 			}
 			terminalStatus = recoveryAcknowledgement.status
 			resolved := recoveryAcknowledgement.result

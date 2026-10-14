@@ -68,6 +68,25 @@ func hostFields(host apiTypes.Host) map[string]any {
 	if host.Etcd.Version != nil {
 		fields["etcd_version"] = *host.Etcd.Version
 	}
+	if maintenance := host.Etcd.Maintenance; maintenance != nil {
+		fields["etcd_maintenance_state"] = maintenance.State
+		fields["etcd_quota_headroom_bytes"] = maintenance.HeadroomBytes
+		fields["etcd_backend_in_use_bytes"] = maintenance.InUseBytes
+		fields["etcd_reusable_bytes"] = maintenance.ReusableBytes
+		fields["etcd_reclaimed_bytes"] = maintenance.ReclaimedBytes
+		fields["etcd_compacted_through"] = maintenance.CompactedThrough
+		fields["etcd_maintenance_failure"] = maintenance.FailureCode
+		if maintenance.Cleanup != nil {
+			fields["etcd_cleanup_state"] = maintenance.Cleanup.State
+			fields["etcd_cleanup_failure"] = maintenance.Cleanup.FailureCode
+			fields["etcd_cleanup_tasks"] = maintenance.Cleanup.Tasks
+			fields["etcd_cleanup_diagnostics"] = maintenance.Cleanup.Diagnostics
+		}
+		if maintenance.Blocker != nil {
+			fields["etcd_compaction_blocker"] = maintenance.Blocker.OwnerID
+			fields["etcd_compaction_protected_revision"] = maintenance.Blocker.Revision
+		}
+	}
 	if software := host.Etcd.Software; software != nil {
 		fields["etcd_image"] = software.Image
 		fields["etcd_image_config_digest"] = software.ConfigDigest

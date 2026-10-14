@@ -9,7 +9,8 @@ import (
 )
 
 // PruneExpiredTasks removes at most one complete expired Task journal. A
-// previously checkpointed intent is always resumed before another Task starts.
+// Checkpointed intents rotate fairly before another candidate is selected;
+// each keeps its independent Task and source ownership while interrupted.
 func (repository *TaskRepository) PruneExpiredTasks(
 	ctx context.Context,
 	now time.Time,
@@ -54,21 +55,22 @@ func (repository *TaskRepository) PruneExpiredTasks(
 func (repository *TaskRepository) nextTaskPruneIntent(
 	ctx context.Context,
 ) (etcdstore.Versioned[taskjournal.PruneIntent], bool, error) {
-	page, err := repository.store.Range(
-		ctx,
-		etcdstore.RangeRequest{Prefix: taskjournal.TaskPruneIntentPrefix, Limit: 1},
-	)
+	scan, err := repository.readTaskCleanupPage(ctx, taskPruneResumeScanKey, taskjournal.TaskPruneIntentPrefix, 1)
 	if err != nil {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}
-	if page == nil || page.ReadRevision <= 0 || len(page.Values) > 1 {
-		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
-	}
+	page := scan.page
 	if len(page.Values) == 0 {
+		if err := repository.advanceTaskCleanupPage(ctx, scan, ""); err != nil {
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
+		}
 		return etcdstore.Versioned[taskjournal.PruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	entry := page.Values[0]
 	defer clear(entry.Value)
+	if err := repository.advanceTaskCleanupPage(ctx, scan, entry.Key); err != nil {
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
+	}
 	intent, err := taskjournal.DecodePruneIntent(entry.Value)
 	if err != nil || entry.Key != taskjournal.TaskPruneIntentKey(intent.TaskID) || entry.ModRevision <= 0 {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()

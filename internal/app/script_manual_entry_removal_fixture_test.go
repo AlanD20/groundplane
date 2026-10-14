@@ -86,7 +86,13 @@ func (fixture *ExecutedArtifactFixture) CheckManualJourneyEntryRemoval(t *testin
 		t.Fatalf("unblocked Entry removal = %v / %v", err, integrationTransactionConflict(result))
 	}
 	fixture.head = fixture.store.revision
-	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, task.CreatedAt.Add(time.Second))
+	claim, found, err := fixture.Tasks.ClaimNextTask(
+		ctx,
+		ids.New(ids.KindAgent),
+		1,
+		task.CreatedAt.Add(time.Second),
+		32,
+	)
 	if err != nil || !found || claim.Task.Record.ID != task.ID {
 		t.Fatalf("Entry removal claim = %t, %v", found, err)
 	}

@@ -189,7 +189,9 @@ export function TaskDetailDrawer({
               <RefreshCw className="size-4" />{" "}
               {detail?.interruptedDetachRetry
                 ? "Retry captured Detach hook"
-                : "Retry"}
+                : detail?.recoveryRetryAvailable
+                  ? "Retry recovery"
+                  : "Retry"}
             </Button>
           )}
           <Button

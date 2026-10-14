@@ -143,12 +143,11 @@ func TestInterruptedApplyRestoresBeforeOpeningEtcd(t *testing.T) {
 	}
 	options := createOptions(
 		config.EtcdConfig{
-			QuotaBackendBytes:       2 << 30,
-			SnapshotCount:           10000,
-			HeartbeatInterval:       100,
-			ElectionTimeout:         1000,
-			AutoCompactionRetention: "0",
-			LogLevel:                "debug",
+			QuotaBackendBytes: 2 << 30,
+			SnapshotCount:     10000,
+			HeartbeatInterval: 100,
+			ElectionTimeout:   1000,
+			LogLevel:          "debug",
 		},
 	)
 	engine.current = container.InspectResponse{

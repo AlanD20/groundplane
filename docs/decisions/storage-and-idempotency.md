@@ -82,6 +82,31 @@ Implementation may follow approved resource-specific decisions without
 silently accepting these general recommendations. Current storage mechanics
 and capability owners live under [etcd infrastructure](../../internal/infra/etcd).
 
+## Bounded diagnostics and history maintenance
+
+Task outcomes, execution/recovery authority and disposable diagnostics have
+different lifetimes. Diagnostic expiry is a sidecar at the original terminal
+Task revision; it never rewrites the bytes hashed by terminal delivery. Attempt
+history uses a small cursor and individually compressed summaries, with bounded
+decode sizes. This reduces write amplification without treating compression as
+a substitute for retention or history compaction.
+
+GP is the sole compaction owner. It excludes captured-input publications while
+reading the protected floor, durably reserves the eligible cutoff, then calls
+etcd compaction. New old-view captures compare against that reservation; a lost
+response is not permission to introduce a capture behind it. Building config
+captures, unfinished hierarchy planning and pending proxy-replacement preparation
+own old views. Sealed config/runtime sources instead read immutable retained
+bytes at a fresh snapshot and verify their original identities and hashes.
+
+Cleanup cursors and per-Task prune intents isolate held or malformed records;
+they never authorize deleting those records. Defragmentation is a separate,
+threshold/window-controlled operation after eligible history collection.
+Current owners: [history protection](../../internal/infra/etcd/history_protection.go),
+[maintenance](../../internal/infra/etcd/storage_maintenance.go), and
+[Task cleanup](../../internal/infra/etcd/task_cleanup_scan.go).
+This implementation still requires its focused interruption and live data proof.
+
 ## Canonical mutation intent
 
 Every mutating human request is validated before idempotency evidence is

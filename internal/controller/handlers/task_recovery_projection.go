@@ -28,9 +28,13 @@ func applyTaskRecovery(
 	response.ReconciliationRequired = recovery.State != "completed"
 	response.Recovery = &apiTypes.TaskRecovery{
 		State: recovery.State, Summary: taskRecoverySummary(recovery),
-		StepIDs:     slices.Clone(recovery.StepIDs),
-		Deadline:    recovery.Deadline,
-		LastFailure: lastFailure,
+		StepIDs:           slices.Clone(recovery.StepIDs),
+		Deadline:          recovery.Deadline,
+		LastFailure:       lastFailure,
+		AutomaticFailures: recovery.AutomaticFailures,
+		RetryAfter:        recovery.RetryAfter,
+		RetryAvailable:    recovery.RetryAvailable,
+		StopReason:        recovery.StopReason,
 	}
 	if len(recovery.StepIDs) > 0 {
 		total := int32(len(recovery.StepIDs))
@@ -74,7 +78,14 @@ func taskRecoverySummary(recovery *etcd.TaskRecoverySnapshot) string {
 	case "awaiting_confirmation":
 		return "Recovery steps finished; the Controller has not yet accepted the final recovery evidence."
 	case "proof_required":
-		return "The recovery deadline passed without accepted completion evidence. GP may continue recovery, but affected resources remain protected until cleanup or restoration is verified."
+		return "The recovery deadline passed. Automatic execution is stopped; explicit Retry can authorize another bounded recovery attempt. Affected resources remain protected until restoration is verified."
+	case "automatic_retries_stopped":
+		if recovery.StopReason == "unsafe_replay" {
+			return "Automatic recovery stopped because repeating this action may be unsafe. Review its captured failure before explicitly selecting Retry; affected resources remain protected."
+		}
+		return "Automatic recovery retries stopped after a non-transient failure or an exhausted retry budget. Inspect the failure and use Retry explicitly; affected resources remain protected."
+	case "retry_wait":
+		return "Recovery is waiting before a bounded retry of its captured restoration steps. Forward actions are not rerun."
 	case "completed":
 		return "GP verified the captured recovery outcome. This does not undo database writes or arbitrary scripts; the original operation did not succeed."
 	default:

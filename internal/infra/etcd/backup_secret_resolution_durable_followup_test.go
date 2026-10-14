@@ -61,7 +61,7 @@ func newDurableBackupSecretCaptureFixture(
 	}
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 9300)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, time.Now().UTC(),
+		context.Background(), agentID, 1, time.Now().UTC(), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != run.TaskID {
 		t.Fatalf("claim Backup task = %#v/%v/%v", claim, found, err)
@@ -416,7 +416,7 @@ func NewBackupSecretPublishedPruneFixture(t *testing.T) BackupSecretResolutionFi
 	}
 	agentID := ids.NewAt(ids.KindAgent, dispatch.CreatedAt, 9510)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, time.Now().UTC(),
+		context.Background(), agentID, 1, time.Now().UTC(), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != dispatch.TaskID {
 		t.Fatalf("claim prune task = %#v/%v/%v", claim, found, err)

@@ -24,7 +24,7 @@ func TestAgentZoneRemovalCompletionAndReplay(t *testing.T) {
 			fixture, tasks := beginZoneRemoval(t, false, applied)
 			ctx := context.Background()
 			agentID := ids.NewAt(ids.KindAgent, fixture.task.CreatedAt, 99)
-			assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.task.CreatedAt.Add(time.Second))
+			assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.task.CreatedAt.Add(time.Second), 32)
 			if err != nil || !found {
 				t.Fatalf("ClaimNextTask() = %#v/%v/%v", assignment, found, err)
 			}

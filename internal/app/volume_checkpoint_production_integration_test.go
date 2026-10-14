@@ -41,7 +41,7 @@ func TestVolumeRemovalProductionCheckpointService(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentID := ids.New(ids.KindAgent)
-	claimed, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, time.Now().UTC())
+	claimed, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, time.Now().UTC(), 32)
 	if err != nil || !found || claimed.Task.Record.ID != accepted.TaskID {
 		t.Fatalf("claim real DELETE: %v", err)
 	}

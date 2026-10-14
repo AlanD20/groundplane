@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -13,22 +12,20 @@ import (
 // EtcdConfig contains tunable settings only. Node identity, loopback listeners,
 // data directory, image and GP's transaction capacity are bootstrap-owned.
 type EtcdConfig struct {
-	QuotaBackendBytes       int64  `yaml:"quota-backend-bytes"`
-	SnapshotCount           uint64 `yaml:"snapshot-count"`
-	HeartbeatInterval       uint64 `yaml:"heartbeat-interval"`
-	ElectionTimeout         uint64 `yaml:"election-timeout"`
-	AutoCompactionRetention string `yaml:"auto-compaction-retention"`
-	LogLevel                string `yaml:"log-level"`
+	QuotaBackendBytes int64  `yaml:"quota-backend-bytes"`
+	SnapshotCount     uint64 `yaml:"snapshot-count"`
+	HeartbeatInterval uint64 `yaml:"heartbeat-interval"`
+	ElectionTimeout   uint64 `yaml:"election-timeout"`
+	LogLevel          string `yaml:"log-level"`
 }
 
 func DefaultEtcdConfig() EtcdConfig {
 	return EtcdConfig{
-		QuotaBackendBytes:       2 << 30,
-		SnapshotCount:           10000,
-		HeartbeatInterval:       100,
-		ElectionTimeout:         1000,
-		AutoCompactionRetention: "0",
-		LogLevel:                "info",
+		QuotaBackendBytes: 2 << 30,
+		SnapshotCount:     10000,
+		HeartbeatInterval: 100,
+		ElectionTimeout:   1000,
+		LogLevel:          "info",
 	}
 }
 
@@ -53,14 +50,6 @@ func ParseEtcdDocument(ctx context.Context, document []byte) (EtcdConfig, error)
 		return EtcdConfig{}, fmt.Errorf(
 			"config: etcd heartbeat must be 10 through 1000 ms and election timeout at least five heartbeats, at most 50000 ms",
 		)
-	}
-	if cfg.AutoCompactionRetention != "0" {
-		duration, err := time.ParseDuration(cfg.AutoCompactionRetention)
-		if err != nil || duration < time.Minute || duration > 365*24*time.Hour {
-			return EtcdConfig{}, fmt.Errorf(
-				"config: etcd compaction retention must be 0 or a duration between 1m and 8760h",
-			)
-		}
 	}
 	switch cfg.LogLevel {
 	case "debug", "info", "warn", "error":
@@ -93,13 +82,6 @@ func (cfg EtcdConfig) Arguments() []string {
 	}
 	if cfg.ElectionTimeout != defaults.ElectionTimeout {
 		result = append(result, "--election-timeout="+strconv.FormatUint(cfg.ElectionTimeout, 10))
-	}
-	if cfg.AutoCompactionRetention != defaults.AutoCompactionRetention {
-		result = append(
-			result,
-			"--auto-compaction-mode=periodic",
-			"--auto-compaction-retention="+cfg.AutoCompactionRetention,
-		)
 	}
 	if cfg.LogLevel != defaults.LogLevel {
 		result = append(result, "--log-level="+cfg.LogLevel)

@@ -328,7 +328,7 @@ func TestEnvironmentDeletionRetryTransfersFenceWithoutUnlockedInterval(t *testin
 		ctx,
 		agentID,
 		1,
-		fixture.now.Add(time.Second),
+		fixture.now.Add(time.Second), 32,
 	); err != nil ||
 		!found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
@@ -557,7 +557,7 @@ func TestEnvironmentDeletionCompletionRejectsRetainedBackupState(t *testing.T) {
 			fixture.putRaw(t, test.key(fixture), []byte("retained"))
 			agentID := ids.NewAt(ids.KindAgent, fixture.now, 8080)
 			if _, found, err := fixture.tasks.ClaimNextTask(
-				context.Background(), agentID, 1, fixture.now.Add(time.Second),
+				context.Background(), agentID, 1, fixture.now.Add(time.Second), 32,
 			); err != nil || !found {
 				t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 			}
@@ -669,7 +669,7 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 			fixture.mustBegin(t)
 			agentID := ids.NewAt(ids.KindAgent, fixture.now, 8081)
 			if _, found, err := fixture.tasks.ClaimNextTask(
-				context.Background(), agentID, 1, fixture.now.Add(time.Second),
+				context.Background(), agentID, 1, fixture.now.Add(time.Second), 32,
 			); err != nil || !found {
 				t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 			}

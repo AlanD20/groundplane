@@ -141,7 +141,7 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 	if mode == "stale agent" {
 		generation = 2
 	}
-	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, generation, retryAt.Add(time.Second))
+	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, generation, retryAt.Add(time.Second), 32)
 	if err != nil || !found || claimed.Task.Record.ID != retryID {
 		t.Fatalf("claim successor: %v/%v", found, err)
 	}
@@ -174,7 +174,7 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 				t.Fatal("second successor did not publish", err, conflict)
 			}
 			fixture.AssertRemovalRecoveryBudget(t, "retry")
-			claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second))
+			claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second), 32)
 			if err != nil || !found || claimed.Task.Record.ID != retryID {
 				t.Fatalf("claim repeated successor: %v/%v", found, err)
 			}
@@ -444,7 +444,7 @@ func proveVolumeRemovalPendingEvidence(t *testing.T, phase, family, mode string)
 		if err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
 			t.Fatal("Retry did not publish", err, conflict)
 		}
-		claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, at.Add(2*time.Second))
+		claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, at.Add(2*time.Second), 32)
 		if err != nil || !found || claimed.Task.Record.ID != retryID {
 			t.Fatalf("claim: %v/%v", found, err)
 		}

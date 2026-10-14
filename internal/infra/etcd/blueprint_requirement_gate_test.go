@@ -56,7 +56,7 @@ func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledg
 			createTestAttach(t, ctx, attaches, scope, attach, &facts)
 			agentID := ids.NewAt(ids.KindAgent, attach.CreatedAt, 921)
 			claimedAttach, found, err := tasks.ClaimNextTask(
-				ctx, agentID, 1, attach.CreatedAt.Add(time.Second),
+				ctx, agentID, 1, attach.CreatedAt.Add(time.Second), 32,
 			)
 			if err != nil || !found || claimedAttach.Task.Record.ID != attach.TaskID {
 				t.Fatalf("claim Attach = %#v, %t, %v", claimedAttach, found, err)
@@ -110,7 +110,7 @@ func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledg
 			}
 
 			claimedBlueprint, found, claimErr := tasks.ClaimNextTask(
-				ctx, agentID, 2, blueprintTask.CreatedAt.Add(time.Second),
+				ctx, agentID, 2, blueprintTask.CreatedAt.Add(time.Second), 32,
 			)
 			if test.unrelatedEpoch {
 				if claimErr == nil || found || !isKind(claimErr, errs.KindStateConflict) {
@@ -180,7 +180,7 @@ func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *te
 			prerequisite := created
 			if terminalStatus == testtaskjournal.TaskStatusFailed {
 				claim, found, claimErr := tasks.ClaimNextTask(
-					ctx, agentID, 1, attach.CreatedAt.Add(time.Second),
+					ctx, agentID, 1, attach.CreatedAt.Add(time.Second), 32,
 				)
 				if claimErr != nil || !found || claim.Task.Record.ID != attach.TaskID {
 					t.Fatalf("claim Attach = %#v, %t, %v", claim, found, claimErr)
@@ -227,7 +227,7 @@ func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *te
 				t.Fatalf("non-success gate/epoch = %#v, %v", gateAndEpoch, err)
 			}
 			claimed, found, claimErr := tasks.ClaimNextTask(
-				ctx, agentID, 2, blueprintTask.CreatedAt.Add(time.Second),
+				ctx, agentID, 2, blueprintTask.CreatedAt.Add(time.Second), 32,
 			)
 			if claimErr == nil || found || !isKind(claimErr, errs.KindStateConflict) {
 				t.Fatalf("claim Blueprint after non-success = %#v, %t, %v", claimed, found, claimErr)
@@ -405,7 +405,7 @@ func TestBlueprintRequirementGateClaimSuccessAndUnmet(t *testing.T) {
 				context.Background(),
 				ids.NewAt(ids.KindAgent, fixture.task.CreatedAt, 80),
 				1,
-				fixture.task.CreatedAt.Add(time.Second),
+				fixture.task.CreatedAt.Add(time.Second), 32,
 			)
 			if err != nil || found != test.want {
 				t.Fatalf("ClaimNextTask() = %#v, %t, %v; want found %t", assignment, found, err, test.want)
@@ -423,7 +423,7 @@ func TestBlueprintRequirementGateClaimFailsClosedWhenMarkerHasNoGate(t *testing.
 		context.Background(),
 		ids.NewAt(ids.KindAgent, fixture.task.CreatedAt, 81),
 		1,
-		fixture.task.CreatedAt.Add(time.Second),
+		fixture.task.CreatedAt.Add(time.Second), 32,
 	)
 	if err == nil || found || !isKind(err, errs.KindInternal) {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v, want false/internal", found, err)
@@ -480,7 +480,7 @@ func TestBlueprintRequirementGateClaimRetriesAgainstTargetRace(t *testing.T) {
 		context.Background(),
 		ids.NewAt(ids.KindAgent, fixture.task.CreatedAt, 82),
 		1,
-		fixture.task.CreatedAt.Add(time.Second),
+		fixture.task.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || found || tracing.armed {
 		t.Fatalf("ClaimNextTask(race) found/error/armed = %t/%v/%t", found, err, tracing.armed)

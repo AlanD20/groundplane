@@ -303,7 +303,7 @@ func pruneTaskCheckpointMarker(t *testing.T, store *memoryTaskStore, pruneAt tim
 	repository := NewTestIdempotencyRetention(t, store)
 	if count, err := repository.PruneExpired(
 		context.Background(),
-		pruneAt,
+		pruneAt, 16,
 	); err != nil ||
 		count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)

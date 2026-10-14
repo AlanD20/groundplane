@@ -182,7 +182,7 @@ func runVolumeResourceAgentTask(
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	agentID := ids.New(ids.KindAgent)
-	claimed, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, time.Now().UTC())
+	claimed, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, time.Now().UTC(), 32)
 	if err != nil || !found || claimed.Task.Record.ID != taskID {
 		t.Fatalf("claim resource Task: %v found=%t", err, found)
 	}

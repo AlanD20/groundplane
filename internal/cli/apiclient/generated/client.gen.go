@@ -2043,16 +2043,20 @@ func (e TaskPreparationState) Valid() bool {
 
 // Defines values for TaskRecoveryState.
 const (
-	TaskRecoveryStateAwaitingConfirmation TaskRecoveryState = "awaiting_confirmation"
-	TaskRecoveryStateCompleted            TaskRecoveryState = "completed"
-	TaskRecoveryStatePending              TaskRecoveryState = "pending"
-	TaskRecoveryStateProofRequired        TaskRecoveryState = "proof_required"
-	TaskRecoveryStateRunning              TaskRecoveryState = "running"
+	TaskRecoveryStateAutomaticRetriesStopped TaskRecoveryState = "automatic_retries_stopped"
+	TaskRecoveryStateAwaitingConfirmation    TaskRecoveryState = "awaiting_confirmation"
+	TaskRecoveryStateCompleted               TaskRecoveryState = "completed"
+	TaskRecoveryStatePending                 TaskRecoveryState = "pending"
+	TaskRecoveryStateProofRequired           TaskRecoveryState = "proof_required"
+	TaskRecoveryStateRetryWait               TaskRecoveryState = "retry_wait"
+	TaskRecoveryStateRunning                 TaskRecoveryState = "running"
 )
 
 // Valid indicates whether the value is a known member of the TaskRecoveryState enum.
 func (e TaskRecoveryState) Valid() bool {
 	switch e {
+	case TaskRecoveryStateAutomaticRetriesStopped:
+		return true
 	case TaskRecoveryStateAwaitingConfirmation:
 		return true
 	case TaskRecoveryStateCompleted:
@@ -2061,7 +2065,33 @@ func (e TaskRecoveryState) Valid() bool {
 		return true
 	case TaskRecoveryStateProofRequired:
 		return true
+	case TaskRecoveryStateRetryWait:
+		return true
 	case TaskRecoveryStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskRecoveryStopReason.
+const (
+	NonTransientFailure  TaskRecoveryStopReason = "non_transient_failure"
+	RecoveryDeadline     TaskRecoveryStopReason = "recovery_deadline"
+	RetryBudgetExhausted TaskRecoveryStopReason = "retry_budget_exhausted"
+	UnsafeReplay         TaskRecoveryStopReason = "unsafe_replay"
+)
+
+// Valid indicates whether the value is a known member of the TaskRecoveryStopReason enum.
+func (e TaskRecoveryStopReason) Valid() bool {
+	switch e {
+	case NonTransientFailure:
+		return true
+	case RecoveryDeadline:
+		return true
+	case RetryBudgetExhausted:
+		return true
+	case UnsafeReplay:
 		return true
 	default:
 		return false
@@ -2618,6 +2648,16 @@ type BuildProvenance struct {
 
 // BuildProvenanceKind defines model for BuildProvenance.Kind.
 type BuildProvenanceKind string
+
+// CleanupStatus defines model for CleanupStatus.
+type CleanupStatus struct {
+	Diagnostics        int64     `json:"diagnostics"`
+	FailureCode        *string   `json:"failure_code,omitempty"`
+	IdempotencyRecords int64     `json:"idempotency_records"`
+	ObservedAt         time.Time `json:"observed_at"`
+	State              string    `json:"state"`
+	Tasks              int64     `json:"tasks"`
+}
 
 // Component defines model for Component.
 type Component struct {
@@ -3721,11 +3761,12 @@ type HostController struct {
 
 // HostEtcd defines model for HostEtcd.
 type HostEtcd struct {
-	DbSize   string             `json:"db_size"`
-	Node     string             `json:"node"`
-	Software *ContainerIdentity `json:"software,omitempty"`
-	Status   string             `json:"status"`
-	Version  *string            `json:"version,omitempty"`
+	DbSize      string             `json:"db_size"`
+	Maintenance *Status            `json:"maintenance,omitempty"`
+	Node        string             `json:"node"`
+	Software    *ContainerIdentity `json:"software,omitempty"`
+	Status      string             `json:"status"`
+	Version     *string            `json:"version,omitempty"`
 }
 
 // HostImage defines model for HostImage.
@@ -4073,6 +4114,13 @@ type PageZone struct {
 	Items      *[]Zone `json:"items"`
 	NextCursor *string `json:"next_cursor,omitempty"`
 	Revision   *int64  `json:"revision,omitempty"`
+}
+
+// Pin defines model for Pin.
+type Pin struct {
+	Kind     string `json:"kind"`
+	OwnerId  string `json:"owner_id"`
+	Revision int64  `json:"revision"`
 }
 
 // PreparedSoftwareArtifact defines model for PreparedSoftwareArtifact.
@@ -5142,6 +5190,31 @@ type SoftwareReleaseChoice struct {
 // SoftwareReleaseChoiceSelection defines model for SoftwareReleaseChoice.Selection.
 type SoftwareReleaseChoiceSelection string
 
+// Status defines model for Status.
+type Status struct {
+	BackendBytes      int64          `json:"backend_bytes"`
+	Blocker           *Pin           `json:"blocker,omitempty"`
+	Cleanup           *CleanupStatus `json:"cleanup,omitempty"`
+	CompactedThrough  int64          `json:"compacted_through"`
+	CurrentKeys       int64          `json:"current_keys"`
+	CurrentValueBytes int64          `json:"current_value_bytes"`
+	DiagnosticBacklog int64          `json:"diagnostic_backlog"`
+	FailureCode       *string        `json:"failure_code,omitempty"`
+	HeadroomBytes     int64          `json:"headroom_bytes"`
+	InUseBytes        int64          `json:"in_use_bytes"`
+	LastDefragAt      *time.Time     `json:"last_defrag_at,omitempty"`
+	LastFailureAt     *time.Time     `json:"last_failure_at,omitempty"`
+	LastSuccessAt     *time.Time     `json:"last_success_at,omitempty"`
+	ObservedAt        time.Time      `json:"observed_at"`
+	ProtectedRevision *int64         `json:"protected_revision,omitempty"`
+	QuotaBytes        int64          `json:"quota_bytes"`
+	ReclaimedBytes    int64          `json:"reclaimed_bytes"`
+	ReusableBytes     int64          `json:"reusable_bytes"`
+	State             string         `json:"state"`
+	TaskBacklog       int64          `json:"task_backlog"`
+	WalBytes          int64          `json:"wal_bytes"`
+}
+
 // Task defines model for Task.
 type Task struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -5151,6 +5224,7 @@ type Task struct {
 	Actor                  TaskActor           `json:"actor"`
 	AttemptHistory         *TaskAttemptHistory `json:"attempt_history,omitempty"`
 	CreatedAt              time.Time           `json:"created_at"`
+	DiagnosticsExpiredAt   *time.Time          `json:"diagnostics_expired_at,omitempty"`
 	EnvironmentId          *string             `json:"environment_id,omitempty"`
 	Executions             *PageTaskExecution  `json:"executions,omitempty"`
 	Executor               TaskExecutor        `json:"executor"`
@@ -5165,6 +5239,7 @@ type Task struct {
 	ProjectId              *string             `json:"project_id,omitempty"`
 	ReconciliationRequired bool                `json:"reconciliation_required"`
 	Recovery               *TaskRecovery       `json:"recovery,omitempty"`
+	RecoveryRetryAvailable bool                `json:"recovery_retry_available"`
 	ResourceKind           *string             `json:"resource_kind,omitempty"`
 	ResultSummary          *string             `json:"result_summary,omitempty"`
 	RetryOf                *string             `json:"retry_of,omitempty"`
@@ -5305,17 +5380,24 @@ type TaskPreparationState string
 
 // TaskRecovery defines model for TaskRecovery.
 type TaskRecovery struct {
-	CompletedSteps *int32            `json:"completed_steps,omitempty"`
-	Deadline       *time.Time        `json:"deadline,omitempty"`
-	LastFailure    *TaskFailure      `json:"last_failure,omitempty"`
-	State          TaskRecoveryState `json:"state"`
-	StepIds        *[]string         `json:"step_ids,omitempty"`
-	Summary        string            `json:"summary"`
-	TotalSteps     *int32            `json:"total_steps,omitempty"`
+	AutomaticFailures int32                   `json:"automatic_failures"`
+	CompletedSteps    *int32                  `json:"completed_steps,omitempty"`
+	Deadline          *time.Time              `json:"deadline,omitempty"`
+	LastFailure       *TaskFailure            `json:"last_failure,omitempty"`
+	RetryAfter        *time.Time              `json:"retry_after,omitempty"`
+	RetryAvailable    bool                    `json:"retry_available"`
+	State             TaskRecoveryState       `json:"state"`
+	StepIds           *[]string               `json:"step_ids,omitempty"`
+	StopReason        *TaskRecoveryStopReason `json:"stop_reason,omitempty"`
+	Summary           string                  `json:"summary"`
+	TotalSteps        *int32                  `json:"total_steps,omitempty"`
 }
 
 // TaskRecoveryState defines model for TaskRecovery.State.
 type TaskRecoveryState string
+
+// TaskRecoveryStopReason defines model for TaskRecovery.StopReason.
+type TaskRecoveryStopReason string
 
 // TaskStep defines model for TaskStep.
 type TaskStep struct {
@@ -8541,14 +8623,14 @@ type ClientInterface interface {
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// HostTerminalWithBody Open or resume the owning browser session's interactive root host terminal
+	// HostTerminalWithBody Open an independent root host terminal; replay resumes the same session
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
 	HostTerminalWithBody(ctx context.Context, params *HostTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// HostTerminal Open or resume the owning browser session's interactive root host terminal
+	// HostTerminal Open an independent root host terminal; replay resumes the same session
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -10945,7 +11027,7 @@ func (c *Client) HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*
 	return c.Client.Do(req)
 }
 
-// HostTerminalWithBody Open or resume the owning browser session's interactive root host terminal
+// HostTerminalWithBody Open an independent root host terminal; replay resumes the same session
 //
 // Takes any type of body and a specified content type.
 //
@@ -10962,7 +11044,7 @@ func (c *Client) HostTerminalWithBody(ctx context.Context, params *HostTerminalP
 	return c.Client.Do(req)
 }
 
-// HostTerminal Open or resume the owning browser session's interactive root host terminal
+// HostTerminal Open an independent root host terminal; replay resumes the same session
 //
 // Takes a body of the `application/json` content type.
 //
@@ -22621,14 +22703,14 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HostShowResponse, error)
 
-	// HostTerminalWithBodyWithResponse Open or resume the owning browser session's interactive root host terminal
+	// HostTerminalWithBodyWithResponse Open an independent root host terminal; replay resumes the same session
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
 	HostTerminalWithBodyWithResponse(ctx context.Context, params *HostTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*HostTerminalResponse, error)
 
-	// HostTerminalWithResponse Open or resume the owning browser session's interactive root host terminal
+	// HostTerminalWithResponse Open an independent root host terminal; replay resumes the same session
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -33238,7 +33320,7 @@ func (c *ClientWithResponses) HostShowWithResponse(ctx context.Context, reqEdito
 	return ParseHostShowResponse(rsp)
 }
 
-// HostTerminalWithBodyWithResponse Open or resume the owning browser session's interactive root host terminal
+// HostTerminalWithBodyWithResponse Open an independent root host terminal; replay resumes the same session
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -33251,7 +33333,7 @@ func (c *ClientWithResponses) HostTerminalWithBodyWithResponse(ctx context.Conte
 	return ParseHostTerminalResponse(rsp)
 }
 
-// HostTerminalWithResponse Open or resume the owning browser session's interactive root host terminal
+// HostTerminalWithResponse Open an independent root host terminal; replay resumes the same session
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //

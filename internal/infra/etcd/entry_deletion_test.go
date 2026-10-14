@@ -204,7 +204,7 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 	}
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 9300)
 	if _, found, err := tasks.ClaimNextTask(
-		ctx, agentID, 1, task.CreatedAt.Add(time.Second),
+		ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32,
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
@@ -279,7 +279,8 @@ func TestEntryRemovalFailureDoesNotPromoteConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 9350)
-	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32); err != nil ||
+		!found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
 	terminal, err := tasks.AcknowledgeTask(

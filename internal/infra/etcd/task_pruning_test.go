@@ -33,7 +33,7 @@ func TestTaskPruningRetainsOwnedEnvironmentDeletionRetrySource(t *testing.T) {
 	}
 	pruneAt := terminalAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
 	idempotency := NewTestIdempotencyRetention(t, fixture.store)
-	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, pruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
 	if count, err := fixture.tasks.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 0 {
@@ -88,7 +88,7 @@ func TestTaskPruningRetainedEnvironmentDeletionDoesNotStarveLaterTask(t *testing
 	pruneAt := unrelatedTerminal.Record.RetainUntil.Add(time.Nanosecond)
 	idempotency := NewTestIdempotencyRetention(t, fixture.store)
 	for {
-		count, pruneErr := idempotency.PruneExpired(ctx, pruneAt)
+		count, pruneErr := idempotency.PruneExpired(ctx, pruneAt, 16)
 		if pruneErr != nil {
 			t.Fatalf("PruneExpired(marker) error = %v", pruneErr)
 		}
@@ -136,7 +136,7 @@ func TestTaskPruningEnvironmentDeletionRetryRequeuesSource(t *testing.T) {
 	}
 	firstPruneAt := terminal.Record.RetainUntil.Add(time.Nanosecond)
 	idempotency := NewTestIdempotencyRetention(t, fixture.store)
-	if count, err := idempotency.PruneExpired(ctx, firstPruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, firstPruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(source marker) = %d, %v", count, err)
 	}
 	if count, err := fixture.tasks.PruneExpiredTasks(ctx, firstPruneAt); err != nil || count != 0 {
@@ -177,7 +177,7 @@ func TestTaskPruningEnvironmentDeletionRetryRequeuesSource(t *testing.T) {
 		t.Fatalf("AbortPendingTask(unrelated) error = %v", err)
 	}
 	finalPruneAt := unrelatedTerminal.Record.RetainUntil.Add(time.Nanosecond)
-	if count, err := idempotency.PruneExpired(ctx, finalPruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, finalPruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(unrelated marker) = %d, %v", count, err)
 	}
 	if count, err := fixture.tasks.PruneExpiredTasks(
@@ -186,11 +186,13 @@ func TestTaskPruningEnvironmentDeletionRetryRequeuesSource(t *testing.T) {
 	); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(source with active retry) = %d, %v", count, err)
 	}
-	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(terminal.Record.ID), false)
 	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(retryID), true)
 	if count, err := fixture.tasks.PruneExpiredTasks(ctx, finalPruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(unrelated after source) = %d, %v", count, err)
 	}
+	// TASK-19: fair rotation may visit the later row first after an older
+	// source is requeued. Both must be collectible without touching the retry.
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(terminal.Record.ID), false)
 	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(unrelated.ID), false)
 	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(retryID), true)
 	active := fixture.mustGet(t, testtaskjournal.TaskActiveOperationKey(fixture.task.OperationID))
@@ -248,7 +250,7 @@ func TestTaskPruningWaitsForMarkerAndRemovesComponentIntent(t *testing.T) {
 	}
 	assertTaskLifecycleValue(t, store, testtaskjournal.TaskStorageKey(task.ID), true)
 	idempotency := NewTestIdempotencyRetention(t, store)
-	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, pruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
@@ -279,7 +281,7 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 	task := validTaskRecord(now)
 	createLifecycleTask(t, repository, task)
 	agentID := ids.NewAt(ids.KindAgent, now, 1601)
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(time.Second))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
@@ -306,7 +308,7 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 	}
 	pruneAt := terminalAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
 	idempotency := NewTestIdempotencyRetention(t, store)
-	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, pruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
 	store.trackPruning = true

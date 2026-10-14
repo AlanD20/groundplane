@@ -61,7 +61,7 @@ func TestBlueprintParentClaimSurvivesRestartWithoutAgentAssignment(t *testing.T)
 		claimed.Record.Status != testtaskjournal.TaskStatusRunning {
 		t.Fatalf("claim Blueprint parent = %#v, %t, %v", claimed, found, err)
 	}
-	if _, found, err := repository.ClaimNextTask(ctx, ids.NewAt(ids.KindAgent, now, 22), 1, now.Add(time.Second)); err != nil ||
+	if _, found, err := repository.ClaimNextTask(ctx, ids.NewAt(ids.KindAgent, now, 22), 1, now.Add(time.Second), 32); err != nil ||
 		found {
 		t.Fatalf("Agent claimed Blueprint parent: %t, %v", found, err)
 	}

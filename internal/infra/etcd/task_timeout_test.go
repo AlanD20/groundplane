@@ -10,6 +10,7 @@ import (
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func TestTaskRepositoryExpiresOnlyOverdueAssignments(t *testing.T) {
@@ -24,7 +25,7 @@ func TestTaskRepositoryExpiresOnlyOverdueAssignments(t *testing.T) {
 	createLifecycleTask(t, repository, task)
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 118)
 	assignedAt := task.CreatedAt.Add(time.Second)
-	assignment, found, err := repository.ClaimNextTask(ctx, agentID, 4, assignedAt)
+	assignment, found, err := repository.ClaimNextTask(ctx, agentID, 4, assignedAt, 32)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v, %t, %v", assignment, found, err)
 	}
@@ -74,7 +75,7 @@ func TestTaskRepositoryRecoveryExpiryMovesBoundedRowsToProofRequired(t *testing.
 		task.IdempotencyKey = fmt.Sprintf("recovery-%08d", index)
 		createLifecycleTask(t, repository, task)
 		agentID := ids.NewAt(ids.KindAgent, now, int64(2005+index*10))
-		claim, found, claimErr := repository.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+		claim, found, claimErr := repository.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 		if claimErr != nil || !found {
 			t.Fatalf("ClaimNextTask(%d) = %#v, %t, %v", index, claim, found, claimErr)
 		}
@@ -121,8 +122,9 @@ func TestTaskRepositoryRecoveryExpiryMovesBoundedRowsToProofRequired(t *testing.
 			t.Fatalf("proof-required restoration authority digest = %q, %v", authorityDigest, digestErr)
 		}
 		listed, listErr := repository.ListAgentAssignments(ctx, assignment.AgentID, assignment.AgentGeneration, 1)
-		if listErr != nil || len(listed) != 1 || !listed[0].RecoveryProofRequired ||
-			listed[0].Task.Revision != listed[0].Assignment.Revision {
+		// The immutable proof claim remains addressable above, but its expired
+		// execution budget must not occupy the active dispatch roster.
+		if listErr != nil || len(listed) != 0 {
 			t.Fatalf("list proof-required assignment = %#v, %v", listed, listErr)
 		}
 		read, readErr := store.Get(ctx, testtaskassignments.ReleaseRecoveryKey(assignment.TaskID))
@@ -136,7 +138,7 @@ func TestTaskRepositoryRecoveryExpiryMovesBoundedRowsToProofRequired(t *testing.
 	}
 }
 
-func TestRecoveryReconnectRenewsExpiredProofWindow(t *testing.T) {
+func TestRecoveryReconnectDoesNotRenewExpiredProofWindow(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	repository, err := newTaskRepository(store)
@@ -146,7 +148,7 @@ func TestRecoveryReconnectRenewsExpiredProofWindow(t *testing.T) {
 	task := validTaskRecord(taskJournalTime())
 	createLifecycleTask(t, repository, task)
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 118)
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 4, task.CreatedAt.Add(time.Second))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 4, task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("claim = %#v, %t, %v", claim, found, err)
 	}
@@ -158,25 +160,25 @@ func TestRecoveryReconnectRenewsExpiredProofWindow(t *testing.T) {
 	if err != nil || !current.RecoveryProofRequired {
 		t.Fatalf("proof-required assignment = %#v, %v", current, err)
 	}
-	before := time.Now().UTC()
-	if err := repository.incrementAssignmentEpoch(ctx, current, nil); err != nil {
-		t.Fatal(err)
+	// TASK-16: reconnect cannot grant a fresh execution budget. Only explicit
+	// operator Retry authorizes another captured recovery attempt.
+	if err := repository.incrementAssignmentEpoch(ctx, current, nil); !isKind(err, errs.KindResourceInUse) {
+		t.Fatalf("expired proof window was renewed: %v", err)
 	}
 	renewed, err := repository.GetTaskAssignment(ctx, task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	record := renewed.Assignment.Record
-	if !record.RecoveryExecutionDeadline.After(before) ||
-		record.RecoveryExecutionDeadline.After(time.Now().UTC().Add(releaseRecoveryProofExecutionBudget)) ||
+	if !record.RecoveryExecutionDeadline.Equal(current.Assignment.Record.RecoveryExecutionDeadline) ||
 		!record.Deadline.Equal(original.Deadline) || !record.RecoveryDeadline.Equal(original.RecoveryDeadline) ||
 		record.RestorationAuthoritySHA256 != original.RestorationAuthoritySHA256 ||
 		record.ReleaseRecoveryRecordSHA256 != original.ReleaseRecoveryRecordSHA256 ||
-		record.ExecutionEpoch != current.Assignment.Record.ExecutionEpoch+1 {
+		record.ExecutionEpoch != current.Assignment.Record.ExecutionEpoch || renewed.Assignment.Revision != current.Assignment.Revision {
 		t.Fatalf("renewed proof assignment changed pinned authority or retained expired window: %#v", record)
 	}
-	if err := repository.incrementAssignmentEpoch(ctx, renewed, nil); err != nil {
-		t.Fatal(err)
+	if err := repository.incrementAssignmentEpoch(ctx, renewed, nil); !isKind(err, errs.KindResourceInUse) {
+		t.Fatalf("repeated reconnect revived exhausted recovery: %v", err)
 	}
 	reconnected, err := repository.GetTaskAssignment(ctx, task.ID)
 	if err != nil || !reconnected.Assignment.Record.RecoveryExecutionDeadline.Equal(record.RecoveryExecutionDeadline) {

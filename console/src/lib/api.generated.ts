@@ -939,7 +939,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Open or resume the owning browser session's interactive root host terminal */
+        /** Open an independent root host terminal; replay resumes the same session */
         post: operations["host.terminal"];
         delete?: never;
         options?: never;
@@ -2259,6 +2259,18 @@ export interface components {
             /** @enum {string} */
             kind: "source_ref" | "release";
         };
+        CleanupStatus: {
+            /** Format: int64 */
+            diagnostics: number;
+            failure_code?: string;
+            /** Format: int64 */
+            idempotency_records: number;
+            /** Format: date-time */
+            observed_at: string;
+            state: string;
+            /** Format: int64 */
+            tasks: number;
+        };
         Component: {
             /**
              * Format: uri
@@ -3181,6 +3193,7 @@ export interface components {
         };
         HostEtcd: {
             db_size: string;
+            maintenance?: components["schemas"]["Status"];
             node: string;
             software?: components["schemas"]["ContainerIdentity"];
             status: string;
@@ -3524,6 +3537,12 @@ export interface components {
             next_cursor?: string;
             /** Format: int64 */
             revision?: number;
+        };
+        Pin: {
+            kind: string;
+            owner_id: string;
+            /** Format: int64 */
+            revision: number;
         };
         PreparedSoftwareArtifact: {
             architecture: string;
@@ -4522,6 +4541,46 @@ export interface components {
             /** @enum {string} */
             selection: "controller" | "agent" | "both";
         };
+        Status: {
+            /** Format: int64 */
+            backend_bytes: number;
+            blocker?: components["schemas"]["Pin"];
+            cleanup?: components["schemas"]["CleanupStatus"];
+            /** Format: int64 */
+            compacted_through: number;
+            /** Format: int64 */
+            current_keys: number;
+            /** Format: int64 */
+            current_value_bytes: number;
+            /** Format: int64 */
+            diagnostic_backlog: number;
+            failure_code?: string;
+            /** Format: int64 */
+            headroom_bytes: number;
+            /** Format: int64 */
+            in_use_bytes: number;
+            /** Format: date-time */
+            last_defrag_at?: string;
+            /** Format: date-time */
+            last_failure_at?: string;
+            /** Format: date-time */
+            last_success_at?: string;
+            /** Format: date-time */
+            observed_at: string;
+            /** Format: int64 */
+            protected_revision?: number;
+            /** Format: int64 */
+            quota_bytes: number;
+            /** Format: int64 */
+            reclaimed_bytes: number;
+            /** Format: int64 */
+            reusable_bytes: number;
+            state: string;
+            /** Format: int64 */
+            task_backlog: number;
+            /** Format: int64 */
+            wal_bytes: number;
+        };
         Task: {
             /**
              * Format: uri
@@ -4534,6 +4593,8 @@ export interface components {
             attempt_history?: components["schemas"]["TaskAttemptHistory"];
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            diagnostics_expired_at?: string;
             environment_id?: string;
             executions?: components["schemas"]["PageTaskExecution"];
             /** @enum {string} */
@@ -4550,6 +4611,7 @@ export interface components {
             project_id?: string;
             reconciliation_required: boolean;
             recovery?: components["schemas"]["TaskRecovery"];
+            recovery_retry_available: boolean;
             resource_kind?: string;
             result_summary?: string;
             retry_of?: string;
@@ -4678,13 +4740,20 @@ export interface components {
         };
         TaskRecovery: {
             /** Format: int32 */
+            automatic_failures: number;
+            /** Format: int32 */
             completed_steps?: number;
             /** Format: date-time */
             deadline?: string;
             last_failure?: components["schemas"]["TaskFailure"];
+            /** Format: date-time */
+            retry_after?: string;
+            retry_available: boolean;
             /** @enum {string} */
-            state: "pending" | "running" | "awaiting_confirmation" | "proof_required" | "completed";
+            state: "pending" | "running" | "awaiting_confirmation" | "proof_required" | "retry_wait" | "automatic_retries_stopped" | "completed";
             step_ids?: string[] | null;
+            /** @enum {string} */
+            stop_reason?: "non_transient_failure" | "retry_budget_exhausted" | "recovery_deadline" | "unsafe_replay";
             summary: string;
             /** Format: int32 */
             total_steps?: number;

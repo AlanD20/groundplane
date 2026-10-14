@@ -66,6 +66,10 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskStorageKey(current.Record.TaskID)},
 		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskAttemptHistoryKey(current.Record.TaskID)},
+		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskDiagnosticExpiryKey(current.Record.TaskID)},
+		{Type: etcdstore.MutationDelete, Key: taskassignments.RecoveryRetryControlKey(current.Record.TaskID)},
+		{Type: etcdstore.MutationDelete,
+			Key: taskjournal.TaskAttemptSummaryPrefix(current.Record.TaskID), Prefix: true},
 		{
 			Type:   etcdstore.MutationDelete,
 			Key:    taskassignments.RollingReleaseTaskPrefix(current.Record.TaskID),

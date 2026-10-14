@@ -13,9 +13,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// CapturedSnapshotReader reads immutable children at the original seal
-// revision. Current Task admission is distinct from this byte authority, so a
-// retry can read retained bytes without rebuilding from current Entries.
+// CapturedSnapshotReader reads the retained immutable capture at one fresh
+// storage snapshot. Every member must still belong to its original seal
+// revision and inventory; current Entries and Secrets are never consulted.
 type CapturedSnapshotReader struct {
 	repository *CaptureSnapshotRepository
 	authority  CaptureSnapshotWriteAuthority
@@ -48,7 +48,8 @@ func (entry *CapturedSnapshotEntry) Clear() {
 
 // OpenCapturedSnapshot proves the complete stored count/chain inventory before
 // returning a reader. Reads are bounded per Entry; no aggregate values are
-// retained. Compaction is an error, never permission to read latest children.
+// retained. The original seal, member revisions and hashes authorize bytes;
+// this does not depend on retaining old MVCC copies of those immutable members.
 func (repository *CaptureSnapshotRepository) OpenCapturedSnapshot(
 	ctx context.Context,
 	authority CaptureSnapshotWriteAuthority,
@@ -63,11 +64,11 @@ func (repository *CaptureSnapshotRepository) OpenCapturedSnapshot(
 		return nil, capturedSnapshotCorrupt()
 	}
 	keys := []string{BackupConfigSnapshotKey(authority.SnapshotID), captureSnapshotEvidenceKey(authority.SnapshotID)}
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: cursor.Revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: cursor.ReadRevision})
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision != cursor.Revision || len(read.Values) != 2 {
+	if read == nil || read.ReadRevision != cursor.ReadRevision || len(read.Values) != 2 {
 		return nil, capturedSnapshotCorrupt()
 	}
 	defer etcdstore.ClearValues(read.Values)
@@ -186,13 +187,18 @@ func (reader *CapturedSnapshotReader) readEntry(
 	key := backupConfigSnapshotEntryKey(reader.authority.SnapshotID, ordinal)
 	read, err := reader.repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{key}, Revision: reader.cursor.Revision},
+		etcdstore.GetManyRequest{Keys: []string{key}, Revision: reader.cursor.ReadRevision},
 	)
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision != reader.cursor.Revision || len(read.Values) != 1 || read.Values[0] == nil ||
-		read.Values[0].Key != key || read.Values[0].ModRevision <= 0 || read.Values[0].ModRevision > reader.cursor.Revision {
+	if read == nil || read.ReadRevision != reader.cursor.ReadRevision || len(read.Values) != 1 {
+		return nil, recordcodec.CorruptRecord()
+	}
+	if read.Values[0] == nil ||
+		read.Values[0].Key != key ||
+		read.Values[0].ModRevision <= 0 ||
+		read.Values[0].ModRevision > reader.cursor.Revision {
 		return nil, capturedSnapshotCorrupt()
 	}
 	defer etcdstore.ClearValues(read.Values)
@@ -315,12 +321,17 @@ func (reader *CapturedSnapshotReader) fixedRange(
 ) (*etcdstore.RangeResult, error) {
 	read, err := reader.repository.store.Range(
 		ctx,
-		etcdstore.RangeRequest{Prefix: prefix, StartExclusive: start, Limit: limit, Revision: reader.cursor.Revision},
+		etcdstore.RangeRequest{
+			Prefix:         prefix,
+			StartExclusive: start,
+			Limit:          limit,
+			Revision:       reader.cursor.ReadRevision,
+		},
 	)
 	if err != nil {
 		return nil, err
 	}
-	if read == nil || read.ReadRevision != reader.cursor.Revision {
+	if read == nil || read.ReadRevision != reader.cursor.ReadRevision {
 		return nil, capturedSnapshotCorrupt()
 	}
 	return read, nil

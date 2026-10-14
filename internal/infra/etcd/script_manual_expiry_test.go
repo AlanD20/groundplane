@@ -36,7 +36,7 @@ func TestManualScriptRetentionPruneReleasesRetrySources(t *testing.T) {
 		t.Fatal(err)
 	}
 	idempotency := NewTestIdempotencyRetention(t, store)
-	if count, err := idempotency.PruneExpired(ctx, *terminal.Record.RetainUntil); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, *terminal.Record.RetainUntil, 16); err != nil || count != 1 {
 		t.Fatalf("expire Task marker = %d, %v", count, err)
 	}
 	count, err := tasks.PruneExpiredTasks(ctx, *terminal.Record.RetainUntil)
@@ -80,7 +80,7 @@ func TestManualScriptExpiryInterruptionPreservesTerminalAuthority(t *testing.T) 
 				t.Fatal(err)
 			}
 			idempotency := NewTestIdempotencyRetention(t, store)
-			if _, err := idempotency.PruneExpired(ctx, *terminal.Record.RetainUntil); err != nil {
+			if _, err := idempotency.PruneExpired(ctx, *terminal.Record.RetainUntil, 16); err != nil {
 				t.Fatal(err)
 			}
 			taskBefore := store.valueAt(testtaskjournal.TaskStorageKey(terminal.Record.ID), store.revision)
@@ -89,7 +89,11 @@ func TestManualScriptExpiryInterruptionPreservesTerminalAuthority(t *testing.T) 
 				store.revision,
 			)
 			interrupted, err := newTaskRepository(
-				&scriptSourceReferenceFailureStore{memoryHierarchyStore: store, failAt: failAt},
+				&scriptSourceReferenceFailureStore{
+					memoryHierarchyStore: store,
+					failAt:               failAt,
+					ignoreCleanupCursor:  true,
+				},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -176,7 +180,7 @@ func TestManualScriptRetentionSkipsLiveRetryWithoutDroppingIndex(t *testing.T) {
 	}
 	idempotency := NewTestIdempotencyRetention(t, store)
 	for {
-		count, err := idempotency.PruneExpired(ctx, *unrelatedTerminal.Record.RetainUntil)
+		count, err := idempotency.PruneExpired(ctx, *unrelatedTerminal.Record.RetainUntil, 16)
 		if err != nil {
 			t.Fatal(err)
 		}

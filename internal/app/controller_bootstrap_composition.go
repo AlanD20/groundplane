@@ -23,15 +23,16 @@ import (
 )
 
 type controllerBootstrapComposition struct {
-	config           config.ControllerConfig
-	controllerConfig *controllerconfigstore.Store
-	tick             time.Duration
-	logger           *slog.Logger
-	consoleAssets    fs.FS
-	etcdLifecycle    *etcdcontainer.Manager
-	etcdEndpoints    []string
-	store            controllerStore
-	componentCatalog []componentrender.EnvironmentComponentRegistration
+	config             config.ControllerConfig
+	controllerConfig   *controllerconfigstore.Store
+	tick               time.Duration
+	logger             *slog.Logger
+	consoleAssets      fs.FS
+	etcdLifecycle      *etcdcontainer.Manager
+	etcdEndpoints      []string
+	store              controllerStore
+	storageMaintenance *etcd.StorageMaintenance
+	componentCatalog   []componentrender.EnvironmentComponentRegistration
 }
 
 type controllerStore interface {
@@ -128,7 +129,7 @@ func newControllerBootstrapComposition(
 		return controllerBootstrapComposition{}, fmt.Errorf("controller: reconcile etcd container: %w", err)
 	}
 	etcdEndpoints := etcdcontainer.Endpoints()
-	store, err := etcd.New(ctx, etcdEndpoints, cfg.Etcd.KeyPrefix)
+	store, err := etcd.New(ctx, etcdEndpoints, cfg.Etcd.KeyPrefix, cfg.Maintenance, etcdcontainer.DataDirectory)
 	if err != nil {
 		return controllerBootstrapComposition{}, fmt.Errorf("controller: initialize etcd: %w", err)
 	}
@@ -138,14 +139,15 @@ func newControllerBootstrapComposition(
 	}
 	keepEtcdLifecycle = true
 	return controllerBootstrapComposition{
-		config:           cfg,
-		controllerConfig: controllerConfig,
-		tick:             tick,
-		logger:           logger,
-		consoleAssets:    consoleAssets,
-		etcdLifecycle:    etcdLifecycle,
-		etcdEndpoints:    etcdEndpoints,
-		store:            store,
-		componentCatalog: componentCatalog,
+		config:             cfg,
+		controllerConfig:   controllerConfig,
+		tick:               tick,
+		logger:             logger,
+		consoleAssets:      consoleAssets,
+		etcdLifecycle:      etcdLifecycle,
+		etcdEndpoints:      etcdEndpoints,
+		store:              store,
+		storageMaintenance: store.Maintenance(),
+		componentCatalog:   componentCatalog,
 	}, nil
 }

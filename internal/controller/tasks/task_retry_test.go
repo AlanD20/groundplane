@@ -28,6 +28,18 @@ type fakeTaskRetryRepository struct {
 	mutationCalls int
 }
 
+func (*fakeTaskRetryRepository) GetStoppedRecoveryRetry(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+func (*fakeTaskRetryRepository) RetryStoppedRecovery(
+	context.Context,
+	string,
+	testidempotency.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return etcd.IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "unexpected stopped recovery retry")
+}
+
 func (*fakeTaskRetryRepository) RetryInterruptedDetach(context.Context, string,
 	testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

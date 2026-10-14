@@ -132,8 +132,10 @@ and briefly restarts only etcd. Control-plane requests may reconnect; applicatio
 containers are left running. A normal Controller restart does not apply pending
 etcd edits.
 
-The editor accepts quota, snapshot count, heartbeat/election timing, periodic
-compaction retention and log level. Node identity, listeners, data path, image
+The editor accepts quota, snapshot count, heartbeat/election timing and log
+level. GP owns history compaction; etcd's independent auto-compactor is not
+configurable because it cannot honor GP's protected capture revisions.
+Node identity, listeners, data path, image
 and GP's transaction capacity remain bootstrap-owned; unknown keys are rejected.
 The document is limited to 8 KiB. Defaults and bounds live in the
 [configuration schema](../../internal/common/config/etcd.go).
@@ -146,6 +148,32 @@ continuity qualification.
 
 CLI: `controller etcd config show`, `set --file PATH`, and `apply`.
 API: `GET/PUT /etcd/config` and `POST /etcd/config/apply`.
+
+### Storage maintenance
+
+Host → etcd reports database quota headroom, backend usage, reusable space,
+current key/value payload and separate WAL size. It also reports due cleanup
+counts, the last cleanup pass, compaction/defragmentation results and any
+protected revision with its owning operation. Due counts include records still
+held by recovery or request replay; they are not permission to delete them.
+`host show` and `GET /host` expose the same status.
+
+Configure the `maintenance` block in Controller startup YAML through its existing
+Console editor, CLI or API. Save validates; a Controller restart activates the
+policy without restarting etcd. The default diagnostic lifetime is 90 days, the
+recent-history window is one hour, and cleanup runs every minute with a two-second
+work budget shared across independent pruning owners. Scans retain their progress
+across interruptions and rotate past held records without weakening their guards.
+See the [maintenance schema](../../internal/common/config/maintenance.go) for
+supported settings and bounds.
+
+Compaction discards eligible historical versions, not current application records.
+Unfinished captures and Blueprint/deletion preparation protect their required old
+views. Defragmentation reclaims the resulting reusable file space only above its
+configured byte and percentage thresholds, within a UTC maintenance window.
+The default window starts at 03:00 UTC and lasts 15 minutes. Each pass is bounded
+to 30 seconds; etcd requests may briefly pause, but application containers and
+their data stay untouched. Local implementation is not live qualification.
 
 ## Agent enrollment and settings
 

@@ -346,7 +346,7 @@ func testBlueprintExecutedArtifactConfigured(
 	}
 	agentID := ids.New(ids.KindAgent)
 	ack := func(task etcd.TaskRecord) {
-		claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+		claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 		if err != nil || !found {
 			t.Fatalf("claim = %t, %v", found, err)
 		}
@@ -611,7 +611,7 @@ func proveSecondAddressableBlueprint(
 	}
 	fixture.Publish(t, task, render.Projection, publication)
 	agentID := ids.New(ids.KindAgent)
-	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("successor claim=%t,%v", found, err)
 	}

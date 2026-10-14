@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
 
@@ -34,6 +35,23 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 			assignment.AgentID != expected.Assignment.Record.AgentID ||
 			assignment.AgentGeneration != expected.Assignment.Record.AgentGeneration {
 			return TaskAssignment{}, errs.New(errs.KindStateConflict, "Agent reconnect assignment authority changed")
+		}
+		if current.RecoveryProofRequired && !assignment.RecoveryExecutionDeadline.After(time.Now().UTC()) {
+			current.DispatchHeld = true
+			return current, nil
+		}
+		control, _, controlErr := repository.readRecoveryRetryControl(ctx, task.ID, current.Task.ReadRevision)
+		if controlErr != nil {
+			return TaskAssignment{}, controlErr
+		}
+		if control != nil &&
+			(control.AssignmentID != assignment.AssignmentID || control.ExecutionEpoch > assignment.ExecutionEpoch ||
+				assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly) {
+			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
+		}
+		if control != nil && (control.Stopped || time.Now().UTC().Before(control.NextAttemptAt)) {
+			current.DispatchHeld = true
+			return current, nil
 		}
 		if taskHasClosingReport(task) {
 			if terminal, closing, err := repository.resumeTaskClosingReport(ctx, current); err != nil || closing {

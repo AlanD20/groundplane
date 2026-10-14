@@ -25,19 +25,17 @@ func (repository *TaskRepository) ListAgentAssignments(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	ctx = bounded
 	if recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || maximum <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "agent assignment query is invalid")
 	}
-	assignments, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: taskjournal.TaskAssignmentScopePrefix(agentID),
-		Limit:  int64(maximum) + 1,
-	})
+	assignments, err := repository.resumableAgentAssignmentRange(ctx, agentID, agentGeneration, maximum)
 	if err != nil {
 		return nil, err
 	}
-	if assignments.More || len(assignments.Values) > int(maximum) {
-		return nil, errs.New(errs.KindInternal, "agent assignments exceed configured concurrency")
-	}
+	defer etcdstore.ClearRangeValues(assignments.Values)
 	if len(assignments.Values) == 0 {
 		return []TaskAssignment{}, nil
 	}

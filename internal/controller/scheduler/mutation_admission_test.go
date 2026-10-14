@@ -43,6 +43,7 @@ func TestNativeMutationAdmissionPausesScheduler(t *testing.T) {
 	admission := &closedMutationAdmission{}
 	scheduler := &Scheduler{
 		admission: admission, tasks: tasks, idempotency: markers, agents: agents,
+		maintenancePolicy:  schedulerTestPolicy(),
 		blueprintRevisions: blueprintRevisions, backupSchedules: schedules, now: time.Now,
 	}
 	if err := scheduler.tick(context.Background()); err != nil {

@@ -191,7 +191,7 @@ func TestBlueprintCandidateClaimEpochAcceptsOnlyValidatedAppliedPredecessor(t *t
 			}
 
 			claim, found, claimErr := repository.ClaimNextTask(
-				ctx, ids.NewAt(ids.KindAgent, now, 806), 1, now.Add(2*time.Second),
+				ctx, ids.NewAt(ids.KindAgent, now, 806), 1, now.Add(2*time.Second), 32,
 			)
 			if !test.wantClaim {
 				if claimErr == nil || found || !errors.Is(claimErr, errs.New(errs.KindStateConflict, "")) {

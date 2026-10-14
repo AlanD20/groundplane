@@ -35,19 +35,20 @@ import (
 )
 
 type Dependencies struct {
-	Config        config.ControllerConfig
-	Key           agentruntime.ControllerKey
-	Protector     *secretvalue.Protector
-	Store         etcdstore.Store
-	Agents        *agentregistration.Repository
-	Tasks         *etcd.TaskRepository
-	Intents       *requestidempotency.Coordinator
-	Idempotency   *etcd.IdempotencyRepository
-	Channel       *channeltransport.Runtime
-	EtcdEndpoints []string
-	EtcdLifecycle *etcdcontainer.Manager
-	Tick          time.Duration
-	Logger        *slog.Logger
+	Config             config.ControllerConfig
+	Key                agentruntime.ControllerKey
+	Protector          *secretvalue.Protector
+	Store              etcdstore.Store
+	Agents             *agentregistration.Repository
+	Tasks              *etcd.TaskRepository
+	Intents            *requestidempotency.Coordinator
+	Idempotency        *etcd.IdempotencyRepository
+	Channel            *channeltransport.Runtime
+	EtcdEndpoints      []string
+	EtcdLifecycle      *etcdcontainer.Manager
+	StorageMaintenance *etcd.StorageMaintenance
+	Tick               time.Duration
+	Logger             *slog.Logger
 }
 
 // Platform owns native release handles and the Agent container
@@ -224,7 +225,7 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	platform.Host, err = host.NewHostService(host.HostDependencies{
+	hostDependencies := host.HostDependencies{
 		System: host.NewSystemSource(hoststats.New(), container),
 		Etcd: host.NewEtcdSource(
 			dependencies.EtcdEndpoints,
@@ -235,7 +236,11 @@ func New(
 		Updates:           platform.Upgrades,
 		ControllerService: host.ControllerUnit, ControllerVersion: version.Value,
 		ControllerSource: version.Provenance(),
-	})
+	}
+	if dependencies.StorageMaintenance != nil {
+		hostDependencies.Maintenance = dependencies.StorageMaintenance
+	}
+	platform.Host, err = host.NewHostService(hostDependencies)
 	if err != nil {
 		return nil, err
 	}

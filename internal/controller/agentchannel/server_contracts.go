@@ -37,7 +37,7 @@ type Authenticator interface {
 type TaskStore interface {
 	ListAgentAssignments(context.Context, string, uint64, int32) ([]etcd.TaskAssignment, error)
 	ReconnectAgentAssignment(context.Context, etcd.TaskAssignment) (etcd.TaskAssignment, error)
-	ClaimNextTask(context.Context, string, uint64, time.Time) (etcd.TaskAssignment, bool, error)
+	ClaimNextTask(context.Context, string, uint64, time.Time, int32) (etcd.TaskAssignment, bool, error)
 	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
 	AppendTaskEvent(context.Context, taskjournal.TaskEventInput, time.Time) (etcd.TaskEventAppend, error)

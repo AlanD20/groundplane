@@ -85,7 +85,13 @@ func (fixture *volumeRemovalProductionFixture) CompleteCreate(t *testing.T, task
 		t.Fatal(err)
 	}
 	agentID := ids.New(ids.KindAgent)
-	assignment, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.Record.CreatedAt.Add(time.Millisecond))
+	assignment, found, err := fixture.Tasks.ClaimNextTask(
+		ctx,
+		agentID,
+		1,
+		task.Record.CreatedAt.Add(time.Millisecond),
+		32,
+	)
 	if err != nil || !found || assignment.Task.Record.ID != taskID {
 		t.Fatalf("claim Volume creation: found=%t error=%v", found, err)
 	}

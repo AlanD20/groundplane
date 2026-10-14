@@ -145,7 +145,7 @@ func claimBlueprintTerminalDesiredFixture(
 		context.Background(),
 		agentID,
 		1,
-		published.task.CreatedAt.Add(time.Second),
+		published.task.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found {
 		t.Fatalf("claim original: found=%t error=%v", found, err)

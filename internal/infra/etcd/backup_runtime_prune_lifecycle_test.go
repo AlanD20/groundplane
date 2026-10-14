@@ -556,7 +556,7 @@ func TestBackupRuntimeRepositoryComposesMaximumPointPruneTaskBoundaries(t *testi
 	}
 	agentID := ids.NewAt(ids.KindAgent, dispatch.CreatedAt, 2400)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, dispatch.CreatedAt.Add(time.Second),
+		context.Background(), agentID, 1, dispatch.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != dispatch.TaskID {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
@@ -688,7 +688,7 @@ func TestBackupRuntimeRepositoryComposesMaximumPointPruneTaskBoundaries(t *testi
 		}
 	}
 	claim, found, err = tasks.ClaimNextTask(
-		context.Background(), agentID, 1, dispatch.CreatedAt.Add(5*time.Second),
+		context.Background(), agentID, 1, dispatch.CreatedAt.Add(5*time.Second), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != nextDispatch.TaskID {
 		t.Fatalf("ClaimNextTask(retry) = %#v/%v/%v", claim, found, err)
@@ -765,7 +765,7 @@ func TestBackupRuntimeRepositoryComposesMaximumPointPruneTaskBoundaries(t *testi
 	retireBackupTestTerminalDelivery(t, tasks, sourceTask)
 	retention := NewTestIdempotencyRetention(t, store)
 	for {
-		count, pruneErr := retention.PruneExpired(context.Background(), pruneAt)
+		count, pruneErr := retention.PruneExpired(context.Background(), pruneAt, 16)
 		if pruneErr != nil {
 			t.Fatalf("PruneExpired(prune Task marker) error = %v", pruneErr)
 		}
@@ -810,10 +810,18 @@ func TestBackupRuntimeRepositoryComposesMaximumPointPruneTaskBoundaries(t *testi
 	if err != nil || !removedDispatch.Succeeded {
 		t.Fatalf("remove stale terminal prune dispatch = %#v, %v", removedDispatch, err)
 	}
-	if count, pruneErr := tasks.PruneExpiredTasks(
-		context.Background(), pruneAt,
-	); pruneErr != nil || count != 1 {
-		t.Fatalf("PruneExpiredTasks(prune source) = %d, %v", count, pruneErr)
+	// Fair discovery may first wrap past the previously rejected record.
+	// Bound the resumed passes; the removed blocker never deletes authority.
+	pruned := 0
+	for pass := 0; pass < 3 && pruned == 0; pass++ {
+		count, pruneErr := tasks.PruneExpiredTasks(context.Background(), pruneAt)
+		if pruneErr != nil {
+			t.Fatal(pruneErr)
+		}
+		pruned += count
+	}
+	if pruned != 1 {
+		t.Fatalf("PruneExpiredTasks(prune source) = %d", pruned)
 	}
 	if sourceEntry := mustOptionalKey(t, store, testtaskjournal.TaskStorageKey(dispatch.TaskID)); sourceEntry != nil {
 		t.Fatalf("retained source prune Task = %#v", sourceEntry)

@@ -354,7 +354,7 @@ func acknowledgeRecoverySecretTask(
 	t.Helper()
 	ctx := context.Background()
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 801)
-	assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+	assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found || assignment.Task.Record.ID != task.ID {
 		t.Fatalf("claim = %t/%v", found, err)
 	}

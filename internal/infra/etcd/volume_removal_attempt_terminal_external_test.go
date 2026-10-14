@@ -121,7 +121,7 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 				if err != nil || seed.Values[0] == nil {
 					t.Fatalf("missing seed marker: %v", err)
 				}
-				if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+				if count, err := idempotency.PruneExpired(ctx, pruneAt, 16); err != nil || count != 1 {
 					t.Fatalf("expired seed collection: %d/%v", count, err)
 				}
 				seed, err = fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{seedKey}})
@@ -288,7 +288,7 @@ func prepareVolumeRemovalAttemptTerminal(t *testing.T, checkpoint string) (*etcd
 	}
 	tasks := fixture.TaskRepository(t)
 	agentID := ids.New(ids.KindAgent)
-	claimed, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.Task.CreatedAt.Add(time.Second))
+	claimed, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.Task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("claim: %v/%v", found, err)
 	}

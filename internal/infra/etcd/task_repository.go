@@ -14,6 +14,7 @@ import (
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"time"
 )
 
 type taskRepositoryStore interface {
@@ -63,9 +64,10 @@ type TaskEventAppend struct {
 // a hard limit of MaximumTaskEvents, so the repository never needs an
 // unbounded read or a second revision to return the complete journal.
 type TaskEventSnapshot struct {
-	Task     TaskRecord
-	Events   []taskjournal.TaskEventRecord
-	Revision int64
+	Task                 TaskRecord
+	Events               []taskjournal.TaskEventRecord
+	Revision             int64
+	DiagnosticsExpiredAt *time.Time
 }
 
 // TaskListScope selects one immutable Task journal. ID is empty for global
@@ -100,6 +102,7 @@ type TaskRepository struct {
 	retryPolicy                  taskCASRetryPolicy
 	platformResolverTaskPreparer PlatformResolverTaskPreparer
 	platformResolverSelector     PlatformResolverComponentSelector
+	dispatchClaims               chan struct{}
 }
 
 // SetPlatformResolverTaskPreparer installs the private renderer used only by
@@ -141,7 +144,8 @@ func newTaskRepositoryWithRetryPolicy(
 	if err := validateTaskCASRetryPolicy(retryPolicy); err != nil {
 		return nil, err
 	}
-	return &TaskRepository{Preparer: groupstore.NewPreparer(store), store: store, retryPolicy: retryPolicy}, nil
+	return &TaskRepository{Preparer: groupstore.NewPreparer(store), store: store, retryPolicy: retryPolicy,
+		dispatchClaims: make(chan struct{}, 1)}, nil
 }
 
 func (repository *TaskRepository) GetTask(
@@ -469,6 +473,32 @@ func (repository *TaskRepository) ListTaskEvents(
 	}
 	if task.ID != taskID {
 		return TaskEventSnapshot{}, errs.New(errs.KindInternal, "task event snapshot has a mismatched task")
+	}
+	expiryRead, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{
+			Keys:     []string{taskjournal.TaskDiagnosticExpiryKey(taskID)},
+			Revision: taskResult.ReadRevision,
+		},
+	)
+	if err != nil {
+		return TaskEventSnapshot{}, err
+	}
+	if expiryRead == nil || len(expiryRead.Values) != 1 {
+		return TaskEventSnapshot{}, recordcodec.CorruptRecord()
+	}
+	defer etcdstore.ClearValues(expiryRead.Values)
+	if expiryRead.Values[0] != nil {
+		expiry, err := taskjournal.DecodeDiagnosticExpiry(expiryRead.Values[0].Value)
+		if err != nil || expiry.TaskID != task.ID || expiry.TaskRevision != taskResult.Values[0].ModRevision ||
+			!taskjournal.IsTerminalTaskStatus(task.Status) || expiry.ThroughSequence != task.NextEventSequence-1 {
+			return TaskEventSnapshot{}, recordcodec.CorruptRecord()
+		}
+		return TaskEventSnapshot{
+			Task:                 task,
+			Revision:             taskResult.ReadRevision,
+			DiagnosticsExpiredAt: &expiry.ExpiredAt,
+		}, nil
 	}
 	eventsResult, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix:   taskjournal.TaskEventScopePrefix(taskID),

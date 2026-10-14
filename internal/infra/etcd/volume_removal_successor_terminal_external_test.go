@@ -38,7 +38,7 @@ func TestVolumeRemovalSuccessorFailureRetainsReplay(t *testing.T) {
 	} else if outcome, _, conflict, err := published.Classify(); err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
 		t.Fatalf("retry publication: %v/%v/%v", outcome, conflict, err)
 	}
-	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second))
+	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second), 32)
 	if err != nil || !found || claimed.Task.Record.ID != retryID {
 		t.Fatalf("claim successor: %v/%v", found, err)
 	}
@@ -52,7 +52,7 @@ func TestVolumeRemovalSuccessorFailureRetainsReplay(t *testing.T) {
 	}
 	idempotency := etcd.NewTestIdempotencyRetention(t, fixture.Store)
 	pruneAt := terminal.Record.RetainUntil.Add(time.Hour)
-	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, pruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("collection should expire only the unrelated seed marker: %d/%v", count, err)
 	}
 	if count, err := tasks.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 0 {
@@ -102,7 +102,7 @@ func proveVolumeRemovalSuccessorCompletion(t *testing.T, mode string) {
 	} else if outcome, _, conflict, err := published.Classify(); err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
 		t.Fatalf("retry publication: %v/%v/%v", outcome, conflict, err)
 	}
-	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second))
+	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second), 32)
 	if err != nil || !found || claimed.Task.Record.ID != retryID {
 		t.Fatalf("claim successor: %v/%v", found, err)
 	}
@@ -211,7 +211,7 @@ func proveVolumeRemovalSuccessorCompletion(t *testing.T, mode string) {
 	}
 	if mode == "normal" {
 		collector := etcd.NewTestIdempotencyRetention(t, fixture.Store)
-		if count, err := collector.PruneExpired(ctx, finishedAt.Add(90*24*time.Hour+time.Hour)); err != nil ||
+		if count, err := collector.PruneExpired(ctx, finishedAt.Add(90*24*time.Hour+time.Hour), 16); err != nil ||
 			count != 3 {
 			t.Fatalf("completed operation replay expiry: %d/%v", count, err)
 		}
@@ -246,7 +246,7 @@ func TestVolumeRemovalRetainedRetriesDoNotStarvePruning(t *testing.T) {
 			outcome != etcd.IdempotencyKnownApplied {
 			t.Fatalf("retry %d publication: %v/%v/%v", index, outcome, conflict, err)
 		}
-		claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second))
+		claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second), 32)
 		if err != nil || !found || claimed.Task.Record.ID != retryID {
 			t.Fatalf("claim attempt %d: %v/%v", index, found, err)
 		}
@@ -268,7 +268,7 @@ func TestVolumeRemovalRetainedRetriesDoNotStarvePruning(t *testing.T) {
 	for range 4 {
 		backend.scans = 0
 		idempotency := etcd.NewTestIdempotencyRetention(t, backend)
-		count, err := idempotency.PruneExpired(ctx, pruneAt)
+		count, err := idempotency.PruneExpired(ctx, pruneAt, 16)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -364,7 +364,7 @@ func TestVolumeRemovalFinalizedMarkerExpiryFencesOwnership(t *testing.T) {
 			if lateOwner {
 				want = 1
 			}
-			if count, err := idempotency.PruneExpired(ctx, terminal.Record.RetainUntil.Add(time.Hour)); err != nil ||
+			if count, err := idempotency.PruneExpired(ctx, terminal.Record.RetainUntil.Add(time.Hour), 16); err != nil ||
 				count != want {
 				t.Fatalf("finalized marker collection: %d/%v, want %d", count, err, want)
 			}
@@ -398,14 +398,14 @@ func TestVolumeRemovalExpiredBatchKeepsTransactionBound(t *testing.T) {
 	backend := &boundedRemovalPruneStore{Store: fixture.Store}
 	collector := etcd.NewTestIdempotencyRetention(t, backend)
 	at := completed.Record.RetainUntil.Add(time.Hour)
-	if count, err := collector.PruneExpired(ctx, at); err != nil || count != 2 {
+	if count, err := collector.PruneExpired(ctx, at, 16); err != nil || count != 2 {
 		t.Fatalf("initial marker expiry: %d/%v", count, err)
 	}
 	keys := etcd.SeedCompletedVolumePruneBatch(t, fixture, completed.Record)
 	for _, want := range []int{9, 7} {
 		backend.scans = 0
 		collector = etcd.NewTestIdempotencyRetention(t, backend)
-		if count, err := collector.PruneExpired(ctx, at); err != nil || count != want {
+		if count, err := collector.PruneExpired(ctx, at, 16); err != nil || count != want {
 			t.Fatalf("bounded expired Volume batch: %d/%v, want %d", count, err, want)
 		}
 	}

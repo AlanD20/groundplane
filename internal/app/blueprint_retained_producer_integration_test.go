@@ -213,7 +213,7 @@ func proveRetainedBlueprintProducer(
 		t.Fatalf("retained runtime replay: %v", err)
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, claimed, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second))
+	claim, claimed, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !claimed || claim.Task.Record.ID != prepared.Task.ID {
 		t.Fatalf("retained Task claim: %t %v", claimed, err)
 	}

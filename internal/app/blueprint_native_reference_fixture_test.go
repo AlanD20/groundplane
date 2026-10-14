@@ -110,7 +110,7 @@ func (fixture *ExecutedArtifactFixture) AssertBlueprintNativeReferenceRejection(
 			) {
 				t.Fatalf("corrupt native source admitted for plan reconstruction: %v", err)
 			}
-			if _, found, err := tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, task.CreatedAt.Add(time.Second)); !errors.Is(
+			if _, found, err := tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, task.CreatedAt.Add(time.Second), 32); !errors.Is(
 				err,
 				errs.New(errs.KindInternal, ""),
 			) ||

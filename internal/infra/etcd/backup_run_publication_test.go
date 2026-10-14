@@ -198,7 +198,7 @@ func TestBackupRunPublicationReplayAcceptsClaimedWinner(t *testing.T) {
 	}
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 7101)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != run.TaskID {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
@@ -227,7 +227,7 @@ func TestBackupRunPublicationReplayAcceptsTerminalWinner(t *testing.T) {
 	}
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 7201)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
@@ -275,7 +275,7 @@ func TestBackupRunPublicationReplayRejectsTornSuccessors(t *testing.T) {
 			context.Background(),
 			ids.NewAt(ids.KindAgent, run.CreatedAt, 7301),
 			1,
-			run.CreatedAt.Add(time.Second),
+			run.CreatedAt.Add(time.Second), 32,
 		)
 		if err != nil || !found {
 			t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
@@ -305,7 +305,7 @@ func TestBackupRunPublicationReplayRejectsTornSuccessors(t *testing.T) {
 		}
 		agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 7401)
 		claim, found, err := tasks.ClaimNextTask(
-			context.Background(), agentID, 1, run.CreatedAt.Add(time.Second),
+			context.Background(), agentID, 1, run.CreatedAt.Add(time.Second), 32,
 		)
 		if err != nil || !found {
 			t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)

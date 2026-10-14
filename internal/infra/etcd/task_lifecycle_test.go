@@ -389,7 +389,7 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		ctx,
 		agentID,
 		3,
-		second.CreatedAt.Add(time.Second),
+		second.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v, %v, %v", claim, found, err)
@@ -526,7 +526,7 @@ func TestTaskRetryClaimAllocatesFreshAssignmentID(t *testing.T) {
 	createLifecycleTask(t, repository, source)
 	agentID := ids.NewAt(ids.KindAgent, source.CreatedAt, 801)
 	sourceClaim, found, err := repository.ClaimNextTask(
-		ctx, agentID, 1, source.CreatedAt.Add(time.Second),
+		ctx, agentID, 1, source.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask(source) = %#v, %t, %v", sourceClaim, found, err)
@@ -556,7 +556,7 @@ func TestTaskRetryClaimAllocatesFreshAssignmentID(t *testing.T) {
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("RetryTask() outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	retryClaim, found, err := repository.ClaimNextTask(ctx, agentID, 1, retryAt.Add(time.Second))
+	retryClaim, found, err := repository.ClaimNextTask(ctx, agentID, 1, retryAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask(retry) = %#v, %t, %v", retryClaim, found, err)
 	}
@@ -581,7 +581,7 @@ func TestTaskClaimUnknownOutcomeRecoversCommittedAssignmentID(t *testing.T) {
 	unknown := errs.New(errs.KindStorageUnavailable, "unknown Task claim outcome")
 	store.failAfterCommit(unknown)
 	if _, _, err := repository.ClaimNextTask(
-		ctx, agentID, 5, task.CreatedAt.Add(time.Second),
+		ctx, agentID, 5, task.CreatedAt.Add(time.Second), 32,
 	); !errors.Is(err, unknown) {
 		t.Fatalf("ClaimNextTask(unknown) error = %v", err)
 	}
@@ -595,7 +595,7 @@ func TestTaskClaimUnknownOutcomeRecoversCommittedAssignmentID(t *testing.T) {
 		t.Fatalf("ListAgentAssignments(after unknown) = %#v, %v", reconnected, err)
 	}
 	if another, found, err := repository.ClaimNextTask(
-		ctx, agentID, 5, task.CreatedAt.Add(2*time.Second),
+		ctx, agentID, 5, task.CreatedAt.Add(2*time.Second), 32,
 	); err != nil || found || another.Assignment.Record.AssignmentID != "" {
 		t.Fatalf("ClaimNextTask(after unknown) = %#v, %t, %v", another, found, err)
 	}
@@ -617,7 +617,7 @@ func TestTaskRepositoryTimesOutExactAgentGenerationAssignments(t *testing.T) {
 		ctx,
 		agentID,
 		9,
-		second.CreatedAt.Add(time.Second),
+		second.CreatedAt.Add(time.Second), 32,
 	); err != nil ||
 		!found {
 		t.Fatalf("ClaimNextTask(first) found/error = %v/%v", found, err)
@@ -626,7 +626,7 @@ func TestTaskRepositoryTimesOutExactAgentGenerationAssignments(t *testing.T) {
 		ctx,
 		agentID,
 		9,
-		second.CreatedAt.Add(2*time.Second),
+		second.CreatedAt.Add(2*time.Second), 32,
 	); err != nil ||
 		!found {
 		t.Fatalf("ClaimNextTask(second) found/error = %v/%v", found, err)
@@ -669,7 +669,7 @@ func TestTaskRepositoryIsolatesControllerAndAgentExecutionClaims(t *testing.T) {
 	createLifecycleTask(t, repository, agentTask)
 
 	agentID := ids.NewAt(ids.KindAgent, now, 701)
-	agentClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(2*time.Second))
+	agentClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(2*time.Second), 32)
 	if err != nil || !found || agentClaim.Task.Record.ID != agentTask.ID ||
 		agentClaim.Assignment.Record.Executor != testtaskjournal.TaskExecutorAgent {
 		t.Fatalf("ClaimNextTask() = %#v, %v, %v", agentClaim, found, err)
@@ -738,7 +738,7 @@ func TestTaskRepositoryRejectsStaleGenerationAndAbortsPendingTask(t *testing.T) 
 		ctx,
 		agentID,
 		8,
-		runningTask.CreatedAt.Add(time.Second),
+		runningTask.CreatedAt.Add(time.Second), 32,
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}

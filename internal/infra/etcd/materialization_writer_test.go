@@ -66,7 +66,7 @@ func TestTaskRepositorySerializesMaterializationWithoutBlockingUnrelatedTasks(t 
 	createLifecycleTask(t, repository, unrelated)
 	agentID := ids.NewAt(ids.KindAgent, at, 702)
 
-	firstClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, at.Add(3*time.Second))
+	firstClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, at.Add(3*time.Second), 32)
 	if err != nil || !found || firstClaim.Task.Record.ID != first.ID {
 		t.Fatalf("first ClaimNextTask() = %#v, %v, %v", firstClaim, found, err)
 	}
@@ -76,7 +76,7 @@ func TestTaskRepositorySerializesMaterializationWithoutBlockingUnrelatedTasks(t 
 		t.Fatalf("ListAgentAssignments() = %#v, %v", recovered, err)
 	}
 
-	unrelatedClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, at.Add(4*time.Second))
+	unrelatedClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, at.Add(4*time.Second), 32)
 	if err != nil || !found || unrelatedClaim.Task.Record.ID != unrelated.ID {
 		t.Fatalf("unrelated ClaimNextTask() = %#v, %v, %v", unrelatedClaim, found, err)
 	}
@@ -105,7 +105,7 @@ func TestTaskRepositorySerializesMaterializationWithoutBlockingUnrelatedTasks(t 
 		t.Fatalf("seed first applied projection = %#v, %v", appliedTransaction, err)
 	}
 
-	secondClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, at.Add(7*time.Second))
+	secondClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, at.Add(7*time.Second), 32)
 	if err != nil || !found || secondClaim.Task.Record.ID != second.ID {
 		t.Fatalf("second ClaimNextTask() = %#v, %v, %v", secondClaim, found, err)
 	}
@@ -212,7 +212,7 @@ func TestTaskRepositoryScansPastAFullPageOfBlockedMaterializations(t *testing.T)
 	active := materializationLifecycleTask(at, environmentID, 1)
 	createLifecycleTask(t, repository, active)
 	agentID := ids.NewAt(ids.KindAgent, at, 721)
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 5, at.Add(time.Second))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 5, at.Add(time.Second), 32)
 	if err != nil || !found || claim.Task.Record.ID != active.ID {
 		t.Fatalf("active ClaimNextTask() = %#v, %v, %v", claim, found, err)
 	}
@@ -226,7 +226,7 @@ func TestTaskRepositoryScansPastAFullPageOfBlockedMaterializations(t *testing.T)
 	createLifecycleTask(t, repository, unrelated)
 
 	next, found, err := repository.ClaimNextTask(
-		ctx, agentID, 5, at.Add(time.Duration(taskClaimQueuePageSize+5)*time.Second),
+		ctx, agentID, 5, at.Add(time.Duration(taskClaimQueuePageSize+5)*time.Second), 32,
 	)
 	if err != nil || !found || next.Task.Record.ID != unrelated.ID {
 		t.Fatalf("paginated ClaimNextTask() = %#v, %v, %v", next, found, err)

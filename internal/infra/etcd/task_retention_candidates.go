@@ -19,38 +19,63 @@ import (
 func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 	ctx context.Context, now time.Time,
 ) (*etcdstore.RangeResult, error) {
-	request := etcdstore.RangeRequest{Prefix: taskjournal.TaskRetentionIndexPrefix, Limit: 1}
-	for {
-		page, err := repository.store.Range(ctx, request)
+	scan, err := repository.readTaskCleanupPage(ctx, taskRetentionScanKey, taskjournal.TaskRetentionIndexPrefix, 8)
+	if err != nil {
+		return nil, err
+	}
+	if len(scan.page.Values) == 0 && scan.after != "" {
+		if err := repository.advanceTaskCleanupPage(ctx, scan, ""); err != nil {
+			return nil, err
+		}
+		scan, err = repository.readTaskCleanupPage(ctx, taskRetentionScanKey, taskjournal.TaskRetentionIndexPrefix, 8)
 		if err != nil {
 			return nil, err
 		}
-		if page == nil || page.ReadRevision <= 0 || len(page.Values) > 1 {
-			return nil, taskjournal.CorruptPruneIntent()
-		}
-		if len(page.Values) == 0 {
-			return page, nil
-		}
-		entry := page.Values[0]
+	}
+	page := scan.page
+	for index, entry := range page.Values {
 		taskID, deadline, err := taskjournal.ParseTaskRetentionIndexKey(entry.Key)
 		if err != nil {
-			clear(entry.Value)
+			etcdstore.ClearRangeValues(page.Values)
+			if advanceErr := repository.advanceTaskCleanupPage(ctx, scan, entry.Key); advanceErr != nil {
+				return nil, advanceErr
+			}
 			return nil, err
 		}
 		if deadline.After(now) {
-			return page, nil
+			etcdstore.ClearRangeValues(page.Values)
+			if err := repository.advanceTaskCleanupPage(ctx, scan, ""); err != nil {
+				return nil, err
+			}
+			return &etcdstore.RangeResult{ReadRevision: page.ReadRevision}, nil
 		}
 		blocked, err := repository.taskRetentionCandidateBlocked(ctx, taskID, deadline, page.ReadRevision)
 		if err != nil {
-			clear(entry.Value)
+			etcdstore.ClearRangeValues(page.Values)
+			if advanceErr := repository.advanceTaskCleanupPage(ctx, scan, entry.Key); advanceErr != nil {
+				return nil, advanceErr
+			}
 			return nil, err
 		}
 		if !blocked {
-			return page, nil
+			if err := repository.advanceTaskCleanupPage(ctx, scan, entry.Key); err != nil {
+				etcdstore.ClearRangeValues(page.Values)
+				return nil, err
+			}
+			etcdstore.ClearRangeValues(page.Values[:index])
+			etcdstore.ClearRangeValues(page.Values[index+1:])
+			return &etcdstore.RangeResult{ReadRevision: page.ReadRevision, Values: []etcdstore.KeyValue{entry}}, nil
 		}
-		request.StartExclusive, request.Revision = entry.Key, page.ReadRevision
 		clear(entry.Value)
 	}
+	after := ""
+	if page.More {
+		after = page.Values[len(page.Values)-1].Key
+	}
+	if err := repository.advanceTaskCleanupPage(ctx, scan, after); err != nil {
+		return nil, err
+	}
+	return &etcdstore.RangeResult{ReadRevision: page.ReadRevision}, nil
 }
 
 func (repository *TaskRepository) taskRetentionCandidateBlocked(

@@ -95,7 +95,7 @@ func claimedManualScriptFixture(
 		t.Fatal(err)
 	}
 	assignment, found, err := tasks.ClaimNextTask(context.Background(), ids.NewAt(ids.KindAgent, task.CreatedAt, 99), 1,
-		task.CreatedAt.Add(time.Second))
+		task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("claim manual execution = %t, %v", found, err)
 	}

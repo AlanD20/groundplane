@@ -12,7 +12,11 @@ export function taskDetailActions(
         Partial<
           Pick<
             ActivityEntry,
-            "target" | "executor" | "resourceKind" | "interruptedDetachRetry"
+            | "target"
+            | "executor"
+            | "resourceKind"
+            | "interruptedDetachRetry"
+            | "recoveryRetryAvailable"
           >
         >)
     | null,
@@ -25,6 +29,7 @@ export function taskDetailActions(
     cancel: task.status === "pending",
     retry:
       !!task.interruptedDetachRetry ||
+      !!task.recoveryRetryAvailable ||
       (task.executor !== "blueprint" &&
         !(
           task.type === "check" &&

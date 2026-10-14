@@ -115,7 +115,11 @@ Task events resume by sequence. The latest 1,000 events are retained; each is
 bounded to 32 KiB. Sequence numbers never reset when older events are trimmed.
 An expired resume cursor needs a fresh snapshot. Trimming progress does not
 discard the Task's failure or recovery evidence. Terminal history has a 90-day
-retention boundary.
+retention boundary. Disposable events and attempt summaries have a separately
+configurable diagnostic lifetime. Expiry leaves the immutable Task outcome,
+first failure, captured execution/recovery authority and request replay intact.
+Pending work or held recovery evidence is not eligible. The inspector identifies
+expired diagnostics instead of presenting missing events as unfinished steps.
 
 Task details also retain summaries of earlier attempts after their detailed events
 are trimmed. These show the captured action, last recorded outcome, safe failure
@@ -124,7 +128,9 @@ success. The summary history is bounded to 64 KiB and at most 1,000 summaries;
 the inspector reports how many older summaries were discarded. It retires with
 the Task and cannot authorize Retry or prove restoration. The Console inspector,
 API Task details and structured CLI Task Show share this locally implemented
-history; trimming/restart behavior is not yet qualified.
+history. Individually compressed summaries avoid rewriting the entire archive
+for each trimmed event; history remains a diagnostic projection, not execution
+authority. Trimming/restart behavior is not yet live-qualified.
 
 Activity and Task lists show newest-created Tasks first (descending Task ID),
 with the same scope filters and fixed-revision cursor semantics on every page.
@@ -140,6 +146,20 @@ Console pages default to five Tasks, with 5/10/25/50 choices.
 Retry creates a new attempt of the same operation with the captured inputs.
 It does not silently apply later configuration. Pending, running and completed
 attempts cannot ordinarily be retried; only one retry may be active.
+
+An unsettled recovery can offer **Retry recovery** after automatic execution
+stops. Deterministic or unsafe-to-repeat failures stop immediately. Only safe
+captured restoration after a classified transient dependency failure can retry
+automatically, with one- and five-second backoff and at most three failed
+executions inside its existing deadline. Report redelivery does not count as a
+new failure. The stopped state survives restarts, preserves resource ownership
+and releases the execution slot for unrelated work.
+
+Explicit Retry authorizes another bounded recovery attempt in that same Task,
+not its forward actions or newer desired state. Its result and first failure
+remain unchanged until exact restoration proof permits settlement. A lost Retry
+response replays the same authorization. Local implementation is not installed
+failure-path qualification.
 
 A running Blueprint Apply can instead offer **Retry captured Detach hook** when
 a Custom Detach hook started but no result was saved, and its recovery attempt

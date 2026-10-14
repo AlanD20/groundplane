@@ -49,6 +49,7 @@ type RetentionRepository struct {
 
 type pruneScan struct {
 	After          string
+	PreviousAfter  string
 	CursorRevision int64
 	ReadRevision   int64
 	More           bool
@@ -79,10 +80,10 @@ func NewRetentionRepository(store retentionStore, guard PruneGuard) (*RetentionR
 	return &RetentionRepository{store: store, guard: guard}, nil
 }
 
-// PruneExpired performs one bounded daily collection. It reads retention
+// PruneExpired performs one bounded collection. It reads retention
 // entries and their marker counterparts at one fixed MVCC revision, then
 // retries only a known CAS conflict from a fresh snapshot.
-func (repository *RetentionRepository) PruneExpired(ctx context.Context, now time.Time) (int, error) {
+func (repository *RetentionRepository) PruneExpired(ctx context.Context, now time.Time, remaining int) (int, error) {
 	if ctx == nil {
 		return 0, errs.New(errs.KindInternal, "idempotency context is required")
 	}
@@ -92,8 +93,11 @@ func (repository *RetentionRepository) PruneExpired(ctx context.Context, now tim
 	if !recordcodec.IsCanonicalUTC(now) {
 		return 0, errs.New(errs.KindValidationFailed, "idempotency prune time must be UTC")
 	}
+	if remaining < 1 {
+		return 0, errs.New(errs.KindValidationFailed, "idempotency cleanup budget must be positive")
+	}
 	for attempt := 0; attempt < maximumPruneCASAttempts; attempt++ {
-		candidates, scan, err := repository.collectExpired(ctx, now)
+		candidates, scan, err := repository.collectExpired(ctx, now, min(maximumPruneMarkers, remaining))
 		if err != nil {
 			return 0, err
 		}
@@ -116,6 +120,7 @@ func (repository *RetentionRepository) PruneExpired(ctx context.Context, now tim
 func (repository *RetentionRepository) collectExpired(
 	ctx context.Context,
 	now time.Time,
+	limit int,
 ) ([]pruneCandidate, pruneScan, error) {
 	scan, err := repository.loadPruneScan(ctx)
 	if err != nil {
@@ -123,12 +128,12 @@ func (repository *RetentionRepository) collectExpired(
 	}
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: IdempotencyRetentionPrefix, StartExclusive: scan.After,
-		Limit: maximumPruneMarkers,
+		Limit: int64(limit),
 	})
 	if err != nil {
 		return nil, scan, err
 	}
-	if page == nil || page.ReadRevision <= 0 || len(page.Values) > maximumPruneMarkers {
+	if page == nil || page.ReadRevision <= 0 || len(page.Values) > limit {
 		return nil, scan, CorruptIdempotencyMarker()
 	}
 	scan.ReadRevision, scan.More = page.ReadRevision, page.More
@@ -370,14 +375,17 @@ func (repository *RetentionRepository) loadPruneScan(ctx context.Context) (prune
 	if _, _, err := ParseIdempotencyRetentionKey(cursor.After); err != nil {
 		return pruneScan{}, CorruptIdempotencyMarker()
 	}
-	return pruneScan{After: cursor.After, CursorRevision: read.Entry.ModRevision}, nil
+	return pruneScan{After: cursor.After, PreviousAfter: cursor.After, CursorRevision: read.Entry.ModRevision}, nil
 }
 
 // A durable scan cursor rotates past retained attempts without scanning more
-// than the daily 16-entry bound or modifying any marker's retention timestamp.
+// than the per-call 16-entry bound or modifying any marker's retention timestamp.
 func (repository *RetentionRepository) pruneRetainedBatch(
 	ctx context.Context, now time.Time, candidates []pruneCandidate, scan pruneScan,
 ) (int, error) {
+	if len(candidates) == 0 && scan.After == scan.PreviousAfter {
+		return 0, nil
+	}
 	guards := make([]PruneGuardResult, len(candidates))
 	cursorMode := scan.After != ""
 	for index, candidate := range candidates {

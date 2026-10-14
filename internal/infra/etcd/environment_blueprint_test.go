@@ -378,7 +378,7 @@ func TestEnvironmentBlueprintCompletionPromotesAppliedComposeProjection(t *testi
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 51)
-	assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+	assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found || assignment.Task.Record.ID != task.ID {
 		t.Fatalf("ClaimNextTask() = %#v, %v, %v", assignment, found, err)
 	}

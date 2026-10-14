@@ -279,7 +279,7 @@ func proveFullMixedProducer(
 		}
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, claimed, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second))
+	claim, claimed, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !claimed {
 		t.Fatalf("full producer claim: %t %v", claimed, err)
 	}
@@ -326,7 +326,7 @@ func proveFullMixedProducer(
 				break
 			}
 			claim, claimed, err = fixture.Tasks.ClaimNextTask(
-				ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Minute),
+				ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Minute), 32,
 			)
 			if err != nil || !claimed {
 				t.Fatalf("sibling Service-unit claim: %t %v", claimed, err)

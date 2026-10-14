@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/storagemaintenance"
 	"github.com/AlanD20/groundplane/internal/common/version"
 
 	"github.com/AlanD20/groundplane/pkg/api"
@@ -59,6 +60,9 @@ type ControllerUpdateSource interface {
 }
 
 type HostDependencies struct {
+	Maintenance interface {
+		Status() storagemaintenance.Status
+	}
 	System            SystemSnapshotSource
 	Etcd              EtcdSnapshotSource
 	Agent             AgentSnapshotSource
@@ -72,6 +76,9 @@ type HostDependencies struct {
 // accepted Host response. It owns error normalization and never exposes source
 // errors, etcd endpoints, or Agent credential material.
 type HostService struct {
+	maintenance interface {
+		Status() storagemaintenance.Status
+	}
 	system            SystemSnapshotSource
 	etcd              EtcdSnapshotSource
 	agent             AgentSnapshotSource
@@ -104,6 +111,7 @@ func NewHostService(dependencies HostDependencies) (*HostService, error) {
 		return nil, errs.New(errs.KindInternal, "host controller version is required")
 	}
 	return &HostService{
+		maintenance:       dependencies.Maintenance,
 		system:            dependencies.System,
 		etcd:              dependencies.Etcd,
 		agent:             dependencies.Agent,
@@ -151,6 +159,11 @@ func (service *HostService) Show(ctx context.Context) (api.Host, error) {
 	if etcd.Version != "" {
 		observedEtcdVersion = &etcd.Version
 	}
+	var maintenance *storagemaintenance.Status
+	if service.maintenance != nil {
+		snapshot := service.maintenance.Status()
+		maintenance = &snapshot
+	}
 	return api.Host{
 		Hostname: system.Hostname,
 		Arch:     system.Arch,
@@ -162,11 +175,12 @@ func (service *HostService) Show(ctx context.Context) (api.Host, error) {
 		Swap:     system.Swap,
 		Docker:   system.Docker,
 		Etcd: api.HostEtcd{
-			Node:     etcd.Node,
-			Status:   etcd.Status,
-			DBSize:   etcd.DBSize,
-			Version:  observedEtcdVersion,
-			Software: etcd.Software,
+			Maintenance: maintenance,
+			Node:        etcd.Node,
+			Status:      etcd.Status,
+			DBSize:      etcd.DBSize,
+			Version:     observedEtcdVersion,
+			Software:    etcd.Software,
 		},
 		Controller: api.HostController{
 			Service: service.controllerService,

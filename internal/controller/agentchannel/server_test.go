@@ -88,6 +88,7 @@ func (store *wakeTaskStore) ClaimNextTask(
 
 	uint64,
 	time.Time,
+	int32,
 ) (etcd.TaskAssignment, bool, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -174,6 +175,7 @@ func (store *fakeTaskStore) ClaimNextTask(
 
 	uint64,
 	time.Time,
+	int32,
 ) (etcd.TaskAssignment, bool, error) {
 	if len(store.claims) == 0 {
 		return etcd.TaskAssignment{}, false, nil

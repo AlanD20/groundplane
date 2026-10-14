@@ -190,6 +190,8 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     attemptHistory: task.attempt_history,
     executions: task.executions,
     interruptedDetachRetry: task.interrupted_detach_retry,
+    recoveryRetryAvailable: task.recovery_retry_available,
+    diagnosticsExpiredAt: task.diagnostics_expired_at,
     workspace:
       task.workspace_type === "platform" ? "platform" : task.tenant_id!,
     workspaceType: task.workspace_type,

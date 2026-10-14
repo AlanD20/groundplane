@@ -20,6 +20,12 @@ import (
 const taskRetryRoute = "/tasks/{id}/retry"
 
 type taskRetryRepository interface {
+	GetStoppedRecoveryRetry(context.Context, string) (bool, error)
+	RetryStoppedRecovery(
+		context.Context,
+		string,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 	RetryInterruptedDetach(
 		context.Context,
 		string,
@@ -268,7 +274,17 @@ func (service *taskRetryService) retryTask(
 	now := service.now().UTC()
 	retryTaskID := ids.New(ids.KindTask)
 	resumeDetach := source.Record.Executor == taskjournal.TaskExecutorBlueprint
-	if resumeDetach {
+	resumeRecovery, err := service.repository.GetStoppedRecoveryRetry(ctx, sourceTaskID)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if resumeRecovery && initiation != nil {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"stopped recovery requires an explicit operator Retry",
+		)
+	}
+	if resumeDetach || resumeRecovery {
 		retryTaskID = sourceTaskID
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: retryTaskID})
@@ -285,7 +301,7 @@ func (service *taskRetryService) retryTask(
 		TaskID: retryTaskID, CreatedAt: now, UpdatedAt: now,
 	}
 	var result etcd.IdempotencyTransactionResult
-	if resumeDetach {
+	if resumeDetach || resumeRecovery {
 		marker.Kind = idempotencyrecord.IdempotencyMarkerDirect
 		marker.State = idempotencyrecord.IdempotencyMarkerCompleted
 		marker.TaskID = ""
@@ -293,7 +309,9 @@ func (service *taskRetryService) retryTask(
 		marker.RetainUntil = now.Add(idempotencyrecord.MarkerRetention)
 	}
 	var retryErr error
-	if resumeDetach {
+	if resumeRecovery {
+		result, retryErr = service.repository.RetryStoppedRecovery(ctx, sourceTaskID, marker)
+	} else if resumeDetach {
 		result, retryErr = service.repository.RetryInterruptedDetach(ctx, sourceTaskID, marker)
 	} else if source.Record.Type == taskjournal.TaskBackup || source.Record.Type == taskjournal.TaskRestore {
 		if initiation != nil {

@@ -259,7 +259,7 @@ func blueprintFinalRecoveryAcknowledgement(t *testing.T, componentDeclared, comp
 			t.Fatal("accepted Component authority from changed plan hash")
 		}
 	}
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(2*time.Minute))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(2*time.Minute), 32)
 	if err != nil || !found || claim.Assignment.Record.RestorationAuthority == nil ||
 		claim.Assignment.Record.RestorationAuthority.Candidates[0].Target != testtaskassignments.ReleaseRestorationCandidateAbsence {
 		t.Fatalf("claim recovery fixture = %#v, %t, %v", claim, found, err)
@@ -805,7 +805,7 @@ func newOrdinaryReleaseClaimFixtureForTarget(t *testing.T, serviceTarget bool) o
 	}
 	seedBlueprintRequirementTask(t, store, task)
 	agentID := ids.NewAt(ids.KindAgent, now, 113)
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("ordinary Release ClaimNextTask() = %#v, %t, %v", claim, found, err)
 	}

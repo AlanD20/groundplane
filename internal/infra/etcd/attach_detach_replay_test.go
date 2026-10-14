@@ -35,7 +35,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 	grantRecord, grantFacts := testPendingAttach(t, scope, 94, "replay-grant", nil)
 	createTestAttach(t, ctx, attaches, scope, grantRecord, &grantFacts)
 	if _, found, err := tasks.ClaimNextTask(
-		ctx, agentID, 14, grantRecord.CreatedAt.Add(time.Second),
+		ctx, agentID, 14, grantRecord.CreatedAt.Add(time.Second), 32,
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask(grant) found/error = %v/%v", found, err)
 	}
@@ -62,7 +62,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		ctx,
 		agentID,
 		15,
-		record.CreatedAt.Add(3*time.Second),
+		record.CreatedAt.Add(3*time.Second), 32,
 	); err != nil ||
 		!found {
 		t.Fatalf("ClaimNextTask(source) found/error = %v/%v", found, err)
@@ -89,7 +89,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 
 	detachAt := record.CreatedAt.Add(5 * time.Second)
 	detachTask := publishTestDetach(t, ctx, attaches, sourceScope, ready, detachAt)
-	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 16, detachAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 16, detachAt.Add(time.Second), 32); err != nil || !found {
 		t.Fatalf("ClaimNextTask(detach) found/error = %v/%v", found, err)
 	}
 	assignmentID := taskAssignmentIDForTest(t, tasks, detachTask.ID)

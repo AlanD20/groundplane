@@ -174,7 +174,7 @@ func TestBlueprintChildAssignmentFencesCurrentParentAndPendingUnit(t *testing.T)
 				t.Fatalf("seed Blueprint child = %#v, %v", seed, err)
 			}
 			agentID := ids.NewAt(ids.KindAgent, now, 57)
-			assignment, found, err := repository.ClaimNextTask(ctx, agentID, 1, now.Add(2*time.Second))
+			assignment, found, err := repository.ClaimNextTask(ctx, agentID, 1, now.Add(2*time.Second), 32)
 			if err != nil || !found {
 				t.Fatalf("claim Blueprint child = %#v, %t, %v", assignment, found, err)
 			}

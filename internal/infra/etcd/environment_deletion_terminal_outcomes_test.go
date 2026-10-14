@@ -39,7 +39,7 @@ func TestEnvironmentDeletionTerminalOutcomesCleanCompanionsAndReplay(t *testing.
 				)
 			} else {
 				if _, found, claimErr := fixture.tasks.ClaimNextTask(
-					context.Background(), agentID, 1, fixture.now.Add(time.Second),
+					context.Background(), agentID, 1, fixture.now.Add(time.Second), 32,
 				); claimErr != nil || !found {
 					t.Fatalf("ClaimNextTask() found/error = %t/%v", found, claimErr)
 				}
@@ -177,7 +177,7 @@ func TestEnvironmentDeletionTerminalUnknownOutcomeReplaysCommittedCleanup(t *tes
 	fixture.mustBegin(t)
 	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8040)
 	if _, found, err := fixture.tasks.ClaimNextTask(
-		context.Background(), agentID, 1, fixture.now.Add(time.Second),
+		context.Background(), agentID, 1, fixture.now.Add(time.Second), 32,
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}

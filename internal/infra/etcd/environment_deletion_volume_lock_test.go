@@ -102,7 +102,7 @@ func TestEnvironmentDeletionCompletionExcludesVolumeRemovalLock(t *testing.T) {
 			fixture.mustBegin(t)
 			agentID := ids.New(ids.KindAgent)
 			if _, found, err := fixture.tasks.ClaimNextTask(ctx, agentID, 1,
-				fixture.now.Add(time.Second)); err != nil || !found {
+				fixture.now.Add(time.Second), 32); err != nil || !found {
 				t.Fatalf("claim: %v/%v", found, err)
 			}
 			owner := removalrecord.Owner{EnvironmentID: fixture.environment.Record.ID,

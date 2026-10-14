@@ -38,7 +38,7 @@ func TestAttachTaskClaimAndAcknowledgementAdvanceProvisioningAtomically(t *testi
 	createTestAttach(t, ctx, attaches, scope, record, &facts)
 	agentID := ids.NewAt(ids.KindAgent, record.CreatedAt, 801)
 
-	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, record.CreatedAt.Add(time.Second))
+	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, record.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v, %v, %v", claim, found, err)
 	}
@@ -127,7 +127,8 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 	record, facts := testPendingAttach(t, scope, 82, "retry-db", nil)
 	createTestAttach(t, ctx, attaches, scope, record, &facts)
 	agentID := ids.NewAt(ids.KindAgent, record.CreatedAt, 802)
-	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 2, record.CreatedAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 2, record.CreatedAt.Add(time.Second), 32); err != nil ||
+		!found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
 	terminalAt := record.CreatedAt.Add(2 * time.Second)
@@ -173,7 +174,7 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 		pending.Revision != retryTask.Revision {
 		t.Fatalf("retrying Attach = %#v, %v", pending, err)
 	}
-	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 2, retryAt.Add(time.Second))
+	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 2, retryAt.Add(time.Second), 32)
 	if err != nil || !found || claim.Task.Record.ID != retryID {
 		t.Fatalf("ClaimNextTask(retry) = %#v, %v, %v", claim, found, err)
 	}
@@ -204,7 +205,7 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 	grantRecord, grantFacts := testPendingAttach(t, scope, 84, "grant-target", nil)
 	createTestAttach(t, ctx, attaches, scope, grantRecord, &grantFacts)
 	if _, found, claimErr := tasks.ClaimNextTask(
-		ctx, agentID, 20, grantRecord.CreatedAt.Add(time.Second),
+		ctx, agentID, 20, grantRecord.CreatedAt.Add(time.Second), 32,
 	); claimErr != nil || !found {
 		t.Fatalf("ClaimNextTask(grant) found/error = %v/%v", found, claimErr)
 	}
@@ -230,7 +231,7 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 	defer clear(expectedCiphertext)
 	createTestAttach(t, ctx, attaches, sourceScope, record, &facts)
 	if _, found, claimErr := tasks.ClaimNextTask(
-		ctx, agentID, 20, record.CreatedAt.Add(3*time.Second),
+		ctx, agentID, 20, record.CreatedAt.Add(3*time.Second), 32,
 	); claimErr != nil || !found {
 		t.Fatalf("ClaimNextTask(source) found/error = %v/%v", found, claimErr)
 	}
@@ -294,7 +295,7 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("RetryTask(restart) outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 20, retryAt.Add(time.Second))
+	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 20, retryAt.Add(time.Second), 32)
 	if err != nil || !found || claim.Task.Record.ID != retryID {
 		t.Fatalf("ClaimNextTask(retry) = %#v, %v, %v", claim, found, err)
 	}
@@ -353,7 +354,8 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	record, facts := testPendingAttach(t, scope, 83, "detach-db", nil)
 	createTestAttach(t, ctx, attaches, scope, record, &facts)
 	agentID := ids.NewAt(ids.KindAgent, record.CreatedAt, 804)
-	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 3, record.CreatedAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 3, record.CreatedAt.Add(time.Second), 32); err != nil ||
+		!found {
 		t.Fatalf("ClaimNextTask(provision) found/error = %v/%v", found, err)
 	}
 	if _, err := tasks.AcknowledgeTask(
@@ -374,7 +376,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	detachAt := record.CreatedAt.Add(3 * time.Second)
 	detachTask := publishTestDetach(t, ctx, attaches, scope, ready, detachAt)
 	detachID := detachTask.ID
-	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 3, detachAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 3, detachAt.Add(time.Second), 32); err != nil || !found {
 		t.Fatalf("ClaimNextTask(detach) found/error = %v/%v", found, err)
 	}
 	detachFailureAt := detachAt.Add(2 * time.Second)
@@ -417,7 +419,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	if err != nil || retrying.Record.Status != core.AttachDetaching || retrying.Record.TaskID != retryID {
 		t.Fatalf("retrying detach Attach = %#v, %v", retrying, err)
 	}
-	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 3, retryAt.Add(time.Second))
+	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 3, retryAt.Add(time.Second), 32)
 	if err != nil || !found || claim.Task.Record.ID != retryID {
 		t.Fatalf("ClaimNextTask(detach retry) = %#v, %v, %v", claim, found, err)
 	}
@@ -541,7 +543,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 			ctx,
 			agentID,
 			12,
-			record.CreatedAt.Add(time.Second),
+			record.CreatedAt.Add(time.Second), 32,
 		); err != nil ||
 			!found {
 			t.Fatalf("ClaimNextTask(provision) found/error = %v/%v", found, err)
@@ -562,7 +564,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 		}
 		detachAt := record.CreatedAt.Add(3 * time.Second)
 		detachTask := publishTestDetach(t, ctx, attaches, scope, ready, detachAt)
-		if _, found, err := tasks.ClaimNextTask(ctx, agentID, 12, detachAt.Add(time.Second)); err != nil || !found {
+		if _, found, err := tasks.ClaimNextTask(ctx, agentID, 12, detachAt.Add(time.Second), 32); err != nil || !found {
 			t.Fatalf("ClaimNextTask(detach) found/error = %v/%v", found, err)
 		}
 		failedTask, err := tasks.AcknowledgeTask(
@@ -684,7 +686,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 			ctx,
 			agentID,
 			13,
-			record.CreatedAt.Add(time.Second),
+			record.CreatedAt.Add(time.Second), 32,
 		); err != nil ||
 			!found {
 			t.Fatalf("ClaimNextTask(provision) found/error = %v/%v", found, err)
@@ -705,7 +707,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 		}
 		detachAt := record.CreatedAt.Add(3 * time.Second)
 		detachTask := publishTestDetach(t, ctx, attaches, scope, ready, detachAt)
-		if _, found, err := tasks.ClaimNextTask(ctx, agentID, 13, detachAt.Add(time.Second)); err != nil || !found {
+		if _, found, err := tasks.ClaimNextTask(ctx, agentID, 13, detachAt.Add(time.Second), 32); err != nil || !found {
 			t.Fatalf("ClaimNextTask(detach) found/error = %v/%v", found, err)
 		}
 		exclusionKey, err := testbackupruntime.BackupSourceTargetExclusionKey(

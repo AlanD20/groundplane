@@ -62,7 +62,8 @@ type ControllerConfig struct {
 	HostTerminal struct {
 		InputInactivity string `yaml:"input_inactivity"`
 	} `yaml:"host_terminal"`
-	Storage struct {
+	Maintenance MaintenanceConfig `yaml:"maintenance"`
+	Storage     struct {
 		VolumeRoot string `yaml:"volume_root"`
 	} `yaml:"storage"`
 	Agent struct {
@@ -106,6 +107,7 @@ func DefaultControllerConfig() ControllerConfig {
 	c.Listen.HTTP = []string{"127.0.0.1:8080"}
 	c.Scheduler.TickInterval = "30s"
 	c.HostTerminal.InputInactivity = "15m"
+	c.Maintenance = DefaultMaintenanceConfig()
 	c.ReleaseExecutionTimeout = "15h"
 	c.Storage.VolumeRoot = environmentpath.DefaultVolumeRoot
 	c.Agent.Runtime.PullIntervalSeconds = 2
@@ -169,6 +171,9 @@ func DefaultCLIConfig() CLIConfig {
 }
 
 func (c ControllerConfig) Validate() error {
+	if _, err := c.Maintenance.Policy(); err != nil {
+		return err
+	}
 	if _, err := c.AllocationPools(); err != nil {
 		return err
 	}

@@ -223,6 +223,7 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 	if err := applyTaskRecovery(&response, task.Record, events, recovery); err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
+	response.DiagnosticsExpiredAt = events.DiagnosticsExpiredAt
 	preparation, err := s.tasks.GetReleasePreparation(ctx, task.Record, task.ReadRevision)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
@@ -248,6 +249,12 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 	}
 	if err := s.applyBlueprintFailureDetails(ctx, task.Record, &response); err != nil {
 		return nil, normalizeTaskRouteError(err)
+	}
+	if task.Record.Status == taskjournal.TaskStatusRunning {
+		response.RecoveryRetryAvailable, err = s.tasks.GetStoppedRecoveryRetry(ctx, task.Record.ID)
+		if err != nil {
+			return nil, normalizeTaskRouteError(err)
+		}
 	}
 	if err := s.applyBlueprintExecutionDetails(ctx, task, request, &response); err != nil {
 		return nil, normalizeTaskRouteError(err)

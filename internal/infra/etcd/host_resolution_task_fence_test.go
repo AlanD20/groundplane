@@ -257,7 +257,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	clearHostResolutionReconciliationChange(firstChange)
 	// Automatic publication must produce executable work, not just a queue row.
 	agentID := ids.NewAt(ids.KindAgent, now, 8)
-	firstClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second))
+	firstClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second), 32)
 	if err != nil || !found || firstClaim.Task.Record.ID != first.ID {
 		t.Fatalf("claim automatic resolver Task = %v, %v", found, err)
 	}
@@ -393,7 +393,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if _, err := dnsReferences.RequireDNSUnreferenced(ctx, serviceID, "", 0); err == nil {
 		t.Fatal("pending DNS replacement released its last-applied Service reference")
 	}
-	secondClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, observedAt)
+	secondClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, observedAt, 32)
 	if err != nil || !found || secondClaim.Task.Record.ID != second.ID {
 		t.Fatalf("claim automatic successor = %v, %v", found, err)
 	}

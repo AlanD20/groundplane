@@ -205,7 +205,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 					runEntryRemovalAgent(t, fixture, resolver, materials, task)
 				}
 			} else {
-				if _, found, err := fixture.Tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, time.Now().UTC()); err != nil || found {
+				if _, found, err := fixture.Tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, time.Now().UTC(), 32); err != nil || found {
 					t.Fatalf("never-applied cleanup allowed a competing materialization: %v / %v", found, err)
 				}
 				claimed, found, err := fixture.Tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second))
@@ -215,7 +215,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 				if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, nil, task.CreatedAt.Add(2*time.Second)); err != nil {
 					t.Fatal(err)
 				}
-				if claimed, found, err := fixture.Tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, time.Now().UTC()); err != nil || !found || claimed.Task.Record.ID != competingTask {
+				if claimed, found, err := fixture.Tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, time.Now().UTC(), 32); err != nil || !found || claimed.Task.Record.ID != competingTask {
 					t.Fatalf("completed cleanup retained its materialization exclusion: %v / %v", found, err)
 				}
 			}
@@ -251,7 +251,7 @@ func acknowledgeEntryRemoval(
 	t.Helper()
 	ctx := t.Context()
 	agentID := ids.New(ids.KindAgent)
-	assigned, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+	assigned, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found || assigned.Task.Record.ID != task.ID {
 		t.Fatalf("cleanup assignment: %v / %v", found, err)
 	}

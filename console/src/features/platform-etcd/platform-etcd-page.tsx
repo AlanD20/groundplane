@@ -21,6 +21,7 @@ import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-id
 import { DetailRow } from "@/components/common/detail-row";
 import { newULID } from "@/lib/utils";
 import { useStore } from "@/lib/store";
+import { StorageMaintenanceStatus } from "./storage-maintenance-status";
 
 type Document =
   operations["etcd.config.show"]["responses"][200]["content"]["application/json"];
@@ -145,6 +146,7 @@ export default function PlatformEtcdPage() {
           value={host?.etcd.version ?? "Not reported"}
         />
       </ResourcePanel>
+      <StorageMaintenanceStatus status={host?.etcd.maintenance} />
       <ResourcePanel
         title="etcd configuration"
         actions={

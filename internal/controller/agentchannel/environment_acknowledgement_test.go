@@ -67,7 +67,7 @@ func (store *environmentAcknowledgementStore) ListAgentAssignments(
 }
 
 func (store *environmentAcknowledgementStore) ClaimNextTask(
-	context.Context, string, uint64, time.Time,
+	context.Context, string, uint64, time.Time, int32,
 ) (etcd.TaskAssignment, bool, error) {
 	return etcd.TaskAssignment{}, false, nil
 }

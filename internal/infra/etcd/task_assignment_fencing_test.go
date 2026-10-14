@@ -26,7 +26,7 @@ func TestAgentTaskAcknowledgementFencesExactAssignmentAndReplay(t *testing.T) {
 	task := validTaskRecord(now)
 	createLifecycleTask(t, repository, task)
 	agentID := ids.NewAt(ids.KindAgent, now, 81)
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 9, now.Add(time.Second))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 9, now.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v, %t, %v", claim, found, err)
 	}
@@ -115,7 +115,7 @@ func TestAgentTaskProgressFencesExactAssignmentAndGeneration(t *testing.T) {
 	task := validTaskRecord(now)
 	createLifecycleTask(t, repository, task)
 	agentID := ids.NewAt(ids.KindAgent, now, 91)
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 6, now.Add(time.Second))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 6, now.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v, %t, %v", claim, found, err)
 	}

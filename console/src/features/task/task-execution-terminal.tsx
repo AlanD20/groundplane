@@ -31,6 +31,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
     setEventError(undefined);
     setStreamState(terminalRef.current ? "history" : "connecting");
     following.current = true;
+    if (task.diagnosticsExpiredAt) return;
     const source = new EventSource(
       `/api/v1/tasks/${encodeURIComponent(task.id)}/events`,
     );
@@ -62,7 +63,7 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
       }
     };
     return () => source.close();
-  }, [task.id]);
+  }, [task.id, task.diagnosticsExpiredAt]);
 
   useEffect(() => {
     if (terminal)
@@ -77,6 +78,9 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
   }, [events]);
 
   const steps = task.steps ?? [];
+
+  if (task.diagnosticsExpiredAt)
+    return <TaskExecutionSummary task={task} events={[]} />;
 
   return (
     <section className="space-y-3" aria-label="Task execution">
@@ -139,7 +143,9 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
               (candidate) => candidate.label === event.step_id,
             );
             const name =
-              event.controller_operation?.name || step?.action || "Action not recorded";
+              event.controller_operation?.name ||
+              step?.action ||
+              "Action not recorded";
             return (
               <div
                 key={event.sequence}
@@ -188,35 +194,39 @@ export function TaskExecutionTerminal({ task }: { task: ActivityEntry }) {
         </div>
       </div>
 
-      {task.attemptHistory && <TaskAttemptHistory task={task} history={task.attemptHistory} />}
-      {steps.length > 0 && <Disclosure
-        summary={`Execution stages · ${steps.length}`}
-        className="rounded-lg border border-border"
-        summaryClassName="p-3 text-sm font-medium"
-      >
-        <div className="px-3 pb-3">
-          {steps.length ? (
-            <ol className="space-y-2">
-              {steps.map((step, index) => (
-                <li key={step.label}>
-                  <TaskStepDetails
-                    index={index}
-                    step={step}
-                    terminal={terminal}
-                    events={events.filter(
-                      (event) => event.step_id === step.label,
-                    )}
-                  />
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
-              No step plan was captured for this Task.
-            </p>
-          )}
-        </div>
-      </Disclosure>}
+      {task.attemptHistory && (
+        <TaskAttemptHistory task={task} history={task.attemptHistory} />
+      )}
+      {steps.length > 0 && (
+        <Disclosure
+          summary={`Execution stages · ${steps.length}`}
+          className="rounded-lg border border-border"
+          summaryClassName="p-3 text-sm font-medium"
+        >
+          <div className="px-3 pb-3">
+            {steps.length ? (
+              <ol className="space-y-2">
+                {steps.map((step, index) => (
+                  <li key={step.label}>
+                    <TaskStepDetails
+                      index={index}
+                      step={step}
+                      terminal={terminal}
+                      events={events.filter(
+                        (event) => event.step_id === step.label,
+                      )}
+                    />
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
+                No step plan was captured for this Task.
+              </p>
+            )}
+          </div>
+        </Disclosure>
+      )}
     </section>
   );
 }
@@ -292,7 +302,14 @@ export function TaskStepDetails({
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-2">
-            <StatusBadge status={state} label={state === "pending" && terminal ? "No recorded run" : eventStateLabel(state)} />
+            <StatusBadge
+              status={state}
+              label={
+                state === "pending" && terminal
+                  ? "No recorded run"
+                  : eventStateLabel(state)
+              }
+            />
             <ChevronDown
               className="size-3.5 text-muted-foreground transition-transform group-data-[open=true]:rotate-180"
               aria-hidden

@@ -6,13 +6,17 @@ package etcd
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"io"
+	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 type client interface {
@@ -25,15 +29,29 @@ type client interface {
 	Close() error
 }
 type store struct {
-	client client
-	root   string
+	client           client
+	root             string
+	historyGate      sync.RWMutex
+	compactedThrough atomic.Int64
+	backend          *clientv3.Client
+	maintenance      *StorageMaintenance
 }
 
 // New connects to the etcd cluster named in controller.yaml and scopes every
 // ordinary key operation beneath keyPrefix. Snapshot intentionally remains a
 // cluster operation: the MVP's etcd instance is dedicated to Groundplane.
-func New(ctx context.Context, endpoints []string, keyPrefix string) (*store, error) {
+func New(
+	ctx context.Context,
+	endpoints []string,
+	keyPrefix string,
+	settings config.MaintenanceConfig,
+	dataDirectory string,
+) (*store, error) {
 	if err := validateConfig(endpoints, keyPrefix); err != nil {
+		return nil, err
+	}
+	policy, err := settings.Policy()
+	if err != nil {
 		return nil, err
 	}
 	cli, err := clientv3.New(clientv3.Config{
@@ -43,8 +61,24 @@ func New(ctx context.Context, endpoints []string, keyPrefix string) (*store, err
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	return newStore(cli, keyPrefix)
+	store, err := newStore(cli, keyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	store.backend = cli
+	store.maintenance = &StorageMaintenance{
+		store:        store,
+		policy:       policy,
+		walDirectory: filepath.Join(dataDirectory, "member", "wal"),
+	}
+	if err := store.loadMaintenanceFloor(ctx); err != nil {
+		_ = store.Close()
+		return nil, err
+	}
+	return store, nil
 }
+
+func (s *store) Maintenance() *StorageMaintenance { return s.maintenance }
 func newStore(cli client, keyPrefix string) (*store, error) {
 	if cli == nil {
 		return nil, errs.New(errs.KindValidationFailed, "etcd client is required")

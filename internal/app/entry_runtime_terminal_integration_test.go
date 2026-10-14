@@ -20,7 +20,7 @@ func completeEntryRuntimePublication(
 	t.Helper()
 	if task.EntryRuntime == nil || len(task.EntryRuntime.Updates) == 0 {
 		claim, found, err := fixture.Tasks.ClaimNextTask(
-			t.Context(), ids.New(ids.KindAgent), 1, task.CreatedAt.Add(time.Second),
+			t.Context(), ids.New(ids.KindAgent), 1, task.CreatedAt.Add(time.Second), 32,
 		)
 		if err != nil || !found {
 			t.Fatalf("claim materialization-only Entry = %t, %v", found, err)
@@ -37,14 +37,14 @@ func completeEntryRuntimePublication(
 	if race == "before claim" {
 		fixture.AdvanceAcknowledgedRuntime(t, serviceID)
 		if _, found, err := fixture.Tasks.ClaimNextTask(
-			t.Context(), ids.New(ids.KindAgent), 1, task.CreatedAt.Add(time.Second),
+			t.Context(), ids.New(ids.KindAgent), 1, task.CreatedAt.Add(time.Second), 32,
 		); found || !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 			t.Fatalf("claim accepted changed Entry runtime: found=%t err=%v", found, err)
 		}
 		return
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, found, err := fixture.Tasks.ClaimNextTask(t.Context(), agentID, 1, task.CreatedAt.Add(time.Second))
+	claim, found, err := fixture.Tasks.ClaimNextTask(t.Context(), agentID, 1, task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("claim Entry runtime = %t, %v", found, err)
 	}

@@ -54,7 +54,7 @@ func NewBackupSecretResolutionFixture(
 	}
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 8800)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 7, time.Now().UTC(),
+		context.Background(), agentID, 7, time.Now().UTC(), 32,
 	)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v, %t, %v", claim, found, err)

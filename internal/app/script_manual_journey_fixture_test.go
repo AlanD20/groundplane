@@ -137,7 +137,7 @@ func (fixture *ExecutedArtifactFixture) RetryTimedOutManualScript(
 		ctx,
 		assignment.Assignment.Record.AgentID,
 		1,
-		retryAt.Add(time.Second),
+		retryAt.Add(time.Second), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != retryID ||
 		claim.Assignment.Record.AssignmentID == assignment.Assignment.Record.AssignmentID {

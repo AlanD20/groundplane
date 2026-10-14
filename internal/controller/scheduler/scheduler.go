@@ -2,6 +2,9 @@ package scheduler
 
 import (
 	"context"
+	"errors"
+	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/storagemaintenance"
 	"log/slog"
 	"time"
 
@@ -12,11 +15,18 @@ import (
 type taskExpiration interface {
 	ExpireTimedOutTasks(context.Context, time.Time) (int, error)
 	PruneExpiredTasks(context.Context, time.Time) (int, error)
+	ExpireTaskDiagnostics(context.Context, time.Time, time.Duration, int) (int, error)
 	ResumeTaskSourceReleases(context.Context) (bool, error)
 }
 
 type idempotencyPruning interface {
-	PruneExpired(context.Context, time.Time) (int, error)
+	PruneExpired(context.Context, time.Time, int) (int, error)
+}
+
+type storageMaintenance interface {
+	Policy() config.MaintenancePolicy
+	Tick(context.Context, time.Time) error
+	RecordCleanup(context.Context, storagemaintenance.CleanupStatus) error
 }
 
 type blueprintRevisionCleanup interface {
@@ -42,8 +52,6 @@ type backupOrphanReconciler interface {
 	Tick(context.Context, string) (string, bool, error)
 }
 
-const dailyMaintenanceInterval = 24 * time.Hour
-
 type mutationAdmission interface {
 	CheckMutation(context.Context, string) error
 }
@@ -53,20 +61,23 @@ type mutationAdmission interface {
 // cost nothing extra, no per-policy timer/unit churn. See mvp.md,
 // "systemd timers (backup, cleanup) -> the Controller scheduler".
 type Scheduler struct {
-	logger             *slog.Logger
-	admission          mutationAdmission
-	Interval           time.Duration
-	tasks              taskExpiration
-	idempotency        idempotencyPruning
-	blueprintRevisions blueprintRevisionCleanup
-	agents             staleAgentExpiration
-	backupSchedules    BackupScheduleRunner
-	backupRetention    backupRetentionDispatcher
-	retentionCursor    string
-	backupOrphans      backupOrphanReconciler
-	orphanCursor       string
-	now                func() time.Time
-	nextPrune          time.Time
+	logger                 *slog.Logger
+	admission              mutationAdmission
+	Interval               time.Duration
+	tasks                  taskExpiration
+	idempotency            idempotencyPruning
+	blueprintRevisions     blueprintRevisionCleanup
+	agents                 staleAgentExpiration
+	backupSchedules        BackupScheduleRunner
+	backupRetention        backupRetentionDispatcher
+	retentionCursor        string
+	backupOrphans          backupOrphanReconciler
+	orphanCursor           string
+	now                    func() time.Time
+	nextPrune              time.Time
+	maintenancePolicy      config.MaintenancePolicy
+	storageMaintenance     storageMaintenance
+	nextStorageMaintenance time.Time
 }
 
 func New(
@@ -85,7 +96,15 @@ func New(
 		logger: logger, admission: admission, Interval: interval, tasks: tasks, idempotency: idempotency, agents: agents,
 		blueprintRevisions: blueprintRevisions,
 		backupSchedules:    backupSchedules, backupRetention: backupRetention, backupOrphans: backupOrphans, now: time.Now,
+		maintenancePolicy: config.DefaultMaintenancePolicy(),
 	}
+}
+
+// ConfigureMaintenance receives the already-validated startup policy. Runtime
+// changes follow the Controller's existing configuration/restart workflow.
+func (sch *Scheduler) ConfigureMaintenance(storage storageMaintenance) {
+	sch.maintenancePolicy = storage.Policy()
+	sch.storageMaintenance = storage
 }
 
 // Run blocks, ticking at Interval until ctx is cancelled.
@@ -123,6 +142,13 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 		}
 	}
 	now := sch.now().UTC()
+	maintenanceErr := sch.runRetentionMaintenance(ctx, now)
+	if sch.storageMaintenance != nil && !now.Before(sch.nextStorageMaintenance) {
+		sch.nextStorageMaintenance = now.Add(sch.maintenancePolicy.CleanupInterval)
+		if err := sch.storageMaintenance.Tick(ctx, now); err != nil {
+			maintenanceErr = errors.Join(maintenanceErr, err)
+		}
+	}
 	if _, err := sch.tasks.ExpireTimedOutTasks(ctx, now); err != nil {
 		return err
 	}
@@ -156,15 +182,5 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 			sch.logger.Error("scheduler: backup orphan reconciliation failed", slog.Any("error", err))
 		}
 	}
-	if !sch.nextPrune.IsZero() && now.Before(sch.nextPrune) {
-		return nil
-	}
-	if _, err := sch.idempotency.PruneExpired(ctx, now); err != nil {
-		return err
-	}
-	if _, err := sch.tasks.PruneExpiredTasks(ctx, now); err != nil {
-		return err
-	}
-	sch.nextPrune = now.Add(dailyMaintenanceInterval)
-	return nil
+	return maintenanceErr
 }

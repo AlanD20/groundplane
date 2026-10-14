@@ -136,7 +136,7 @@ func acknowledgeNativeAttach(
 		t.Fatal(err)
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, found, err := tasks.ClaimNextTask(t.Context(), agentID, 1, at)
+	claim, found, err := tasks.ClaimNextTask(t.Context(), agentID, 1, at, 32)
 	if err != nil || !found || claim.Task.Record.ID != taskID {
 		t.Fatalf("claim: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestAttachRuntimeStaleSourceAndFailurePreserveAuthority(t *testing.T) {
 				t.Fatal(err)
 			}
 			agentID := ids.New(ids.KindAgent)
-			claim, found, err := tasks.ClaimNextTask(t.Context(), agentID, 1, record.CreatedAt.Add(time.Second))
+			claim, found, err := tasks.ClaimNextTask(t.Context(), agentID, 1, record.CreatedAt.Add(time.Second), 32)
 			if phase == "claim" {
 				if found || !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 					t.Fatalf("stale claim: %v, %v", found, err)

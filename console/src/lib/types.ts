@@ -491,6 +491,8 @@ export type ActivityEntry = {
   reconciliationRequired?: boolean;
   imageFetch?: TaskResponse["image_fetch"];
   interruptedDetachRetry?: TaskResponse["interrupted_detach_retry"];
+  recoveryRetryAvailable?: boolean;
+  diagnosticsExpiredAt?: string;
   id: string;
   operationId?: string;
   retryOf?: string;

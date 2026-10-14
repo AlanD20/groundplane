@@ -123,7 +123,7 @@ func TestManualScriptRetryTransfersSealedSources(t *testing.T) {
 	if err != nil || script.Record.ActiveReferences != 1 {
 		t.Fatalf("retry reserved references again: %v", err)
 	}
-	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.Assignment.Record.AgentID, 1, at.Add(2*time.Second))
+	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.Assignment.Record.AgentID, 1, at.Add(2*time.Second), 32)
 	if err != nil || !found || claimed.Task.Record.ID != retryID ||
 		claimed.Assignment.Record.AssignmentID == assignment.Assignment.Record.AssignmentID {
 		t.Fatalf("retry did not acquire fresh assignment authority: %t, %v", found, err)

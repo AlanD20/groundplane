@@ -130,7 +130,7 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 	}
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 990)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != run.TaskID {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
@@ -283,7 +283,7 @@ func TestBackupRuntimeRepositoryRoutesCompletedAcknowledgement(t *testing.T) {
 	}
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 1993)
 	claim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(time.Second), 32,
 	)
 	if err != nil || !found || claim.Task.Record.ID != run.TaskID {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
@@ -438,7 +438,7 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 				)
 			} else {
 				claim, found, claimErr := tasks.ClaimNextTask(
-					context.Background(), agentID, 1, run.CreatedAt.Add(time.Second),
+					context.Background(), agentID, 1, run.CreatedAt.Add(time.Second), 32,
 				)
 				if claimErr != nil || !found || claim.Task.Record.ID != run.TaskID {
 					t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, claimErr)
@@ -546,13 +546,13 @@ func TestTaskRepositoryTimeoutCollectorContinuesAfterBackupTerminal(t *testing.T
 	createLifecycleTask(t, tasks, ordinary)
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 2990)
 	backupClaim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(2*time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(2*time.Second), 32,
 	)
 	if err != nil || !found || backupClaim.Task.Record.ID != run.TaskID {
 		t.Fatalf("ClaimNextTask(Backup) = %#v/%v/%v", backupClaim, found, err)
 	}
 	ordinaryClaim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(3*time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(3*time.Second), 32,
 	)
 	if err != nil || !found || ordinaryClaim.Task.Record.ID != ordinary.ID {
 		t.Fatalf("ClaimNextTask(ordinary) = %#v/%v/%v", ordinaryClaim, found, err)
@@ -606,13 +606,13 @@ func TestTaskRepositoryAgentTimeoutContinuesAfterBackupTerminal(t *testing.T) {
 	createLifecycleTask(t, tasks, ordinary)
 	agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 2991)
 	backupClaim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(2*time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(2*time.Second), 32,
 	)
 	if err != nil || !found || backupClaim.Task.Record.ID != run.TaskID {
 		t.Fatalf("ClaimNextTask(Backup) = %#v/%v/%v", backupClaim, found, err)
 	}
 	ordinaryClaim, found, err := tasks.ClaimNextTask(
-		context.Background(), agentID, 1, run.CreatedAt.Add(3*time.Second),
+		context.Background(), agentID, 1, run.CreatedAt.Add(3*time.Second), 32,
 	)
 	if err != nil || !found || ordinaryClaim.Task.Record.ID != ordinary.ID {
 		t.Fatalf("ClaimNextTask(ordinary) = %#v/%v/%v", ordinaryClaim, found, err)
@@ -657,7 +657,7 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 				)
 			} else {
 				claim, found, claimErr := tasks.ClaimNextTask(
-					context.Background(), agentID, 1, dispatch.CreatedAt.Add(time.Second),
+					context.Background(), agentID, 1, dispatch.CreatedAt.Add(time.Second), 32,
 				)
 				if claimErr != nil || !found || claim.Task.Record.ID != dispatch.TaskID {
 					t.Fatalf("ClaimNextTask(prune) = %#v/%v/%v", claim, found, claimErr)

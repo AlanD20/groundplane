@@ -56,7 +56,7 @@ func TestEnvironmentDeletionCompletionFencesChildInsertionAtTerminalCommit(t *te
 		t.Fatalf("seed Environment projection = %#v, %v", transaction, transactErr)
 	}
 	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8084)
-	if _, found, err := fixture.tasks.ClaimNextTask(context.Background(), agentID, 1, fixture.now.Add(time.Second)); err != nil ||
+	if _, found, err := fixture.tasks.ClaimNextTask(context.Background(), agentID, 1, fixture.now.Add(time.Second), 32); err != nil ||
 		!found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
@@ -146,7 +146,7 @@ func TestEnvironmentDeletionCompletionRemovesDesiredProjectionBeforeParent(t *te
 	}
 	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8083)
 	if _, found, err := fixture.tasks.ClaimNextTask(
-		context.Background(), agentID, 1, fixture.now.Add(time.Second),
+		context.Background(), agentID, 1, fixture.now.Add(time.Second), 32,
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
@@ -202,7 +202,7 @@ func TestEnvironmentDeletionCompletionRetainsHistoricalTaskJournal(t *testing.T)
 	fixture.mustBegin(t)
 	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8082)
 	if _, found, err := fixture.tasks.ClaimNextTask(
-		context.Background(), agentID, 1, fixture.now.Add(time.Second),
+		context.Background(), agentID, 1, fixture.now.Add(time.Second), 32,
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
@@ -261,7 +261,7 @@ func TestEnvironmentDeletionRequiresAffirmativeCleanupCompletion(t *testing.T) {
 	}
 	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8085)
 	if _, found, err := fixture.tasks.ClaimNextTask(
-		ctx, agentID, 1, fixture.now.Add(time.Second),
+		ctx, agentID, 1, fixture.now.Add(time.Second), 32,
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
@@ -351,7 +351,7 @@ func TestEnvironmentDeletionTimeoutRetainsFenceAndIntent(t *testing.T) {
 		context.Background(),
 		ids.NewAt(ids.KindAgent, fixture.now, 8090),
 		1,
-		fixture.now.Add(time.Second),
+		fixture.now.Add(time.Second), 32,
 	)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)

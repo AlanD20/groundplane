@@ -148,7 +148,9 @@ completion. A completed Task alone does not prove application health.
 `task retry <id>` creates a new eligible attempt using captured inputs. For a
 running Blueprint Apply that reports an interrupted Custom Detach hook, it
 authorizes that captured hook once in the same child Task instead; it does not
-retry the Blueprint. See [Tasks and logs](features/tasks-and-logs.md#retry).
+retry the Blueprint. When automatic recovery has stopped, Retry authorizes one
+bounded restoration attempt in the existing Task; it does not repeat forward
+work or change the captured inputs. See [Tasks and logs](features/tasks-and-logs.md#retry).
 `task abort <id>` addresses the existing Task. Closing a stream or pressing
 Ctrl-C stops the client request, not the Task. Restrictions and recovery limits
 are in [Tasks and logs](features/tasks-and-logs.md).

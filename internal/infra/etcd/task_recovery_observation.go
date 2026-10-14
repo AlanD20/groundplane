@@ -21,6 +21,10 @@ type TaskRecoverySnapshot struct {
 	StepIDs                []string
 	CompletedSteps         *uint32
 	Deadline               *time.Time
+	AutomaticFailures      uint32
+	RetryAfter             *time.Time
+	RetryAvailable         bool
+	StopReason             string
 }
 
 // Read retained recovery records rather than reconstructing the original
@@ -109,6 +113,23 @@ func (repository *TaskRepository) GetTaskRecovery(
 		observation.State = "proof_required"
 	} else if observation.CompletedSteps != nil && int(*observation.CompletedSteps) == len(observation.StepIDs) {
 		observation.State = "awaiting_confirmation"
+	}
+	control, _, err := repository.readRecoveryRetryControl(ctx, task.ID, revision)
+	if err != nil {
+		return nil, err
+	}
+	if control != nil {
+		observation.AutomaticFailures = control.Failures
+		if control.Stopped {
+			observation.State, observation.RetryAvailable = "automatic_retries_stopped", true
+			observation.StopReason = control.StopReason
+		} else if assignment.ExecutionEpoch == control.ExecutionEpoch {
+			observation.State = "retry_wait"
+			next := control.NextAttemptAt
+			observation.RetryAfter = &next
+		}
+	} else if observation.State == "proof_required" && !assignment.RecoveryExecutionDeadline.After(time.Now().UTC()) {
+		observation.RetryAvailable = true
 	}
 	return observation, nil
 }

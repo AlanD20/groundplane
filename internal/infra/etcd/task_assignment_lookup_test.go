@@ -27,13 +27,13 @@ func TestGetTaskAssignmentResolvesTheTaskIndexedExecutionClaim(t *testing.T) {
 	task := validTaskRecord(now)
 	createLifecycleTask(t, repository, task)
 	agentID := ids.NewAt(ids.KindAgent, now, 901)
-	claim, found, err := repository.ClaimNextTask(ctx, agentID, 7, now.Add(time.Second))
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 7, now.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v, %t, %v", claim, found, err)
 	}
 	other := validTaskRecord(now.Add(time.Minute))
 	createLifecycleTask(t, repository, other)
-	otherClaim, found, err := repository.ClaimNextTask(ctx, agentID, 7, now.Add(2*time.Minute))
+	otherClaim, found, err := repository.ClaimNextTask(ctx, agentID, 7, now.Add(2*time.Minute), 32)
 	if err != nil || !found || otherClaim.Task.Record.ID != other.ID ||
 		otherClaim.Assignment.Record.AssignmentID == claim.Assignment.Record.AssignmentID {
 		t.Fatalf("ClaimNextTask(other) = %#v, %t, %v", otherClaim, found, err)

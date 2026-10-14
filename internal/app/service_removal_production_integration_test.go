@@ -137,7 +137,7 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.Record.CreatedAt.Add(time.Millisecond))
+	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.Record.CreatedAt.Add(time.Millisecond), 32)
 	if err != nil || !found || claim.Task.Record.ID != task.Record.ID {
 		t.Fatalf("claim removal: %v", err)
 	}

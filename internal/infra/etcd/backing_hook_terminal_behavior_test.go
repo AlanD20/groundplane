@@ -36,7 +36,7 @@ func TestBackingAfterStartTerminalRequiresResultAndPreservesFailure(t *testing.T
 			}
 			createLifecycleTask(t, tasks, task)
 			claim, found, err := tasks.ClaimNextTask(
-				t.Context(), taskEventTestAgentID, 1, now.Add(time.Second),
+				t.Context(), taskEventTestAgentID, 1, now.Add(time.Second), 32,
 			)
 			if err != nil || !found || claim.Task.Record.ID != task.ID {
 				t.Fatalf("ClaimNextTask() = %#v/%t/%v", claim, found, err)

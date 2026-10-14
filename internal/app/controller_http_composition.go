@@ -215,23 +215,19 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		Tasks:                   dependencies.authority.tasks,
 		Logs:                    serviceReads.logs,
 	})
+	maintenanceScheduler := scheduler.New(
+		dependencies.bootstrap.logger, dependencies.platform.Upgrades, dependencies.bootstrap.tick,
+		dependencies.authority.tasks, dependencies.authority.idempotency.Retention,
+		dependencies.dataServices.serviceDesiredRevisionRecords, dependencies.staleTasks,
+		dependencies.backup.schedules, dependencies.backup.retention, dependencies.backup.orphans,
+	)
+	maintenanceScheduler.ConfigureMaintenance(dependencies.bootstrap.storageMaintenance)
 	return &Controller{
-		Config: dependencies.bootstrap.config,
-		Logger: dependencies.bootstrap.logger,
-		server: server,
-		agent:  dependencies.agentRuntime,
-		scheduler: scheduler.New(
-			dependencies.bootstrap.logger,
-			dependencies.platform.Upgrades,
-			dependencies.bootstrap.tick,
-			dependencies.authority.tasks,
-			dependencies.authority.idempotency.Retention,
-			dependencies.dataServices.serviceDesiredRevisionRecords,
-			dependencies.staleTasks,
-			dependencies.backup.schedules,
-			dependencies.backup.retention,
-			dependencies.backup.orphans,
-		),
+		Config:          dependencies.bootstrap.config,
+		Logger:          dependencies.bootstrap.logger,
+		server:          server,
+		agent:           dependencies.agentRuntime,
+		scheduler:       maintenanceScheduler,
 		controllerTasks: dependencies.controllerTasks,
 		blueprints:      blueprintCoordinator,
 		software:        dependencies.software,

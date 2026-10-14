@@ -140,6 +140,15 @@ effects retain their ownership restrictions until resolved. Recovery preserves
 the original failure and restores only explicitly captured authority; it does not
 restore databases or reverse arbitrary migrations.
 
+Automatic recovery retries are finite and scoped to one operation. Deterministic
+failures and ambiguous side effects stop automatic execution; safe transient
+restoration failures use backoff within their captured deadline. Exhaustion
+survives restarts and requires an explicit operator Retry. Stopped work retains
+unproven recovery ownership but must not consume unrelated Agent capacity.
+Diagnostic expiry cannot alter an immutable outcome or delete required recovery
+authority. GP compacts etcd history only behind a concurrency-safe protected
+revision floor; maintenance never redeploys application containers.
+
 Workload Deploy resolves an image already present in the host Docker daemon.
 GP neither pulls nor builds workload images during Deploy. Historical operations
 use the captured local image id, not a mutable tag resolved again. Managed GP

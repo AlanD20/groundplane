@@ -147,7 +147,7 @@ func testBlueprintMixedCandidate(t *testing.T, servingRace bool) {
 		}
 		agentID := ids.New(ids.KindAgent)
 		claim, claimed, err := fixture.Tasks.ClaimNextTask(
-			ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second),
+			ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second), 32,
 		)
 		if err != nil || !claimed || claim.Task.Record.ID != prepared.Task.ID {
 			t.Fatalf("native first-deploy claim: %t %v", claimed, err)

@@ -17,4 +17,7 @@ type TaskAssignment struct {
 	// RecoveryProofRequired is private lifecycle state. It is true only after
 	// the immutable recovery deadline expired without exact restoration proof.
 	RecoveryProofRequired bool
+	// DispatchHeld means recovery needs explicit operator authorization. Reading
+	// or reconnecting the assignment is not permission to create a new budget.
+	DispatchHeld bool
 }

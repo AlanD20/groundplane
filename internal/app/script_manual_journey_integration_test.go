@@ -191,7 +191,7 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 			fixture.CheckManualJourneySecretDeletion(t, secretID, true)
 		}
 		agentID := ids.New(ids.KindAgent)
-		assignment, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+		assignment, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second), 32)
 		if err != nil || !found || assignment.Task.Record.ID != task.ID {
 			t.Fatalf("manual claim = %t, %v", found, err)
 		}

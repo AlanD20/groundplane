@@ -32,6 +32,10 @@ type fakeTaskQueries struct {
 	list           func(etcd.TaskListScope, testkeyvalue.PageRequest) (testkeyvalue.Page[etcd.TaskRecord], error)
 }
 
+func (*fakeTaskQueries) GetStoppedRecoveryRetry(context.Context, string) (bool, error) {
+	return false, nil
+}
+
 func (*fakeTaskQueries) ListBlueprintTaskChildren(
 	context.Context,
 	etcd.TaskRecord,

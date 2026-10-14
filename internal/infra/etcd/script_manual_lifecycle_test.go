@@ -102,7 +102,7 @@ func TestManualScriptClaimRejectsChangedSourceRoot(t *testing.T) {
 		context.Background(),
 		ids.NewAt(ids.KindAgent, task.CreatedAt, 99),
 		1,
-		task.CreatedAt.Add(time.Second),
+		task.CreatedAt.Add(time.Second), 32,
 	)
 	if found || err == nil {
 		t.Fatalf("claim accepted substituted source root: found=%t, error=%v", found, err)

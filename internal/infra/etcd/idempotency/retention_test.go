@@ -319,7 +319,7 @@ func TestIdempotencyPruneExpiredUsesFreshFixedRevisionAfterCASConflict(t *testin
 		},
 	}
 	repository := newTestRetentionRepository(t, store)
-	count, err := repository.PruneExpired(context.Background(), marker.RetainUntil.Add(time.Nanosecond))
+	count, err := repository.PruneExpired(context.Background(), marker.RetainUntil.Add(time.Nanosecond), 16)
 	if err != nil || count != 1 {
 		t.Fatalf("PruneExpired() = %d, %v", count, err)
 	}
@@ -346,7 +346,7 @@ func TestIdempotencyPruneExpiredAbortsMissingAndUnknownEvidence(t *testing.T) {
 	missingStore := &collectorTestStore{snapshots: []collectorSnapshot{snapshot}}
 	repository := newTestRetentionRepository(t, missingStore)
 	if _, err := repository.PruneExpired(
-		context.Background(), marker.RetainUntil,
+		context.Background(), marker.RetainUntil, 16,
 	); !isKind(err, errs.KindInternal) {
 		t.Fatalf("PruneExpired(missing) error = %v, want internal", err)
 	}
@@ -361,7 +361,7 @@ func TestIdempotencyPruneExpiredAbortsMissingAndUnknownEvidence(t *testing.T) {
 	}
 	repository = newTestRetentionRepository(t, unknownStore)
 	if _, err := repository.PruneExpired(
-		context.Background(), marker.RetainUntil,
+		context.Background(), marker.RetainUntil, 16,
 	); !errors.Is(err, backendError) {
 		t.Fatalf("PruneExpired(unknown) error = %v, want original", err)
 	}

@@ -53,7 +53,7 @@ type terminalServerMessage struct {
 func (s *Server) registerHostTerminal() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "host.terminal", Method: http.MethodPost, Path: "/host/terminal",
-		Summary: "Open or resume the owning browser session's interactive root host terminal",
+		Summary: "Open an independent root host terminal; replay resumes the same session",
 		Tags:    []string{"Host"}, DefaultStatus: http.StatusCreated,
 		Middlewares: huma.Middlewares{s.ownHostTerminalRequest},
 	}, s.openHostTerminal)

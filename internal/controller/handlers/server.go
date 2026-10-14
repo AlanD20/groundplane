@@ -206,6 +206,7 @@ type taskQueries interface {
 		etcdstore.PageRequest,
 	) (etcdstore.Page[etcd.TaskRecord], error)
 	GetInterruptedDetachRetry(context.Context, string) (*etcd.InterruptedDetachRetry, error)
+	GetStoppedRecoveryRetry(context.Context, string) (bool, error)
 	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	ListTasksByScope(
 		context.Context,

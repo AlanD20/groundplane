@@ -1282,6 +1282,41 @@
         ],
         "type": "object"
       },
+      "CleanupStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnostics": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "failure_code": {
+            "type": "string"
+          },
+          "idempotency_records": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "tasks": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "observed_at",
+          "state",
+          "idempotency_records",
+          "tasks",
+          "diagnostics"
+        ],
+        "type": "object"
+      },
       "Component": {
         "additionalProperties": false,
         "properties": {
@@ -4510,6 +4545,9 @@
           "db_size": {
             "type": "string"
           },
+          "maintenance": {
+            "$ref": "#/components/schemas/Status"
+          },
           "node": {
             "type": "string"
           },
@@ -5566,6 +5604,27 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "Pin": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "owner_id",
+          "revision"
         ],
         "type": "object"
       },
@@ -8761,6 +8820,108 @@
         ],
         "type": "object"
       },
+      "Status": {
+        "additionalProperties": false,
+        "properties": {
+          "backend_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "blocker": {
+            "$ref": "#/components/schemas/Pin"
+          },
+          "cleanup": {
+            "$ref": "#/components/schemas/CleanupStatus"
+          },
+          "compacted_through": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "current_keys": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "current_value_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "diagnostic_backlog": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "failure_code": {
+            "type": "string"
+          },
+          "headroom_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "in_use_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_defrag_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_failure_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_success_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "protected_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "quota_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "reclaimed_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "reusable_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          },
+          "task_backlog": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "wal_bytes": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "observed_at",
+          "backend_bytes",
+          "in_use_bytes",
+          "quota_bytes",
+          "headroom_bytes",
+          "reusable_bytes",
+          "wal_bytes",
+          "current_value_bytes",
+          "current_keys",
+          "compacted_through",
+          "reclaimed_bytes",
+          "diagnostic_backlog",
+          "task_backlog"
+        ],
+        "type": "object"
+      },
       "Task": {
         "additionalProperties": false,
         "properties": {
@@ -8784,6 +8945,10 @@
             "$ref": "#/components/schemas/TaskAttemptHistory"
           },
           "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "diagnostics_expired_at": {
             "format": "date-time",
             "type": "string"
           },
@@ -8838,6 +9003,9 @@
           },
           "recovery": {
             "$ref": "#/components/schemas/TaskRecovery"
+          },
+          "recovery_retry_available": {
+            "type": "boolean"
           },
           "resource_kind": {
             "type": "string"
@@ -8925,6 +9093,7 @@
           "target",
           "executor",
           "timeout_seconds",
+          "recovery_retry_available",
           "status",
           "reconciliation_required",
           "workspace_type",
@@ -9313,6 +9482,11 @@
       "TaskRecovery": {
         "additionalProperties": false,
         "properties": {
+          "automatic_failures": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
           "completed_steps": {
             "format": "int32",
             "minimum": 0,
@@ -9325,12 +9499,21 @@
           "last_failure": {
             "$ref": "#/components/schemas/TaskFailure"
           },
+          "retry_after": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "retry_available": {
+            "type": "boolean"
+          },
           "state": {
             "enum": [
               "pending",
               "running",
               "awaiting_confirmation",
               "proof_required",
+              "retry_wait",
+              "automatic_retries_stopped",
               "completed"
             ],
             "type": "string"
@@ -9344,6 +9527,15 @@
               "null"
             ]
           },
+          "stop_reason": {
+            "enum": [
+              "non_transient_failure",
+              "retry_budget_exhausted",
+              "recovery_deadline",
+              "unsafe_replay"
+            ],
+            "type": "string"
+          },
           "summary": {
             "type": "string"
           },
@@ -9355,7 +9547,9 @@
         },
         "required": [
           "state",
-          "summary"
+          "summary",
+          "automatic_failures",
+          "retry_available"
         ],
         "type": "object"
       },
@@ -14840,7 +15034,7 @@
             "description": "Error"
           }
         },
-        "summary": "Open or resume the owning browser session's interactive root host terminal",
+        "summary": "Open an independent root host terminal; replay resumes the same session",
         "tags": [
           "Host"
         ]

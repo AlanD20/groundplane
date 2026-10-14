@@ -127,7 +127,7 @@ func TestTaskAcknowledgementPromotesComponentCandidateAndMovesReservation(t *tes
 	seedComponentTaskLifecycle(t, store, task, records)
 
 	agentID := ids.NewAt(ids.KindAgent, now, 1102)
-	if _, found, err := repository.ClaimNextTask(ctx, agentID, 3, now.Add(time.Second)); err != nil || !found {
+	if _, found, err := repository.ClaimNextTask(ctx, agentID, 3, now.Add(time.Second), 32); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
 	terminalAt := now.Add(2 * time.Second)
@@ -210,7 +210,7 @@ func TestTaskTimeoutDiscardsComponentCandidateAndNewReservation(t *testing.T) {
 	seedComponentTaskLifecycle(t, store, task, records)
 
 	agentID := ids.NewAt(ids.KindAgent, now, 1202)
-	if _, found, err := repository.ClaimNextTask(ctx, agentID, 9, now.Add(time.Second)); err != nil || !found {
+	if _, found, err := repository.ClaimNextTask(ctx, agentID, 9, now.Add(time.Second), 32); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
 	count, err := repository.TimeoutAgentAssignments(ctx, agentID, 9, 1, now.Add(24*time.Hour))

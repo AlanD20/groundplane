@@ -177,7 +177,13 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 			}
 			assertBlueprintFileRecoveryFixture(t, prepared.Task, replayed, filePass)
 			agentID := ids.New(ids.KindAgent)
-			claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second))
+			claim, found, err := fixture.Tasks.ClaimNextTask(
+				ctx,
+				agentID,
+				1,
+				prepared.Task.CreatedAt.Add(time.Second),
+				32,
+			)
 			if err != nil || !found || claim.Task.Record.ID != prepared.Task.ID {
 				t.Fatalf("pass%d assignment: %t %v", pass, found, err)
 			}

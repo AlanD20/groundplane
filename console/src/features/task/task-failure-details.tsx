@@ -59,6 +59,8 @@ export function TaskRecoveryDetails({ task }: { task: ActivityEntry }) {
     running: "Recovery in progress",
     awaiting_confirmation: "Waiting for recovery confirmation",
     proof_required: "Recovery needs proof",
+    retry_wait: "Waiting before recovery retry",
+    automatic_retries_stopped: "Automatic recovery stopped",
     completed: "Recovery verified",
   };
   return (
@@ -67,6 +69,19 @@ export function TaskRecoveryDetails({ task }: { task: ActivityEntry }) {
       <p className="break-words text-muted-foreground [overflow-wrap:anywhere]">
         {recovery.summary}
       </p>
+      {recovery.automatic_failures > 0 && (
+        <p className="text-muted-foreground">
+          Failed recovery attempts: {recovery.automatic_failures}
+        </p>
+      )}
+      {recovery.retry_after && (
+        <p className="text-muted-foreground">
+          Next eligible attempt:{" "}
+          <time dateTime={recovery.retry_after}>
+            {new Date(recovery.retry_after).toLocaleString()}
+          </time>
+        </p>
+      )}
       {recovery.completed_steps !== undefined &&
         recovery.total_steps !== undefined && (
           <p className="text-muted-foreground">

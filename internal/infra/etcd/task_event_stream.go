@@ -49,6 +49,9 @@ func (repository *TaskRepository) OpenTaskEventStream(
 	if after >= snapshot.Task.NextEventSequence {
 		return nil, errs.New(errs.KindMalformedRequest, "Last-Event-ID is ahead of the task journal")
 	}
+	if snapshot.DiagnosticsExpiredAt != nil && after != 0 && after < snapshot.Task.NextEventSequence-1 {
+		return nil, errs.New(errs.KindCursorExpired, "Task diagnostic retention expired; request the Task summary")
+	}
 	if after != 0 && after < firstTaskEventSequence(snapshot.Task)-1 {
 		return nil, errs.New(errs.KindCursorExpired, "Task event history was trimmed; request a fresh snapshot")
 	}
@@ -265,6 +268,9 @@ func emitTaskEventSuffix(
 	last uint64,
 	emit func(taskjournal.TaskEventRecord) error,
 ) (uint64, error) {
+	if snapshot.DiagnosticsExpiredAt != nil {
+		return snapshot.Task.NextEventSequence - 1, nil
+	}
 	if snapshot.Task.NextEventSequence <= last {
 		return last, errs.New(errs.KindInternal, "task event snapshot is behind the stream")
 	}

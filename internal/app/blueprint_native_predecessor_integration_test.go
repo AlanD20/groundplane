@@ -168,7 +168,7 @@ func proveNativeCandidatePreparation(
 		t.Fatalf("immutable native replay: %v", err)
 	}
 	agentID := ids.New(ids.KindAgent)
-	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second))
+	claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, prepared.Task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found {
 		t.Fatalf("native claim: %v", err)
 	}

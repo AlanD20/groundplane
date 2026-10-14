@@ -79,7 +79,7 @@ func TestPlatformResolverBootstrapTaskIsClaimable(t *testing.T) {
 		ctx,
 		ids.NewAt(ids.KindAgent, now, 4),
 		1,
-		now.Add(time.Second),
+		now.Add(time.Second), 32,
 	)
 	if err != nil || !found || assignment.Task.Record.ID != task.ID {
 		t.Fatalf("ClaimNextTask() = %#v, %t, %v, want bootstrap Task", assignment, found, err)

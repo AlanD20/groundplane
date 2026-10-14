@@ -75,7 +75,7 @@ func TestTaskPruningRejectsMissingOwnerIndex(t *testing.T) {
 	}
 	idempotency := NewTestIdempotencyRetention(t, store)
 	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
-	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, pruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
 	key := testtaskjournal.TaskWorkspacePlatformIndexKey(task.ID)
@@ -124,7 +124,7 @@ func TestTaskPruningStartRetainsVisibleOwnerMemberships(t *testing.T) {
 	}
 	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
 	idempotency := NewTestIdempotencyRetention(t, store)
-	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, pruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
 	intent, found, err := repository.beginTaskPrune(ctx, pruneAt)
@@ -214,7 +214,7 @@ func TestTaskPruningDeletesTenantAndEnvironmentMemberships(t *testing.T) {
 	}
 	idempotency := NewTestIdempotencyRetention(t, store)
 	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
-	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+	if count, err := idempotency.PruneExpired(ctx, pruneAt, 16); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
@@ -342,7 +342,7 @@ func TestSystemTaskInitiationRejectsAgentExecutor(t *testing.T) {
 	task := validTaskRecord(now)
 	createLifecycleTask(t, repository, task)
 	agentID := ids.NewAt(ids.KindAgent, now, 2311)
-	if _, found, err := repository.ClaimNextTask(ctx, agentID, 1, now); err != nil || !found {
+	if _, found, err := repository.ClaimNextTask(ctx, agentID, 1, now, 32); err != nil || !found {
 		t.Fatalf("ClaimNextTask(agent) found/error = %v/%v", found, err)
 	}
 	if _, err := repository.GetSystemTaskInitiation(ctx, task.ID); !errors.Is(

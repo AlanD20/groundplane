@@ -34,7 +34,7 @@ func TestVolumeRemovalTerminalRejectsUnprovedDirectoryAbsence(t *testing.T) {
 	}
 	tasks := fixture.TaskRepository(t)
 	agentID := ids.New(ids.KindAgent)
-	assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.Task.CreatedAt.Add(time.Second))
+	assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.Task.CreatedAt.Add(time.Second), 32)
 	if err != nil || !found || assignment.Task.Record.ID != fixture.Task.ID {
 		t.Fatalf("claim removal: %v/%v", found, err)
 	}
@@ -87,7 +87,7 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 			}
 			tasks := fixture.TaskRepository(t)
 			agentID := ids.New(ids.KindAgent)
-			claimed, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.Task.CreatedAt.Add(time.Second))
+			claimed, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.Task.CreatedAt.Add(time.Second), 32)
 			if err != nil || !found {
 				t.Fatalf("claim: %v/%v", found, err)
 			}
