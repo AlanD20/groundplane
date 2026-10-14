@@ -134,7 +134,7 @@ func (maintenance *StorageMaintenance) Tick(ctx context.Context, now time.Time) 
 	view := &maintenance.record.Status
 	view.State, view.ObservedAt = "idle", now
 	view.BackendBytes, view.InUseBytes, view.QuotaBytes = status.DbSize, status.DbSizeInUse, status.DbSizeQuota
-	view.HeadroomBytes = max(int64(0), view.QuotaBytes-view.InUseBytes)
+	view.HeadroomBytes = max(int64(0), view.QuotaBytes-view.BackendBytes)
 	view.ReusableBytes = max(int64(0), view.BackendBytes-view.InUseBytes)
 	view.WALBytes, err = directoryBytes(maintenance.walDirectory)
 	if err != nil {
@@ -214,7 +214,7 @@ func (maintenance *StorageMaintenance) Tick(ctx context.Context, now time.Time) 
 	view.BackendBytes, view.InUseBytes = status.DbSize, status.DbSizeInUse
 	view.HeadroomBytes, view.ReusableBytes = max(
 		int64(0),
-		view.QuotaBytes-view.InUseBytes,
+		view.QuotaBytes-view.BackendBytes,
 	), max(
 		int64(0),
 		view.BackendBytes-view.InUseBytes,
@@ -242,7 +242,7 @@ func (maintenance *StorageMaintenance) Tick(ctx context.Context, now time.Time) 
 		view.ReclaimedBytes += max(int64(0), before-after.DbSize)
 		view.LastDefragAt, view.LastSuccessAt, view.State = &now, &now, "idle"
 		view.ReusableBytes = max(int64(0), after.DbSize-after.DbSizeInUse)
-		view.HeadroomBytes = max(int64(0), view.QuotaBytes-view.InUseBytes)
+		view.HeadroomBytes = max(int64(0), view.QuotaBytes-view.BackendBytes)
 	}
 	view.FailureCode = ""
 	return maintenance.persist(ctx)

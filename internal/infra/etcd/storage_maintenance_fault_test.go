@@ -183,8 +183,11 @@ func TestMaintenanceReservationLossAndDefragWindow(t *testing.T) {
 			if mode == "outside_window" && rpc.defrags.Load() != 0 {
 				t.Fatal("defrag ran outside window")
 			}
+			view := maintenance.Status()
+			if view.HeadroomBytes != max(int64(0), view.QuotaBytes-view.BackendBytes) {
+				t.Fatalf("reusable pages were reported as writable quota headroom: %+v", view)
+			}
 			if mode == "inside_window" {
-				view := maintenance.Status()
 				if rpc.defrags.Load() != 1 || view.ReclaimedBytes != 240<<20 || view.BackendBytes != 16<<20 ||
 					view.ReusableBytes != 0 {
 					t.Fatalf("defrag accounting: %+v", view)

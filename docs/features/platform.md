@@ -157,6 +157,8 @@ counts, the last cleanup pass, compaction/defragmentation results and any
 protected revision with its owning operation. Due counts include records still
 held by recovery or request replay; they are not permission to delete them.
 `host show` and `GET /host` expose the same status.
+Quota headroom uses the whole backend size: reusable pages are not additional
+quota capacity until defragmentation returns them to the filesystem.
 
 Configure the `maintenance` block in Controller startup YAML through its existing
 Console editor, CLI or API. Save validates; a Controller restart activates the
