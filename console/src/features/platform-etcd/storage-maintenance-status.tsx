@@ -6,9 +6,20 @@ type Maintenance = NonNullable<
   operations["host.show"]["responses"][200]["content"]["application/json"]["etcd"]["maintenance"]
 >;
 
-export function StorageMaintenanceStatus({ status }: { status?: Maintenance }) {
+export function StorageMaintenanceStatus({
+  status,
+  unavailable,
+}: {
+  status?: Maintenance;
+  unavailable: boolean;
+}) {
   return (
     <ResourcePanel title="Storage maintenance">
+      {unavailable && (
+        <p role="status" className="mb-4 text-sm text-warning">
+          Status refresh is unavailable. The last observation is retained.
+        </p>
+      )}
       {!status || status.state === "waiting_for_first_pass" ? (
         <p className="text-sm text-muted-foreground">
           Waiting for the first maintenance observation.

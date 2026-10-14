@@ -27,9 +27,13 @@ type Document =
   operations["etcd.config.show"]["responses"][200]["content"]["application/json"];
 type Accepted =
   operations["etcd.config.apply"]["responses"][202]["content"]["application/json"];
+type Host =
+  operations["host.show"]["responses"][200]["content"]["application/json"];
 
 export default function PlatformEtcdPage() {
   const { host } = useStore();
+  const [maintenance, setMaintenance] = useState(host?.etcd.maintenance);
+  const [maintenanceUnavailable, setMaintenanceUnavailable] = useState(false);
   const [document, setDocument] = useState<Document>();
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,6 +59,32 @@ export default function PlatformEtcdPage() {
     });
     return () => controller.abort();
   }, [load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (!globalThis.document.hidden) {
+        try {
+          const current = await controllerRequest<Host>("/host", 200, {
+            signal: controller.signal,
+          });
+          if (!controller.signal.aborted) {
+            setMaintenance(current.etcd.maintenance);
+            setMaintenanceUnavailable(false);
+          }
+        } catch {
+          if (!controller.signal.aborted) setMaintenanceUnavailable(true);
+        }
+      }
+      if (!controller.signal.aborted)
+        timer = setTimeout(() => void poll(), 15_000);
+    };
+    void poll();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, []);
   useEffect(() => {
     if (!taskID) return;
     const controller = new AbortController();
@@ -146,7 +176,10 @@ export default function PlatformEtcdPage() {
           value={host?.etcd.version ?? "Not reported"}
         />
       </ResourcePanel>
-      <StorageMaintenanceStatus status={host?.etcd.maintenance} />
+      <StorageMaintenanceStatus
+        status={maintenance}
+        unavailable={maintenanceUnavailable}
+      />
       <ResourcePanel
         title="etcd configuration"
         actions={
