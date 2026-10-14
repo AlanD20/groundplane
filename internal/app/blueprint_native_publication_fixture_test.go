@@ -20,6 +20,7 @@ import (
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -127,10 +128,15 @@ func (fixture *ExecutedArtifactFixture) PublishNativeBlueprintRevision(
 	if err != nil {
 		t.Fatal(err)
 	}
+	zoneReservations := make([]testzones.Record, len(projection.DesiredZones))
+	for index, zone := range projection.DesiredZones {
+		zoneReservations[index] = testzones.Record(zone)
+	}
 	result, err := repository.PublishEnvironmentBlueprintAuthoredRevision(ctx, etcd.BlueprintAuthoredPublication{
 		Project: fixture.Project, Environment: fixture.Environment,
 		ExpectedHeadRevision: fixture.head, Claim: claim,
 		DesiredInput: desired, OwnedIdentities: owned,
+		ZoneReservations:      zoneReservations,
 		PrerequisiteAuthority: prerequisites,
 		Parent:                parent, Marker: marker, ScriptPublication: fixture.hookScripts,
 	})

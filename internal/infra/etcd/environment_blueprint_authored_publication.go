@@ -12,8 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -29,6 +31,7 @@ type BlueprintAuthoredPublication struct {
 	Claim                  blueprints.EnvironmentBlueprintStageClaim
 	DesiredInput           projectionrecord.EnvironmentDesiredInput
 	OwnedIdentities        projectionrecord.EnvironmentOwnedIdentities
+	ZoneReservations       []zones.Record
 	PrerequisiteAuthority  BlueprintPrerequisiteAuthority
 	AttachInputGenerations []BlueprintAttachInputGenerationPublication
 	Parent                 TaskRecord
@@ -140,6 +143,35 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(desiredValue)
+	if len(input.ZoneReservations) != len(input.OwnedIdentities.Networks) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Zone reservations are incomplete",
+		)
+	}
+	zoneIdentities := make(map[string]string, len(input.OwnedIdentities.Networks))
+	for _, owned := range input.OwnedIdentities.Networks {
+		zoneIdentities[owned.ID] = owned.Name
+	}
+	for _, zone := range input.ZoneReservations {
+		if zones.ValidateRecord(zone) != nil || zone.EnvironmentID != environment.Record.ID ||
+			zoneIdentities[zone.Desired.ID] != zone.Desired.Name {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Zone reservation identity changed",
+			)
+		}
+		delete(zoneIdentities, zone.Desired.ID)
+	}
+	effectiveEnvironment := environment.Record
+	effectiveEnvironment.NetworkPool = input.DesiredInput.Input.NetworkPool
+	zonePool, err := networkreservations.NewPlanner(repository.store).PrepareZonePoolAtRevision(
+		ctx, effectiveEnvironment, input.ZoneReservations, 0,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(zonePool.Value())
 	nameConditions, nameMutations, err := dnsrecords.NewReader(repository.store).PrepareAuthoredDNSPublication(
 		ctx, input.DesiredInput, input.OwnedIdentities, environment.ReadRevision,
 	)
@@ -221,6 +253,12 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	conditions = append(conditions, prerequisites.conditions...)
 	conditions = append(conditions, nameConditions...)
 	mutations = append(mutations, nameMutations...)
+	zonePoolKey := networkreservations.ZonePoolRegistryKey(environment.Record.ID)
+	conditions = append(conditions, keyvalue.Condition{Key: zonePoolKey, ModRevision: zonePool.CurrentRevision()})
+	mutations = append(
+		mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: zonePoolKey, Value: zonePool.Value()},
+	)
 	conditions = append(conditions, initialAbsence.Conditions()...)
 	conditions = append(conditions, birthConditions...)
 	mutations = append(mutations, initialAbsence.Mutations()...)

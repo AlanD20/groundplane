@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -67,6 +68,7 @@ type PublishAuthoredInput struct {
 	ExpectedHeadRevision   int64
 	Staged                 StagedPublication
 	OwnedIdentities        projectionrecord.EnvironmentOwnedIdentities
+	ZoneReservations       []zones.Record
 	PrerequisiteAuthority  etcd.BlueprintPrerequisiteAuthority
 	AttachInputGenerations []etcd.BlueprintAttachInputGenerationPublication
 	Evidence               Evidence
@@ -117,6 +119,7 @@ func PublishAuthored(
 			Project: input.Project, Environment: input.Environment,
 			ExpectedHeadRevision: input.ExpectedHeadRevision,
 			Claim:                claim, DesiredInput: desired, OwnedIdentities: input.OwnedIdentities,
+			ZoneReservations:       input.ZoneReservations,
 			PrerequisiteAuthority:  input.PrerequisiteAuthority,
 			AttachInputGenerations: input.AttachInputGenerations,
 			Parent:                 input.Parent, Marker: marker,

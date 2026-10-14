@@ -254,6 +254,10 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	zoneReservations, err := authoredZoneReservations(ctx, desired, owned, baseline.project.Record)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	attachInputGenerations, err := service.prepareAuthoredAttachInputGenerations(
 		ctx, environmentID, claim.RevisionID, parsed.Extensions.Attachments,
 		desiredServices, preflight.currentAttaches, owned, allocator,
@@ -278,6 +282,7 @@ func (service *Service) applyAuthoredOnce(
 			Project: baseline.project, Environment: baseline.environment,
 			ExpectedHeadRevision: baseline.expectedHeadRevision,
 			Staged:               staged, OwnedIdentities: owned,
+			ZoneReservations:       zoneReservations,
 			PrerequisiteAuthority:  prerequisiteAuthority,
 			AttachInputGenerations: attachInputGenerations,
 			Evidence:               evidence, Locator: locator, Parent: parent,

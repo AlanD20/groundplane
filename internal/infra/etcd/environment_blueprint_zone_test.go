@@ -49,10 +49,14 @@ func assertEnvironmentBlueprintTopologyAuthority(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	projection testenvironmentprojection.EnvironmentComposeProjection,
+	retained ...testzones.Record,
 ) {
 	t.Helper()
 	want := make(map[string]string, len(projection.DesiredZones))
 	for _, zone := range projection.DesiredZones {
+		want[zone.Desired.ID] = zone.Desired.Subnet
+	}
+	for _, zone := range retained {
 		want[zone.Desired.ID] = zone.Desired.Subnet
 	}
 	result, err := store.Get(
@@ -91,9 +95,9 @@ func assertEnvironmentBlueprintTopologyAuthority(
 	}
 }
 
-func TestEnvironmentBlueprintZonePoolPublicationReplacesExactCandidateSet(t *testing.T) {
-	// Rationale: the candidate desired projection is the complete Zone subnet
-	// authority; reservations absent from it must not survive publication.
+func TestEnvironmentBlueprintZonePoolPublicationRetainsUntilProtectedRemoval(t *testing.T) {
+	// Rationale: a new desired input cannot release an old native bridge's
+	// reservation before protected removal proves its absence.
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
 	repository, err := newHierarchyRepository(store)
@@ -142,7 +146,9 @@ func TestEnvironmentBlueprintZonePoolPublicationReplacesExactCandidateSet(t *tes
 		outcome != IdempotencyKnownApplied {
 		t.Fatalf("publication outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	assertEnvironmentBlueprintTopologyAuthority(t, store, projection)
+	assertEnvironmentBlueprintTopologyAuthority(t, store, projection, testzones.Record{
+		Desired: core.Zone{ID: staleID, Subnet: "10.40.20.0/24"},
+	})
 }
 
 func TestEnvironmentBlueprintZonePreparationRejectsOverlappingSubnets(t *testing.T) {

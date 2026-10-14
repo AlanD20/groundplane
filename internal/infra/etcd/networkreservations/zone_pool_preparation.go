@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"maps"
 )
 
 type ZonePoolChange struct {
@@ -26,7 +27,9 @@ func (repository *Planner) PrepareZonePoolAtRevision(
 	if err != nil {
 		return ZonePoolChange{}, err
 	}
-	next := ZonePoolRegistry{Reservations: make(map[string]string, len(desired))}
+	// Omission is a cleanup intention, not proof that the native bridge is gone.
+	// Retain its reservation until protected Zone retirement releases it.
+	next := ZonePoolRegistry{Reservations: maps.Clone(current.Record.Reservations)}
 	for _, projection := range desired {
 		zone := zonerecord.Record(projection)
 		if projection.EnvironmentID != environment.ID {
@@ -57,7 +60,8 @@ func (repository *Planner) getEnvironmentBlueprintZoneRegistryAtRevision(
 	if err != nil {
 		return etcdstore.Versioned[ZonePoolRegistry]{}, err
 	}
-	if result == nil || result.ReadRevision != readRevision || len(result.Values) != 1 {
+	if result == nil || result.ReadRevision <= 0 ||
+		readRevision > 0 && result.ReadRevision != readRevision || len(result.Values) != 1 {
 		return etcdstore.Versioned[ZonePoolRegistry]{}, errs.New(
 			errs.KindInternal,
 			"Zone pool registry read is incomplete",
@@ -66,7 +70,7 @@ func (repository *Planner) getEnvironmentBlueprintZoneRegistryAtRevision(
 	defer etcdstore.ClearValues(result.Values)
 	if result.Values[0] == nil {
 		return etcdstore.Versioned[ZonePoolRegistry]{
-			Record: ZonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: readRevision,
+			Record: ZonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: result.ReadRevision,
 		}, nil
 	}
 	registry, err := recordcodec.Decode[ZonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
@@ -74,6 +78,6 @@ func (repository *Planner) getEnvironmentBlueprintZoneRegistryAtRevision(
 		return etcdstore.Versioned[ZonePoolRegistry]{}, CorruptZonePoolRegistry()
 	}
 	return etcdstore.Versioned[ZonePoolRegistry]{
-		Record: registry, Revision: result.Values[0].ModRevision, ReadRevision: readRevision,
+		Record: registry, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }
