@@ -283,6 +283,8 @@ func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
 		Actor: apiTypes.TaskActor(task.Actor), CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
 		StartedAt: task.StartedAt, FinishedAt: task.FinishedAt,
 		ReconciliationRequired: task.ReconciliationRequired,
+		RecoveryRetryAvailable: task.RecoveryRetryAvailable,
+		DiagnosticsExpiredAt:   task.DiagnosticsExpiredAt,
 		TargetName:             valueOrEmpty(task.TargetName), ResourceKind: valueOrEmpty(task.ResourceKind),
 		Executor: string(task.Executor), TimeoutSeconds: task.TimeoutSeconds,
 		Failure: taskFailureFromGenerated(task.Failure), Recovery: taskRecoveryFromGenerated(task.Recovery),

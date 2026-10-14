@@ -25,7 +25,12 @@ func taskRecoveryFromGenerated(value *generated.TaskRecovery) *apiTypes.TaskReco
 		State: string(value.State), Summary: value.Summary,
 		CompletedSteps: value.CompletedSteps,
 		TotalSteps:     value.TotalSteps, Deadline: value.Deadline,
-		LastFailure: taskFailureFromGenerated(value.LastFailure),
+		LastFailure:       taskFailureFromGenerated(value.LastFailure),
+		AutomaticFailures: uint32(value.AutomaticFailures),
+		RetryAfter:        value.RetryAfter, RetryAvailable: value.RetryAvailable,
+	}
+	if value.StopReason != nil {
+		result.StopReason = string(*value.StopReason)
 	}
 	if value.StepIds != nil {
 		result.StepIDs = slices.Clone(*value.StepIds)

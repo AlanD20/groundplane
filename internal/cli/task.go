@@ -119,6 +119,8 @@ func taskFields(task apiTypes.Task) map[string]any {
 		"image_fetch":              task.ImageFetch,
 		"executions":               task.Executions,
 		"interrupted_detach_retry": task.InterruptedDetachRetry,
+		"recovery_retry_available": task.RecoveryRetryAvailable,
+		"diagnostics_expired_at":   nullableTaskTimestamp(task.DiagnosticsExpiredAt),
 		"preparation":              task.Preparation,
 		"attempt_history":          task.AttemptHistory,
 		"id":                       task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
