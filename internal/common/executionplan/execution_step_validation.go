@@ -224,9 +224,9 @@ func validateStep(
 		}
 		targetArtifacts := artifacts
 		if recovery := plan.GetComponentRecoveryProcedure(); recovery != nil &&
-			recovery.GetConfigurationActionStepId() == step.GetStepId() {
+			recovery.GetComponentId() == apply.GetComponentId() {
 			candidate := artifacts[recovery.GetCandidateArtifactId()]
-			if recovery.GetComponentId() != apply.GetComponentId() || candidate == nil {
+			if candidate == nil {
 				return errs.New(errs.KindValidationFailed, "Component action does not match its captured recovery candidate")
 			}
 			// The predecessor is retained solely for recovery; it is not a
