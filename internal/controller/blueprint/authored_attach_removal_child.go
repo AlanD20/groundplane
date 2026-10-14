@@ -147,7 +147,7 @@ func (service *Service) prepareAuthoredAttachRemovalChild(
 			}
 		}
 	}
-	runtime, err := service.plans.CaptureEntryMutationRuntime(ctx, applied)
+	runtime, err := service.plans.CaptureAppliedEntryMutationRuntime(ctx, applied)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}

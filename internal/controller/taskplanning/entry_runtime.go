@@ -9,6 +9,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	"sort"
 	"strings"
 
@@ -40,6 +41,29 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
+	return resolver.captureEntryMutationRuntime(ctx, current, scope)
+}
+
+// CaptureAppliedEntryMutationRuntime retains acknowledged workloads during
+// authored omission, even while the new desired projection is still pending.
+func (resolver *TaskPlanResolver) CaptureAppliedEntryMutationRuntime(
+	ctx context.Context, current etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+) (EntryMutationRuntime, error) {
+	if resolver == nil || resolver.releases == nil {
+		return EntryMutationRuntime{}, errs.New(errs.KindInternal, "Entry runtime capture is not configured")
+	}
+	scope, err := resolver.releases.LoadPlanningScopeForAppliedProjection(ctx, current)
+	if err != nil {
+		return EntryMutationRuntime{}, err
+	}
+	return resolver.captureEntryMutationRuntime(ctx, current, scope)
+}
+
+func (resolver *TaskPlanResolver) captureEntryMutationRuntime(
+	ctx context.Context,
+	current etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	scope releasequeries.ReleasePlanningScope,
+) (EntryMutationRuntime, error) {
 	// The head and immutable-root readers report revisions of different etcd
 	// keys. Compare desired identity and bytes at the pinned read, not those keys.
 	if scope.Compose.Record.RevisionID != current.Record.RevisionID ||
