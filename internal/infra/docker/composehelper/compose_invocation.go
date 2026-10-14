@@ -108,7 +108,9 @@ func commandsFor(
 			validation := base
 			validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
 			mutation := base
-			mutation.Args = append(append([]string(nil), prefix...), "up", "--detach", "--force-recreate", "--no-deps")
+			mutation.Args = append(append([]string(nil), prefix...),
+				"up", "--detach", "--force-recreate", "--no-deps", "--wait", "--wait-timeout",
+				strconv.FormatUint(uint64(request.GetTimeoutSeconds()), 10))
 			mutation.Args = append(mutation.Args, serviceNames(artifact, []string{serviceID})...)
 			return []runner.RunCmdOpts{validation, mutation}, nil
 		}
