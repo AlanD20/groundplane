@@ -1,7 +1,6 @@
 package agentchannel
 
 import (
-	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
@@ -60,15 +59,13 @@ func (s *Server) dispatchReady(
 			quarantined[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
 			continue
 		}
-		if assignment.Task.Record.Params[releaserender.TaskReleasePublicationParam] != "" {
-			assignment, err = s.tasks.ReconnectAgentAssignment(stream.Context(), assignment)
-			if err != nil {
-				return err
-			}
-			if controllerCompletedAssignment(assignment) {
-				claimCapacity++
-				continue
-			}
+		assignment, err = s.tasks.ReconnectAgentAssignment(stream.Context(), assignment)
+		if err != nil {
+			return err
+		}
+		if controllerCompletedAssignment(assignment) {
+			claimCapacity++
+			continue
 		}
 		if err := validateAgentDispatchClaim(
 			assignment,
