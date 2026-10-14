@@ -173,13 +173,34 @@ export default function PlatformControllerPage() {
       )}
       <div hidden={tab !== "configuration"}>
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>
               <h2 className="flex items-center gap-2">
                 <FileCode2 className="size-4 text-muted-foreground" /> Startup
                 configuration
               </h2>
             </CardTitle>
+            {controllerConfig && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={dirty || controllerConfigLoading || saving}
+                onClick={() => {
+                  setSaveError(null);
+                  void refreshControllerConfig()
+                    .then((config) => setContent(config.content))
+                    .catch((cause: unknown) => {
+                      setSaveError(
+                        cause instanceof Error
+                          ? cause.message
+                          : "Unable to reload Controller configuration",
+                      );
+                    });
+                }}
+              >
+                <RefreshCw className="size-4" /> Reload file
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {controllerConfigLoading && !controllerConfig ? (
@@ -203,35 +224,14 @@ export default function PlatformControllerPage() {
                   setSaveError(null);
                 }}
                 actions={
-                  <>
-                    <Button
-                      size="sm"
-                      disabled={!dirty || saving}
-                      onClick={() => void save()}
-                    >
-                      <Save className="size-4" />{" "}
-                      {saving ? "Saving…" : "Save Controller config"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={dirty || controllerConfigLoading || saving}
-                      onClick={() => {
-                        setSaveError(null);
-                        void refreshControllerConfig()
-                          .then((config) => setContent(config.content))
-                          .catch((cause: unknown) => {
-                            setSaveError(
-                              cause instanceof Error
-                                ? cause.message
-                                : "Unable to reload Controller configuration",
-                            );
-                          });
-                      }}
-                    >
-                      <RefreshCw className="size-4" /> Reload file
-                    </Button>
-                  </>
+                  <Button
+                    size="sm"
+                    disabled={!dirty || saving}
+                    onClick={() => void save()}
+                  >
+                    <Save className="size-4" />{" "}
+                    {saving ? "Saving…" : "Save Controller config"}
+                  </Button>
                 }
               >
                 <div className="grid gap-3 rounded-lg border border-border bg-surface p-3 text-xs sm:grid-cols-2">

@@ -162,9 +162,7 @@
 @layer utilities {
   /* Modal and resting actions stay local; active page editors dock to the viewport. */
   .form-actions.form-actions {
-    position: sticky;
-    bottom: 0;
-    z-index: 20;
+    position: static;
     margin-top: 1rem;
     padding-top: 1rem;
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
@@ -327,9 +325,6 @@
     border-bottom: 1px solid var(--border);
   }
   [data-slot="drawer-content"] [data-slot="dialog-footer"] {
-    position: sticky;
-    bottom: -1.5rem;
-    z-index: 10;
     background: var(--popover);
     margin-top: auto;
     padding-top: 1rem;

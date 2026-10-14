@@ -157,7 +157,7 @@ export function CoreDnsSettings({
         </section>
         <SettingsDraft
           pristineLabel={configured ? "Saved configuration" : "Not configured"}
-          dirty={dirty}
+          dirty={!configured || dirty}
           busy={saving || !!activeTaskId}
           onCancel={() => {
             setU(upstream);

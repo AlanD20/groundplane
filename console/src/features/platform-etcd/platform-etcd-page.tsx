@@ -148,16 +148,27 @@ export default function PlatformEtcdPage() {
       <ResourcePanel
         title="etcd configuration"
         actions={
-          <Button
-            variant="outline"
-            disabled={dirty || busy || !!taskID}
-            onClick={() =>
-              void load().catch((cause) => setError(message(cause)))
-            }
-          >
-            <RefreshCw />
-            Reload
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              disabled={dirty || busy || !!taskID}
+              onClick={() =>
+                void load().catch((cause) => setError(message(cause)))
+              }
+            >
+              <RefreshCw />
+              Reload
+            </Button>
+            {document?.apply_required && (
+              <Button
+                variant="outline"
+                disabled={dirty || busy || !!taskID}
+                onClick={() => setConfirm(true)}
+              >
+                Apply saved configuration
+              </Button>
+            )}
+          </>
         }
       >
         <div className="space-y-4">
@@ -170,24 +181,13 @@ export default function PlatformEtcdPage() {
                 setError(undefined);
               }}
               actions={
-                <>
-                  <Button
-                    disabled={!dirty || busy || !!taskID}
-                    onClick={() => void save()}
-                  >
-                    <Save />
-                    Save
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={
-                      dirty || busy || !!taskID || !document.apply_required
-                    }
-                    onClick={() => setConfirm(true)}
-                  >
-                    Apply saved configuration
-                  </Button>
-                </>
+                <Button
+                  disabled={!dirty || busy || !!taskID}
+                  onClick={() => void save()}
+                >
+                  <Save />
+                  Save
+                </Button>
               }
             >
               <p className="text-xs text-muted-foreground">{document.path}</p>

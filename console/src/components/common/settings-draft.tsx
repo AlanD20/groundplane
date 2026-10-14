@@ -33,18 +33,19 @@ export function SettingsDraft({
       <fieldset disabled={busy} className="min-w-0 space-y-4">
         {children}
       </fieldset>
-      <FormActions
-        dirty={dirty}
-        onDiscard={onCancel}
-        pinned={dirty}
-        status="Unsaved changes"
-        className={`${editorFooterClassName} flex flex-wrap items-center justify-end gap-2`}
-      >
-        <Button variant="outline" disabled={!dirty || busy} onClick={onCancel}>
-          Cancel
-        </Button>
-        {actions}
-      </FormActions>
+      {dirty && (
+        <FormActions
+          dirty={dirty}
+          onDiscard={onCancel}
+          status="Unsaved changes"
+          className={`${editorFooterClassName} flex flex-wrap items-center justify-end gap-2`}
+        >
+          <Button variant="outline" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+          {actions}
+        </FormActions>
+      )}
     </div>
   );
 }
