@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
+	"github.com/AlanD20/groundplane/internal/common/storagemaintenance"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -65,8 +66,9 @@ func hostFromGenerated(host generated.Host) (apiTypes.Host, error) {
 		Docker: host.Docker,
 		Etcd: apiTypes.HostEtcd{
 			Node: host.Etcd.Node, Status: apiTypes.HealthState(host.Etcd.Status), DBSize: host.Etcd.DbSize,
-			Version:  host.Etcd.Version,
-			Software: etcdSoftware,
+			Version:     host.Etcd.Version,
+			Software:    etcdSoftware,
+			Maintenance: maintenanceFromGenerated(host.Etcd.Maintenance),
 		},
 		Controller: apiTypes.HostController{
 			Service: host.Controller.Service,
@@ -82,6 +84,39 @@ func hostFromGenerated(host generated.Host) (apiTypes.Host, error) {
 			Labels:        labels,
 		},
 	}, nil
+}
+
+func maintenanceFromGenerated(source *generated.Status) *storagemaintenance.Status {
+	if source == nil {
+		return nil
+	}
+	result := &storagemaintenance.Status{
+		State: source.State, ObservedAt: source.ObservedAt,
+		BackendBytes: source.BackendBytes, InUseBytes: source.InUseBytes, QuotaBytes: source.QuotaBytes,
+		HeadroomBytes: source.HeadroomBytes, ReusableBytes: source.ReusableBytes,
+		WALBytes: source.WalBytes, CurrentValueBytes: source.CurrentValueBytes, CurrentKeys: source.CurrentKeys,
+		CompactedThrough: source.CompactedThrough, LastSuccessAt: source.LastSuccessAt, LastFailureAt: source.LastFailureAt,
+		FailureCode: valueOrEmpty(
+			source.FailureCode,
+		), LastDefragAt: source.LastDefragAt, ReclaimedBytes: source.ReclaimedBytes,
+		DiagnosticBacklog: source.DiagnosticBacklog, TaskBacklog: source.TaskBacklog,
+	}
+	if source.ProtectedRevision != nil {
+		result.ProtectedRevision = *source.ProtectedRevision
+	}
+	if source.Blocker != nil {
+		result.Blocker = &storagemaintenance.Pin{
+			Kind: source.Blocker.Kind, OwnerID: source.Blocker.OwnerId, Revision: source.Blocker.Revision,
+		}
+	}
+	if source.Cleanup != nil {
+		result.Cleanup = &storagemaintenance.CleanupStatus{
+			ObservedAt: source.Cleanup.ObservedAt, State: source.Cleanup.State,
+			IdempotencyRecords: int(source.Cleanup.IdempotencyRecords), Tasks: int(source.Cleanup.Tasks),
+			Diagnostics: int(source.Cleanup.Diagnostics), FailureCode: valueOrEmpty(source.Cleanup.FailureCode),
+		}
+	}
+	return result
 }
 
 func controllerUpdateFromGenerated(update generated.ControllerUpdateState) (apiTypes.ControllerUpdateState, error) {
