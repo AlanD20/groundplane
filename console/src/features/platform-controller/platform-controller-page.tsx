@@ -173,7 +173,7 @@ export default function PlatformControllerPage() {
       )}
       <div hidden={tab !== "configuration"}>
         <Card>
-          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
             <CardTitle>
               <h2 className="flex items-center gap-2">
                 <FileCode2 className="size-4 text-muted-foreground" /> Startup
