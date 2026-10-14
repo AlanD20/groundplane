@@ -94,6 +94,15 @@ func (service *Service) Plan(
 		return blueprintunits.DesiredPlan{}, err
 	}
 	omissions := orderAuthoredRemovalUnits(planner.omissions)
+	omissions, err = service.orderAuthoredAttachRemovals(
+		ctx,
+		parent.Owner.EnvironmentID,
+		omissions,
+		snapshot.ReadRevision,
+	)
+	if err != nil {
+		return blueprintunits.DesiredPlan{}, err
+	}
 	componentTargets := make([]blueprintunits.ResourceKey, 0)
 	for _, candidates := range [][]blueprintunits.Unit{units, omissions} {
 		for _, candidate := range candidates {

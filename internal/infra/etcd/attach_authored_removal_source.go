@@ -105,7 +105,7 @@ func (repository *AttachRepository) GetAttachFactsVersioned(
 	}
 	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		if len(current.Record.FactSets) != 0 || current.Record.HookBundle {
+		if current.Record.OwnsCredential() && (len(current.Record.FactSets) != 0 || current.Record.HookBundle) {
 			return etcdstore.Versioned[attachrecord.EncryptedFacts]{}, false, errs.New(
 				errs.KindInternal, "Attach encrypted facts are missing",
 			)
