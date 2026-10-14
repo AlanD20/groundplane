@@ -1808,6 +1808,56 @@ distinct from the final normal updates and does not prove uninterrupted upgrades
 Persistent Volume removal, external-consumer backing Zone removal and every
 omission/interruption variant are not qualified by this combined case.
 
+## Bounded recovery, storage reclamation and terminal tabs
+
+**H119 — selected HOST-16/17/18 and TASK-16/17/18/19 variants, 2026-10-15.**
+
+Signed implementation `e5f98b144` and the quota correction `26184a877` passed
+local delivery checks on Linux amd64. Full `make ci` completed; the final quota
+delta also passed its focused race check. Later CLI projection and Console
+refresh corrections passed compilation, Console build, formatting and
+architecture checks. No static-contract or trivial rendering tests were added.
+Final production source is `c64849378`, including the separate native Task DTO
+projection; storage epoch 36, channel 19 and plan schema 18 were used.
+
+Local behavior checks prove finite safe-recovery budgets, deterministic/ambiguous
+replay refusal, restart/report replay, explicit Retry without a second execution,
+retained ownership without consuming unrelated capacity, per-summary writes,
+bounded decompression, interrupted diagnostic expiry, retained Entry reads after
+simulated compaction, publication fencing and uncertain reservation recovery.
+
+On one existing Ubuntu 24.04 amd64 host, a Controller-only epoch-35→36 repair
+converted one aggregate archive into 130 compressed summaries without changing
+any of its 216 Task records. No product compatibility reader, reset or quota
+increase was used. Subsequent same-epoch updates completed through GP's normal
+updater. The existing Agent image was retained; its ordinary restart is distinct
+from application or etcd interruption.
+
+GP waited for its actual ten-minute QA history window, compacted guarded eligible
+history and defragmented within the configured UTC window. Native etcd reported
+a backend decrease from about 2 GiB to 16,351,232 bytes; maintenance recorded
+2,129,215,488 bytes reclaimed. Current payload and separate WAL were reported
+independently. All 215 original terminal Task records remained byte-identical;
+all original Tasks remained present. Container identities, application/etcd
+processes, mounts, database inventory and application migration rows were preserved.
+One queue's configured hourly recycle occurred before the update request; it was
+recorded separately, not attributed to GP or concealed by the verifier.
+
+Installed terminal checks prove independent root-shell state/output, same-key
+replay, background output, the global four-session bound, selected process death
+and a surviving unrelated shell. The browser restored an existing tab after
+reload without a new Open request. All verification shells were terminated.
+The live maintenance panel advanced its observation while preserving an unsaved
+YAML draft; that draft was cancelled without changing host configuration.
+The final CLI preserved the original failed Task's cause, recovery outcome,
+Retry availability and diagnostic-expiry timestamp after compaction.
+
+Broader installed recovery-fault injection, active historical-reader variants,
+other operating systems/architectures and uninterrupted traffic were not run.
+Existing malformed/fenced QA Blueprint records were retained; their errors did
+not prevent independent diagnostic cleanup and compaction. This is not a blanket
+production or release-readiness claim.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

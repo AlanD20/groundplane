@@ -169,6 +169,22 @@ across interruptions and rotate past held records without weakening their guards
 See the [maintenance schema](../../internal/common/config/maintenance.go) for
 supported settings and bounds.
 
+For example, retain disposable diagnostics for one day while preserving the
+default Task/replay lifetime:
+
+```yaml
+maintenance:
+  diagnostic_retention: 24h
+  cleanup_interval: 1m
+  history_retention: 1h
+  defrag_start_utc: "03:00"
+  defrag_window: 15m
+```
+
+The Console refreshes this status every 15 seconds while the page is visible.
+Refresh does not replace an unsaved configuration draft. If the API is temporarily
+unavailable, the last observation remains visible with a refresh warning.
+
 Compaction discards eligible historical versions, not current application records.
 Unfinished captures and Blueprint/deletion preparation protect their required old
 views. Defragmentation reclaims the resulting reusable file space only above its
