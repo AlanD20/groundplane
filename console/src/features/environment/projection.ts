@@ -24,6 +24,7 @@ export function environmentFromAPI(
   }
   return {
     id: environment.id,
+    resourceLoadError: undefined,
     projectId: environment.project_id,
     name: environment.name,
     networkPool: environment.network_pool,

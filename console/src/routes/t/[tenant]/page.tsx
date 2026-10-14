@@ -161,8 +161,26 @@ export default function TenantPage() {
         </DialogFooter>
       </ResourceForm>
 
-      {projects.length === 0 ? (
-        <EmptyState icon={<Boxes />} title="No projects yet" />
+      {store.projectsLoading ? (
+        <EmptyState icon={<Boxes />} title="Loading Projects" />
+      ) : projects.length === 0 ? (
+        <EmptyState
+          icon={<Boxes />}
+          title={
+            store.projectError ? "Unable to load Projects" : "No projects yet"
+          }
+          description={store.projectError ?? undefined}
+          action={
+            store.projectError ? (
+              <Button
+                variant="outline"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <ProjectsTable
           tenant={tenant}

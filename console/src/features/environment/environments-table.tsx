@@ -38,7 +38,9 @@ export function EnvironmentsTable({
   const [query, setQuery] = useState("");
   const environments = project.environments ?? [];
   const observation = useVisibleServiceObservations({
-    environmentIds: environments.map((env) => env.id),
+    environmentIds: environments
+      .filter((env) => !env.resourceLoadError)
+      .map((env) => env.id),
     observations: environments.flatMap((env) =>
       env.services.map((service) => service.observation),
     ),
@@ -108,24 +110,47 @@ export function EnvironmentsTable({
                   </TableCell>
                   <TableCell>
                     <StatusBadge
-                      status={environmentRuntimeState(
-                        env.services,
-                        observation.now,
-                      )}
+                      label={
+                        env.resourceLoadError
+                          ? "Resources unavailable"
+                          : undefined
+                      }
+                      status={
+                        env.resourceLoadError
+                          ? "unavailable"
+                          : environmentRuntimeState(
+                              env.services,
+                              observation.now,
+                            )
+                      }
                     />
                   </TableCell>
                   <TableCell>
-                    <p>{env.services.length} Services</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {env.routes.length} Routes, {env.zones.length} Zones,{" "}
-                      {env.attaches.length} connections
-                    </p>
+                    {env.resourceLoadError ? (
+                      <p className="max-w-80 whitespace-pre-line text-xs text-destructive">
+                        {env.resourceLoadError}
+                      </p>
+                    ) : (
+                      <>
+                        <p>{env.services.length} Services</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {env.routes.length} Routes, {env.zones.length} Zones,{" "}
+                          {env.attaches.length} connections
+                        </p>
+                      </>
+                    )}
                   </TableCell>
                   <TableCell className="max-w-60">
-                    <ImageReference value={env.release} />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatTimestamp(env.lastDeployAt, "Never deployed")}
-                    </p>
+                    {env.resourceLoadError ? (
+                      "Unavailable"
+                    ) : (
+                      <>
+                        <ImageReference value={env.release} />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {formatTimestamp(env.lastDeployAt, "Never deployed")}
+                        </p>
+                      </>
+                    )}
                   </TableCell>
                   <TableCell className="w-12">
                     <ResourceActionMenu

@@ -27,6 +27,7 @@ export function projectFromAPI(
   }
   return {
     id: project.id,
+    environmentLoadError: undefined,
     tenantId: project.tenant_id ?? null,
     slug: project.slug,
     name: project.name,
@@ -53,10 +54,23 @@ export async function listAllTenantProjects(
     cursor = page.next_cursor ?? "";
   } while (cursor);
   return Promise.all(
-    projects.map(async (project) => ({
-      ...project,
-      environments: await listAllEnvironments(project.id, signal),
-    })),
+    projects.map(async (project) => {
+      try {
+        return {
+          ...project,
+          environments: await listAllEnvironments(project.id, signal),
+        };
+      } catch (error) {
+        if (signal.aborted) throw error;
+        return {
+          ...project,
+          environmentLoadError:
+            error instanceof Error
+              ? error.message
+              : "Unable to load Environments",
+        };
+      }
+    }),
   );
 }
 

@@ -97,6 +97,16 @@ export function ProjectsTable({
                         Created {project.createdAt}
                       </p>
                     )}
+                    {(project.environmentLoadError ||
+                      project.environments?.some(
+                        (env) => env.resourceLoadError,
+                      )) && (
+                      <p className="mt-1 text-xs text-destructive">
+                        {project.environmentLoadError
+                          ? "Environments unavailable"
+                          : "Some Environment resources unavailable"}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
@@ -109,14 +119,20 @@ export function ProjectsTable({
                           {env.name}
                         </Link>
                       ))}
-                      {!project.environments?.length && "None yet"}
+                      {!project.environments?.length &&
+                        (project.environmentLoadError
+                          ? "Unavailable"
+                          : "None yet")}
                     </div>
                   </TableCell>
                   <TableCell>
-                    {project.environments?.reduce(
-                      (count, env) => count + env.services.length,
-                      0,
-                    ) ?? 0}
+                    {project.environmentLoadError ||
+                    project.environments?.some((env) => env.resourceLoadError)
+                      ? "Unavailable"
+                      : (project.environments?.reduce(
+                          (count, env) => count + env.services.length,
+                          0,
+                        ) ?? 0)}
                   </TableCell>
                   <TableCell>
                     {

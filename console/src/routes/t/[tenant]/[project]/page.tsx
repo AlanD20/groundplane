@@ -102,7 +102,12 @@ export default function TenantProjectPage() {
             <MetaPill icon={<Layers />}>
               {envs.length} environment{envs.length === 1 ? "" : "s"}
             </MetaPill>
-            <MetaPill icon={<Boxes />}>{svcCount} services</MetaPill>
+            <MetaPill icon={<Boxes />}>
+              {project.environmentLoadError ||
+              envs.some((env) => env.resourceLoadError)
+                ? "Services unavailable"
+                : `${svcCount} services`}
+            </MetaPill>
           </>
         }
         actions={
@@ -187,7 +192,18 @@ export default function TenantProjectPage() {
       </ResourceForm>
 
       {/* Environment selector */}
-      {envs.length === 0 ? (
+      {project.environmentLoadError ? (
+        <EmptyState
+          icon={<Boxes />}
+          title="Unable to load Environments"
+          description={project.environmentLoadError}
+          action={
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          }
+        />
+      ) : envs.length === 0 ? (
         <EmptyState icon={<Boxes />} title="No environments yet" />
       ) : (
         <EnvironmentsTable

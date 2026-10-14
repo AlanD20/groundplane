@@ -35,9 +35,20 @@ export async function listAllEnvironments(
     cursor = page.next_cursor ?? "";
   } while (cursor);
   return Promise.all(
-    environments.map((environment) =>
-      loadEnvironmentResources(environment, signal),
-    ),
+    environments.map(async (environment) => {
+      try {
+        return await loadEnvironmentResources(environment, signal);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        return {
+          ...environment,
+          resourceLoadError:
+            error instanceof Error
+              ? error.message
+              : "Unable to load Environment resources",
+        };
+      }
+    }),
   );
 }
 

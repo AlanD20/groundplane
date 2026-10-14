@@ -28,7 +28,15 @@ import { TasksCard } from "@/features/task/environment-tasks-card";
 import { EnvironmentVolumeManager } from "@/features/volume/environment-volume-manager";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
-import { ArrowLeft, Boxes, Layers, Network, Plug, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Boxes,
+  Layers,
+  Network,
+  Plug,
+  Plus,
+} from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { EnvironmentDeletionFence } from "./deletion-fence";
 import { SettingsCard } from "./environment-settings";
@@ -67,7 +75,7 @@ export default function EnvironmentPage() {
   );
   const observation = useVisibleServiceObservations({
     environmentIds: [
-      ...(env ? [env.id] : []),
+      ...(env && !env.resourceLoadError ? [env.id] : []),
       ...backingEnvironments.map((environment) => environment.id),
     ],
     observations: [
@@ -100,6 +108,22 @@ export default function EnvironmentPage() {
           </Link>
         }
       />
+    );
+
+  if (env.resourceLoadError)
+    return (
+      <div role="alert">
+        <EmptyState
+          icon={<AlertTriangle />}
+          title={`Unable to load ${env.name} resources`}
+          description={env.resourceLoadError}
+          action={
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          }
+        />
+      </div>
     );
 
   const runtime = environmentRuntimeState(env.services, observation.now);

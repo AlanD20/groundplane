@@ -263,6 +263,7 @@ export type BlueprintApplyAudit = {
 
 export type Environment = {
   id: string;
+  resourceLoadError?: string;
   projectId: string;
   name: string; // staging | production
   networkPool: string;
@@ -305,9 +306,6 @@ export type Adapter = {
   requires: { database: boolean; role: boolean };
   envVars: string[];
   provision: ProvisionOp[];
-  // custom = network-only: attaching joins the service's network and that's
-  // all — no auto-provisioning, no facts, no credentials, no backups. The
-  // operator chooses the image; Groundplane runs it and wires connectivity.
   custom?: boolean;
 };
 
@@ -332,6 +330,7 @@ export type ConsumerLink = {
 // controller logic (envs, services, attaches, backups) is shared.
 export type Project = {
   id: string;
+  environmentLoadError?: string;
   slug: string;
   name: string;
   kind: "tenant" | "backing";
