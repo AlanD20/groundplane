@@ -75,16 +75,18 @@ export default function TenantPage() {
           </>
         }
         actions={
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="size-4" /> New project
-          </Button>
+          !open && (
+            <Button onClick={() => setOpen(true)}>
+              <Plus className="size-4" /> New project
+            </Button>
+          )
         }
       />
       <ResourceForm open={open} onOpenChange={setOpen}>
         <DialogHeader>
           <DialogTitle>New project · {tenant.name}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <div className="grid max-w-5xl gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="p-name">Name</Label>
             <Input
@@ -107,7 +109,7 @@ export default function TenantPage() {
               Follows Name until edited.
             </p>
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label htmlFor="p-desc">Description</Label>
             <Input
               id="p-desc"
@@ -118,7 +120,7 @@ export default function TenantPage() {
           </div>
 
           {projectError && (
-            <p role="alert" className="text-xs text-destructive">
+            <p role="alert" className="text-xs text-destructive md:col-span-2">
               {projectError}
             </p>
           )}
@@ -161,15 +163,7 @@ export default function TenantPage() {
       </ResourceForm>
 
       {projects.length === 0 ? (
-        <EmptyState
-          icon={<Boxes />}
-          title="No projects yet"
-          action={
-            <Button onClick={() => setOpen(true)}>
-              <Plus className="size-4" /> New project
-            </Button>
-          }
-        />
+        <EmptyState icon={<Boxes />} title="No projects yet" />
       ) : (
         <ProjectsTable
           tenant={tenant}

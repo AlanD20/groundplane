@@ -111,8 +111,9 @@ label a value “inherited” merely because it came from another scope.
 
 Use inline forms for creation, editing and operation review, including deployment,
 rollback and image actions. Place the form below the page or section heading,
-above its collection. Right-side drawers are reserved for Task and Runner
-inspection and notifications. Small confirmation dialogs remain centered.
+above its collection. Right-side drawers are reserved for Task inspection and
+notifications. Runner details expand inside their inventory row. Small confirmation
+dialogs remain centered.
 Use a workspace for extended work
 with multiple resources or substantial history. Do not turn each toggle into a
 separate page or put an entire resource's configuration into one large modal.
@@ -295,9 +296,15 @@ header and active form actions. Do not use native browser fullscreen. Preserve
 the document, undo and selection, with an explicit exit and Escape support.
 Fullscreen changes viewing space, never saves or applies changes. Preview, search and read-only rules are identical in both sizes.
 
+Collection creation has one header action, without a duplicate empty-state action.
+Hide that entry action while its form is open; submission belongs to the form footer.
+
 Forms group related fields and use two columns when space permits; stack on narrow
 screens. Give multiline editors, long values and multi-select exposure full rows.
 Do not create tall single-column forms merely because fields are separate controls.
+Align paired fields at their labels and controls; helper text must not stretch the
+neighboring field. Repeated input cards keep their remove action at the trailing
+top edge, with an accessible name and tooltip for icon-only actions.
 
 Required retyping belongs in a focused confirmation popup, never in the inline
 editor or viewport footer.
@@ -438,9 +445,9 @@ and copyable. Put optional YAML or verbose metadata behind a named disclosure.
 Only editing states receive the highlighted surface and viewport action bar;
 Close actions remain local and ordinary.
 Use the shared ResourceForm for ordinary creation and editing; reserve dialogs
-for confirmations without configuration fields; Task and Runner inspection keep
-their dedicated drawers. Scope an open form to its owning navigation
-destination. Global creation shortcuts navigate there before opening it; they
+for confirmations without configuration fields. Task inspection keeps its dedicated
+drawer; Runner details expand within their inventory row across Tenant, Project
+and Environment views. Scope an open form to its owning navigation destination. Global creation shortcuts navigate there before opening it; they
 must not leave a form hanging above unrelated tabs. Add Service protects an
 unsaved draft when navigating away.
 When configuring an existing component, expand its current section in place;

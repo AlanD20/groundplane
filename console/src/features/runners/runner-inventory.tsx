@@ -17,12 +17,6 @@ import {
 import { TaskLink } from "@/components/common/task-link";
 import { Button } from "@/components/ui/button";
 import {
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import {
   Table,
   TableBody,
   TableCell,
@@ -32,7 +26,13 @@ import {
 } from "@/components/ui/table";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import type { Runner } from "@/lib/types";
-import { GitBranch, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import {
+  ChevronRight,
+  GitBranch,
+  Pencil,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { RunnerCheckPanel } from "./runner-check-panel";
@@ -67,7 +67,10 @@ export function RunnerInventory({
 }) {
   const [query, setQuery] = useState("");
   const [inspectedId, setInspectedId] = useState<string | null>(null);
-  const inspected = runners.find((runner) => runner.id === inspectedId);
+  const toggleDetails = (id: string) => {
+    if (expandedId === id) return;
+    setInspectedId((current) => (current === id ? null : id));
+  };
   const table = useTableView(
     runners.filter((runner) => {
       const ownership = owner(runner);
@@ -187,81 +190,179 @@ export function RunnerInventory({
               query={query}
               onQueryChange={setQuery}
             />
-            <ResourceTable>
-              <Table aria-label="GitHub Runners">
-                <TableHeader>
-                  <TableRow>
-                    <TableSortHead sort={table} field="name">
-                      Runner
-                    </TableSortHead>
-                    <TableSortHead sort={table} field="status">
-                      Status
-                    </TableSortHead>
-                    <TableSortHead sort={table} field="scope">
-                      Scope
-                    </TableSortHead>
-                    <TableSortHead sort={table} field="owner">
-                      Owner
-                    </TableSortHead>
-                    <TableHead>Installed software</TableHead>
-                    <TableHead>Current job</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[
-                    ...runners.filter(
-                      (r) =>
-                        r.id === expandedId &&
-                        !table.rows.some((row) => row.id === r.id),
-                    ),
-                    ...table.rows,
-                  ].map((runner) => (
-                    <Fragment key={runner.id}>
-                      <ResourceRow
-                        key={runner.id}
-                        onOpen={() => setInspectedId(runner.id)}
-                      >
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="content"
-                            className="max-w-64 justify-start gap-2 p-0 text-xs"
-                            onClick={() => setInspectedId(runner.id)}
-                          >
-                            <GitBranch className="size-3.5 shrink-0 text-primary" />
-                            <span className="truncate">{runner.slug}</span>
-                          </Button>
-                        </TableCell>
-                        <TableCell>{status(runner)}</TableCell>
-                        <TableCell>{owner(runner).scope}</TableCell>
-                        <TableCell className="max-w-64 break-words">
-                          {owner(runner).name}
-                        </TableCell>
-                        <TableCell>
-                          <ContainerSoftwareIdentity
-                            software={runner.software}
-                            showReferences={false}
-                            unavailable="Identity not reported"
-                          />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          Not reported
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-2">
-                            {actions(runner)}
-                          </div>
-                        </TableCell>
-                      </ResourceRow>
-                      <TableExpansion columns={7}>
-                        {expandedId === runner.id ? editor : null}
-                      </TableExpansion>
-                    </Fragment>
-                  ))}
-                </TableBody>
-              </Table>
-            </ResourceTable>
+            <div className="@container">
+              <ResourceTable>
+                <Table aria-label="GitHub Runners">
+                  <TableHeader>
+                    <TableRow>
+                      <TableSortHead sort={table} field="name">
+                        Runner
+                      </TableSortHead>
+                      <TableSortHead sort={table} field="status">
+                        Status
+                      </TableSortHead>
+                      <TableSortHead sort={table} field="scope">
+                        Scope
+                      </TableSortHead>
+                      <TableSortHead sort={table} field="owner">
+                        Owner
+                      </TableSortHead>
+                      <TableHead>Installed software</TableHead>
+                      <TableHead>Current job</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[
+                      ...runners.filter(
+                        (r) =>
+                          r.id === expandedId &&
+                          !table.rows.some((row) => row.id === r.id),
+                      ),
+                      ...table.rows,
+                    ].map((runner) => (
+                      <Fragment key={runner.id}>
+                        <ResourceRow
+                          key={runner.id}
+                          onOpen={() => toggleDetails(runner.id)}
+                        >
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="content"
+                              className="max-w-64 justify-start gap-2 p-0 text-xs"
+                              onClick={() => toggleDetails(runner.id)}
+                              disabled={expandedId === runner.id}
+                              aria-expanded={inspectedId === runner.id}
+                              aria-controls={`runner-details-${runner.id}`}
+                            >
+                              <ChevronRight
+                                aria-hidden
+                                className={`size-3.5 shrink-0 transition-transform motion-reduce:transition-none ${inspectedId === runner.id ? "rotate-90" : ""}`}
+                              />
+                              <GitBranch className="size-3.5 shrink-0 text-primary" />
+                              <span className="truncate">{runner.slug}</span>
+                            </Button>
+                          </TableCell>
+                          <TableCell>{status(runner)}</TableCell>
+                          <TableCell>{owner(runner).scope}</TableCell>
+                          <TableCell className="max-w-64 break-words">
+                            {owner(runner).name}
+                          </TableCell>
+                          <TableCell>
+                            <ContainerSoftwareIdentity
+                              software={runner.software}
+                              showReferences={false}
+                              unavailable="Identity not reported"
+                            />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            Not reported
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-2">
+                              {actions(runner)}
+                            </div>
+                          </TableCell>
+                        </ResourceRow>
+                        <TableExpansion columns={7}>
+                          {expandedId === runner.id ? (
+                            editor
+                          ) : inspectedId === runner.id ? (
+                            <div
+                              id={`runner-details-${runner.id}`}
+                              className="w-[calc(100cqw-2rem)] min-w-0 space-y-4 border-t border-border pt-4"
+                            >
+                              <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
+                                <DetailRow
+                                  label="Status"
+                                  value={status(runner)}
+                                />
+                                <DetailRow
+                                  label="Owner"
+                                  value={owner(runner).name}
+                                />
+                                <DetailRow
+                                  label="GitHub name"
+                                  value={runner.name}
+                                />
+                                <DetailRow
+                                  label="Labels"
+                                  value={runner.labels.join(", ") || "None"}
+                                />
+                                <DetailRow
+                                  label="Current job"
+                                  value="Not reported by the Controller"
+                                />
+                                <DetailRow
+                                  label="Installed software"
+                                  value={
+                                    <ContainerSoftwareIdentity
+                                      software={runner.software}
+                                      unavailable="Identity not reported by the Controller"
+                                    />
+                                  }
+                                />
+                                <DetailRow
+                                  label="Last report"
+                                  value={formatTimestamp(
+                                    runner.observedAt ?? "",
+                                    "Not reported",
+                                  )}
+                                />
+                                <DetailRow
+                                  label="Created"
+                                  value={formatTimestamp(
+                                    runner.createdAt,
+                                    "Not reported",
+                                  )}
+                                />
+                                <DetailRow
+                                  label="Registration Task"
+                                  value={
+                                    <TaskLink taskId={runner.createTaskId}>
+                                      Inspect Task
+                                    </TaskLink>
+                                  }
+                                />
+                                {runner.removeTaskId && (
+                                  <DetailRow
+                                    label="Removal Task"
+                                    value={
+                                      <TaskLink taskId={runner.removeTaskId}>
+                                        Inspect Task
+                                      </TaskLink>
+                                    }
+                                  />
+                                )}
+                                <DetailRow
+                                  label="Runner ID"
+                                  value={runner.id}
+                                />
+                              </div>
+                              <DetailRow
+                                label="GitHub URL"
+                                value={runner.githubUrl}
+                              />
+                              <RunnerCheckPanel
+                                runnerId={runner.id}
+                                open
+                                disabled={runner.lifecycle !== "ready"}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Trusted workflows use normal GP CLI/API access.
+                                Builds use a dedicated rootless Docker daemon,
+                                not the host socket.
+                              </p>
+                            </div>
+                          ) : null}
+                        </TableExpansion>
+                      </Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ResourceTable>
+            </div>
             {!table.total && (
               <p
                 role="status"
@@ -276,88 +377,6 @@ export function RunnerInventory({
           </>
         )}
       </ResourcePanel>
-      <Drawer
-        open={!!inspected}
-        onOpenChange={(open) => {
-          if (!open) setInspectedId(null);
-        }}
-      >
-        <DrawerContent>
-          {inspected && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{inspected.slug}</DialogTitle>
-                <DialogDescription>
-                  GitHub Runner · {owner(inspected).scope}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <DetailRow label="Status" value={status(inspected)} />
-                <DetailRow label="GitHub URL" value={inspected.githubUrl} />
-                <DetailRow label="Owner" value={owner(inspected).name} />
-                <DetailRow label="GitHub name" value={inspected.name} />
-                <DetailRow
-                  label="Labels"
-                  value={inspected.labels.join(", ") || "None"}
-                />
-                <DetailRow
-                  label="Current job"
-                  value="Not reported by the Controller"
-                />
-                <DetailRow
-                  label="Installed software"
-                  value={
-                    <ContainerSoftwareIdentity
-                      software={inspected.software}
-                      unavailable="Identity not reported by the Controller"
-                    />
-                  }
-                />
-                <DetailRow
-                  label="Last report"
-                  value={formatTimestamp(
-                    inspected.observedAt ?? "",
-                    "Not reported",
-                  )}
-                />
-                <DetailRow
-                  label="Created"
-                  value={formatTimestamp(inspected.createdAt, "Not reported")}
-                />
-                <DetailRow
-                  label="Registration Task"
-                  value={
-                    <TaskLink taskId={inspected.createTaskId}>
-                      Inspect Task
-                    </TaskLink>
-                  }
-                />
-                {inspected.removeTaskId && (
-                  <DetailRow
-                    label="Removal Task"
-                    value={
-                      <TaskLink taskId={inspected.removeTaskId}>
-                        Inspect Task
-                      </TaskLink>
-                    }
-                  />
-                )}
-                <DetailRow label="Runner ID" value={inspected.id} />
-                <RunnerCheckPanel
-                  runnerId={inspected.id}
-                  open
-                  disabled={inspected.lifecycle !== "ready"}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Trusted workflows use normal GP CLI/API access. Builds use a
-                  dedicated rootless Docker daemon, not the host socket.
-                </p>
-                <div className="flex flex-wrap gap-2">{actions(inspected)}</div>
-              </div>
-            </>
-          )}
-        </DrawerContent>
-      </Drawer>
     </>
   );
 }

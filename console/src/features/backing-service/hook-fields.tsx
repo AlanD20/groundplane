@@ -1,4 +1,6 @@
 import { useEffect, useId, useState } from "react";
+import { Trash2 } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { BackingHooks } from "./api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -175,7 +177,7 @@ export function BackingHookFields({
           return (
             <div
               key={index}
-              className="grid gap-3 rounded-lg border border-border p-3 sm:col-span-2 sm:grid-cols-2"
+              className="relative grid min-w-0 items-start gap-3 rounded-lg border border-border p-3 pr-12 sm:col-span-2 sm:grid-cols-2"
             >
               <div className="grid gap-1.5">
                 <Label htmlFor={`${id}-input-${index}`}>Input key</Label>
@@ -232,19 +234,23 @@ export function BackingHookFields({
                   />
                 </div>
               )}
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-destructive hover:text-destructive"
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    inputs: inputs.filter((_, i) => i !== index),
-                  })
-                }
-              >
-                Remove input
-              </Button>
+              <Tooltip content="Remove input">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Remove input ${input.key || index + 1}`}
+                  className="absolute right-2 top-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      inputs: inputs.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  <Trash2 aria-hidden className="size-4" />
+                </Button>
+              </Tooltip>
             </div>
           );
         })}

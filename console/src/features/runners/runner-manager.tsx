@@ -122,7 +122,7 @@ export default function RunnerManager({
     (runner) => runner.id !== editing?.id && runner.slug === normalizedSlug,
   );
 
-  const createAction = (
+  const createAction = creating ? null : (
     <Button
       disabled={store.runnersLoading || runners.length >= 5}
       onClick={() => {
