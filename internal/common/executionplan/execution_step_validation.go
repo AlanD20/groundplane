@@ -223,9 +223,8 @@ func validateStep(
 			return errs.New(errs.KindValidationFailed, "Component action generation does not match its plan")
 		}
 		targetArtifacts := artifacts
-		if recovery := plan.GetComponentRecoveryProcedure(); recovery != nil &&
-			recovery.GetComponentId() == apply.GetComponentId() {
-			candidate := artifacts[recovery.GetCandidateArtifactId()]
+		if candidateID, captured := ComponentActionCandidateArtifactID(plan, apply.GetComponentId()); captured {
+			candidate := artifacts[candidateID]
 			if candidate == nil {
 				return errs.New(errs.KindValidationFailed, "Component action does not match its captured recovery candidate")
 			}

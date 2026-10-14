@@ -8,6 +8,17 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// ComponentActionCandidateArtifactID selects forward authority from captured
+// recovery, independently of whether configuration uses files or discovery.
+// The caller validates the plan before resolving the returned artifact ID.
+func ComponentActionCandidateArtifactID(plan *agentpb.ExecutionPlan, componentID string) (string, bool) {
+	recovery := plan.GetComponentRecoveryProcedure()
+	if recovery == nil || recovery.GetComponentId() != componentID {
+		return "", false
+	}
+	return recovery.GetCandidateArtifactId(), true
+}
+
 func validateComponentContainerActionTarget(
 	operation agentpb.PlanOperation,
 	action *agentpb.ComponentApply,

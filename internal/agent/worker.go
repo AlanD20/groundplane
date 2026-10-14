@@ -225,7 +225,9 @@ func isReleaseExecution(plan *agentpb.ExecutionPlan) bool {
 	switch plan.GetOperation() {
 	case agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
 		agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK,
-		agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY:
+		agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+		agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
+		agentpb.PlanOperation_PLAN_OPERATION_REMOVE:
 		return true
 	default:
 		return false

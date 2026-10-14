@@ -64,7 +64,7 @@ func validateRequest(
 		artifactID = ""
 	case *agentpb.ExecutionStep_ComponentApply:
 		artifact, err = componentActionArtifact(
-			plan.GetOperation(), plan.GetSteps(), plan.GetArtifacts(),
+			plan,
 			payload.ComponentApply.GetArtifactId(), payload.ComponentApply.GetComponentId(),
 		)
 		if err != nil {
@@ -150,12 +150,24 @@ func validateRequest(
 }
 
 func componentActionArtifact(
-	operation agentpb.PlanOperation,
-	steps []*agentpb.ExecutionStep,
-	artifacts []*agentpb.ComposeArtifact,
+	plan *agentpb.ExecutionPlan,
 	materializationID string,
 	componentID string,
 ) (*agentpb.ComposeArtifact, error) {
+	operation, steps, artifacts := plan.GetOperation(), plan.GetSteps(), plan.GetArtifacts()
+	if candidateID, captured := executionplan.ComponentActionCandidateArtifactID(plan, componentID); captured {
+		var candidate *agentpb.ComposeArtifact
+		for _, artifact := range artifacts {
+			if artifact.GetArtifactId() == candidateID {
+				candidate = artifact
+				break
+			}
+		}
+		if candidate == nil {
+			return nil, errs.New(errs.KindValidationFailed, "Compose helper Component recovery candidate is absent")
+		}
+		artifacts = []*agentpb.ComposeArtifact{candidate}
+	}
 	if operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
 		materializations := 0
 		boundArtifactID := ""
