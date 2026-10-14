@@ -12,7 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (p *WorkerPool) executeBlueprintReleaseSetup(
+func (p *WorkerPool) executeReleaseSetup(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
@@ -34,11 +34,11 @@ func (p *WorkerPool) executeBlueprintReleaseSetup(
 		result, err := p.environmentDirectories.ExecuteStep(ctx, assignment, step, p.CheckpointVolumeRemoval)
 		return composeruntime.StepResult{ExitCode: result.ExitCode}, err
 	default:
-		return composeruntime.StepResult{}, errs.New(errs.KindInternal, "agent: unsupported Blueprint Release setup step")
+		return composeruntime.StepResult{}, errs.New(errs.KindInternal, "agent: unsupported Release setup step")
 	}
 }
 
-func (p *WorkerPool) executeBlueprintReleaseComponent(
+func (p *WorkerPool) executeReleaseComponent(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
@@ -49,7 +49,7 @@ func (p *WorkerPool) executeBlueprintReleaseComponent(
 		assignment.Plan.GetComponentLifecycleMode() != agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UNSPECIFIED {
 		return composeruntime.StepResult{}, errs.New(
 			errs.KindInternal,
-			"agent: Blueprint Component action contains host lifecycle authority",
+			"agent: Release Component action contains host lifecycle authority",
 		)
 	}
 	if p.componentActions == nil {
@@ -68,7 +68,7 @@ func (p *WorkerPool) executeBlueprintReleaseComponent(
 	if observation != nil && (observation.ManagedConfig != nil || observation.DNSResolverObservation != nil) {
 		err = errors.Join(
 			err,
-			errs.New(errs.KindInternal, "agent: Blueprint Component action returned host lifecycle evidence"),
+			errs.New(errs.KindInternal, "agent: Release Component action returned host lifecycle evidence"),
 		)
 	}
 	result.ReconciliationRequired = err != nil

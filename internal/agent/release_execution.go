@@ -319,15 +319,15 @@ func (p *WorkerPool) runReleaseStep(
 				}
 			}
 		}
-	} else if reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY && step.GetComponentApply() != nil {
-		result, err = p.executeBlueprintReleaseComponent(stepCtx, reservation.assignment, step)
+	} else if step.GetComponentApply() != nil {
+		result, err = p.executeReleaseComponent(stepCtx, reservation.assignment, step)
 		state.componentMutationAttempted = state.componentMutationAttempted || result.MutationAttempted
 	} else if reservation.assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
 		executionplan.ConfigurationFilePair(reservation.assignment.Plan, step.GetStepId()) != nil {
 		result, err = p.executeReleaseConfigurationStep(stepCtx, reservation.assignment, step)
-	} else if reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
-		(step.GetMaterializeFile() != nil || step.GetAdapterProcedure() != nil || step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetEnvironmentDirectoryCreate() != nil) {
-		result, err = p.executeBlueprintReleaseSetup(stepCtx, reservation.assignment, step)
+	} else if step.GetMaterializeFile() != nil || step.GetAdapterProcedure() != nil ||
+		step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetEnvironmentDirectoryCreate() != nil {
+		result, err = p.executeReleaseSetup(stepCtx, reservation.assignment, step)
 	} else {
 		result, err = p.compose.ExecuteStep(stepCtx, reservation.assignment, step, reportHealth)
 	}
