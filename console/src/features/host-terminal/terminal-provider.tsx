@@ -1,5 +1,5 @@
-import type { components } from "@/lib/api.generated";
 import { controllerRequest } from "@/lib/controller-json-request";
+import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { newULID } from "@/lib/utils";
 import {
   type CSSProperties,
@@ -10,198 +10,92 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
+import {
+  TerminalConnection,
+  type HostTerminalSession,
+} from "./terminal-connection";
 
-export type HostTerminalSession = components["schemas"]["HostTerminalSession"];
+export type { HostTerminalSession } from "./terminal-connection";
 
-type TerminalContextValue = {
-  session: HostTerminalSession | null;
+type TerminalTab = { id: string; name: string; connection: TerminalConnection };
+type SavedTab = { name: string; session: HostTerminalSession };
+type PendingOpen = { idempotencyKey: string; columns: number; rows: number };
+const storageKey = "groundplane-host-terminal-tabs";
+const pendingOpenStorageKey = "groundplane-host-terminal-new-tab";
+
+type TerminalWorkspace = {
+  tabs: TerminalTab[];
+  activeId: string | null;
   visible: boolean;
   opening: boolean;
-  connected: boolean;
   maximized: boolean;
   height: number;
-  error: string | null;
-  remainingSeconds: number;
+  openError: string | null;
   open: () => Promise<void>;
+  newTab: () => Promise<void>;
+  selectTab: (id: string) => void;
+  renameTab: (id: string, name: string) => void;
+  closeTab: (id: string) => void;
   show: () => void;
   hide: () => void;
-  terminate: () => void;
-  sendInput: (data: string) => void;
-  sendResize: (columns: number, rows: number) => void;
-  subscribeOutput: (listener: (data: Uint8Array) => void) => () => void;
   setMaximized: (value: boolean) => void;
   setHeight: (value: number) => void;
 };
 
-const storageKey = "groundplane-host-terminal-session";
-const pendingOpenStorageKey = "groundplane-host-terminal-open";
-const TerminalContext = createContext<TerminalContextValue | null>(null);
-
-type PendingOpen = {
-  idempotencyKey: string;
-  columns: number;
-  rows: number;
-};
-
-type ServerStatus = {
-  type: "activity" | "terminated" | "output_truncated";
-  session?: HostTerminalSession;
-};
+const TerminalContext = createContext<TerminalWorkspace | null>(null);
+const noSubscribe = () => () => {};
+const noSnapshot = () => null;
 
 export function HostTerminalProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [session, setSession] = useState<HostTerminalSession | null>(() =>
-    restoreSession(),
-  );
+  const [tabs, setTabs] = useState<TerminalTab[]>(restoreTabs);
+  const [activeId, setActiveId] = useState<string | null>(tabs[0]?.id ?? null);
   const [visible, setVisible] = useState(false);
   const [opening, setOpening] = useState(false);
-  const [connected, setConnected] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [height, setHeightState] = useState(360);
-  const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [openError, setOpenError] = useState<string | null>(null);
   const openingRef = useRef(false);
   const pendingOpenRef = useRef<PendingOpen | null>(restorePendingOpen());
-  const socketRef = useRef<WebSocket | null>(null);
-  const sessionRef = useRef(session);
-  const sequenceRef = useRef(0);
-  const retryRef = useRef<number | null>(null);
-  const activeRef = useRef(true);
-  const terminatePendingRef = useRef(false);
-  const outputListeners = useRef(new Set<(data: Uint8Array) => void>());
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
 
   useEffect(() => {
-    sessionRef.current = session;
-    persistSession(session);
-  }, [session]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const connect = useCallback((current: HostTerminalSession) => {
-    if (socketRef.current || current.state !== "active") return;
-    const target = new URL(current.stream_path, window.location.href);
-    target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
-    target.searchParams.set("after", String(sequenceRef.current));
-    const socket = new WebSocket(target);
-    socket.binaryType = "arraybuffer";
-    socketRef.current = socket;
-    socket.onopen = () => {
-      if (socketRef.current !== socket) return;
-      setConnected(true);
-      setError(null);
-      if (terminatePendingRef.current) {
-        socket.send(JSON.stringify({ type: "terminate" }));
-      }
-    };
-    socket.onmessage = (message) => {
-      if (socketRef.current !== socket) return;
-      if (message.data instanceof ArrayBuffer) {
-        if (message.data.byteLength < 8) return;
-        const view = new DataView(message.data);
-        const sequence = Number(view.getBigUint64(0));
-        if (sequence <= sequenceRef.current) return;
-        sequenceRef.current = sequence;
-        const bytes = new Uint8Array(message.data, 8);
-        for (const listener of outputListeners.current) listener(bytes);
-        return;
-      }
-      try {
-        const status = JSON.parse(String(message.data)) as ServerStatus;
-        if (status.type === "output_truncated") {
-          const notice = new TextEncoder().encode(
-            "\r\n[earlier host terminal output was truncated]\r\n",
-          );
-          for (const listener of outputListeners.current) listener(notice);
-        } else if (status.session) {
-          sessionRef.current = status.session;
-          setSession(status.session);
-          if (status.type === "terminated") {
-            terminatePendingRef.current = false;
-            setConnected(false);
-          }
-        }
-      } catch {
-        setError("Host terminal returned an invalid status frame.");
-      }
-    };
-    socket.onerror = () => {
-      if (socketRef.current === socket) setError("Host terminal connection was interrupted.");
-    };
-    socket.onclose = (event) => {
-      if (socketRef.current !== socket) return;
-      socketRef.current = null;
-      setConnected(false);
-      const latest = sessionRef.current;
-      if (event.code === 1008 && latest?.id === current.id) {
-        const ended: HostTerminalSession = { ...latest, state: "terminated", reason: "session_unavailable" };
-        sessionRef.current = ended;
-        setSession(ended);
-        terminatePendingRef.current = false;
-        setError("This host terminal session has ended. Open a new terminal to continue.");
-        return;
-      }
-      if (
-        latest?.state === "active" &&
-        activeRef.current &&
-        Date.parse(latest.expires_at) > Date.now()
-      ) {
-        retryRef.current = window.setTimeout(() => connect(latest), 1_000);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (session?.state === "active") connect(session);
+    const save = () => persistTabs(tabs);
+    save();
+    const unsubscribe = tabs.map((tab) => tab.connection.subscribe(save));
     return () => {
-      if (retryRef.current !== null) window.clearTimeout(retryRef.current);
+      for (const release of unsubscribe) release();
     };
-  }, [connect, session?.id, session?.state]);
+  }, [tabs]);
 
-  useEffect(() => {
-    activeRef.current = true;
-    return () => {
-      activeRef.current = false;
-      if (retryRef.current !== null) window.clearTimeout(retryRef.current);
-      socketRef.current?.close();
-    };
-  }, []);
+  useEffect(
+    () => () => {
+      for (const tab of tabsRef.current) tab.connection.dispose();
+    },
+    [],
+  );
 
-  const open = useCallback(async () => {
+  const newTab = useCallback(async () => {
     setVisible(true);
-    setMaximized(false);
-    const current = sessionRef.current;
-    if (current?.state === "active" && connected && Date.parse(current.expires_at) > Date.now()) {
-      return;
-    }
     if (openingRef.current) return;
     openingRef.current = true;
     setOpening(true);
-    setError(null);
-    // An explicit Open can recover from an expired session or Controller
-    // restart. Automatic WebSocket reconnect never creates a new root shell.
-    sessionRef.current = null;
-    if (retryRef.current !== null) window.clearTimeout(retryRef.current);
-    const previousSocket = socketRef.current;
-    socketRef.current = null;
-    setConnected(false);
-    previousSocket?.close();
-    terminatePendingRef.current = false;
+    setOpenError(null);
     const pending = pendingOpenRef.current ?? {
       idempotencyKey: newULID(),
       columns: 100,
       rows: 28,
     };
     pendingOpenRef.current = pending;
-    persistPendingOpen(pending);
+    saveOptional(pendingOpenStorageKey, pending);
     try {
-      const created = await controllerRequest<HostTerminalSession>(
+      const session = await controllerRequest<HostTerminalSession>(
         "/host/terminal",
         201,
         {
@@ -211,13 +105,32 @@ export function HostTerminalProvider({
         },
       );
       pendingOpenRef.current = null;
-      persistPendingOpen(null);
-      if (created.id !== current?.id) sequenceRef.current = 0;
-      sessionRef.current = created;
-      setSession(created);
-      connect(created);
+      saveOptional(pendingOpenStorageKey, null);
+      setTabs((current) =>
+        current.some((tab) => tab.id === session.id)
+          ? current
+          : [
+              ...current,
+              {
+                id: session.id,
+                name: `Terminal ${current.length + 1}`,
+                connection: new TerminalConnection(session),
+              },
+            ],
+      );
+      setActiveId(session.id);
     } catch (cause) {
-      setError(
+      // A refused request cannot have opened a shell. An uncertain outcome must
+      // keep its key so the next click recovers that shell instead of duplicating it.
+      if (
+        cause instanceof ControllerRequestError &&
+        cause.status >= 400 &&
+        cause.status < 500
+      ) {
+        pendingOpenRef.current = null;
+        saveOptional(pendingOpenStorageKey, null);
+      }
+      setOpenError(
         cause instanceof Error
           ? cause.message
           : "Unable to open host terminal.",
@@ -226,98 +139,92 @@ export function HostTerminalProvider({
       openingRef.current = false;
       setOpening(false);
     }
-  }, [connect, connected]);
-
-  const terminate = useCallback(() => {
-    terminatePendingRef.current = true;
-    const current = sessionRef.current;
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "terminate" }));
-    } else if (current?.state === "active") {
-      connect(current);
-    }
-  }, [connect]);
-
-  const sendInput = useCallback((data: string) => {
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN && data.length > 0) {
-      for (let start = 0; start < data.length;) {
-        let end = Math.min(start + 4_096, data.length);
-        const final = data.charCodeAt(end - 1);
-        if (end < data.length && final >= 0xd800 && final <= 0xdbff) end--;
-        socket.send(
-          JSON.stringify({ type: "input", data: data.slice(start, end) }),
-        );
-        start = end;
-      }
-    }
   }, []);
 
-  const sendResize = useCallback((columns: number, rows: number) => {
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "resize", columns, rows }));
+  const open = useCallback(async () => {
+    setVisible(true);
+    if (tabsRef.current.length === 0) await newTab();
+    else {
+      const selected =
+        tabsRef.current.find((tab) => tab.id === activeId) ??
+        tabsRef.current[0];
+      setActiveId(selected.id);
+      selected.connection.connect();
+    }
+  }, [newTab, activeId]);
+
+  const selectTab = useCallback((id: string) => {
+    setActiveId(id);
+    setVisible(true);
+  }, []);
+  const renameTab = useCallback((id: string, name: string) => {
+    const next = name.trim().slice(0, 40);
+    if (next)
+      setTabs((current) =>
+        current.map((tab) => (tab.id === id ? { ...tab, name: next } : tab)),
+      );
+  }, []);
+  const closeTab = useCallback((id: string) => {
+    const tab = tabsRef.current.find((item) => item.id === id);
+    if (!tab || tab.connection.getSnapshot().session.state === "active") return;
+    tab.connection.dispose();
+    const remaining = tabsRef.current.filter((item) => item.id !== id);
+    setTabs(remaining);
+    setActiveId((current) =>
+      current === id ? (remaining[0]?.id ?? null) : current,
+    );
+    if (remaining.length === 0) {
+      setVisible(false);
+      setMaximized(false);
     }
   }, []);
-
-  const subscribeOutput = useCallback(
-    (listener: (data: Uint8Array) => void) => {
-      outputListeners.current.add(listener);
-      return () => outputListeners.current.delete(listener);
-    },
-    [],
-  );
-
   const setHeight = useCallback((value: number) => {
     setHeightState(Math.max(220, Math.min(value, window.innerHeight * 0.75)));
   }, []);
+  const show = useCallback(() => setVisible(true), []);
+  const hide = useCallback(() => {
+    setVisible(false);
+    setMaximized(false);
+  }, []);
 
-  const remainingSeconds =
-    session?.state === "active"
-      ? Math.max(0, Math.ceil((Date.parse(session.expires_at) - now) / 1_000))
-      : 0;
-
-  const value = useMemo<TerminalContextValue>(
+  const value = useMemo<TerminalWorkspace>(
     () => ({
-      session,
+      tabs,
+      activeId,
       visible,
       opening,
-      connected,
       maximized,
       height,
-      error,
-      remainingSeconds,
+      openError,
       open,
-      show: () => setVisible(true),
-      hide: () => {
-        setVisible(false);
-        setMaximized(false);
-      },
-      terminate,
-      sendInput,
-      sendResize,
-      subscribeOutput,
+      newTab,
+      selectTab,
+      renameTab,
+      closeTab,
+      show,
+      hide,
       setMaximized,
       setHeight,
     }),
     [
-      session,
+      tabs,
+      activeId,
       visible,
       opening,
-      connected,
       maximized,
       height,
-      error,
-      remainingSeconds,
+      openError,
       open,
-      terminate,
-      sendInput,
-      sendResize,
-      subscribeOutput,
+      newTab,
+      selectTab,
+      renameTab,
+      closeTab,
+      show,
+      hide,
       setHeight,
     ],
   );
+
   return (
     <TerminalContext.Provider value={value}>
       <div
@@ -325,7 +232,7 @@ export function HostTerminalProvider({
         style={
           {
             "--terminal-dock-height":
-              visible && !maximized && (session || opening || error)
+              visible && !maximized && (tabs.length || opening || openError)
                 ? `${height}px`
                 : "0px",
           } as CSSProperties
@@ -337,69 +244,100 @@ export function HostTerminalProvider({
   );
 }
 
-export function useHostTerminal() {
-  const value = useContext(TerminalContext);
-  if (!value)
+export function useHostTerminal(id?: string) {
+  const workspace = useContext(TerminalContext);
+  if (!workspace)
     throw new Error("useHostTerminal must be used within HostTerminalProvider");
-  return value;
+  const connection = workspace.tabs.find(
+    (tab) => tab.id === (id ?? workspace.activeId),
+  )?.connection;
+  const state = useSyncExternalStore(
+    connection?.subscribe ?? noSubscribe,
+    connection?.getSnapshot ?? noSnapshot,
+  );
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (state?.session.state !== "active") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [state?.session.state]);
+  return {
+    ...workspace,
+    connection,
+    session: state?.session ?? null,
+    connected: state?.connected ?? false,
+    error: state?.error ?? null,
+    remainingSeconds:
+      state?.session.state === "active"
+        ? Math.max(
+            0,
+            Math.ceil((Date.parse(state.session.expires_at) - now) / 1_000),
+          )
+        : 0,
+    terminate: connection?.terminate,
+  };
 }
 
-function restoreSession(): HostTerminalSession | null {
+function restoreTabs(): TerminalTab[] {
   try {
     const raw = sessionStorage.getItem(storageKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as HostTerminalSession;
-    if (
-      !parsed.id ||
-      parsed.state !== "active" ||
-      Date.parse(parsed.expires_at) <= Date.now()
-    ) {
-      sessionStorage.removeItem(storageKey);
-      return null;
-    }
-    return parsed;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SavedTab[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (tab) =>
+          tab != null &&
+          typeof tab.name === "string" &&
+          tab.session?.id &&
+          tab.session.state === "active" &&
+          Date.parse(tab.session.expires_at) > Date.now(),
+      )
+      .slice(0, 4)
+      .map((tab) => ({
+        id: tab.session.id,
+        name: tab.name,
+        connection: new TerminalConnection(tab.session),
+      }));
   } catch {
-    return null;
+    return [];
   }
 }
 
-function persistSession(session: HostTerminalSession | null) {
-  try {
-    if (session?.state === "active")
-      sessionStorage.setItem(storageKey, JSON.stringify(session));
-    else sessionStorage.removeItem(storageKey);
-  } catch {
-    /* Session recovery is optional when storage is unavailable. */
-  }
+function persistTabs(tabs: TerminalTab[]) {
+  saveOptional(
+    storageKey,
+    tabs
+      .filter((tab) => tab.connection.getSnapshot().session.state === "active")
+      .map((tab) => ({
+        name: tab.name,
+        session: tab.connection.getSnapshot().session,
+      })),
+  );
 }
 
 function restorePendingOpen(): PendingOpen | null {
   try {
     const raw = sessionStorage.getItem(pendingOpenStorageKey);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as PendingOpen;
-    if (
-      !/^[A-Za-z0-9._:-]{16,128}$/.test(parsed.idempotencyKey) ||
-      parsed.columns < 20 ||
-      parsed.columns > 500 ||
-      parsed.rows < 5 ||
-      parsed.rows > 300
-    ) {
-      sessionStorage.removeItem(pendingOpenStorageKey);
-      return null;
-    }
-    return parsed;
+    const pending = JSON.parse(raw) as PendingOpen;
+    return /^[A-Za-z0-9._:-]{16,128}$/.test(pending.idempotencyKey) &&
+      pending.columns >= 20 &&
+      pending.columns <= 500 &&
+      pending.rows >= 5 &&
+      pending.rows <= 300
+      ? pending
+      : null;
   } catch {
     return null;
   }
 }
 
-function persistPendingOpen(pending: PendingOpen | null) {
+function saveOptional(key: string, value: SavedTab[] | PendingOpen | null) {
   try {
-    if (pending)
-      sessionStorage.setItem(pendingOpenStorageKey, JSON.stringify(pending));
-    else sessionStorage.removeItem(pendingOpenStorageKey);
+    if (value === null) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* Retry continuity is optional when storage is unavailable. */
+    /* Session recovery is optional when browser storage is unavailable. */
   }
 }

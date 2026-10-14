@@ -71,7 +71,6 @@ type Manager struct {
 	hostname    string
 	closed      bool
 	byID        map[string]*session
-	byOwner     map[string]*session
 	replays     map[string]terminalReplay
 	replayOrder []string
 }
@@ -115,7 +114,7 @@ func New(launcher shellLauncher, inactivity time.Duration) (*Manager, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Manager{
 		ctx: ctx, cancel: cancel, launcher: launcher, inactivity: inactivity,
-		hostname: hostname, byID: make(map[string]*session), byOwner: make(map[string]*session),
+		hostname: hostname, byID: make(map[string]*session),
 		replays: make(map[string]terminalReplay),
 	}, nil
 }
@@ -165,13 +164,6 @@ func (m *Manager) Open(
 	if owner == "" {
 		owner = ids.NewULID()
 	}
-	if existing := m.byOwner[owner]; existing != nil {
-		m.recordReplayLocked(idempotencyKey, terminalReplay{
-			owner: owner, columns: columns, rows: rows, session: existing,
-		})
-		m.mu.Unlock()
-		return existing.projection(true), owner, nil
-	}
 	if len(m.byID) >= MaxSessions {
 		m.mu.Unlock()
 		return apiTypes.HostTerminalSession{}, "", errs.New(
@@ -190,7 +182,6 @@ func (m *Manager) Open(
 	s.expiresAt = time.Now().UTC().Add(m.inactivity)
 	s.timer = time.AfterFunc(m.inactivity, s.expireInputInactivity)
 	m.byID[s.id] = s
-	m.byOwner[owner] = s
 	m.recordReplayLocked(idempotencyKey, terminalReplay{
 		owner: owner, columns: columns, rows: rows, session: s,
 	})
@@ -310,9 +301,6 @@ func (m *Manager) release(s *session) {
 	m.mu.Lock()
 	if m.byID[s.id] == s {
 		delete(m.byID, s.id)
-	}
-	if m.byOwner[s.owner] == s {
-		delete(m.byOwner, s.owner)
 	}
 	m.mu.Unlock()
 }

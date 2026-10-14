@@ -102,11 +102,17 @@ Anyone who can reach the Console can use it; there is no separate login or token
 Keep Console/API listeners restricted to trusted private clients. This is host
 access, not a container shell or a Task log.
 
-The bottom panel can be resized or maximized within the browser tab. Hide keeps
-the shell running. Close offers Keep in background or Terminate; Terminate ends
-the shell and its owned foreground/background processes. Reopen resumes the
-owning browser session. A Controller restart terminates these transient sessions;
-opening again is an explicit new shell, not replay of past commands.
+The bottom panel can be resized or maximized within the browser tab. Its tabs
+hold independent shells; use New tab to open another, select a tab to switch,
+and Rename to change its local label. The host permits four active sessions
+total, shared by Console and CLI operators.
+
+Switching tabs or hiding the panel keeps shells and their output running. Close
+offers Keep in background or Terminate; Terminate ends only the selected shell
+and its owned foreground/background processes. A closed tab can then be removed.
+Reloading the Console reconnects available tabs for the owning browser session;
+it never silently opens replacement shells. A Controller restart terminates
+these transient sessions. Open a new tab explicitly to start a new shell.
 
 Platform Settings configures operator-input inactivity: 15 minutes by default,
 from 1 minute to 8 hours. Save takes effect after the next Controller restart.

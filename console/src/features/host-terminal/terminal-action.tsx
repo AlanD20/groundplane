@@ -19,8 +19,7 @@ export function HostTerminalAction() {
           : "Open host terminal"
       }
       onClick={() => {
-        if (active && terminal.connected && terminal.remainingSeconds > 0) terminal.show();
-        else void terminal.open();
+        void terminal.open();
       }}
     >
       <span className="relative">

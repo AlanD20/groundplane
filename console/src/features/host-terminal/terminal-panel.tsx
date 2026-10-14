@@ -8,9 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
-import "@xterm/xterm/css/xterm.css";
+import { Input } from "@/components/ui/input";
 import {
   ChevronsDownUp,
   ChevronsUpDown,
@@ -18,84 +16,21 @@ import {
   Minus,
   SquareTerminal,
   X,
+  Plus,
+  Pencil,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useHostTerminal } from "./terminal-provider";
+import { TerminalViewport } from "./terminal-viewport";
 
 export function HostTerminalPanel() {
   const terminal = useHostTerminal();
-  const [confirmClose, setConfirmClose] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitRef = useRef<FitAddon | null>(null);
+  const [confirmClose, setConfirmClose] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [name, setName] = useState("");
   const renderPanel = Boolean(
-    terminal.session || terminal.opening || terminal.error,
+    terminal.tabs.length || terminal.opening || terminal.openError,
   );
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || xtermRef.current) return;
-    const xterm = new Terminal({
-      cursorBlink: true,
-      convertEol: false,
-      scrollback: 5_000,
-      fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-      fontSize: 13,
-      lineHeight: 1.25,
-      theme: {
-        background: "#111318",
-        foreground: "#e8eaf0",
-        cursor: "#f5a524",
-        selectionBackground: "#46505f99",
-      },
-    });
-    const fit = new FitAddon();
-    xterm.loadAddon(fit);
-    xterm.open(container);
-    fit.fit();
-    const data = xterm.onData(terminal.sendInput);
-    const resize = xterm.onResize(({ cols, rows }) =>
-      terminal.sendResize(cols, rows),
-    );
-    const unsubscribe = terminal.subscribeOutput((value) => xterm.write(value));
-    const observer = new ResizeObserver(() => {
-      if (container.offsetParent !== null) fit.fit();
-    });
-    observer.observe(container);
-    xtermRef.current = xterm;
-    fitRef.current = fit;
-    return () => {
-      observer.disconnect();
-      unsubscribe();
-      data.dispose();
-      resize.dispose();
-      xterm.dispose();
-      xtermRef.current = null;
-      fitRef.current = null;
-    };
-  }, [
-    terminal.sendInput,
-    terminal.sendResize,
-    terminal.subscribeOutput,
-    terminal.session?.id,
-    renderPanel,
-  ]);
-
-  useEffect(() => {
-    if (!terminal.visible) return;
-    const frame = requestAnimationFrame(() => {
-      fitRef.current?.fit();
-      xtermRef.current?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [terminal.visible, terminal.maximized, terminal.height]);
-
-  useEffect(() => {
-    if (xtermRef.current) {
-      xtermRef.current.options.disableStdin =
-        !terminal.connected || terminal.session?.state !== "active";
-    }
-  }, [terminal.connected, terminal.session?.state]);
 
   if (!renderPanel) return null;
 
@@ -211,25 +146,116 @@ export function HostTerminalPanel() {
             className="text-zinc-400 hover:bg-white/10 hover:text-white"
             aria-label="Close terminal"
             onClick={() => {
-              if (terminal.session?.state === "active") setConfirmClose(true);
-              else terminal.hide();
+              if (terminal.session?.state === "active" && terminal.activeId)
+                setConfirmClose(terminal.activeId);
+              else if (terminal.activeId) terminal.closeTab(terminal.activeId);
             }}
           >
             <X />
           </Button>
         </div>
-        {terminal.error ? (
+        <div
+          role="tablist"
+          aria-label="Host shells"
+          className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/10 px-2 py-1"
+        >
+          {terminal.tabs.map((tab, index) => (
+            <Button
+              key={tab.id}
+              id={`terminal-tab-${tab.id}`}
+              role="tab"
+              aria-selected={terminal.activeId === tab.id}
+              aria-controls={`terminal-panel-${tab.id}`}
+              tabIndex={terminal.activeId === tab.id ? 0 : -1}
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "shrink-0 text-zinc-400 hover:bg-white/10 hover:text-white",
+                terminal.activeId === tab.id && "bg-white/10 text-white",
+              )}
+              onClick={() => terminal.selectTab(tab.id)}
+              onPointerDown={(event) => {
+                // Pointer selection returns directly to shell input; arrow-key
+                // navigation keeps focus on the tablist.
+                if (event.button === 0) event.preventDefault();
+              }}
+              onKeyDown={(event) => {
+                const next =
+                  event.key === "ArrowRight"
+                    ? (index + 1) % terminal.tabs.length
+                    : event.key === "ArrowLeft"
+                      ? (index + terminal.tabs.length - 1) %
+                        terminal.tabs.length
+                      : event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? terminal.tabs.length - 1
+                          : -1;
+                if (next >= 0) {
+                  event.preventDefault();
+                  terminal.selectTab(terminal.tabs[next].id);
+                  document
+                    .getElementById(`terminal-tab-${terminal.tabs[next].id}`)
+                    ?.focus();
+                }
+              }}
+            >
+              {tab.name}
+            </Button>
+          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="New terminal tab"
+            className="shrink-0 text-zinc-400 hover:bg-white/10 hover:text-white"
+            disabled={terminal.opening}
+            onClick={() => void terminal.newTab()}
+          >
+            <Plus />
+          </Button>
+          {terminal.activeId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Rename terminal tab"
+              className="shrink-0 text-zinc-400 hover:bg-white/10 hover:text-white"
+              onClick={() => {
+                setName(
+                  terminal.tabs.find((tab) => tab.id === terminal.activeId)
+                    ?.name ?? "",
+                );
+                setRenaming(terminal.activeId);
+              }}
+            >
+              <Pencil />
+            </Button>
+          )}
+        </div>
+        {terminal.error || terminal.openError ? (
           <div
             role="alert"
             className="border-b border-red-400/20 bg-red-400/10 px-4 py-2 text-xs text-red-200"
           >
-            {terminal.error}
+            {terminal.openError ?? terminal.error}
           </div>
         ) : null}
-        <div ref={containerRef} className="min-h-0 flex-1 px-2 py-1" />
+        {terminal.tabs.map((tab) => (
+          <TerminalViewport
+            key={tab.id}
+            id={tab.id}
+            active={terminal.activeId === tab.id}
+          />
+        ))}
       </section>
 
-      <Dialog open={confirmClose} onOpenChange={setConfirmClose}>
+      <Dialog
+        open={confirmClose !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmClose(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Close host terminal?</DialogTitle>
@@ -243,7 +269,7 @@ export function HostTerminalPanel() {
               variant="outline"
               onClick={() => {
                 terminal.hide();
-                setConfirmClose(false);
+                setConfirmClose(null);
               }}
             >
               Keep in background
@@ -251,13 +277,61 @@ export function HostTerminalPanel() {
             <Button
               variant="destructive"
               onClick={() => {
-                terminal.terminate();
-                setConfirmClose(false);
+                terminal.tabs
+                  .find((tab) => tab.id === confirmClose)
+                  ?.connection.terminate();
+                setConfirmClose(null);
               }}
             >
               Terminate session
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={renaming !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenaming(null);
+        }}
+      >
+        <DialogContent>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (renaming && name.trim()) {
+                terminal.renameTab(renaming, name);
+                setRenaming(null);
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Rename terminal tab</DialogTitle>
+              <DialogDescription>
+                This label only identifies the tab.
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              aria-label="Tab name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={40}
+              required
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRenaming(null)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!name.trim()}>
+                Rename
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>
