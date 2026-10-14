@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -38,7 +39,14 @@ func (s *Server) acknowledge(
 	if err != nil {
 		return taskReportRejected, err
 	}
-	componentRecovery := task.Record.Params[taskjournal.TaskBlueprintComponentUnitParam] != ""
+	if s.plans == nil {
+		return taskReportRejected, errs.New(errs.KindInternal, "Agent Task plan resolver is not configured")
+	}
+	plan, err := s.plans.ResolveExecutionPlan(ctx, task.Record)
+	if err != nil {
+		return taskReportRejected, err
+	}
+	componentRecovery := plan.GetComponentRecoveryProcedure() != nil
 	recoveryDigest := acknowledgement.GetReleaseRecoveryRecordSha256()
 	if componentRecovery {
 		recoveryDigest = acknowledgement.GetComponentRecoveryRecordSha256()
@@ -118,13 +126,6 @@ func (s *Server) acknowledge(
 	}
 	environmentTarget := ids.Validate(ids.KindEnvironment, task.Record.Target) == nil
 	environmentCreation := task.Record.Type == taskjournal.TaskCreate && environmentTarget
-	if s.plans == nil {
-		return taskReportRejected, errs.New(errs.KindInternal, "Agent Task plan resolver is not configured")
-	}
-	plan, err := s.plans.ResolveExecutionPlan(ctx, task.Record)
-	if err != nil {
-		return taskReportRejected, err
-	}
 	environmentDirectory := executionplan.UsesEnvironmentDirectoryResult(plan)
 	if backupTask {
 		if err := validateBackupTaskResult(acknowledgement); err != nil {
