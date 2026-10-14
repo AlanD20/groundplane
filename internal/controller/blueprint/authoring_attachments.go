@@ -5,8 +5,10 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -88,6 +90,15 @@ func (service *Service) authoringAttachmentSpecs(
 	specs := make(map[string]core.AttachmentSpec, len(attaches))
 	for _, current := range attaches {
 		record := current.Record
+		// Unfinished removal retains execution authority, not desired topology.
+		if slices.ContainsFunc(
+			snapshot.identities.Record.PendingOmissions,
+			func(omission projectionrecord.OwnedOmission) bool {
+				return omission.Kind == ids.KindAttach && omission.ID == record.ID
+			},
+		) {
+			continue
+		}
 		// Export describes authored topology, not readiness of its runtime.
 		// A stopped Apply may never have sealed the new effective projection.
 		consumerName, found := consumerNames[record.ServiceID]
