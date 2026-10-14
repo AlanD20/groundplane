@@ -190,7 +190,7 @@ export function FormActions({
       hidden={eligible && !!session && session.active !== id}
       data-slot="dialog-footer"
       data-viewport-actions={fixed || undefined}
-      style={fixed ? { bottom: 0 } : undefined}
+      style={fixed ? { bottom: "var(--terminal-dock-height, 0px)" } : undefined}
       className={cn(
         "form-actions flex flex-wrap items-center justify-end gap-2",
         className,

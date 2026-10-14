@@ -2,6 +2,7 @@ import type { components } from "@/lib/api.generated";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { newULID } from "@/lib/utils";
 import {
+  type CSSProperties,
   createContext,
   useCallback,
   useContext,
@@ -319,7 +320,19 @@ export function HostTerminalProvider({
   );
   return (
     <TerminalContext.Provider value={value}>
-      {children}
+      <div
+        className="contents"
+        style={
+          {
+            "--terminal-dock-height":
+              visible && !maximized && (session || opening || error)
+                ? `${height}px`
+                : "0px",
+          } as CSSProperties
+        }
+      >
+        {children}
+      </div>
     </TerminalContext.Provider>
   );
 }

@@ -1,5 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { TableExpansion } from "@/components/common/table-expansion";
+import { CompactReference } from "@/components/common/compact-reference";
+import { Badge } from "@/components/ui/badge";
 import { DetailRow } from "@/components/common/detail-row";
 import {
   ResourcePanel,
@@ -201,14 +203,10 @@ export function RunnerInventory({
                       <TableSortHead sort={table} field="status">
                         Status
                       </TableSortHead>
-                      <TableSortHead sort={table} field="scope">
-                        Scope
-                      </TableSortHead>
                       <TableSortHead sort={table} field="owner">
                         Owner
                       </TableSortHead>
                       <TableHead>Installed software</TableHead>
-                      <TableHead>Current job</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -245,9 +243,11 @@ export function RunnerInventory({
                             </Button>
                           </TableCell>
                           <TableCell>{status(runner)}</TableCell>
-                          <TableCell>{owner(runner).scope}</TableCell>
                           <TableCell className="max-w-64 break-words">
-                            {owner(runner).name}
+                            <div>{owner(runner).name}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {owner(runner).scope}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <ContainerSoftwareIdentity
@@ -256,16 +256,13 @@ export function RunnerInventory({
                               unavailable="Identity not reported"
                             />
                           </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            Not reported
-                          </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-2">
                               {actions(runner)}
                             </div>
                           </TableCell>
                         </ResourceRow>
-                        <TableExpansion columns={7}>
+                        <TableExpansion columns={5}>
                           {expandedId === runner.id ? (
                             editor
                           ) : inspectedId === runner.id ? (
@@ -273,87 +270,85 @@ export function RunnerInventory({
                               id={`runner-details-${runner.id}`}
                               className="w-[calc(100cqw-2rem)] min-w-0 space-y-4 border-t border-border pt-4"
                             >
-                              <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                                <DetailRow
-                                  label="Status"
-                                  value={status(runner)}
-                                />
-                                <DetailRow
-                                  label="Owner"
-                                  value={owner(runner).name}
-                                />
-                                <DetailRow
-                                  label="GitHub name"
-                                  value={runner.name}
-                                />
-                                <DetailRow
-                                  label="Labels"
-                                  value={runner.labels.join(", ") || "None"}
-                                />
-                                <DetailRow
-                                  label="Current job"
-                                  value="Not reported by the Controller"
-                                />
-                                <DetailRow
-                                  label="Installed software"
-                                  value={
-                                    <ContainerSoftwareIdentity
-                                      software={runner.software}
-                                      unavailable="Identity not reported by the Controller"
-                                    />
-                                  }
-                                />
-                                <DetailRow
-                                  label="Last report"
-                                  value={formatTimestamp(
-                                    runner.observedAt ?? "",
-                                    "Not reported",
-                                  )}
-                                />
-                                <DetailRow
-                                  label="Created"
-                                  value={formatTimestamp(
-                                    runner.createdAt,
-                                    "Not reported",
-                                  )}
-                                />
-                                <DetailRow
-                                  label="Registration Task"
-                                  value={
-                                    <TaskLink taskId={runner.createTaskId}>
-                                      Inspect Task
-                                    </TaskLink>
-                                  }
-                                />
-                                {runner.removeTaskId && (
-                                  <DetailRow
-                                    label="Removal Task"
-                                    value={
-                                      <TaskLink taskId={runner.removeTaskId}>
-                                        Inspect Task
-                                      </TaskLink>
-                                    }
-                                  />
-                                )}
-                                <DetailRow
-                                  label="Runner ID"
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <CompactReference
                                   value={runner.id}
+                                  label="Runner ID"
                                 />
+                                <div className="flex flex-wrap gap-3 text-xs">
+                                  <TaskLink taskId={runner.createTaskId}>
+                                    Registration task
+                                  </TaskLink>
+                                  {runner.removeTaskId && (
+                                    <TaskLink taskId={runner.removeTaskId}>
+                                      Removal task
+                                    </TaskLink>
+                                  )}
+                                </div>
                               </div>
-                              <DetailRow
-                                label="GitHub URL"
-                                value={runner.githubUrl}
-                              />
+                              <div className="grid items-start gap-4 @3xl:grid-cols-2">
+                                <ResourcePanel title="GitHub registration">
+                                  <div className="min-w-0 space-y-1">
+                                    <span className="text-xs text-muted-foreground">
+                                      Repository or organization
+                                    </span>
+                                    <p className="break-all text-sm">
+                                      {runner.githubUrl}
+                                    </p>
+                                  </div>
+                                  <DetailRow
+                                    label="Runner name"
+                                    value={runner.name || "Not reported"}
+                                  />
+                                  <div className="space-y-2">
+                                    <span className="text-xs text-muted-foreground">
+                                      Workflow labels
+                                    </span>
+                                    <div className="flex flex-wrap gap-2">
+                                      {runner.labels.length ? (
+                                        runner.labels.map((label) => (
+                                          <Badge
+                                            key={label}
+                                            variant="secondary"
+                                            className="max-w-full whitespace-normal break-all font-mono"
+                                          >
+                                            {label}
+                                          </Badge>
+                                        ))
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">
+                                          None
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </ResourcePanel>
+                                <ResourcePanel title="Runtime">
+                                  <ContainerSoftwareIdentity
+                                    software={runner.software}
+                                    unavailable="Software identity not reported"
+                                  />
+                                  <DetailRow
+                                    label="Last report"
+                                    value={formatTimestamp(
+                                      runner.observedAt ?? "",
+                                      "Not reported",
+                                    )}
+                                  />
+                                  <DetailRow
+                                    label="Created"
+                                    value={formatTimestamp(
+                                      runner.createdAt,
+                                      "Not reported",
+                                    )}
+                                  />
+                                </ResourcePanel>
+                              </div>
                               <RunnerCheckPanel
                                 runnerId={runner.id}
                                 open
                                 disabled={runner.lifecycle !== "ready"}
                               />
-                              <p className="text-xs text-muted-foreground">
-                                Trusted workflows use normal GP CLI/API access.
-                                Builds use a dedicated rootless Docker daemon,
-                                not the host socket.
-                              </p>
                             </div>
                           ) : null}
                         </TableExpansion>

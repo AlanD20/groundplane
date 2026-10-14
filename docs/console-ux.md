@@ -244,7 +244,9 @@ content; it does not need its own visual treatment for ordinary fields and edits
   and disabled behavior. Permit one active editor per page: close an unchanged
   editor when switching, and require explicit discard for a changed draft.
   Keep editing preserves the current draft and cancels the attempted editor.
-  Never stack viewport action bars.
+  Never stack viewport action bars. When the Host terminal is docked, position
+  the action bar above it and follow terminal resizing and hiding. Fullscreen
+  workspace editors reserve that same terminal space.
   Keep the sidebar clear on desktop and wrap controls on narrow screens. Use the
   opaque editing tint, a top divider without shadow, 16px padding and mobile safe-area
   padding in both themes. Resting settings and modal confirmations keep their

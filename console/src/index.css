@@ -193,7 +193,9 @@
     z-index: 25;
     margin: 0;
     top: 64px;
-    bottom: var(--viewport-actions-height, 0px);
+    bottom: calc(
+      var(--viewport-actions-height, 0px) + var(--terminal-dock-height, 0px)
+    );
     left: 0;
     right: 0;
   }
