@@ -8,6 +8,8 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/edgechecks"
@@ -104,11 +106,25 @@ func (publication BlueprintZoneRemovalPublication) prepare(
 	if err := validateAuthoredZoneRemovalHierarchy(ctx, repository, zone, revision); err != nil {
 		return nil, nil, err
 	}
-	if selectedByEnabledComponent(intent.AppliedProjection.Components, intent.ZoneID) {
-		return nil, nil, errs.New(
-			errs.KindResourceInUse,
-			"Zone is selected by an enabled Component; change or disable the Component first",
-		)
+	// The retained applied projection is recovery input, not current Component
+	// ownership after preceding omission units have acknowledged their teardown.
+	currentComponents, err := readEnvironmentBlueprintRuntimeComponents(
+		ctx, repository.store, intent.EnvironmentID, revision,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	componentConditions := make([]keyvalue.Condition, 0, len(currentComponents)*2)
+	for _, current := range currentComponents {
+		if selectedByEnabledComponent([]components.Record{current.Component.Record}, intent.ZoneID) {
+			return nil, nil, errs.New(errs.KindResourceInUse,
+				"Zone is selected by an enabled Component; change or disable the Component first")
+		}
+		componentConditions = append(componentConditions,
+			keyvalue.Condition{Key: components.RecordKey(current.Component.Record.Desired.ID),
+				ModRevision: current.Component.Revision},
+			keyvalue.Condition{Key: componentplanning.RuntimeKey(current.Component.Record.Desired.ID),
+				ModRevision: current.Runtime.Revision})
 	}
 	pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](read.Values[2].Value, "zone_pool_registry")
 	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
@@ -182,6 +198,7 @@ func (publication BlueprintZoneRemovalPublication) prepare(
 		{Key: keys[4]}, {Key: keys[5]}, {Key: keys[6]},
 	}
 	conditions = append(conditions, dnsConditions...)
+	conditions = append(conditions, componentConditions...)
 	conditions = append(conditions, checkCondition)
 	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []keyvalue.Mutation{

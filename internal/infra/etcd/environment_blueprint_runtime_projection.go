@@ -69,15 +69,24 @@ func (repository *EnvironmentBlueprintRepository) ReadEnvironmentBlueprintRuntim
 	environmentID string,
 	revision int64,
 ) ([]BlueprintRuntimeComponent, error) {
+	if repository == nil || repository.HierarchyRepository == nil {
+		return nil, errs.New(errs.KindValidationFailed, "Blueprint runtime Component lookup is invalid")
+	}
+	return readEnvironmentBlueprintRuntimeComponents(ctx, repository.store, environmentID, revision)
+}
+
+func readEnvironmentBlueprintRuntimeComponents(
+	ctx context.Context, store hierarchyStore, environmentID string, revision int64,
+) ([]BlueprintRuntimeComponent, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
-	if repository == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil || revision <= 0 {
+	if store == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil || revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "Blueprint runtime Component lookup is invalid")
 	}
 	page, err := recordquery.ListIndexAtRevision(
 		ctx,
-		repository.store,
+		store,
 		"components",
 		"environment",
 		environmentID,
@@ -102,7 +111,7 @@ func (repository *EnvironmentBlueprintRepository) ReadEnvironmentBlueprintRuntim
 	result := make([]BlueprintRuntimeComponent, len(page.Items))
 	for index, component := range page.Items {
 		runtime, found, err := componentplanning.ReadRuntime(
-			ctx, repository.store, component.Record.Desired.ID, revision,
+			ctx, store, component.Record.Desired.ID, revision,
 		)
 		if err != nil {
 			return nil, err
