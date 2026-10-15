@@ -104,12 +104,15 @@ access, not a container shell or a Task log.
 
 The bottom panel can be resized or maximized within the browser tab. Its tabs
 hold independent shells; use New tab to open another, select a tab to switch,
-and Rename to change its local label. The host permits four active sessions
+and right-click a tab (or long-press on touch) for Rename, Close tab and
+Terminate session. Each tab also has its own close button. The host permits four active sessions
 total, shared by Console and CLI operators.
 
-Switching tabs or hiding the panel keeps shells and their output running. Close
-offers Keep in background or Terminate; Terminate ends only the selected shell
-and its owned foreground/background processes. A closed tab can then be removed.
+Switching tabs or hiding the panel keeps shells and their output running. Closing
+an active tab asks to terminate its shell and removes the tab only after the
+session ends. Terminate session asks for confirmation and ends only that tab's
+shell and its owned foreground/background processes, retaining its output until
+the tab is closed. Closing an already-ended tab needs no confirmation.
 Reloading the Console reconnects available tabs for the owning browser session;
 it never silently opens replacement shells. A Controller restart terminates
 these transient sessions. Open a new tab explicitly to start a new shell.

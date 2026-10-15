@@ -169,6 +169,7 @@ export function HostTerminalProvider({
     if (!tab || tab.connection.getSnapshot().session.state === "active") return;
     tab.connection.dispose();
     const remaining = tabsRef.current.filter((item) => item.id !== id);
+    tabsRef.current = remaining;
     setTabs(remaining);
     setActiveId((current) =>
       current === id ? (remaining[0]?.id ?? null) : current,

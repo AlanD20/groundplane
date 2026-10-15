@@ -7,6 +7,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,8 +25,9 @@ import {
   X,
   Plus,
   Pencil,
+  Square,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useHostTerminal } from "./terminal-provider";
 import { TerminalViewport } from "./terminal-viewport";
 
@@ -28,6 +36,35 @@ export function HostTerminalPanel() {
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [closeAfterTerminate, setCloseAfterTerminate] = useState(false);
+  const [pendingClose, setPendingClose] = useState<string[]>([]);
+  const requestClose = (id: string) => {
+    const tab = terminal.tabs.find((item) => item.id === id);
+    if (tab?.connection.getSnapshot().session.state === "active") {
+      setCloseAfterTerminate(true);
+      setConfirmClose(id);
+    } else terminal.closeTab(id);
+  };
+  useEffect(() => {
+    const releases = pendingClose.map((id) => {
+      const tab = terminal.tabs.find((item) => item.id === id);
+      if (!tab) return () => {};
+      let unsubscribe = () => {};
+      const finish = () => {
+        if (tab.connection.getSnapshot().session.state !== "active") {
+          unsubscribe();
+          terminal.closeTab(id);
+          setPendingClose((current) => current.filter((item) => item !== id));
+        }
+      };
+      unsubscribe = tab.connection.subscribe(finish);
+      finish();
+      return unsubscribe;
+    });
+    return () => {
+      for (const release of releases) release();
+    };
+  }, [pendingClose, terminal.tabs, terminal.closeTab]);
   const renderPanel = Boolean(
     terminal.tabs.length || terminal.opening || terminal.openError,
   );
@@ -139,20 +176,6 @@ export function HostTerminalPanel() {
           >
             <Minus />
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="text-zinc-400 hover:bg-white/10 hover:text-white"
-            aria-label="Close terminal"
-            onClick={() => {
-              if (terminal.session?.state === "active" && terminal.activeId)
-                setConfirmClose(terminal.activeId);
-              else if (terminal.activeId) terminal.closeTab(terminal.activeId);
-            }}
-          >
-            <X />
-          </Button>
         </div>
         <div
           role="tablist"
@@ -160,48 +183,102 @@ export function HostTerminalPanel() {
           className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/10 px-2 py-1"
         >
           {terminal.tabs.map((tab, index) => (
-            <Button
-              key={tab.id}
-              id={`terminal-tab-${tab.id}`}
-              role="tab"
-              aria-selected={terminal.activeId === tab.id}
-              aria-controls={`terminal-panel-${tab.id}`}
-              tabIndex={terminal.activeId === tab.id ? 0 : -1}
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "shrink-0 text-zinc-400 hover:bg-white/10 hover:text-white",
-                terminal.activeId === tab.id && "bg-white/10 text-white",
-              )}
-              onClick={() => terminal.selectTab(tab.id)}
-              onPointerDown={(event) => {
-                // Pointer selection returns directly to shell input; arrow-key
-                // navigation keeps focus on the tablist.
-                if (event.button === 0) event.preventDefault();
-              }}
-              onKeyDown={(event) => {
-                const next =
-                  event.key === "ArrowRight"
-                    ? (index + 1) % terminal.tabs.length
-                    : event.key === "ArrowLeft"
-                      ? (index + terminal.tabs.length - 1) %
-                        terminal.tabs.length
-                      : event.key === "Home"
-                        ? 0
-                        : event.key === "End"
-                          ? terminal.tabs.length - 1
-                          : -1;
-                if (next >= 0) {
-                  event.preventDefault();
-                  terminal.selectTab(terminal.tabs[next].id);
-                  document
-                    .getElementById(`terminal-tab-${terminal.tabs[next].id}`)
-                    ?.focus();
-                }
-              }}
-            >
-              {tab.name}
-            </Button>
+            <ContextMenu key={tab.id}>
+              <ContextMenuTrigger
+                className={cn(
+                  "flex shrink-0 items-center rounded-md",
+                  terminal.activeId === tab.id && "bg-white/10",
+                )}
+              >
+                <Button
+                  id={`terminal-tab-${tab.id}`}
+                  role="tab"
+                  aria-selected={terminal.activeId === tab.id}
+                  aria-controls={`terminal-panel-${tab.id}`}
+                  tabIndex={terminal.activeId === tab.id ? 0 : -1}
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "shrink-0 text-zinc-400 hover:bg-white/10 hover:text-white",
+                    terminal.activeId === tab.id && "bg-white/10 text-white",
+                  )}
+                  onClick={() => terminal.selectTab(tab.id)}
+                  onPointerDown={(event) => {
+                    // Pointer selection returns directly to shell input; arrow-key
+                    // navigation keeps focus on the tablist.
+                    if (event.button === 0) event.preventDefault();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Delete") {
+                      event.preventDefault();
+                      requestClose(tab.id);
+                      return;
+                    }
+                    const next =
+                      event.key === "ArrowRight"
+                        ? (index + 1) % terminal.tabs.length
+                        : event.key === "ArrowLeft"
+                          ? (index + terminal.tabs.length - 1) %
+                            terminal.tabs.length
+                          : event.key === "Home"
+                            ? 0
+                            : event.key === "End"
+                              ? terminal.tabs.length - 1
+                              : -1;
+                    if (next >= 0) {
+                      event.preventDefault();
+                      terminal.selectTab(terminal.tabs[next].id);
+                      document
+                        .getElementById(
+                          `terminal-tab-${terminal.tabs[next].id}`,
+                        )
+                        ?.focus();
+                    }
+                  }}
+                >
+                  <span className="max-w-48 truncate">
+                    {tab.name}
+                    {pendingClose.includes(tab.id) ? " · Closing…" : ""}
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Close ${tab.name}`}
+                  className="mr-1 shrink-0 text-zinc-400 hover:bg-white/10 hover:text-white"
+                  onClick={() => requestClose(tab.id)}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem
+                  onClick={() => {
+                    setName(tab.name);
+                    setRenaming(tab.id);
+                  }}
+                >
+                  <Pencil />
+                  Rename
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => requestClose(tab.id)}>
+                  <X />
+                  Close tab
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem
+                  variant="destructive"
+                  onClick={() => {
+                    setCloseAfterTerminate(false);
+                    setConfirmClose(tab.id);
+                  }}
+                >
+                  <Square />
+                  Terminate session
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
           <Button
             type="button"
@@ -214,24 +291,6 @@ export function HostTerminalPanel() {
           >
             <Plus />
           </Button>
-          {terminal.activeId && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Rename terminal tab"
-              className="shrink-0 text-zinc-400 hover:bg-white/10 hover:text-white"
-              onClick={() => {
-                setName(
-                  terminal.tabs.find((tab) => tab.id === terminal.activeId)
-                    ?.name ?? "",
-                );
-                setRenaming(terminal.activeId);
-              }}
-            >
-              <Pencil />
-            </Button>
-          )}
         </div>
         {terminal.error || terminal.openError ? (
           <div
@@ -258,25 +317,37 @@ export function HostTerminalPanel() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Close host terminal?</DialogTitle>
+            <DialogTitle>
+              {closeAfterTerminate ? "Close" : "Terminate"}{" "}
+              {terminal.tabs.find((tab) => tab.id === confirmClose)?.name ??
+                "terminal"}
+              ?
+            </DialogTitle>
             <DialogDescription>
-              Keep it running in the background for the same browser session, or
-              terminate the root shell and every process it owns.
+              This terminates this shell and its running processes.
+              {closeAfterTerminate
+                ? " The tab closes once the session ends."
+                : " The tab and its output remain available."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
-                terminal.hide();
                 setConfirmClose(null);
               }}
             >
-              Keep in background
+              Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={() => {
+                if (closeAfterTerminate && confirmClose)
+                  setPendingClose((current) =>
+                    current.includes(confirmClose)
+                      ? current
+                      : [...current, confirmClose],
+                  );
                 terminal.tabs
                   .find((tab) => tab.id === confirmClose)
                   ?.connection.terminate();
