@@ -33,6 +33,7 @@ import { TerminalViewport } from "./terminal-viewport";
 
 export function HostTerminalPanel() {
   const terminal = useHostTerminal();
+  const [confirmCloseAll, setConfirmCloseAll] = useState(false);
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -176,6 +177,16 @@ export function HostTerminalPanel() {
           >
             <Minus />
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="text-zinc-400 hover:bg-white/10 hover:text-white"
+            aria-label="Close terminal"
+            onClick={() => setConfirmCloseAll(true)}
+          >
+            <X />
+          </Button>
         </div>
         <div
           role="tablist"
@@ -286,7 +297,7 @@ export function HostTerminalPanel() {
             size="icon-sm"
             aria-label="New terminal tab"
             className="shrink-0 text-zinc-400 hover:bg-white/10 hover:text-white"
-            disabled={terminal.opening}
+            disabled={terminal.opening || pendingClose.length > 0}
             onClick={() => void terminal.newTab()}
           >
             <Plus />
@@ -309,6 +320,45 @@ export function HostTerminalPanel() {
         ))}
       </section>
 
+      <Dialog open={confirmCloseAll} onOpenChange={setConfirmCloseAll}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Close terminal?</DialogTitle>
+            <DialogDescription>
+              Keep these tabs running in the background, or terminate all
+              sessions in this terminal panel and their running processes.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                terminal.hide();
+                setConfirmCloseAll(false);
+              }}
+            >
+              Keep in background
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={terminal.opening}
+              onClick={() => {
+                setPendingClose((current) => [
+                  ...new Set([
+                    ...current,
+                    ...terminal.tabs.map((tab) => tab.id),
+                  ]),
+                ]);
+                for (const tab of terminal.tabs) tab.connection.terminate();
+                if (!terminal.tabs.length) terminal.hide();
+                setConfirmCloseAll(false);
+              }}
+            >
+              Terminate all sessions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={confirmClose !== null}
         onOpenChange={(open) => {

@@ -108,6 +108,10 @@ and right-click a tab (or long-press on touch) for Rename, Close tab and
 Terminate session. Each tab also has its own close button. The host permits four active sessions
 total, shared by Console and CLI operators.
 
+The panel's Close terminal button offers Keep in background or Terminate all
+sessions. The latter ends all shells in this browser's terminal panel and closes
+their tabs after acknowledgment; it does not affect other operators' sessions.
+
 Switching tabs or hiding the panel keeps shells and their output running. Closing
 an active tab asks to terminate its shell and removes the tab only after the
 session ends. Terminate session asks for confirmation and ends only that tab's
