@@ -67,7 +67,7 @@ func (repository *ServiceReader) GetServiceByName(
 			"Service name is required",
 		)
 	}
-	projection, found, err := blueprints.ReadCurrentProjection(ctx, repository.store, environmentID, 0)
+	projection, found, err := readDeclaredResources(ctx, repository.store, environmentID, 0)
 	if err != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
@@ -78,13 +78,12 @@ func (repository *ServiceReader) GetServiceByName(
 		)
 	}
 	for _, service := range projection.Record.DesiredServices {
-		if service.Desired.Name == name &&
-			!IsComponentService(projection.Record.Components, service.Desired.ID) {
+		if service.Desired.Name == name {
 			return servicerecord.ReadJoined(
 				ctx,
 				repository.store,
 				servicerecord.DesiredSelection{
-					Services:     ServicesWithVolumeMounts(projection.Record),
+					Services:     projection.Record.DesiredServices,
 					Revision:     projection.Revision,
 					ReadRevision: projection.ReadRevision,
 				},
@@ -116,7 +115,7 @@ func (repository *ServiceReader) ListServices(
 	if err != nil {
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 	}
-	projection, found, err := blueprints.ReadCurrentProjection(ctx, repository.store, environmentID, revision)
+	projection, found, err := readDeclaredResources(ctx, repository.store, environmentID, revision)
 	if err != nil {
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 	}
@@ -126,7 +125,7 @@ func (repository *ServiceReader) ListServices(
 			Revision: projection.ReadRevision,
 		}, nil
 	}
-	desired := OrdinaryServices(projection.Record)
+	desired := append([]servicerecord.EnvironmentServiceProjection(nil), projection.Record.DesiredServices...)
 	sort.Slice(desired, func(left, right int) bool { return desired[left].Desired.ID < desired[right].Desired.ID })
 	start := sort.Search(len(desired), func(index int) bool { return desired[index].Desired.ID > lastID })
 	end := min(start+limit, len(desired))
@@ -136,7 +135,7 @@ func (repository *ServiceReader) ListServices(
 			ctx,
 			repository.store,
 			servicerecord.DesiredSelection{
-				Services:     ServicesWithVolumeMounts(projection.Record),
+				Services:     projection.Record.DesiredServices,
 				Revision:     projection.Revision,
 				ReadRevision: projection.ReadRevision,
 			},

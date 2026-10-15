@@ -3,81 +3,107 @@ package environmentqueries
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
 )
 
-// FindEnvironmentVolume resolves a stable Volume id from the sole published
-// desired-state authority. The MVP deliberately prefers a bounded sequential
-// head scan over a second synchronously writable identity authority.
-func (repository *ProjectionReader) FindEnvironmentVolume(
-	ctx context.Context,
-	volumeID string,
-) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], projectionrecord.EnvironmentVolumeIdentity, error) {
+// FindEnvironmentVolumeIdentity selects the declared owner before touching
+// runtime. Unfinished rendering in another Environment cannot block this lookup.
+func (repository *ProjectionReader) FindEnvironmentVolumeIdentity(ctx context.Context, volumeID string) (
+	etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities], projectionrecord.EnvironmentVolumeIdentity, error,
+) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
 	}
-	if err := recordcodec.ValidateID(ids.KindVolume, volumeID); err != nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
+	if ids.Validate(ids.KindVolume, volumeID) != nil {
+		return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume id is invalid",
+		)
 	}
-	const headsPrefix = "/v1/records/environment-blueprints/"
 	start := ""
+	revision := int64(0)
 	for {
-		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: headsPrefix, StartExclusive: start, Limit: 128,
-		})
+		page, err := repository.store.Range(
+			ctx,
+			etcdstore.RangeRequest{
+				Prefix:         EnvironmentDesiredHeadScanPrefix,
+				StartExclusive: start,
+				Limit:          128,
+				Revision:       revision,
+			},
+		)
 		if err != nil {
-			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
+			return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
 		}
-		if page == nil {
-			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
+		if page == nil || page.ReadRevision <= 0 || page.More && len(page.Values) == 0 {
+			return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
 				errs.KindInternal,
-				"Environment desired-head scan is empty",
+				"Environment desired-head scan did not advance",
 			)
 		}
+		revision = page.ReadRevision
 		for _, entry := range page.Values {
 			start = entry.Key
 			if !strings.HasSuffix(entry.Key, "/current") {
 				continue
 			}
-			environmentID := strings.TrimSuffix(strings.TrimPrefix(entry.Key, headsPrefix), "/current")
-			if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
-				return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, projectionrecord.CorruptEnvironmentComposeProjection()
-			}
-			revisionID, err := idempotencyrecord.DecodeTaskReference(entry.Value)
+			environmentID := strings.TrimSuffix(
+				strings.TrimPrefix(entry.Key, EnvironmentDesiredHeadScanPrefix),
+				"/current",
+			)
+			owned, found, err := blueprints.ReadCurrentOwnedIdentities(ctx, repository.store, environmentID, revision)
 			if err != nil {
-				return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, projectionrecord.CorruptEnvironmentComposeProjection()
-			}
-			projection, found, err := repository.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
-			if err != nil {
-				return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
+				return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
 			}
 			if !found {
-				return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, projectionrecord.CorruptEnvironmentComposeProjection()
+				continue
 			}
-			for _, volume := range projection.Record.Volumes {
+			for _, volume := range owned.Record.Volumes {
 				if volume.ID == volumeID {
-					projection.Revision = entry.ModRevision
-					return projection, volume, nil
+					return owned, projectionrecord.EnvironmentVolumeIdentity{
+						ID:   volume.ID,
+						Key:  volume.Name,
+						Slug: volume.Slug,
+					}, nil
 				}
 			}
 		}
 		if !page.More {
 			break
 		}
-		if len(page.Values) == 0 {
-			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
-				errs.KindInternal,
-				"Environment desired-head pagination did not advance",
-			)
-		}
 	}
-	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
+	return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
 		errs.KindVolumeNotFound,
-		"volume was not found",
+		"Volume was not found",
 	)
+}
+
+// FindEnvironmentVolume retains the sealed-runtime requirement for destructive
+// operations and dependency inspection, after selecting the exact declared owner.
+func (repository *ProjectionReader) FindEnvironmentVolume(ctx context.Context, volumeID string) (
+	etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], projectionrecord.EnvironmentVolumeIdentity, error,
+) {
+	owned, identity, err := repository.FindEnvironmentVolumeIdentity(ctx, volumeID)
+	if err != nil {
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
+	}
+	projection, found, err := blueprints.ReadEffectiveProjectionRevisionAt(
+		ctx,
+		repository.store,
+		owned.Record.EnvironmentID,
+		owned.Record.RevisionID,
+		owned.ReadRevision,
+	)
+	if err != nil {
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
+	}
+	if !found {
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, projectionrecord.CorruptEnvironmentComposeProjection()
+	}
+	projection.Revision = owned.Revision
+	return projection, identity, nil
 }

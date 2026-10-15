@@ -12,16 +12,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 type Environments interface {
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetEnvironmentComposeProjection(
+	GetEnvironmentDesiredInput(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
 }
 
 type Services interface {
@@ -104,7 +102,7 @@ func (service *Reader) GetServiceNativeCompose(
 	if err != nil {
 		return "", err
 	}
-	projection, found, err := service.environments.GetEnvironmentComposeProjection(ctx, environmentID)
+	projection, found, err := service.environments.GetEnvironmentDesiredInput(ctx, environmentID)
 	if err != nil {
 		return "", err
 	}
@@ -114,12 +112,5 @@ func (service *Reader) GetServiceNativeCompose(
 	if projection.Record.EnvironmentID != environment.Record.ID {
 		return "", errs.New(errs.KindInternal, "Service desired Compose projection owner is invalid")
 	}
-	artifact := &agentpb.ComposeArtifact{}
-	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(
-		projection.Record.ComposeArtifact,
-		artifact,
-	); err != nil {
-		return "", errs.New(errs.KindInternal, "Service desired Compose artifact is corrupt")
-	}
-	return composerender.ProjectEnvironmentServiceNativeCompose(artifact, serviceName)
+	return composerender.ProjectAuthoredServiceNativeCompose(projection.Record.Input.NormalizedCompose, serviceName)
 }

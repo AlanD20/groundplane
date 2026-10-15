@@ -124,6 +124,40 @@ type volumeReadTestRepository struct {
 	projection testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
 }
 
+func (repository *volumeReadTestRepository) FindEnvironmentVolumeIdentity(
+	ctx context.Context,
+	_ string,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities], testenvironmentprojection.EnvironmentVolumeIdentity, error) {
+	owned, _, err := repository.GetEnvironmentOwnedIdentities(ctx, repository.projection.Record.EnvironmentID)
+	return owned, repository.projection.Record.Volumes[0], err
+}
+
+func (repository *volumeReadTestRepository) GetEnvironmentOwnedIdentities(
+	context.Context, string,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities], bool, error) {
+	projection := repository.projection
+	owned := testenvironmentprojection.EnvironmentOwnedIdentities{
+		EnvironmentID: projection.Record.EnvironmentID, RevisionID: projection.Record.RevisionID,
+	}
+	for _, volume := range projection.Record.Volumes {
+		owned.Volumes = append(
+			owned.Volumes,
+			testenvironmentprojection.OwnedIdentity{ID: volume.ID, Name: volume.Key, Slug: volume.Slug},
+		)
+	}
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities]{
+		Record:       owned,
+		Revision:     projection.Revision,
+		ReadRevision: projection.ReadRevision,
+	}, true, nil
+}
+
+func (repository *volumeReadTestRepository) GetEnvironmentOwnedIdentitiesRevision(
+	ctx context.Context, environmentID, _ string,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities], bool, error) {
+	return repository.GetEnvironmentOwnedIdentities(ctx, environmentID)
+}
+
 func (repository *volumeReadTestRepository) GetEnvironment(
 	context.Context, string,
 ) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {

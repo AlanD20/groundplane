@@ -2,7 +2,6 @@ package environmentqueries
 
 import (
 	"context"
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -63,7 +62,7 @@ func FindZoneAtRevision(
 			if !owns {
 				continue
 			}
-			projection, found, projectionErr := blueprints.ReadCurrentProjection(
+			projection, found, projectionErr := readDeclaredResources(
 				ctx, store, environmentID, fixedRevision,
 			)
 			if projectionErr != nil {
@@ -79,7 +78,7 @@ func FindZoneAtRevision(
 				if matched != nil {
 					return etcdstore.Versioned[zonerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
-				joined, joinErr := JoinZone(projection, desired)
+				joined, joinErr := joinDeclaredZone(projection, desired)
 				if joinErr != nil {
 					return etcdstore.Versioned[zonerecord.Record]{}, joinErr
 				}

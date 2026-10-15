@@ -14,15 +14,17 @@ type observationReader interface {
 func ReadRoute(
 	ctx context.Context,
 	store observationReader,
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
+	environmentID string,
+	revision int64,
+	readRevision int64,
 	desired EnvironmentRouteProjection,
 ) (etcdstore.Versioned[routerecord.Record], error) {
-	if desired.EnvironmentID != projection.Record.EnvironmentID {
+	if desired.EnvironmentID != environmentID {
 		return etcdstore.Versioned[routerecord.Record]{}, recordcodec.CorruptRecord()
 	}
 	observation, err := routerecord.ReadObservationAtRevision(
 		ctx, store, desired.EnvironmentID, desired.Desired.ID,
-		desired.DesiredGeneration, projection.ReadRevision,
+		desired.DesiredGeneration, readRevision,
 	)
 	if err != nil {
 		return etcdstore.Versioned[routerecord.Record]{}, err
@@ -35,6 +37,6 @@ func ReadRoute(
 		return etcdstore.Versioned[routerecord.Record]{}, recordcodec.CorruptRecord()
 	}
 	return etcdstore.Versioned[routerecord.Record]{
-		Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
+		Record: record, Revision: revision, ReadRevision: readRevision,
 	}, nil
 }

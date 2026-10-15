@@ -2,34 +2,32 @@ package serviceread
 
 import (
 	"context"
-	"crypto/sha256"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 type fakeServiceReadRepository struct {
 	Environments
 	Services
 	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
-	projection  testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
+	projection  testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput]
 	page        testkeyvalue.Page[testservices.ServiceRecord]
 	wantRequest testkeyvalue.PageRequest
 	listed      bool
 }
 
-func (fake *fakeServiceReadRepository) GetEnvironmentComposeProjection(
+func (fake *fakeServiceReadRepository) GetEnvironmentDesiredInput(
 	context.Context, string,
 
-) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput], bool, error) {
 	return fake.projection, fake.projection.Record.RevisionID != "", nil
 }
 
@@ -100,24 +98,14 @@ func TestServiceDetailProjectsCanonicalNativeComposeFromDesiredHead(t *testing.T
       com.groundplane.render-generation: "1"
     x-gp-resource: {kind: service, id: svc_generated}
 `)
-	digest := sha256.Sum256(canonical)
-	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
-		ArtifactId: ids.NewAt(ids.KindConfig, at, 5),
-		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
-		OwnerId:    environmentID, ProjectName: "gp-" + strings.ToLower(environmentID),
-		CanonicalYaml: canonical, YamlSha256: digest[:],
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	repository := &fakeServiceReadRepository{
 		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{Record: testhierarchy.EnvironmentRecord{
 			ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.40.0.0/16",
 		}},
-		projection: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
-			Record: testenvironmentprojection.EnvironmentComposeProjection{
+		projection: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput]{
+			Record: testenvironmentprojection.EnvironmentDesiredInput{
 				EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
-				ComposeArtifact: artifact,
+				Input: core.BlueprintDesiredInput{NormalizedCompose: canonical},
 			},
 		},
 	}

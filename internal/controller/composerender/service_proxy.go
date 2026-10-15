@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	"github.com/AlanD20/groundplane/internal/core/composeinput"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -80,7 +81,7 @@ func renderServiceProxyTopology(
 				ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected,
 				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
-				HasHealthcheck:   ProjectServiceHealthcheck(authored.HealthCheck).Enabled(),
+				HasHealthcheck:   composeinput.Healthcheck(authored.HealthCheck).Enabled(),
 				ImageReference:   authored.Image,
 			}
 			if err := bindEnvironmentComponentImage(input.Identities.Services, authored, service); err != nil {
@@ -90,7 +91,7 @@ func renderServiceProxyTopology(
 			continue
 		}
 		if (identity.Strategy == domain.StrategyBlueGreen || identity.Strategy == domain.StrategyRolling) &&
-			!ProjectServiceHealthcheck(authored.HealthCheck).Enabled() {
+			!composeinput.Healthcheck(authored.HealthCheck).Enabled() {
 			return nil, errs.Newf(
 				errs.KindValidationFailed,
 				"Service %q: %s requires an enabled healthcheck with an explicit command; configure one or select recreate",
@@ -150,7 +151,7 @@ func renderServiceProxyTopology(
 				result = append(result, &agentpb.ComposeService{
 					ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected,
 					ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
-					HasHealthcheck:   ProjectServiceHealthcheck(authored.HealthCheck).Enabled(),
+					HasHealthcheck:   composeinput.Healthcheck(authored.HealthCheck).Enabled(),
 					ImageReference:   authored.Image,
 					Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
 					OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
@@ -338,7 +339,7 @@ func renderServiceProxyTopology(
 				ServiceId: serviceID, ComposeName: workloadName, ExpectedLabels: expected,
 				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
-				HasHealthcheck:   ProjectServiceHealthcheck(workload.HealthCheck).Enabled(),
+				HasHealthcheck:   composeinput.Healthcheck(workload.HealthCheck).Enabled(),
 				ImageReference:   workload.Image,
 				Role:             serviceRole, Slot: slot,
 			})

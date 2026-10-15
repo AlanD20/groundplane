@@ -10,6 +10,16 @@ func JoinZone(
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	desired projectionrecord.EnvironmentZoneProjection,
 ) (etcdstore.Versioned[zonerecord.Record], error) {
+	return joinDeclaredZone(etcdstore.Versioned[DeclaredResources]{
+		Record:   DeclaredResources{EnvironmentID: projection.Record.EnvironmentID},
+		Revision: projection.Revision, ReadRevision: projection.ReadRevision,
+	}, desired)
+}
+
+func joinDeclaredZone(
+	projection etcdstore.Versioned[DeclaredResources],
+	desired projectionrecord.EnvironmentZoneProjection,
+) (etcdstore.Versioned[zonerecord.Record], error) {
 	if desired.EnvironmentID != projection.Record.EnvironmentID {
 		return etcdstore.Versioned[zonerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 	}

@@ -2,7 +2,6 @@ package environmentqueries
 
 import (
 	"context"
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -40,7 +39,7 @@ func (repository *ZoneReader) ListZones(
 	if err != nil {
 		return etcdstore.Page[zonerecord.Record]{}, err
 	}
-	projection, found, err := blueprints.ReadCurrentProjection(
+	projection, found, err := readDeclaredResources(
 		ctx, repository.store, environmentID, revision,
 	)
 	if err != nil {
@@ -62,7 +61,7 @@ func (repository *ZoneReader) ListZones(
 	end := min(start+limit, len(desired))
 	items := make([]etcdstore.Versioned[zonerecord.Record], 0, end-start)
 	for _, value := range desired[start:end] {
-		joined, joinErr := JoinZone(projection, value)
+		joined, joinErr := joinDeclaredZone(projection, value)
 		if joinErr != nil {
 			return etcdstore.Page[zonerecord.Record]{}, joinErr
 		}

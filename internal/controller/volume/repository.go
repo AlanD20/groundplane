@@ -21,6 +21,19 @@ import (
 
 type ReadRepository interface {
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetEnvironmentOwnedIdentities(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities], bool, error)
+	GetEnvironmentOwnedIdentitiesRevision(
+		context.Context,
+		string,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities], bool, error)
+	FindEnvironmentVolumeIdentity(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities], projectionrecord.EnvironmentVolumeIdentity, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,

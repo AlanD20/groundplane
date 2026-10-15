@@ -125,6 +125,20 @@ func ReadEffectiveProjectionRevisionAt(
 	revisionID string,
 	revision int64,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
+	return readEffectiveProjectionRevisionAt(ctx, store, environmentID, revisionID, revision, true)
+}
+
+// ReadAvailableRuntimeRevision lets query views join runtime metadata when it
+// exists. It never substitutes a previous revision or authorizes execution.
+func ReadAvailableRuntimeRevision(ctx context.Context, store blueprintSnapshotReader,
+	environmentID, revisionID string, revision int64,
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
+	return readEffectiveProjectionRevisionAt(ctx, store, environmentID, revisionID, revision, false)
+}
+
+func readEffectiveProjectionRevisionAt(ctx context.Context, store blueprintSnapshotReader,
+	environmentID, revisionID string, revision int64, requireRuntime bool,
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	state, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			EnvironmentBlueprintRootKey(environmentID, revisionID),
@@ -148,6 +162,11 @@ func ReadEffectiveProjectionRevisionAt(
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	if state.Values[1] == nil {
+		if !requireRuntime {
+			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
+				ReadRevision: state.ReadRevision,
+			}, false, nil
+		}
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, errs.New(
 			errs.KindStateConflict,
 			"Environment effective projection is pending",

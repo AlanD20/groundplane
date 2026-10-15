@@ -60,13 +60,9 @@ func TestMutateEnvironmentServiceArtifactProjectsOwnedZoneNetwork(t *testing.T) 
 	}
 }
 
-func TestProjectEnvironmentServiceNativeComposePreservesOperatorFields(t *testing.T) {
+func TestProjectAuthoredServiceNativeComposePreservesOperatorFields(t *testing.T) {
 	t.Parallel()
-	environmentID := ids.NewAt(ids.KindEnvironment, time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC), 1)
-	native, err := ProjectEnvironmentServiceNativeCompose(&agentpb.ComposeArtifact{
-		OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
-		OwnerId:   environmentID,
-		CanonicalYaml: []byte(`services:
+	native, err := ProjectAuthoredServiceNativeCompose([]byte(`services:
   api:
     image: example/api:1
     command: [serve]
@@ -74,8 +70,7 @@ func TestProjectEnvironmentServiceNativeComposePreservesOperatorFields(t *testin
       example.role: api
       com.groundplane.managed: "true"
     x-gp-resource: {kind: service, id: svc_generated}
-`),
-	}, "api")
+`), "api")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,11 +100,6 @@ func TestServiceArtifactRejectsComponentManagedOrdinaryActions(t *testing.T) {
 			ServiceId: serviceID, ComposeName: "caddy",
 			ExpectedLabels: []*agentpb.LabelPair{{Key: composeLabelComponentID, Value: componentID}},
 		}},
-	}
-	if _, err := ProjectEnvironmentServiceNativeCompose(
-		artifact, "caddy",
-	); !isArtifactErrorKind(err, errs.KindServiceNotFound) {
-		t.Fatalf("ProjectEnvironmentServiceNativeCompose(generated) error = %v", err)
 	}
 	for _, action := range []ServiceArtifactAction{ServiceArtifactEdit, ServiceArtifactRemove} {
 		_, err := MutateEnvironmentServiceArtifact(artifact, ServiceArtifactMutation{

@@ -361,14 +361,22 @@ func seedBackupRuntimePublicationEvidence(
 	}
 	defer clear(backingServiceProjectionValue)
 	backingServiceProjectionDigest := sha256.Sum256(backingServiceProjectionValue)
+	backingInputValue, err := testenvironmentprojection.EncodeEnvironmentDesiredInputStorage(
+		desiredInputForProjectionFixture(backingServiceProjection),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(backingInputValue)
+	backingInputDigest := sha256.Sum256(backingInputValue)
 	backingServiceAudit := []byte("backup-runtime-backing-service-audit")
 	backingServiceAuditDigest := sha256.Sum256(backingServiceAudit)
 	backingServiceSeal := testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: backingEnvironment.ID, RevisionID: backingServiceRevisionID,
 		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		AuditChunks: 1, AuditBytes: uint64(len(backingServiceAudit)), AuditSHA256: backingServiceAuditDigest,
-		ProjectionChunks: 1, ProjectionBytes: uint64(len(backingServiceProjectionValue)),
-		ProjectionSHA256: backingServiceProjectionDigest,
+		ProjectionChunks: 1, ProjectionBytes: uint64(len(backingInputValue)),
+		ProjectionSHA256: backingInputDigest,
 		ProjectionResources: uint32(
 			len(backingServiceProjection.DesiredZones) +
 				len(backingServiceProjection.DesiredServices) +
@@ -518,8 +526,8 @@ func seedBackupRuntimePublicationEvidence(
 			backingEnvironment.ID, backingServiceRevisionID, testblueprints.EnvironmentBlueprintChunkProjection, 0,
 		), func() ([]byte, error) {
 			return testblueprints.EncodeEnvironmentBlueprintChunk(testblueprints.EnvironmentBlueprintChunk{
-				Family: testblueprints.EnvironmentBlueprintChunkProjection, LogicalLength: uint32(len(backingServiceProjectionValue)),
-				Digest: backingServiceProjectionDigest, Data: backingServiceProjectionValue,
+				Family: testblueprints.EnvironmentBlueprintChunkProjection, LogicalLength: uint32(len(backingInputValue)),
+				Digest: backingInputDigest, Data: backingInputValue,
 			})
 		},
 		},

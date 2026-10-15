@@ -31,7 +31,22 @@ func TestServiceRepositoryReadsAndPagesDesiredProjectionWithSidecar(t *testing.T
 		serviceRepositoryTestDesired(811, "worker"),
 	}
 	projection := serviceRecordTestProjection(t, environment.Record.ID, desired...)
+	projection.NormalizedCompose = declaredComposeFixture(projection)
 	seedServiceRepositoryTestDesiredProjection(t, store, projection)
+	// An accepted head can await Attach facts before runtime rendering. Browsing
+	// must still work, but an execution read must not invent that missing runtime.
+	if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationDelete,
+		Key:  testblueprints.EnvironmentBlueprintEffectiveProjectionKey(projection.EnvironmentID, projection.RevisionID),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.GetServiceRevision(ctx, projection.EnvironmentID, projection.RevisionID, desired[0].ID); !isKind(
+		err,
+		errs.KindStateConflict,
+	) {
+		t.Fatalf("execution read without rendered runtime = %v", err)
+	}
 	apiRuntimeRevision := seedServiceRepositoryTestRuntime(t, store, testservices.ServiceRuntimeRecord{
 		EnvironmentID: environment.Record.ID, ServiceID: desired[0].ID,
 		Runtime: core.ServiceRuntime{ServiceID: desired[0].ID, RuntimeIntent: core.ServiceRuntimeIntentStopped},

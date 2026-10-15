@@ -184,17 +184,14 @@ func MutateEnvironmentServiceArtifact(
 	return owned, nil
 }
 
-func ProjectEnvironmentServiceNativeCompose(
-	artifact *agentpb.ComposeArtifact,
-	serviceName string,
-) (string, error) {
-	if artifact == nil || artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-		ids.Validate(ids.KindEnvironment, artifact.GetOwnerId()) != nil ||
-		!core.ValidEnvironmentComposeName(serviceName) {
-		return "", errs.New(errs.KindInternal, "Service native Compose projection input is invalid")
+// ProjectAuthoredServiceNativeCompose exposes a Service definition without
+// requiring runtime rendering or resolving private Entry values.
+func ProjectAuthoredServiceNativeCompose(normalized []byte, serviceName string) (string, error) {
+	if !core.ValidEnvironmentComposeName(serviceName) {
+		return "", errs.New(errs.KindValidationFailed, "Service name is invalid")
 	}
 	var document yaml.Node
-	if err := yaml.Unmarshal(artifact.GetCanonicalYaml(), &document); err != nil || len(document.Content) != 1 ||
+	if err := yaml.Unmarshal(normalized, &document); err != nil || len(document.Content) != 1 ||
 		document.Content[0].Kind != yaml.MappingNode {
 		return "", errs.New(errs.KindInternal, "normalized Compose artifact YAML is corrupt")
 	}
@@ -207,18 +204,6 @@ func ProjectEnvironmentServiceNativeCompose(
 	serviceIndex := MappingIndex(services, serviceName)
 	if serviceIndex < 0 || services.Content[serviceIndex+1].Kind != yaml.MappingNode {
 		return "", errs.New(errs.KindInternal, "Service is absent from its current desired revision")
-	}
-	for _, metadata := range artifact.GetServices() {
-		if metadata.GetComposeName() != serviceName {
-			continue
-		}
-		componentID, err := serviceArtifactComponentOwner(metadata)
-		if err != nil {
-			return "", err
-		}
-		if componentID != "" {
-			return "", errs.New(errs.KindServiceNotFound, "Service was not found")
-		}
 	}
 	service := services.Content[serviceIndex+1]
 	RemoveMappingValue(service, composeResourceExtension)

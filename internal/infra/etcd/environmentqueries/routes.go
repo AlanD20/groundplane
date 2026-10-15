@@ -2,7 +2,6 @@ package environmentqueries
 
 import (
 	"context"
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -68,7 +67,7 @@ func FindRouteAtRevision(
 			if !owns {
 				continue
 			}
-			projection, found, projectionErr := blueprints.ReadCurrentProjection(
+			projection, found, projectionErr := readDeclaredResources(
 				ctx,
 				store,
 				environmentID,
@@ -87,7 +86,14 @@ func FindRouteAtRevision(
 				if matched != nil {
 					return etcdstore.Versioned[routerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
-				joined, joinErr := projectionrecord.ReadRoute(ctx, store, projection, desired)
+				joined, joinErr := projectionrecord.ReadRoute(
+					ctx,
+					store,
+					projection.Record.EnvironmentID,
+					projection.Revision,
+					projection.ReadRevision,
+					desired,
+				)
 				if joinErr != nil {
 					return etcdstore.Versioned[routerecord.Record]{}, joinErr
 				}
@@ -128,7 +134,7 @@ func ListRoutes(
 	if err != nil {
 		return etcdstore.Page[routerecord.Record]{}, err
 	}
-	projection, found, err := blueprints.ReadCurrentProjection(ctx, store, environmentID, revision)
+	projection, found, err := readDeclaredResources(ctx, store, environmentID, revision)
 	if err != nil {
 		return etcdstore.Page[routerecord.Record]{}, err
 	}
@@ -144,7 +150,14 @@ func ListRoutes(
 	end := min(start+limit, len(desired))
 	items := make([]etcdstore.Versioned[routerecord.Record], 0, end-start)
 	for _, route := range desired[start:end] {
-		joined, joinErr := projectionrecord.ReadRoute(ctx, store, projection, route)
+		joined, joinErr := projectionrecord.ReadRoute(
+			ctx,
+			store,
+			projection.Record.EnvironmentID,
+			projection.Revision,
+			projection.ReadRevision,
+			route,
+		)
 		if joinErr != nil {
 			return etcdstore.Page[routerecord.Record]{}, joinErr
 		}
@@ -176,7 +189,14 @@ func RouteAtProjection(
 	}
 	for _, desired := range projection.DesiredRoutes {
 		if desired.Desired.ID == routeID {
-			joined, err := projectionrecord.ReadRoute(ctx, store, versioned, desired)
+			joined, err := projectionrecord.ReadRoute(
+				ctx,
+				store,
+				versioned.Record.EnvironmentID,
+				versioned.Revision,
+				versioned.ReadRevision,
+				desired,
+			)
 			if err != nil {
 				return routerecord.Record{}, err
 			}

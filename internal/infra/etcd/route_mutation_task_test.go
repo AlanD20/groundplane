@@ -264,6 +264,32 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("mutation outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
+	// Cleanup must resolve the Task marker, not the synchronous public response.
+	// Otherwise a successful Route operation permanently stalls staging cleanup.
+	descriptorRead, err := store.Get(
+		ctx,
+		testblueprints.EnvironmentBlueprintDescriptorKeyByID(strings.TrimPrefix(task.ID, "task_")),
+	)
+	if err != nil || descriptorRead.Entry == nil {
+		t.Fatalf("Route staging descriptor: %v", err)
+	}
+	descriptor, err := testblueprints.DecodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markerKey, err := testidempotency.IdempotencyMarkerKey(descriptor.Claim.Locator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markerRead, err := store.Get(ctx, markerKey)
+	if err != nil || markerRead.Entry == nil {
+		t.Fatalf("Route staging marker: %v", err)
+	}
+	storedMarker, err := testidempotency.DecodeIdempotencyMarker(markerRead.Entry.Value, descriptor.Claim.Locator)
+	if err != nil || storedMarker.TaskID != task.ID ||
+		storedMarker.Intent.CiphertextDigest != descriptor.Claim.Intent.CiphertextDigest {
+		t.Fatalf("Route staging cannot prove Task publication: %v", err)
+	}
 	stored, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil || stored.Record != record {
 		t.Fatalf("GetRoute() = %#v, %v", stored, err)

@@ -29,7 +29,14 @@ func (repository *TaskRepository) scanRoutesAtRevision(
 			Record: *replacement, ReadRevision: revision,
 		}
 		for _, desired := range replacement.DesiredRoutes {
-			record, err := projectionrecord.ReadRoute(ctx, repository.store, versioned, desired)
+			record, err := projectionrecord.ReadRoute(
+				ctx,
+				repository.store,
+				versioned.Record.EnvironmentID,
+				versioned.Revision,
+				versioned.ReadRevision,
+				desired,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -71,7 +78,14 @@ func (repository *TaskRepository) scanRoutesAtRevision(
 				Record: projection, Revision: value.ModRevision, ReadRevision: page.ReadRevision,
 			}
 			for _, desired := range projection.DesiredRoutes {
-				record, joinErr := projectionrecord.ReadRoute(ctx, repository.store, versioned, desired)
+				record, joinErr := projectionrecord.ReadRoute(
+					ctx,
+					repository.store,
+					versioned.Record.EnvironmentID,
+					versioned.Revision,
+					versioned.ReadRevision,
+					desired,
+				)
 				if joinErr != nil {
 					recordquery.ClearRangeKeyValues(page.Values)
 					return nil, joinErr

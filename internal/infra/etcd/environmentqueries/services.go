@@ -67,7 +67,7 @@ func FindServiceAtRevision(
 			if !owns {
 				continue
 			}
-			projection, found, projectionErr := blueprints.ReadCurrentProjection(
+			projection, found, projectionErr := readDeclaredResources(
 				ctx,
 				store,
 				environmentID,
@@ -83,9 +83,6 @@ func FindServiceAtRevision(
 				if desired.Desired.ID != serviceID {
 					continue
 				}
-				if IsComponentService(projection.Record.Components, serviceID) {
-					continue
-				}
 				if matched != nil {
 					return etcdstore.Versioned[servicerecord.ServiceRecord]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
@@ -93,7 +90,7 @@ func FindServiceAtRevision(
 					ctx,
 					store,
 					servicerecord.DesiredSelection{
-						Services:     ServicesWithVolumeMounts(projection.Record),
+						Services:     projection.Record.DesiredServices,
 						Revision:     projection.Revision,
 						ReadRevision: projection.ReadRevision,
 					},

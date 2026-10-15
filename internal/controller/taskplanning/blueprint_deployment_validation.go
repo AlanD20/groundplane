@@ -1,10 +1,10 @@
 package taskplanning
 
 import (
+	"github.com/AlanD20/groundplane/internal/core/composeinput"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
-	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -32,7 +32,7 @@ func validateBlueprintDeploymentSettings(parsed blueprintparser.Result) error {
 			return errs.Newf(errs.KindValidationFailed, "Service %q: replica count must be positive", name)
 		}
 		if err := domain.ValidateDeploymentReadiness(name, strategy, uint32(replicas),
-			composerender.ProjectServiceHealthcheck(service.HealthCheck).Enabled(), service.Expose); err != nil {
+			composeinput.Healthcheck(service.HealthCheck).Enabled(), service.Expose); err != nil {
 			return err
 		}
 		if strategy == domain.StrategyBlueGreen && len(service.Expose) == 0 {

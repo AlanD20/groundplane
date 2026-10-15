@@ -63,7 +63,7 @@ func (service *ReadService) ListVolumes(
 		)
 	}
 	start := sort.Search(len(projection.Record.Volumes), func(index int) bool {
-		return projection.Record.Volumes[index].Key > cursor.AfterKey
+		return projection.Record.Volumes[index].Name > cursor.AfterKey
 	})
 	end := start + limit
 	if end > len(projection.Record.Volumes) {
@@ -73,7 +73,7 @@ func (service *ReadService) ListVolumes(
 	for _, volume := range projection.Record.Volumes[start:end] {
 		items = append(items, etcdstore.Versioned[etcd.VolumeRecord]{
 			Record: etcd.VolumeRecord{
-				ID: volume.ID, EnvironmentID: environmentID, Slug: volume.Slug, Key: volume.Key,
+				ID: volume.ID, EnvironmentID: environmentID, Slug: volume.Slug, Key: volume.Name,
 			},
 			Revision: projection.Revision, ReadRevision: projection.ReadRevision,
 		})
@@ -82,7 +82,7 @@ func (service *ReadService) ListVolumes(
 	if end < len(projection.Record.Volumes) {
 		page.NextCursor, err = encodeVolumeCursor(volumeListCursor{
 			EnvironmentID: environmentID, RevisionID: projection.Record.RevisionID,
-			AfterKey: projection.Record.Volumes[end-1].Key,
+			AfterKey: projection.Record.Volumes[end-1].Name,
 		})
 		if err != nil {
 			return etcdstore.Page[etcd.VolumeRecord]{}, err
@@ -112,7 +112,7 @@ func (service *ReadService) ListVolumeViews(
 }
 
 func (service *ReadService) GetVolume(ctx context.Context, volumeID string) (apiTypes.Volume, error) {
-	projection, identity, err := service.repository.FindEnvironmentVolume(ctx, volumeID)
+	projection, identity, err := service.repository.FindEnvironmentVolumeIdentity(ctx, volumeID)
 	if err != nil {
 		return apiTypes.Volume{}, err
 	}
@@ -146,37 +146,37 @@ func (service *ReadService) volumeListProjection(
 	ctx context.Context,
 	environmentID string,
 	encodedCursor string,
-) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], volumeListCursor, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities], volumeListCursor, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, volumeListCursor{}, errs.New(
 			errs.KindValidationFailed, "Volume list requires a stable Environment id",
 		)
 	}
 	if encodedCursor == "" {
-		projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
+		projection, found, err := service.repository.GetEnvironmentOwnedIdentities(ctx, environmentID)
 		if err != nil {
-			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, err
+			return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, volumeListCursor{}, err
 		}
 		if !found {
-			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, nil
+			return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, volumeListCursor{}, nil
 		}
 		return projection, volumeListCursor{EnvironmentID: environmentID, RevisionID: projection.Record.RevisionID}, nil
 	}
 	cursor, err := decodeVolumeCursor[volumeListCursor](encodedCursor)
 	if err != nil || cursor.EnvironmentID != environmentID ||
 		ids.Validate(ids.KindTask, cursor.RevisionID) != nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, volumeListCursor{}, errs.New(
 			errs.KindValidationFailed, "Volume page cursor is invalid",
 		)
 	}
-	projection, found, err := service.repository.GetEnvironmentComposeProjectionRevision(
+	projection, found, err := service.repository.GetEnvironmentOwnedIdentitiesRevision(
 		ctx, environmentID, cursor.RevisionID,
 	)
 	if err != nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, volumeListCursor{}, err
 	}
 	if !found {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]{}, volumeListCursor{}, errs.New(
 			errs.KindStateConflict, "Volume page revision is no longer available",
 		)
 	}

@@ -101,8 +101,9 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		Action: action, BaseRevisionID: publicationCurrent.RevisionID,
 		RouteID: record.Desired.ID, Request: request,
 	}}
+	taskMarker := routeMutationTaskMarker(directMarker, task)
 	publication, err := prepareRouteHeadPublication(
-		ctx, repository.store, task, directMarker, publicationCurrent,
+		ctx, repository.store, task, taskMarker, publicationCurrent,
 		*publicationCandidate, audit, publicationRevision,
 	)
 	if err != nil {
@@ -134,7 +135,6 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 			errs.KindValidationFailed, "Route mutation Task does not match its intent",
 		)
 	}
-	taskMarker := routeMutationTaskMarker(directMarker, task)
 	task.idempotencyMarker = cloneIdempotencyLocator(&taskMarker.Locator)
 	if task.IdempotencyKey == "" {
 		task.IdempotencyKey = directMarker.Locator.Key
