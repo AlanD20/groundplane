@@ -1858,6 +1858,40 @@ Existing malformed/fenced QA Blueprint records were retained; their errors did
 not prevent independent diagnostic cleanup and compaction. This is not a blanket
 production or release-readiness claim.
 
+## Readable workspaces during incomplete Blueprint execution
+
+**H120 — ENT-12, IMG-04 and ATT-15, 2026-10-16.** Source `6b585704c`
+on Ubuntu 24.04 amd64, installed through the normal protected Controller update;
+the existing Agent, etcd, application resources and historical Tasks were retained.
+
+Before repair, an aborted Apply left Entry metadata reads returning HTTP 409, which
+prevented the Console from displaying the entire Environment. Image inventory
+also failed on pending runtime. Follow-up browser inspection exposed generated
+Backing Entries and a missing historical Attach credential owner as additional
+read-isolation cases. No historical data was rewritten to make these cases pass.
+
+After repair, all 140 resource-collection reads across 14 tenant/Backing Environments,
+14 Entry-detail reads, ten CLI Entry lists and the 15-image inventory returned
+success. The browser rendered the project list, Zones/topology, Entries and
+Images. A connection with an unavailable credential owner retained its metadata
+and displayed its value-read error locally rather than hiding its Environment.
+The affected Environment's existing log stream returned 55 container log lines.
+
+Local behavior checks covered missing runtime, revision-pinned Entry reads,
+unavailable secret values and removal rejection when image protections cannot be
+verified. Full `make ci` passed for the initial repair `a296ba547`. The follow-up
+run passed changed application/storage race checks and mechanical gates but hit
+the unchanged Agent reconnect test's one-second timeout; its isolated race rerun
+passed without edits. Final Console typecheck, existing tests, production build
+and packaged-Console smoke check passed. The follow-up broad run is not recorded
+as a green full-CI run.
+
+No application traffic stress, deletion, deployment recovery, credential repair
+or new fault injection was qualified by these read-only installed checks. Existing
+failed/aborted Tasks and missing credentials remain real errors; listing metadata
+does not authorize execution or unverified image removal. No test resources were
+created or removed.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

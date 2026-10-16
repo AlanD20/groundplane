@@ -206,6 +206,10 @@ not change the endpoint.
 
 ### Facts, grants, and reveal
 
+If a connection value cannot be read, the Console shows the error on that
+connection. Its metadata and the rest of the Environment remain available;
+this does not bypass credential ownership or make the missing value usable.
+
 Attach facts are not reusable Secret resources and are never injected
 automatically. A managed credential owner stores its fact schema separately
 from an encrypted fact-value envelope. Its provisioned database and role
