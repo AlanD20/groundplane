@@ -136,6 +136,7 @@ export type Attach = {
   projectId: string; // references a BACKING project
   database: string; // Controller-resolved non-secret fact; "—" when the adapter has no database
   role: string; // Controller-resolved non-secret fact
+  factLoadError?: string; // Optional value reads must not hide the connection or its Environment.
   service: string; // the one service in this environment that gains access
   grants?: string[]; // other attaches' databases this role may also access
   status: HealthState;

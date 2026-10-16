@@ -121,7 +121,9 @@ export function AttachesCard({
                   {store.getBackingProject(a.projectId)?.name ?? a.projectId}
                 </span>
                 <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                  {a.database !== "—"
+                  {a.factLoadError
+                    ? "Connection values unavailable"
+                    : a.database !== "—"
                     ? `database ${a.database} · role ${a.role}`
                     : "attached"}
                   {a.service ? ` · for ${a.service}` : ""}
@@ -131,6 +133,14 @@ export function AttachesCard({
               <StatusBadge status={a.status} />
               <DetachAttach env={env} attach={a} />
             </div>
+            {a.factLoadError && (
+              <p
+                role="alert"
+                className="text-sm text-destructive [overflow-wrap:anywhere]"
+              >
+                Connection values unavailable: {a.factLoadError}
+              </p>
+            )}
             <ConnectionValues attach={a} env={env} />
             <BackingAccessCheck
               environmentId={env.id}

@@ -38,7 +38,14 @@ export function FactsCard({
           secret: fact.secret,
         })),
       }));
-      return [{ id: `facts-${a.id}`, title: `for ${a.service}`, sets }];
+      return [
+        {
+          id: `facts-${a.id}`,
+          title: `for ${a.service}`,
+          sets,
+          error: a.factLoadError,
+        },
+      ];
     });
 
   if (factGroups.length === 0)
@@ -68,6 +75,14 @@ export function FactsCard({
             <span className="font-mono text-xs text-muted-foreground">
               {grp.title}
             </span>
+            {grp.error && (
+              <p
+                role="alert"
+                className="text-sm text-destructive [overflow-wrap:anywhere]"
+              >
+                Connection values unavailable: {grp.error}
+              </p>
+            )}
             {grp.sets.map((set) => (
               <Disclosure
                 summary={

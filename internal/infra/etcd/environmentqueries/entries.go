@@ -39,6 +39,19 @@ func (repository *ProjectionReader) GetEnvironmentEntryDeclarationsRevision(ctx 
 func (repository *ProjectionReader) entryDeclarations(ctx context.Context,
 	input keyvalue.Versioned[environmentprojection.EnvironmentDesiredInput],
 ) (keyvalue.Versioned[EntryDeclarations], bool, error) {
+	// An exact-head render also contains adapter-generated Entries. Keep those
+	// when available; only an unrendered head needs authored reconstruction.
+	runtime, available, err := blueprints.ReadAvailableRuntimeRevision(ctx, repository.store,
+		input.Record.EnvironmentID, input.Record.RevisionID, input.ReadRevision)
+	if err != nil {
+		return keyvalue.Versioned[EntryDeclarations]{}, false, err
+	}
+	if available {
+		return keyvalue.Versioned[EntryDeclarations]{
+			Record:   EntryDeclarations{RevisionID: input.Record.RevisionID, Entries: runtime.Record.Entries},
+			Revision: input.Revision, ReadRevision: input.ReadRevision,
+		}, true, nil
+	}
 	owned, found, err := blueprints.ReadOwnedIdentitiesRevision(ctx, repository.store,
 		input.Record.EnvironmentID, input.Record.RevisionID, input.ReadRevision)
 	if err != nil {

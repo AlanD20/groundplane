@@ -51,6 +51,7 @@ async function attachFromAPI(
     })),
   }));
   const ready = attach.status === "ready";
+  let factLoadError: string | undefined;
   const revealSuffix = async (
     set: (typeof factSets)[number] | undefined,
     suffix: string,
@@ -59,12 +60,21 @@ async function attachFromAPI(
       (candidate) => !candidate.secret && candidate.key.endsWith(suffix),
     );
     if (!ready || !fact) return "";
-    return revealAttachFactValue(
-      attach.id,
-      fact.key,
-      set?.grantAttachId,
-      signal,
-    );
+    try {
+      return await revealAttachFactValue(
+        attach.id,
+        fact.key,
+        set?.grantAttachId,
+        signal,
+      );
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      factLoadError =
+        error instanceof Error
+          ? error.message
+          : "Unable to load connection values";
+      return "";
+    }
   };
   const own = factSets.find((set) => !set.grantAttachId);
   const [database, role, ...grants] = await Promise.all([
@@ -90,8 +100,9 @@ async function attachFromAPI(
     grantAttachIds: [...(attach.grant_attach_ids ?? [])],
     factSets,
     projectId: attach.backing_project_id,
-    database: database || "—",
+    database: database || (factLoadError ? "Unavailable" : "—"),
     role,
+    factLoadError,
     service:
       services.find((service) => service.id === serviceId)?.name ?? serviceId,
     grants: grants.filter(Boolean),
