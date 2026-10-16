@@ -70,7 +70,7 @@ func (service *Service) loadAuthoredParentInput(
 	if _, err := authoredOwnedIdentitySnapshot(ctx, desired.Record, identities.Record); err != nil {
 		return authoredParentInput{}, err
 	}
-	if _, err := authoredEntryRecords(desired.Record, identities.Record); err != nil {
+	if _, err := projectionrecord.AuthoredEntryRecords(desired.Record, identities.Record); err != nil {
 		return authoredParentInput{}, err
 	}
 	return authoredParentInput{

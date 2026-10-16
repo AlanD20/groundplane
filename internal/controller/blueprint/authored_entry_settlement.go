@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachoutputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -38,7 +39,7 @@ func (service *Service) SettleEntry(
 	if err != nil {
 		return err
 	}
-	records, err := authoredEntryRecords(input.desired, input.identities)
+	records, err := projectionrecord.AuthoredEntryRecords(input.desired, input.identities)
 	if err != nil {
 		return err
 	}

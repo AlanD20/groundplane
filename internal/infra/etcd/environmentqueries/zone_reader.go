@@ -39,7 +39,7 @@ func (repository *ZoneReader) ListZones(
 	if err != nil {
 		return etcdstore.Page[zonerecord.Record]{}, err
 	}
-	projection, found, err := readDeclaredResources(
+	projection, found, err := ReadDeclaredResources(
 		ctx, repository.store, environmentID, revision,
 	)
 	if err != nil {

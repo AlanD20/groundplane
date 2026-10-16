@@ -59,6 +59,9 @@ new operation, but an accepted Task pins exact value generations for its own
 execution and Retry. A later edit must not change an in-flight operation.
 The Entries list marks a secret Entry whose selected value is empty; it does
 not reveal the value or infer emptiness from the redacted source field.
+Entry definitions remain readable while a Blueprint Apply is pending, failed or
+aborted. A value that has not been materialized is unavailable, not empty: no
+empty-value badge is shown, and Reveal directs you to the Apply or creation Task.
 
 Console Bulk edit loads existing variable values, including secrets, and excludes
 files. From a Service, it loads only variables exposed to that Service. Existing

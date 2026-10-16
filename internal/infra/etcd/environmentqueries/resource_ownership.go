@@ -29,6 +29,8 @@ func environmentOwnsDesiredResource(
 		identities = owned.Record.Networks
 	case ids.KindRoute:
 		identities = owned.Record.Routes
+	case ids.KindEnvEntry:
+		identities = owned.Record.Entries
 	default:
 		return false, errs.New(errs.KindInternal, "unsupported desired resource lookup")
 	}

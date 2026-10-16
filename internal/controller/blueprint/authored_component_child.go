@@ -229,7 +229,7 @@ func (service *Service) prepareAuthoredComponentChild(
 	for index, route := range routeProjection {
 		routes[index] = route.Desired
 	}
-	entries, err := authoredEntryRecords(source.desired.Record, source.identities.Record)
+	entries, err := projectionrecord.AuthoredEntryRecords(source.desired.Record, source.identities.Record)
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}

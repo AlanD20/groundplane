@@ -67,7 +67,7 @@ func (repository *ServiceReader) GetServiceByName(
 			"Service name is required",
 		)
 	}
-	projection, found, err := readDeclaredResources(ctx, repository.store, environmentID, 0)
+	projection, found, err := ReadDeclaredResources(ctx, repository.store, environmentID, 0)
 	if err != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
@@ -115,7 +115,7 @@ func (repository *ServiceReader) ListServices(
 	if err != nil {
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 	}
-	projection, found, err := readDeclaredResources(ctx, repository.store, environmentID, revision)
+	projection, found, err := ReadDeclaredResources(ctx, repository.store, environmentID, revision)
 	if err != nil {
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 	}

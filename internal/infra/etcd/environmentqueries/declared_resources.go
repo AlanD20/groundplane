@@ -25,7 +25,9 @@ type DeclaredResources struct {
 	DesiredRoutes   []environmentprojection.EnvironmentRouteProjection
 }
 
-func readDeclaredResources(
+// ReadDeclaredResources joins current authored resources at one MVCC revision.
+// It never substitutes a previous runtime or supplies authority for execution.
+func ReadDeclaredResources(
 	ctx context.Context,
 	store snapshotReader,
 	environmentID string,

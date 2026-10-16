@@ -169,7 +169,7 @@ func readEffectiveProjectionRevisionAt(ctx context.Context, store blueprintSnaps
 		}
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, errs.New(
 			errs.KindStateConflict,
-			"Environment effective projection is pending",
+			"Environment runtime configuration is not ready; check the latest Blueprint Apply Task",
 		)
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[1].Value)

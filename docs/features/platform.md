@@ -233,6 +233,9 @@ containers. Matched Services and Environments link to their current Console
 pages; containers outside GP are identified separately. Missing GP resource
 records do not hide a container or imply that removal is safe. Other removal
 protection, such as retained rollback inputs, appears separately from container use.
+An unfinished Environment Apply does not hide image inventory. If GP cannot
+verify image protection, the inventory remains visible but removal is disabled;
+listing an image is not permission to delete it.
 Sort images by name, creation date or size; the date is the image's creation time,
 not when it was fetched. Pages default to five rows, with 5/10/25/50 choices.
 

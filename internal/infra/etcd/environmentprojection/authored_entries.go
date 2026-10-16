@@ -1,21 +1,20 @@
-package blueprint
+package environmentprojection
 
 import (
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// authoredEntryRecords reconstructs desired Entry metadata from the pinned
+// AuthoredEntryRecords reconstructs desired Entry metadata from the pinned
 // operator input and its identity sidecar. Flat Entry records may lag a
 // pending Blueprint head, so they cannot supply the coordinator's identity or
 // selected value generation.
-func authoredEntryRecords(
-	desired projectionrecord.EnvironmentDesiredInput,
-	identities projectionrecord.EnvironmentOwnedIdentities,
+func AuthoredEntryRecords(
+	desired EnvironmentDesiredInput,
+	identities EnvironmentOwnedIdentities,
 ) ([]entryrecord.Record, error) {
 	if desired.EnvironmentID != identities.EnvironmentID ||
 		desired.RevisionID != identities.RevisionID ||

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"strings"
@@ -24,12 +24,12 @@ func (service *entryReadService) listProjectedEntries(
 	environmentID string,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[entryrecord.Record], bool, error) {
-	var projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
+	var projection etcdstore.Versioned[projectionrecord.EntryDeclarations]
 	var found bool
 	var err error
 	offset := 0
 	if request.Cursor == "" {
-		projection, found, err = service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
+		projection, found, err = service.repository.GetEnvironmentEntryDeclarations(ctx, environmentID)
 	} else {
 		if !strings.HasPrefix(request.Cursor, entryProjectionCursorPrefix) {
 			return etcdstore.Page[entryrecord.Record]{}, false, nil
@@ -39,7 +39,7 @@ func (service *entryReadService) listProjectedEntries(
 			return etcdstore.Page[entryrecord.Record]{}, false, decodeErr
 		}
 		offset = decodedOffset
-		projection, found, err = service.repository.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
+		projection, found, err = service.repository.GetEnvironmentEntryDeclarationsRevision(ctx, environmentID, revisionID)
 	}
 	if err != nil || !found {
 		return etcdstore.Page[entryrecord.Record]{}, found, err

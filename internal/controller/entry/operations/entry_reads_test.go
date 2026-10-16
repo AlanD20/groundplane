@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
-	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,11 +20,12 @@ type fakeEntryReadRepository struct {
 	environment     testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
 	entry           testkeyvalue.Versioned[testentries.Record]
 	secretValue     testentryvalues.SecretGeneration
+	secretMissing   bool
 	page            testkeyvalue.Page[testentries.Record]
 	wantPage        testkeyvalue.PageRequest
 	environmentRead bool
 	listed          bool
-	projection      *testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
+	projection      *testkeyvalue.Versioned[testenvironmentprojection.EntryDeclarations]
 }
 
 func (fake *fakeEntryReadRepository) GetEnvironment(
@@ -54,25 +55,25 @@ func (fake *fakeEntryReadRepository) ListEntries(
 	return fake.page, nil
 }
 
-func (fake *fakeEntryReadRepository) GetEnvironmentComposeProjection(
+func (fake *fakeEntryReadRepository) GetEnvironmentEntryDeclarations(
 	context.Context,
 	string,
-) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
+) (testkeyvalue.Versioned[testenvironmentprojection.EntryDeclarations], bool, error) {
 	if fake.projection != nil {
 		return *fake.projection, true, nil
 	}
-	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{}, false, nil
+	return testkeyvalue.Versioned[testenvironmentprojection.EntryDeclarations]{}, false, nil
 }
 
-func (fake *fakeEntryReadRepository) GetEnvironmentComposeProjectionRevision(
+func (fake *fakeEntryReadRepository) GetEnvironmentEntryDeclarationsRevision(
 	context.Context,
 	string,
 	string,
-) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
+) (testkeyvalue.Versioned[testenvironmentprojection.EntryDeclarations], bool, error) {
 	if fake.projection != nil {
 		return *fake.projection, true, nil
 	}
-	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{}, false, nil
+	return testkeyvalue.Versioned[testenvironmentprojection.EntryDeclarations]{}, false, nil
 }
 
 func TestEntryListPagesCurrentProjection(t *testing.T) {
@@ -93,11 +94,10 @@ func TestEntryListPagesCurrentProjection(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	projection := testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
-		Record: testenvironmentprojection.EnvironmentComposeProjection{
-			EnvironmentID: environmentID,
-			RevisionID:    revisionID,
-			Entries:       records,
+	projection := testkeyvalue.Versioned[testenvironmentprojection.EntryDeclarations]{
+		Record: testenvironmentprojection.EntryDeclarations{
+			RevisionID: revisionID,
+			Entries:    records,
 		},
 		Revision: 12, ReadRevision: 12,
 	}
@@ -132,7 +132,31 @@ func (fake *fakeEntryReadRepository) GetSecretEntryValue(
 	if entryID != fake.entry.Record.Entry.ID || generationID != fake.entry.Record.CurrentValueGenerationID {
 		return testentryvalues.SecretGeneration{}, false, errs.New(errs.KindInternal, "Entry generation changed")
 	}
-	return fake.secretValue, true, nil
+	return fake.secretValue, !fake.secretMissing, nil
+}
+
+// A declared secret may await settlement: do not hide its metadata, mark it
+// empty, or reveal an invented value while its exact generation is unavailable.
+func TestEntryPendingSecretHasNoEmptyBadgeAndCannotBeRevealed(t *testing.T) {
+	entryID := ids.New(ids.KindEnvEntry)
+	repository := &fakeEntryReadRepository{
+		entry: testkeyvalue.Versioned[testentries.Record]{Record: testentries.Record{
+			EnvironmentID: ids.New(ids.KindEnvironment), CurrentValueGenerationID: ids.New(ids.KindConfig),
+			Entry: core.EnvEntry{ID: entryID, Kind: core.EntryKindEnv, Key: "TOKEN", Secret: true,
+				Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"all"}},
+		}}, secretMissing: true,
+	}
+	service, err := NewReadService(repository, secretReadTestProtector(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty, err := service.SecretValueEmpty(t.Context(), repository.entry.Record); err != nil || empty {
+		t.Fatalf("pending badge: empty=%t, err=%v", empty, err)
+	}
+	if value, err := service.RevealEntry(t.Context(), entryID); value != "" ||
+		!errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("pending reveal: %q, %v", value, err)
+	}
 }
 
 // Rationale: Entry collection ownership is an Environment existence check, and cursor paging must

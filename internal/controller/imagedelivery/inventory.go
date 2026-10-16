@@ -18,7 +18,9 @@ func (service *Service) ListImages(ctx context.Context) (apiTypes.ImageList, err
 	}
 	retention, err := service.retainedImages(ctx, "")
 	if err != nil {
-		return apiTypes.ImageList{}, err
+		// Listing Docker's inventory does not authorize deletion. Preserve known
+		// holds and fail closed for every other image when protection is incomplete.
+		retention.busy = "Image protection could not be verified; removal is disabled"
 	}
 	fence, _, err := readFence(ctx, service.store)
 	if err != nil {

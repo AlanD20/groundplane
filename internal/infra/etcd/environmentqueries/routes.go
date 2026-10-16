@@ -67,7 +67,7 @@ func FindRouteAtRevision(
 			if !owns {
 				continue
 			}
-			projection, found, projectionErr := readDeclaredResources(
+			projection, found, projectionErr := ReadDeclaredResources(
 				ctx,
 				store,
 				environmentID,
@@ -134,7 +134,7 @@ func ListRoutes(
 	if err != nil {
 		return etcdstore.Page[routerecord.Record]{}, err
 	}
-	projection, found, err := readDeclaredResources(ctx, store, environmentID, revision)
+	projection, found, err := ReadDeclaredResources(ctx, store, environmentID, revision)
 	if err != nil {
 		return etcdstore.Page[routerecord.Record]{}, err
 	}

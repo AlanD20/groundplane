@@ -33,6 +33,33 @@ type removalEngine struct {
 	failure  error
 }
 
+// An unreadable protection record must block removal, not hide Docker inventory.
+func TestImageInventoryRemainsReadableWhenProtectionCannotBeVerified(t *testing.T) {
+	store := newMemoryHierarchyStore()
+	store.revision = 1
+	tasks, err := etcd.NewTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := &removalEngine{
+		images: []imagefetch.LocalImage{{ID: "sha256:" + strings.Repeat("a", 64), Tags: []string{"nginx:latest"}}},
+	}
+	service := removalServiceFactory(t, store, tasks, engine)()
+	if _, err := store.Transact(t.Context(), nil, []keyvalue.Mutation{{Type: keyvalue.MutationPut,
+		Key: taskjournal.TaskStorageKey(ids.New(ids.KindTask)), Value: []byte("unreadable")}}); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err := service.ListImages(t.Context())
+	if err != nil || len(inventory.Images) != 1 || inventory.Images[0].RemovalBlocked == "" ||
+		inventory.Images[0].Tags[0] != "nginx:latest" {
+		t.Fatalf("inventory lost or unprotected: %#v, %v", inventory, err)
+	}
+	if _, err := service.RemoveImage(t.Context(), engine.images[0].ID, "reject-unverified-removal"); err == nil ||
+		engine.removals != 0 {
+		t.Fatalf("unverified image removal: %v, calls=%d", err, engine.removals)
+	}
+}
+
 func (engine *removalEngine) List(context.Context) ([]imagefetch.LocalImage, error) {
 	return engine.images, nil
 }

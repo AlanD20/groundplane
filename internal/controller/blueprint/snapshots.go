@@ -8,6 +8,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -205,7 +206,7 @@ func (service *Service) listBlueprintEntries(
 				return nil, errs.New(errs.KindStateConflict, "Environment Entry identities changed while listing")
 			}
 			if found {
-				authored, err := authoredEntryRecords(desired.Record, identities.Record)
+				authored, err := projectionrecord.AuthoredEntryRecords(desired.Record, identities.Record)
 				if err != nil {
 					return nil, err
 				}

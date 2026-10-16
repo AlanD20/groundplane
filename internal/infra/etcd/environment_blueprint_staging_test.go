@@ -5,6 +5,7 @@ import (
 	sha256 "crypto/sha256"
 	"github.com/AlanD20/groundplane/internal/core"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -136,6 +137,19 @@ func desiredInputForProjectionFixture(
 		normalized = []byte("services: {}\n")
 	}
 	serviceNames := make(map[string]string, len(projection.DesiredServices))
+	entries := make(map[string]core.EntrySpec, len(projection.Entries))
+	for _, record := range projection.Entries {
+		entry := record.Entry
+		entries[testentries.BlueprintIdentityKey(record)] = core.EntrySpec{
+			Kind: entry.Kind, Path: entry.Path, UID: entry.UID, GID: entry.GID,
+			Secret: entry.Secret, Exposure: entry.Exposure,
+			Source: core.EntrySourceSpec{
+				Literal:   entry.Source.Literal,
+				SecretRef: entry.Source.SecretRef,
+				Fact:      entry.Source.Fact,
+			},
+		}
+	}
 	for _, service := range projection.DesiredServices {
 		serviceNames[service.Desired.ID] = service.Desired.Name
 	}
@@ -156,6 +170,7 @@ func desiredInputForProjectionFixture(
 			ServiceExtensions: projection.ServiceExtensions,
 			NetworkPool:       "10.40.0.0/16",
 			Routes:            routes,
+			Entries:           entries,
 		},
 	}
 }

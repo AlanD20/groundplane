@@ -4,7 +4,7 @@ import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"unicode/utf8"
@@ -19,15 +19,15 @@ type entryReadRepository interface {
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEntry(context.Context, string) (etcdstore.Versioned[entryrecord.Record], error)
 	ListEntries(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[entryrecord.Record], error)
-	GetEnvironmentComposeProjection(
+	GetEnvironmentEntryDeclarations(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
-	GetEnvironmentComposeProjectionRevision(
+	) (etcdstore.Versioned[projectionrecord.EntryDeclarations], bool, error)
+	GetEnvironmentEntryDeclarationsRevision(
 		context.Context,
 		string,
 		string,
-	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EntryDeclarations], bool, error)
 	GetSecretEntryValue(
 		context.Context,
 		string,
@@ -104,14 +104,21 @@ func (service *entryReadService) RevealEntry(ctx context.Context, entryID string
 		return "", errs.New(errs.KindValidationFailed, "Entry value reveal requires a secret Entry")
 	}
 	var revealed string
-	if err := service.openSelectedSecretValue(ctx, current.Record, func(plaintext []byte) error {
+	available, err := service.openSelectedSecretValue(ctx, current.Record, func(plaintext []byte) error {
 		if !utf8.Valid(plaintext) {
 			return errs.New(errs.KindInternal, "Entry plaintext is not valid UTF-8")
 		}
 		revealed = string(plaintext)
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return "", err
+	}
+	if !available {
+		return "", errs.New(
+			errs.KindStateConflict,
+			"Entry value is not available; check its Blueprint Apply or creation Task",
+		)
 	}
 	return revealed, nil
 }
@@ -126,7 +133,7 @@ func (service *entryReadService) SecretValueEmpty(
 		return false, errs.New(errs.KindValidationFailed, "Entry empty-value status requires a secret Entry")
 	}
 	empty := false
-	err := service.openSelectedSecretValue(ctx, record, func(plaintext []byte) error {
+	_, err := service.openSelectedSecretValue(ctx, record, func(plaintext []byte) error {
 		empty = len(plaintext) == 0
 		return nil
 	})
@@ -137,20 +144,26 @@ func (service *entryReadService) openSelectedSecretValue(
 	ctx context.Context,
 	record entryrecord.Record,
 	consume secretvalue.PlaintextConsumer,
-) error {
+) (bool, error) {
 	stored, found, err := service.repository.GetSecretEntryValue(
 		ctx,
 		record.Entry.ID,
 		record.CurrentValueGenerationID,
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer clear(stored.Ciphertext)
-	if !found || stored.EnvironmentID != record.EnvironmentID ||
+	// Declared Entries precede value settlement (including Attach-derived values).
+	// Missing bytes do not hide metadata or justify an empty-value badge. Reveal
+	// remains unavailable; execution and recovery retain their strict value checks.
+	if !found {
+		return false, nil
+	}
+	if stored.EnvironmentID != record.EnvironmentID ||
 		stored.EntryID != record.Entry.ID ||
 		stored.GenerationID != record.CurrentValueGenerationID {
-		return errs.New(errs.KindInternal, "Entry selected secret value generation is missing or mismatched")
+		return false, errs.New(errs.KindInternal, "Entry selected secret value generation is missing or mismatched")
 	}
 	envelope, err := secretvalue.Restore(secretvalue.Metadata{
 		Version: secretvalue.EnvelopeVersion(stored.EnvelopeVersion),
@@ -161,10 +174,10 @@ func (service *entryReadService) openSelectedSecretValue(
 		},
 	}, stored.Ciphertext)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer envelope.Clear()
-	return service.protector.Open(ctx, envelope, consume)
+	return true, service.protector.Open(ctx, envelope, consume)
 }
 
 type durableEntryReadRepository struct {
@@ -195,19 +208,18 @@ func (repository *durableEntryReadRepository) GetEntry(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[entryrecord.Record], error) {
-	current, err := repository.entries.GetEntry(ctx, id)
-	if err == nil {
-		return current, nil
-	}
-	kind, ok := errs.KindOf(err)
-	if !ok || kind != errs.KindEntryNotFound {
-		return etcdstore.Versioned[entryrecord.Record]{}, err
-	}
 	environmentID, found, err := repository.entries.ResolveBlueprintEntryEnvironment(ctx, id)
-	if err != nil || !found {
+	if err != nil {
 		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
-	projection, found, err := repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
+	if !found {
+		declared, exists, err := repository.hierarchy.FindDeclaredEntry(ctx, id)
+		if err != nil || exists {
+			return declared, err
+		}
+		return repository.entries.GetEntry(ctx, id)
+	}
+	projection, found, err := repository.hierarchy.GetEnvironmentEntryDeclarations(ctx, environmentID)
 	if err != nil {
 		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
@@ -223,19 +235,19 @@ func (repository *durableEntryReadRepository) GetEntry(
 	return etcdstore.Versioned[entryrecord.Record]{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
 }
 
-func (repository *durableEntryReadRepository) GetEnvironmentComposeProjection(
+func (repository *durableEntryReadRepository) GetEnvironmentEntryDeclarations(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
-	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
+) (etcdstore.Versioned[projectionrecord.EntryDeclarations], bool, error) {
+	return repository.hierarchy.GetEnvironmentEntryDeclarations(ctx, environmentID)
 }
 
-func (repository *durableEntryReadRepository) GetEnvironmentComposeProjectionRevision(
+func (repository *durableEntryReadRepository) GetEnvironmentEntryDeclarationsRevision(
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
-) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
-	return repository.hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
+) (etcdstore.Versioned[projectionrecord.EntryDeclarations], bool, error) {
+	return repository.hierarchy.GetEnvironmentEntryDeclarationsRevision(ctx, environmentID, revisionID)
 }
 
 func (repository *durableEntryReadRepository) ListEntries(

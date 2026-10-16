@@ -67,7 +67,7 @@ func FindServiceAtRevision(
 			if !owns {
 				continue
 			}
-			projection, found, projectionErr := readDeclaredResources(
+			projection, found, projectionErr := ReadDeclaredResources(
 				ctx,
 				store,
 				environmentID,

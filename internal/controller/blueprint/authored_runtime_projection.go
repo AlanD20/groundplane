@@ -166,7 +166,7 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 	if _, err := authoredOwnedIdentitySnapshot(ctx, desired.Record, identities.Record); err != nil {
 		return authoredRuntimeProjectionSource{}, err
 	}
-	if _, err := authoredEntryRecords(desired.Record, identities.Record); err != nil {
+	if _, err := projectionrecord.AuthoredEntryRecords(desired.Record, identities.Record); err != nil {
 		return authoredRuntimeProjectionSource{}, err
 	}
 	environment, err := service.repository.GetEnvironment(ctx, environmentID)
@@ -255,7 +255,7 @@ func (service *Service) compileAuthoredEnvironmentInput(
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
-	entries, err := authoredEntryRecords(desired, identities)
+	entries, err := projectionrecord.AuthoredEntryRecords(desired, identities)
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}

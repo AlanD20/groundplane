@@ -6,7 +6,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -65,7 +64,7 @@ func (service *Service) containerOwner(
 		owner.TenantSlug = tenant.Record.Slug
 	}
 	if ids.Validate(ids.KindService, use.ServiceID) == nil {
-		projection, found, err := blueprints.ReadCurrentProjection(
+		projection, found, err := environmentqueries.ReadDeclaredResources(
 			ctx,
 			service.store,
 			use.EnvironmentID,
@@ -74,7 +73,7 @@ func (service *Service) containerOwner(
 		if err != nil {
 			return nil, err
 		}
-		if found && !environmentqueries.IsComponentService(projection.Record.Components, use.ServiceID) {
+		if found {
 			for _, workload := range projection.Record.DesiredServices {
 				if workload.Desired.ID == use.ServiceID && workload.EnvironmentID == use.EnvironmentID {
 					owner.ServiceID, owner.ServiceName = workload.Desired.ID, workload.Desired.Name
