@@ -3,8 +3,14 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
+	"slices"
+
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
@@ -22,8 +28,8 @@ import (
 
 // BlueprintAuthoredPublication accepts immutable operator input and one
 // visible reconciliation parent, without claiming that fact-dependent runtime
-// files or host effects already exist. The coordinator publishes private unit
-// Tasks only after this head and parent are atomically visible.
+// files or host effects already exist. Captured work membership is published
+// after this head, Task and immutable graph become atomically visible.
 type BlueprintAuthoredPublication struct {
 	Project                keyvalue.Versioned[hierarchy.ProjectRecord]
 	Environment            keyvalue.Versioned[hierarchy.EnvironmentRecord]
@@ -34,38 +40,41 @@ type BlueprintAuthoredPublication struct {
 	ZoneReservations       []zones.Record
 	PrerequisiteAuthority  BlueprintPrerequisiteAuthority
 	AttachInputGenerations []BlueprintAttachInputGenerationPublication
-	Parent                 TaskRecord
+	Parent                 workexecution.Task
+	Graph                  blueprintunits.CapturedGraph
+	Baseline               blueprintunits.Snapshot
 	Marker                 idempotency.IdempotencyMarker
 	ScriptPublication      BlueprintScriptPublication
 }
 
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAuthoredRevision(
 	ctx context.Context, input BlueprintAuthoredPublication,
-) (IdempotencyTransactionResult, error) {
+) (keyvalue.TransactionResult, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	project, environment, parent, claim := input.Project, input.Environment, input.Parent, input.Claim
 	if err := hierarchy.ValidateProject(project.Record); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	if err := hierarchy.ValidateEnvironment(environment.Record); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	if len(input.DesiredInput.Input.DNS) != 0 && project.Record.Kind != hierarchy.ProjectKindTenant {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed,
+		return keyvalue.TransactionResult{}, errs.New(errs.KindValidationFailed,
 			"tenantless Backing Environments cannot own scoped DNS records; use platform DNS settings")
 	}
 	if project.Revision <= 0 || environment.Revision <= 0 ||
+		input.Baseline.EnvironmentID != environment.Record.ID || input.Baseline.ReadRevision <= 0 ||
+		input.Baseline.HeadRevision != input.ExpectedHeadRevision || input.Baseline.EpochRevision < 0 ||
 		environment.Record.ProjectID != project.Record.ID ||
 		environment.Record.ProvisioningState != hierarchy.EnvironmentProvisioningReady ||
 		input.ExpectedHeadRevision < 0 || claim.BaselineHeadRevision != input.ExpectedHeadRevision ||
 		claim.SourceKind != blueprints.EnvironmentBlueprintSourceApply ||
 		claim.EnvironmentID != environment.Record.ID || claim.RevisionID != parent.ID || claim.TaskID != parent.ID ||
-		parent.Executor != taskjournal.TaskExecutorBlueprint || parent.Actor != taskjournal.TaskActorOperator ||
-		parent.Type != taskjournal.TaskUpdate || parent.Target != environment.Record.ID ||
-		parent.Status != taskjournal.TaskStatusPending ||
-		parent.Params[blueprints.EnvironmentDesiredRevisionParam] != claim.RevisionID ||
+		parent.Action != workexecution.ActionApply || parent.Actor != workexecution.OperatorActor ||
+		parent.TargetID != environment.Record.ID || parent.Scope.EnvironmentID != environment.Record.ID ||
+		parent.Scope.ProjectID != project.Record.ID || parent.Scope.TenantID != project.Record.TenantID ||
 		input.DesiredInput.EnvironmentID != claim.EnvironmentID ||
 		input.DesiredInput.RevisionID != claim.RevisionID ||
 		input.DesiredInput.RenderGeneration != claim.RenderGeneration ||
@@ -75,19 +84,19 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		input.Marker.TaskID != parent.ID || input.Marker.Locator != claim.Locator ||
 		!input.Marker.CreatedAt.Equal(parent.CreatedAt) ||
 		!input.Marker.UpdatedAt.Equal(parent.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
+		return keyvalue.TransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Blueprint authored publication identity is invalid",
 		)
 	}
-	if err := ValidateTaskRecord(parent); err != nil {
-		return IdempotencyTransactionResult{}, err
+	if err := parent.Validate(); err != nil {
+		return keyvalue.TransactionResult{}, err
 	}
 	if err := input.ScriptPublication.validate(environment.Record.ID, claim.SourceKind); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	if input.ScriptPublication.IsZero() {
 		if len(input.OwnedIdentities.Scripts) != 0 {
-			return IdempotencyTransactionResult{}, errs.New(
+			return keyvalue.TransactionResult{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint Script set has not been prepared",
 			)
@@ -95,24 +104,20 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	} else {
 		set, err := scriptrecord.DecodeScriptSetGeneration(input.ScriptPublication.mutations[0].Value)
 		if err != nil || set.GenerationID != parent.ID {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Blueprint Script set belongs to another revision")
+			return keyvalue.TransactionResult{}, errs.New(errs.KindValidationFailed, "Blueprint Script set belongs to another revision")
 		}
 	}
 	if err := idempotency.ValidateIdempotencyMarker(input.Marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil ||
-		found {
-		return existing, err
+		return keyvalue.TransactionResult{}, err
 	}
 	var birthConditions []keyvalue.Condition
 	if input.ExpectedHeadRevision > 0 && len(input.OwnedIdentities.Components) > 0 {
 		previous, found, err := blueprints.ReadCurrentOwnedIdentities(ctx, repository.store, claim.EnvironmentID, 0)
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return keyvalue.TransactionResult{}, err
 		}
 		if !found || previous.Revision != input.ExpectedHeadRevision {
-			return IdempotencyTransactionResult{}, errs.New(
+			return keyvalue.TransactionResult{}, errs.New(
 				errs.KindStateConflict,
 				"Environment Component identity predecessor changed",
 			)
@@ -121,12 +126,12 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 			ctx, repository.store, input.OwnedIdentities, previous.ReadRevision,
 		)
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return keyvalue.TransactionResult{}, err
 		}
 	}
 	ownedIdentityValue, err := projectionrecord.EncodeEnvironmentOwnedIdentities(input.OwnedIdentities)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer clear(ownedIdentityValue)
 	initialAbsence, err := blueprintunits.PrepareInitialAbsencePublication(
@@ -135,16 +140,20 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		newbornBlueprintUnitTargets(input.OwnedIdentities, claim.RevisionID),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer initialAbsence.Clear()
 	desiredValue, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(input.DesiredInput)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer clear(desiredValue)
+	desiredDigest := sha256.Sum256(desiredValue)
+	if hex.EncodeToString(desiredDigest[:]) != parent.Intent.SHA256 {
+		return keyvalue.TransactionResult{}, errs.New(errs.KindValidationFailed, "Blueprint Task input differs from the sealed desired revision")
+	}
 	if len(input.ZoneReservations) != len(input.OwnedIdentities.Networks) {
-		return IdempotencyTransactionResult{}, errs.New(
+		return keyvalue.TransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Zone reservations are incomplete",
 		)
@@ -156,7 +165,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	for _, zone := range input.ZoneReservations {
 		if zones.ValidateRecord(zone) != nil || zone.EnvironmentID != environment.Record.ID ||
 			zoneIdentities[zone.Desired.ID] != zone.Desired.Name {
-			return IdempotencyTransactionResult{}, errs.New(
+			return keyvalue.TransactionResult{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint Zone reservation identity changed",
 			)
@@ -169,54 +178,46 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		ctx, effectiveEnvironment, input.ZoneReservations, 0,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer clear(zonePool.Value())
 	nameConditions, nameMutations, err := dnsrecords.NewReader(repository.store).PrepareAuthoredDNSPublication(
 		ctx, input.DesiredInput, input.OwnedIdentities, environment.ReadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer keyvalue.ClearMutationValues(nameMutations)
 	prerequisites, err := prepareBlueprintPrerequisiteAuthorityPublication(
 		input.PrerequisiteAuthority, input.DesiredInput,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer prerequisites.clear()
 	revision := blueprints.EnvironmentDesiredRevisionIdentity{
 		EnvironmentID: environment.Record.ID, RevisionID: claim.RevisionID,
 	}
 	publication, err := repository.prepareEnvironmentBlueprintPublicationWithDigest(
-		ctx, claim, revision, sha256.Sum256(desiredValue), parent, input.Marker,
+		ctx, claim, revision, desiredDigest, input.Marker,
 		input.ExpectedHeadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer clear(publication.publishedDescriptor)
-	parent = cloneTaskRecord(parent)
-	if parent.IdempotencyKey == "" {
-		parent.IdempotencyKey = input.Marker.Locator.Key
-	}
-	parent.idempotencyMarker = cloneIdempotencyLocator(&input.Marker.Locator)
-	parentValue, err := EncodeTaskRecord(parent)
+	work, err := workqueue.PrepareTask(parent, input.Marker)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
-	defer clear(parentValue)
+	defer keyvalue.ClearMutationValues(work.Mutations)
 	reference, err := idempotency.EncodeTaskReference(parent.ID)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer clear(reference)
 	conditions := []keyvalue.Condition{
-		{Key: taskjournal.TaskStorageKey(parent.ID)},
-		{Key: taskjournal.TaskOperationIndexKey(parent.OperationID, parent.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(parent.OperationID)},
-		{Key: taskjournal.TaskQueueKey(parent.Executor, parent.ID)},
+		{Key: blueprintunits.EpochKey(environment.Record.ID), ModRevision: input.Baseline.EpochRevision},
 		{
 			Key:         blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -228,14 +229,6 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		{Key: removalrecord.EnvironmentLockKey(environment.Record.ID)},
 	}
 	mutations := []keyvalue.Mutation{
-		{Type: keyvalue.MutationPut, Key: taskjournal.TaskStorageKey(parent.ID), Value: parentValue},
-		{
-			Type:  keyvalue.MutationPut,
-			Key:   taskjournal.TaskOperationIndexKey(parent.OperationID, parent.ID),
-			Value: reference,
-		},
-		{Type: keyvalue.MutationPut, Key: taskjournal.TaskActiveOperationKey(parent.OperationID), Value: reference},
-		{Type: keyvalue.MutationPut, Key: taskjournal.TaskQueueKey(parent.Executor, parent.ID), Value: reference},
 		{Type: keyvalue.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: keyvalue.MutationDelete, Key: publication.locatorKey},
 		{
@@ -251,6 +244,11 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		prerequisites.mutation,
 	}
 	conditions = append(conditions, prerequisites.conditions...)
+	placementConditions, err := repository.blueprintWorkPlacementConditions(ctx, input.Graph)
+	if err != nil {
+		return keyvalue.TransactionResult{}, err
+	}
+	conditions = append(conditions, placementConditions...)
 	conditions = append(conditions, nameConditions...)
 	mutations = append(mutations, nameMutations...)
 	zonePoolKey := networkreservations.ZonePoolRegistryKey(environment.Record.ID)
@@ -268,19 +266,54 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		ctx, repository.store, project, project.ReadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, parent.Actor)
+	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, taskjournal.TaskActorOperator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	attachInputs, err := repository.prepareBlueprintAttachInputGenerations(
 		ctx, parent, input.AttachInputGenerations,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return keyvalue.TransactionResult{}, err
 	}
 	defer attachInputs.clear()
+	captured := input.Graph
+	captured.Items = slices.Clone(input.Graph.Items)
+	for _, generation := range attachInputs.generations {
+		expected, err := blueprintattachinputs.WorkInput(generation)
+		if err != nil {
+			return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
+		}
+		matched := false
+		for index := range captured.Items {
+			item := &captured.Items[index]
+			if item.ID != generation.WorkItemID {
+				continue
+			}
+			if item.TargetID != generation.AttachID || item.Operation != workexecution.Attach ||
+				(item.Input != nil && *item.Input != expected) ||
+				(item.Input == nil && (item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput)) {
+				break
+			}
+			// Pins are now bound. Seal their exact digest before publication,
+			// without changing the caller's draft or selecting any newer input.
+			item.Input = &expected
+			item.Phase, item.Wait = workexecution.Ready, nil
+			matched = true
+			break
+		}
+		if !matched {
+			return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{},
+				errs.New(errs.KindValidationFailed, "Attach work does not reference its captured input generation"))
+		}
+	}
+	graph, err := blueprintunits.PrepareCapturedGraph(parent, captured)
+	if err != nil {
+		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
+	}
+	defer keyvalue.ClearMutationValues(graph.Mutations)
 	conditions = append(conditions, attachInputs.conditions...)
 	mutations = append(mutations, attachInputs.mutations...)
 	baseCount := len(conditions)
@@ -290,17 +323,15 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		}
 		return errs.New(errs.KindStateConflict, "Blueprint authored publication raced")
 	}
-	plan, err := newTaskIdempotencyMutationPlan(parent, initiation, conditions, mutations, classifier)
+	conditions, _, err = prepareTaskInitiationFences(initiation, conditions, classifier)
 	if err != nil {
-		return attachInputs.finish(ctx, repository.store, parent.ID, IdempotencyTransactionResult{}, err)
+		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
 	}
-	idempotencyRepository, err := NewIdempotencyRepository(repository.store)
+	queue, err := workqueue.NewRepository(repository.store)
 	if err != nil {
-		return attachInputs.finish(ctx, repository.store, parent.ID, IdempotencyTransactionResult{}, err)
+		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
 	}
-	result, publicationErr := idempotencyRepository.applyEnvironmentBlueprint(
-		ctx, input.Marker, plan, repository.transactions,
-	)
+	result, publicationErr := queue.Commit(ctx, work, graph, workqueue.Change{Conditions: conditions, Mutations: mutations})
 	return attachInputs.finish(ctx, repository.store, parent.ID, result, publicationErr)
 }
 
