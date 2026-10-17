@@ -124,6 +124,17 @@ message AttachRemovalInput {
   }
 }
 
+// Captured direct Detach consumer update. Both artifacts describe the same
+// native runtime; only this logical Service's backing-network membership changes.
+message AttachConsumerTransition {
+  string environment_id = 1;
+  string backing_environment_id = 2;
+  string service_id = 3;
+  string network_id = 4;
+  ComposeArtifact baseline = 5;
+  ComposeArtifact candidate = 6;
+}
+
 message AttachCredentialRemoval {
   string adapter_key = 1;
   BackingAuthentication authentication = 2;
