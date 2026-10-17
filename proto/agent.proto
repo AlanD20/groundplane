@@ -1872,6 +1872,41 @@ enum NetworkWorkAction {
   NETWORK_WORK_ACTION_REMOVE = 2;
 }
 
+message NetworkWorkAssignment {
+  WorkAttemptIdentity attempt = 1;
+  NetworkWorkInput input = 2;
+}
+
+message NetworkWorkCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+}
+
+message NetworkWorkCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 sequence = 2;
+  string stage_id = 3;
+  WorkInputReference evidence = 4;
+  google.protobuf.Timestamp recorded_at = 5;
+}
+
+message NetworkWorkHelperRequest {
+  NetworkWorkAssignment assignment = 1;
+  WorkStartAck start = 2;
+  NetworkWorkCheckpointRequest report = 3;
+  NetworkWorkCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message NetworkWorkHelperResponse {
+  string network_id = 1;
+  WorkInputReference input = 2;
+  bool ready = 3;
+  bool absent = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  bool inspection = 6;
+}
+
 // Captured Volume work has a closed procedure, not a list of generic steps.
 // Removal retains both runtime configurations and the approved impact digest.
 message VolumeWorkInput {
