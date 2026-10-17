@@ -125,6 +125,7 @@ func PrepareAttachRemoval(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: AttachKey(current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: RetiredDetachKey(current.Record.ID)},
 		{Type: etcdstore.MutationDelete, Key: AttachNameKey(current.Record.EnvironmentID, current.Record.Name)},
 		{Type: etcdstore.MutationDelete, Key: AttachOwnerKey(current.Record.EnvironmentID, current.Record.ID)},
 		{

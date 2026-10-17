@@ -238,6 +238,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	retention, err := operationretention.New(queue, checkRecords, backingRecords, dnsRecords, edgeRecords, runnerRecords, imageRecords, hierarchyRecords,
+		operationretention.WorkRegistration{Operation: workexecution.Detach, Owner: detaches},
 		operationretention.WorkRegistration{Operation: workexecution.Network, Owner: networkAgent},
 		operationretention.WorkRegistration{Operation: workexecution.Volume, Owner: volumeAgent},
 		operationretention.WorkRegistration{Operation: workexecution.RemovalBackupObject, Owner: hierarchyRetention},

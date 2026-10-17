@@ -76,10 +76,11 @@ func (repository *AttachRepository) PublishDetachWork(ctx context.Context, reque
 	if item.Placement.HostID != host.Binding.HostID {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Detach target host changed before publication")
 	}
-	detaching, err := attachrecord.BeginAttachDetaching(source.Attach, task.ID)
+	detaching, ownership, err := attachremoval.PrepareDetachClaim(ctx, repository.store, source, task.ID, item.Placement.HostID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	defer keyvalue.ClearMutationValues(ownership.Mutations)
 	checks, err := backingchecks.RequireAttachIdle(ctx, repository.store, source.Attach.ID, source.SnapshotRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -99,7 +100,7 @@ func (repository *AttachRepository) PublishDetachWork(ctx context.Context, reque
 		return IdempotencyTransactionResult{}, err
 	}
 	defer ancestry.Clear()
-	groups := [][]keyvalue.Condition{fence.TransactionConditions(), host.Conditions, sources,
+	groups := [][]keyvalue.Condition{fence.TransactionConditions(), host.Conditions, sources, ownership.Conditions,
 		request.Input.Snapshot.ConsumerConditions(), desired.conditions, ancestry.Conditions(), {checks}}
 	if request.Initiation != nil {
 		groups = append(groups, request.Initiation.fences)
@@ -140,6 +141,7 @@ func (repository *AttachRepository) PublishDetachWork(ctx context.Context, reque
 		return IdempotencyTransactionResult{}, err
 	}
 	mutations := append([]keyvalue.Mutation(nil), publication.Mutations...)
+	mutations = append(mutations, ownership.Mutations...)
 	mutations = append(mutations, staged.Mutations...)
 	mutations = append(mutations, desired.mutations...)
 	mutations = append(mutations, ancestry.Mutations()...)

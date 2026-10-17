@@ -65,6 +65,12 @@ func AttachKey(id string) string {
 	return RecordPrefix + id
 }
 
+// RetiredDetachKey holds resource-owned proof after settled execution history
+// expires. It is consumed by a new Detach action or deleted with the binding.
+func RetiredDetachKey(id string) string {
+	return "/v1/attach-retired-detach/" + id
+}
+
 func AttachOwnerPrefix(environmentID string) string {
 	return "/v1/indexes/attaches/by-owner/environment/" + environmentID + "/"
 }
