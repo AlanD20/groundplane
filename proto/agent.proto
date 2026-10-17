@@ -1892,6 +1892,18 @@ message NetworkWorkCheckpointAck {
   google.protobuf.Timestamp recorded_at = 5;
 }
 
+message NetworkWorkCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+}
+
+message NetworkWorkCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
 message NetworkWorkHelperRequest {
   NetworkWorkAssignment assignment = 1;
   WorkStartAck start = 2;

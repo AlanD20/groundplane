@@ -16,16 +16,26 @@ import (
 // storage record and work completion in the same transaction. This method
 // grants no host effects and creates no parallel execution record.
 func (repository *Repository) PrepareVolumeCompletionReceipt(ctx context.Context, view workqueue.ResumeView) (workqueue.Change, error) {
+	return repository.prepareResourceCompletionReceipt(ctx, view, ids.KindVolume, workexecution.Volume, false)
+}
+
+func (repository *Repository) PrepareNetworkCompletionReceipt(ctx context.Context, view workqueue.ResumeView, removed bool) (workqueue.Change, error) {
+	return repository.prepareResourceCompletionReceipt(ctx, view, ids.KindNetwork, workexecution.Network, removed)
+}
+
+func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Context, view workqueue.ResumeView,
+	kind ids.Kind, operation workexecution.Operation, removed bool,
+) (workqueue.Change, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
 	checkpoint := view.Checkpoint.Record
 	if task.Validate() != nil || item.Validate() != nil || attempt.Validate() != nil ||
 		task.Action != workexecution.ActionApply || task.Scope.EnvironmentID == "" ||
-		item.Operation != workexecution.Volume || item.TaskID != task.ID || item.Input == nil ||
+		item.Operation != operation || item.TaskID != task.ID || item.Input == nil ||
 		!view.ActiveAttempt || attempt.FinishedAt != nil || attempt.Direction != workexecution.Forward ||
 		attempt.TaskID != task.ID || attempt.WorkItemID != item.ID || attempt.Input != *item.Input ||
 		attempt.Executor.Executor != workexecution.Agent || attempt.Executor.HostID != item.Placement.HostID ||
 		checkpoint == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Evidence.Validate() != nil {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Volume receipt requires its active proven attempt")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt requires its active proven attempt")
 	}
 	graph, err := repository.LoadCapturedGraph(ctx, task, view.Work.ReadRevision)
 	if err != nil {
@@ -40,14 +50,14 @@ func (repository *Repository) PrepareVolumeCompletionReceipt(ctx context.Context
 			captured.Placement != item.Placement || !slices.Equal(captured.Dependencies, item.Dependencies) ||
 			!slices.Equal(captured.Claims, item.Claims) || !captured.CreatedAt.Equal(item.CreatedAt) ||
 			!captured.Deadline.Equal(item.Deadline) {
-			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Volume receipt differs from its captured work")
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt differs from its captured work")
 		}
 		unit = &graph.Record.Units[index]
 		break
 	}
-	if unit == nil || unit.Target.Kind != ids.KindVolume || unit.Removal ||
+	if unit == nil || unit.Target.Kind != kind || unit.Removal != removed ||
 		len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Volume receipt has no captured storage effect")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt has no captured storage effect")
 	}
 	snapshot, err := repository.LoadAtRevision(ctx, task.Scope.EnvironmentID, view.Work.ReadRevision)
 	if err != nil {
@@ -67,12 +77,19 @@ func (repository *Repository) PrepareVolumeCompletionReceipt(ctx context.Context
 		}
 	}
 	if !found {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Volume receipt has no prior resource state")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt has no prior resource state")
+	}
+	state := Applied
+	if removed {
+		state = Absent
 	}
 	receipt := AppliedRecord{EnvironmentID: task.Scope.EnvironmentID, Target: unit.Target,
-		State: Applied, Fingerprint: unit.Fingerprint, ParentTaskID: task.ID,
+		State: state, Fingerprint: unit.Fingerprint, ParentTaskID: task.ID,
 		Execution: &AppliedExecution{TaskID: task.ID, WorkItemID: item.ID, AttemptID: attempt.ID,
 			Executor: attempt.Executor, Input: attempt.Input, Result: checkpoint.Evidence}}
+	if removed {
+		receipt.Fingerprint = ""
+	}
 	value, err := EncodeApplied(receipt)
 	if err != nil {
 		return workqueue.Change{}, err
