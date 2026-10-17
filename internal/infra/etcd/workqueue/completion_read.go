@@ -129,6 +129,19 @@ func (repository *Repository) ReadInterruptedVolumeAt(ctx context.Context, view 
 	return repository.readCompletionOwnership(ctx, view)
 }
 
+// ReadInterruptedNetworkAt retains claims until the Network owner accounts for
+// the replaced executor's bridge mutation.
+func (repository *Repository) ReadInterruptedNetworkAt(ctx context.Context, view ResumeView) (Completion, error) {
+	if !view.ActiveAttempt || view.CurrentExecutor || view.ExecutorRevision <= 0 || view.Work.ReadRevision <= 0 ||
+		view.Work.Task.Revision <= 0 || view.Work.Item.Revision <= 0 || view.Attempt.Revision <= 0 ||
+		view.Work.Item.Item.Operation != workexecution.Network || view.Attempt.Attempt.FinishedAt != nil ||
+		(view.Checkpoint.Record == nil) != (view.Checkpoint.Revision == 0) ||
+		workexecution.ValidateDelivery(view.Work.Item.Item, view.Attempt.Attempt) != nil {
+		return Completion{}, errs.New(errs.KindStateConflict, "Network reconciliation requires its replaced attempt and retained claims")
+	}
+	return repository.readCompletionOwnership(ctx, view)
+}
+
 func (repository *Repository) readCompletionOwnership(ctx context.Context, view ResumeView) (Completion, error) {
 	request := Completion{Task: view.Work.Task, Item: view.Work.Item, Attempt: view.Attempt}
 	taskID, workID, attemptID := request.Task.Task.ID, request.Item.Item.ID, request.Attempt.Attempt.ID

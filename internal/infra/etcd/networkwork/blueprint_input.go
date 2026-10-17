@@ -66,7 +66,7 @@ func (repository *InputRepository) PrepareBlueprintInput(ctx context.Context, vi
 	ready.Conditions = append(ready.Conditions, keyvalue.Condition{Key: DesiredKey(item.ID)})
 	ready.Mutations = append(ready.Mutations, captured.Mutations...)
 	ready.Mutations = append(ready.Mutations, keyvalue.Mutation{
-		Type: keyvalue.MutationPut, Key: desiredKey(item.ID), Value: desired,
+		Type: keyvalue.MutationPut, Key: DesiredKey(item.ID), Value: desired,
 	})
 	return ready, nil
 }
