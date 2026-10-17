@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -28,11 +29,12 @@ func (owner *RemovalCompletion) PrepareFinish(ctx context.Context, finished work
 	if finished.Task.Task.Action != workexecution.ActionRemove || len(finished.Items) == 0 {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "removal completion requires settled removal work")
 	}
+	if ids.Validate(ids.KindNetwork, finished.Task.Task.TargetID) == nil {
+		return owner.networks.PrepareFinish(ctx, finished, at)
+	}
 	switch finished.Items[0].Item.Operation {
 	case workexecution.Volume:
 		return owner.volumes.PrepareFinish(ctx, finished, at)
-	case workexecution.Network:
-		return owner.networks.PrepareFinish(ctx, finished, at)
 	case workexecution.Image:
 		return (workdispatch.CheckImageCompletion{}).PrepareFinish(ctx, finished, at)
 	case workexecution.Hierarchy, workexecution.RemovalBackupObject:

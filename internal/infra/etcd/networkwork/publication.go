@@ -20,6 +20,27 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, task 
 	item workexecution.Item, input *agentpb.NetworkWorkInput, marker idempotency.IdempotencyMarker,
 	admission []keyvalue.Condition, desiredRevision string,
 ) (workqueue.Change, error) {
+	if len(item.Dependencies) != 0 {
+		return workqueue.Change{}, conflict("direct Zone removal cannot contain consumer dependencies")
+	}
+	change, err := workqueue.PrepareSingleTask(task, item, marker)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	captured, err := repository.prepareRemovalInput(ctx, task, item, input, marker, admission, desiredRevision)
+	if err != nil {
+		keyvalue.ZeroMutationBytes(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, captured.Conditions...)
+	change.Mutations = append(change.Mutations, captured.Mutations...)
+	return change, nil
+}
+
+func (repository *InputRepository) prepareRemovalInput(ctx context.Context, task workexecution.Task,
+	item workexecution.Item, input *agentpb.NetworkWorkInput, marker idempotency.IdempotencyMarker,
+	admission []keyvalue.Condition, desiredRevision string,
+) (workqueue.Change, error) {
 	if err := executionplan.ValidateNetworkWorkInput(input); err != nil {
 		return workqueue.Change{}, err
 	}
@@ -28,7 +49,7 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, task 
 		item.Placement.Executor != workexecution.Agent || item.TargetID != input.NetworkId ||
 		task.TargetID != input.NetworkId || task.Scope.EnvironmentID != input.EnvironmentId ||
 		task.Intent.SHA256 != hex.EncodeToString(input.IntentSha256) ||
-		marker.Intent.CiphertextDigest != task.Intent.SHA256 || len(item.Dependencies) != 0 || input.RemovalSubnet == "" {
+		marker.Intent.CiphertextDigest != task.Intent.SHA256 || input.RemovalSubnet == "" {
 		return workqueue.Change{}, conflict("Zone publication differs from its captured removal")
 	}
 	want := []workexecution.Claim{{ScopeID: input.EnvironmentId},
@@ -46,10 +67,7 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, task 
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
+	change := workqueue.Change{}
 	_, raw, expected, err := executionplan.CaptureNetworkWorkInput(item.Input.ID, input)
 	clear(raw)
 	if err != nil || expected != *item.Input {

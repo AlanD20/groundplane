@@ -279,8 +279,12 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	removalPublication, err := workdispatch.NewRemovalPublication(hierarchyPublication, networkAgent)
+	if err != nil {
+		return nil, err
+	}
 	publications, err := workdispatch.NewPublications(queue, []workdispatch.PublicationRegistration{
-		{Action: workexecution.ActionRemove, Owner: hierarchyPublication},
+		{Action: workexecution.ActionRemove, Owner: removalPublication},
 		{Action: workexecution.ActionApply, Owner: blueprintPublication},
 	})
 	if err != nil {
