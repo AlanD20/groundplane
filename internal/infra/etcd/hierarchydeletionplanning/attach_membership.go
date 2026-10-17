@@ -28,12 +28,7 @@ func (repository *Planner) freezeEnvironmentAttachMembership(ctx context.Context
 		}
 	}()
 	for _, target := range targets {
-		input, err := attachremoval.ReadCaptured(
-			ctx,
-			repository.store,
-			operation.SnapshotRevision,
-			target.id,
-		)
+		input, err := repository.captureAttachInput(ctx, operation, target.id, target.revision)
 		if err != nil {
 			return nil, err
 		}
@@ -96,9 +91,6 @@ func (repository *Planner) freezeEnvironmentAttachMembership(ctx context.Context
 	nodes := make([]HierarchyDeletionMembershipNode, 0, len(targets)*2)
 	for _, target := range targets {
 		input := inputs[target.id]
-		if err := repository.persistAttachInput(ctx, operation, input); err != nil {
-			return nil, err
-		}
 		required := append(append([]string(nil), prerequisites...), dependencies[target.id]...)
 		slices.Sort(required)
 		required = slices.Compact(required)
