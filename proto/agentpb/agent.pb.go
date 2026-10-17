@@ -18797,18 +18797,20 @@ func (x *ComponentRestorationCompensate) GetCandidateArtifactId() string {
 }
 
 // A Network item owns one managed bridge. Ensure captures only that bridge's
-// definition. Remove has no Compose artifact and refuses attached endpoints;
-// consumer changes belong to separately ordered resource work.
+// definition. Remove has no Compose artifact. Direct Zone removal may capture
+// same-Environment Services whose endpoints can be disconnected without Deploy.
+// Other consumers require separately ordered resource work.
 type NetworkWorkInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Action        NetworkWorkAction      `protobuf:"varint,1,opt,name=action,proto3,enum=groundplane.agent.v1.NetworkWorkAction" json:"action,omitempty"`
-	EnvironmentId string                 `protobuf:"bytes,2,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
-	NetworkId     string                 `protobuf:"bytes,3,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
-	DockerName    string                 `protobuf:"bytes,4,opt,name=docker_name,json=dockerName,proto3" json:"docker_name,omitempty"`
-	IntentSha256  []byte                 `protobuf:"bytes,5,opt,name=intent_sha256,json=intentSha256,proto3" json:"intent_sha256,omitempty"`
-	Candidate     *ComposeArtifact       `protobuf:"bytes,6,opt,name=candidate,proto3" json:"candidate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Action               NetworkWorkAction      `protobuf:"varint,1,opt,name=action,proto3,enum=groundplane.agent.v1.NetworkWorkAction" json:"action,omitempty"`
+	EnvironmentId        string                 `protobuf:"bytes,2,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	NetworkId            string                 `protobuf:"bytes,3,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+	DockerName           string                 `protobuf:"bytes,4,opt,name=docker_name,json=dockerName,proto3" json:"docker_name,omitempty"`
+	IntentSha256         []byte                 `protobuf:"bytes,5,opt,name=intent_sha256,json=intentSha256,proto3" json:"intent_sha256,omitempty"`
+	Candidate            *ComposeArtifact       `protobuf:"bytes,6,opt,name=candidate,proto3" json:"candidate,omitempty"`
+	DisconnectServiceIds []string               `protobuf:"bytes,7,rep,name=disconnect_service_ids,json=disconnectServiceIds,proto3" json:"disconnect_service_ids,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *NetworkWorkInput) Reset() {
@@ -18879,6 +18881,13 @@ func (x *NetworkWorkInput) GetIntentSha256() []byte {
 func (x *NetworkWorkInput) GetCandidate() *ComposeArtifact {
 	if x != nil {
 		return x.Candidate
+	}
+	return nil
+}
+
+func (x *NetworkWorkInput) GetDisconnectServiceIds() []string {
+	if x != nil {
+		return x.DisconnectServiceIds
 	}
 	return nil
 }
@@ -43201,7 +43210,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x15candidate_artifact_id\x18\x02 \x01(\tR\x13candidateArtifactId\"w\n" +
 	"\x1eComponentRestorationCompensate\x12!\n" +
 	"\fcomponent_id\x18\x01 \x01(\tR\vcomponentId\x122\n" +
-	"\x15candidate_artifact_id\x18\x02 \x01(\tR\x13candidateArtifactId\"\xa4\x02\n" +
+	"\x15candidate_artifact_id\x18\x02 \x01(\tR\x13candidateArtifactId\"\xda\x02\n" +
 	"\x10NetworkWorkInput\x12?\n" +
 	"\x06action\x18\x01 \x01(\x0e2'.groundplane.agent.v1.NetworkWorkActionR\x06action\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1d\n" +
@@ -43210,7 +43219,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\vdocker_name\x18\x04 \x01(\tR\n" +
 	"dockerName\x12#\n" +
 	"\rintent_sha256\x18\x05 \x01(\fR\fintentSha256\x12C\n" +
-	"\tcandidate\x18\x06 \x01(\v2%.groundplane.agent.v1.ComposeArtifactR\tcandidate\"\xf0\x01\n" +
+	"\tcandidate\x18\x06 \x01(\v2%.groundplane.agent.v1.ComposeArtifactR\tcandidate\x124\n" +
+	"\x16disconnect_service_ids\x18\a \x03(\tR\x14disconnectServiceIds\"\xf0\x01\n" +
 	"\x15NetworkWorkAssignment\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12<\n" +
 	"\x05input\x18\x02 \x01(\v2&.groundplane.agent.v1.NetworkWorkInputR\x05input\x12'\n" +

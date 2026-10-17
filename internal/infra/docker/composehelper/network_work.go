@@ -47,9 +47,11 @@ func ExecuteNetworkWork(ctx context.Context, taskRunner runner.Runner, request *
 			_, err = executeManagedNetworkEnsure(bounded, taskRunner, uint32(remaining), input.Procedure.Candidate,
 				&agentpb.ManagedNetworkEnsure{ArtifactId: input.Procedure.Candidate.ArtifactId, NetworkId: input.Procedure.NetworkId})
 		case networkexecution.RemoveNetwork:
-			// Docker refuses a bridge with attached endpoints. Never force-detach
-			// arbitrary containers or resolve the name again after ownership checks.
-			_, err = runNetworkWork(bounded, taskRunner, "network", "rm", dockerID)
+			// Use the inspected immutable Docker ID, never resolve the name again.
+			err = disconnectNetworkConsumers(bounded, taskRunner, input.Procedure, dockerID)
+			if err == nil {
+				_, err = runNetworkWork(bounded, taskRunner, "network", "rm", dockerID)
+			}
 		default:
 			return nil, errs.New(errs.KindValidationFailed, "Network work stage is unsupported")
 		}

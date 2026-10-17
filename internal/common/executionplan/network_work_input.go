@@ -3,6 +3,7 @@ package executionplan
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
@@ -13,8 +14,8 @@ import (
 )
 
 // Network work never runs Compose against an Environment-wide artifact. Its
-// only host effect is ensuring or removing one owned bridge; endpoint removal
-// must already have completed through the consumer's own operation.
+// host effects are limited to one owned bridge and explicitly captured consumer
+// endpoints. Blueprint removals order consumer changes through their own work.
 func ValidateNetworkWorkInput(input *agentpb.NetworkWorkInput) error {
 	if input == nil || proto.Size(input) > MaximumPlanBytes ||
 		ids.Validate(ids.KindEnvironment, input.EnvironmentId) != nil || len(input.IntentSha256) != sha256.Size {
@@ -29,6 +30,9 @@ func ValidateNetworkWorkInput(input *agentpb.NetworkWorkInput) error {
 	}
 	switch input.Action {
 	case agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_ENSURE:
+		if len(input.DisconnectServiceIds) != 0 {
+			return invalidNetworkWork()
+		}
 		artifact := input.Candidate
 		if err := validateArtifactContent(artifact); err != nil {
 			return err
@@ -41,8 +45,15 @@ func ValidateNetworkWorkInput(input *agentpb.NetworkWorkInput) error {
 		}
 		return validateNetworks(nil, artifact)
 	case agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE:
-		if input.Candidate != nil {
+		if input.Candidate != nil || len(input.DisconnectServiceIds) > 4096 ||
+			!slices.IsSorted(input.DisconnectServiceIds) {
 			return invalidNetworkWork()
+		}
+		for index, serviceID := range input.DisconnectServiceIds {
+			if ids.Validate(ids.KindService, serviceID) != nil ||
+				index > 0 && input.DisconnectServiceIds[index-1] == serviceID {
+				return invalidNetworkWork()
+			}
 		}
 		return nil
 	default:

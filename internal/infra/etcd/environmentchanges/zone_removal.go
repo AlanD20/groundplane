@@ -5,11 +5,8 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
-	"slices"
-	"sort"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -219,72 +216,7 @@ func ValidateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 	if intent.Authored != nil {
 		source = intent.AppliedProjection
 	}
-	expected := projectionrecord.CloneEnvironmentComposeProjection(source)
-	expected.RevisionID = intent.CandidateProjection.RevisionID
-	expected.RenderGeneration = intent.CandidateProjection.RenderGeneration
-	expected.ComposeArtifact = append([]byte(nil), intent.CandidateProjection.ComposeArtifact...)
-	expected.NormalizedCompose = append([]byte(nil), intent.CandidateProjection.NormalizedCompose...)
-	expected.DesiredZones = nil
-	foundZone := false
-	for _, zone := range source.DesiredZones {
-		if zone.Desired.ID == intent.ZoneID && zone.Desired.Name == intent.ZoneName {
-			if foundZone {
-				return CorruptZoneRemovalIntent()
-			}
-			foundZone = true
-			continue
-		}
-		expected.DesiredZones = append(expected.DesiredZones, zone)
-	}
-	expected.DesiredServices = append(
-		[]servicerecord.EnvironmentServiceProjection(nil),
-		source.DesiredServices...)
-	affected := make([]string, 0)
-	for index, service := range source.DesiredServices {
-		expected.DesiredServices[index] = service
-		expected.DesiredServices[index].Desired.Zones = nil
-		removed := false
-		for _, name := range service.Desired.Zones {
-			if name == intent.ZoneName {
-				removed = true
-				continue
-			}
-			expected.DesiredServices[index].Desired.Zones = append(expected.DesiredServices[index].Desired.Zones, name)
-		}
-		if removed {
-			affected = append(affected, service.Desired.ID)
-		}
-	}
-	sort.Strings(affected)
-	if !foundZone || !sort.StringsAreSorted(intent.AffectedServiceIDs) ||
-		!slices.Equal(affected, intent.AffectedServiceIDs) {
-		return errs.New(errs.KindValidationFailed, "Zone removal candidate projection changed")
-	}
-	if !sameZoneRemovalProjection(expected, intent.CandidateProjection) {
-		return zoneRemovalProjectionChanged(expected, intent.CandidateProjection)
-	}
-	return nil
-}
-
-func zoneRemovalProjectionChanged(expected, candidate projectionrecord.EnvironmentComposeProjection) error {
-	switch {
-	case expected.EnvironmentID != candidate.EnvironmentID || expected.RevisionID != candidate.RevisionID ||
-		expected.RenderGeneration != candidate.RenderGeneration:
-		return errs.New(errs.KindValidationFailed, "Zone removal candidate projection identity changed")
-	case !SameServiceRemovalBytes(expected.ComposeArtifact, candidate.ComposeArtifact) ||
-		!SameServiceRemovalBytes(expected.NormalizedCompose, candidate.NormalizedCompose):
-		return errs.New(errs.KindValidationFailed, "Zone removal candidate projection artifact changed")
-	case !SameServiceRemovalDesiredZones(expected.DesiredZones, candidate.DesiredZones):
-		return errs.New(errs.KindValidationFailed, "Zone removal candidate desired Zones changed")
-	case !SameServiceRemovalDesiredServices(expected.DesiredServices, candidate.DesiredServices):
-		return errs.New(errs.KindValidationFailed, "Zone removal candidate desired Services changed")
-	default:
-		return errs.New(errs.KindValidationFailed, "Zone removal candidate projection dependencies changed")
-	}
-}
-
-func sameZoneRemovalProjection(left, right projectionrecord.EnvironmentComposeProjection) bool {
-	return SameServiceRemovalProjection(left, right)
+	return ValidateZoneRemovalCandidate(source, intent.CandidateProjection, intent.ZoneID, intent.ZoneName, intent.AffectedServiceIDs)
 }
 
 func EncodeZoneRemovalIntent(intent ZoneRemovalIntent) ([]byte, error) {

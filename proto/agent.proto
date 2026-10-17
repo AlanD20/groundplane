@@ -1864,8 +1864,9 @@ enum PlanOperation {
 }
 
 // A Network item owns one managed bridge. Ensure captures only that bridge's
-// definition. Remove has no Compose artifact and refuses attached endpoints;
-// consumer changes belong to separately ordered resource work.
+// definition. Remove has no Compose artifact. Direct Zone removal may capture
+// same-Environment Services whose endpoints can be disconnected without Deploy.
+// Other consumers require separately ordered resource work.
 message NetworkWorkInput {
   NetworkWorkAction action = 1;
   string environment_id = 2;
@@ -1873,6 +1874,7 @@ message NetworkWorkInput {
   string docker_name = 4;
   bytes intent_sha256 = 5;
   ComposeArtifact candidate = 6;
+  repeated string disconnect_service_ids = 7;
 }
 
 enum NetworkWorkAction {
