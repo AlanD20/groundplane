@@ -356,7 +356,11 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	attachExecutor, err := hierarchyruntime.NewAttachExecutor(workJournal, attachHost)
+	attachRuntime, err := hierarchyruntime.NewAttachRuntimeHost(attachHost, workJournal, resources.helper, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	attachExecutor, err := hierarchyruntime.NewAttachExecutor(workJournal, attachRuntime)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}

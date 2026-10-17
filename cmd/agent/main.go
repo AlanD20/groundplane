@@ -15,6 +15,27 @@ import (
 func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
+	if len(os.Args) == 2 && os.Args[1] == app.AttachConsumerHelperArgument {
+		if err := app.RunAttachConsumerHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Detach consumer helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.NetworkWorkHelperArgument {
+		if err := app.RunNetworkWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Network helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.VolumeWorkHelperArgument {
+		if err := app.RunVolumeWorkHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Volume helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == app.EdgeConnectionCheckHelperArgument {
 		if err := app.RunEdgeConnectionCheckHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent edge connection helper:", err)
@@ -25,6 +46,27 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == app.BackingAccessHelperArgument {
 		if err := app.RunBackingAccessHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent Backing access helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.EnvironmentRemovalHelperArgument {
+		if err := app.RunEnvironmentRemovalHelper(ctx, os.Stdin, os.Stdout, os.Getenv(app.EnvironmentVolumeRootEnv)); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Environment removal helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.ReleaseHelperArgument {
+		if err := app.RunReleaseHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Release helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.RecoveryHelperArgument {
+		if err := app.RunRecoveryHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Release recovery helper:", err)
 			os.Exit(1)
 		}
 		return

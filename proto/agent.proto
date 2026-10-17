@@ -118,6 +118,7 @@ message AttachRemovalInput {
   string project_id = 5;
   string environment_id = 6;
   string service_id = 7;
+  AttachConsumerTransition consumer = 8;
   oneof cleanup {
     AttachCredentialRemoval credential = 10;
     BackingHookProcedure custom_detach = 11;
@@ -133,6 +134,25 @@ message AttachConsumerTransition {
   string network_id = 4;
   ComposeArtifact baseline = 5;
   ComposeArtifact candidate = 6;
+}
+
+message AttachConsumerHelperRequest {
+  WorkAttemptIdentity attempt = 1;
+  AttachConsumerTransition consumer = 2;
+  bytes authority = 3; // canonical non-secret command authority
+  WorkStartAck start = 4;
+  bytes report = 5;
+  AttachRemovalCheckpointAck acknowledgement = 6;
+  bool inspect_only = 7;
+}
+
+message AttachConsumerHelperResponse {
+  string service_id = 1;
+  string network_id = 2;
+  WorkInputReference input = 3;
+  bool detached = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  bool inspection = 6;
 }
 
 message AttachCredentialRemoval {
