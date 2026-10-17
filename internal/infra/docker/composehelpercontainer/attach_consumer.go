@@ -31,6 +31,14 @@ func (executor *Executor) ExecuteAttachConsumer(ctx context.Context, request *ag
 	name := "gp-attach-consumer-" + input.Attempt.ID
 	labels := releaseHelperLabels(input.Attempt)
 	labels["io.groundplane.role"] = "attach-consumer"
+	if input.Forward != nil {
+		forward := *input.Forward
+		priorLabels := releaseHelperLabels(forward)
+		priorLabels["io.groundplane.role"] = "attach-consumer"
+		if err := executor.stopNamedHelper(bounded, "gp-attach-consumer-"+forward.ID, priorLabels); err != nil {
+			return nil, err
+		}
+	}
 	if input.InspectOnly {
 		if err := executor.stopNamedHelper(bounded, name, labels); err != nil {
 			return nil, err

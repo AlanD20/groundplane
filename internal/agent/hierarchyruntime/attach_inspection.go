@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // InspectRemoval never invokes an adapter or hook, changes a container, or
@@ -20,12 +21,8 @@ func (host *BackingHost) InspectRemoval(ctx context.Context, input attachexecuti
 		AttemptID: input.Attempt.ID, ForwardID: input.Source.Forward.ID, Failure: input.Source.Evidence,
 		CommandOrdinal: uint32(input.Source.Failure.Checkpoint.Sequence / 2), State: attachexecution.CommandJournalLost,
 	}
-	if authority := input.Source.Failure.Authority; authority.HasConsumer && authority.ConsumerOrdinal == report.CommandOrdinal {
-		// Docker network changes are not backing-container exec commands.
-		// The consumer owner must stop its exact helper and inspect its files
-		// and endpoints; an empty exec journal cannot prove no effect.
-		report.State, report.ObservedAt = attachexecution.ConsumerUnobservable, time.Now().UTC()
-		return report, report.Validate(input)
+	if input.RequiresConsumer() {
+		return report, errs.New(errs.KindInternal, "consumer inspection must use the Attach runtime host")
 	}
 	saved, err := host.journal.AttachRecoverySource(ctx, input.Attempt, input.Source)
 	if err != nil {

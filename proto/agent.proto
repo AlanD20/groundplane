@@ -94,6 +94,7 @@ message AttachRemovalAssignment {
 message AttachRecoveryAssignment {
   WorkAttemptIdentity attempt = 1;
   bytes recovery = 2;
+  AttachConsumerTransition consumer = 3; // only for an interrupted consumer transition
 }
 
 message AttachRecoveryCompletionRequest {
@@ -144,6 +145,7 @@ message AttachConsumerHelperRequest {
   bytes report = 5;
   AttachRemovalCheckpointAck acknowledgement = 6;
   bool inspect_only = 7;
+  bytes recovery = 8; // captured forward failure; inspection-only recovery variant
 }
 
 message AttachConsumerHelperResponse {

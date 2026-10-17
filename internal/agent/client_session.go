@@ -240,7 +240,9 @@ func (c *Client) runSession(
 				continue
 			}
 			if assignment := result.message.GetAttachRecoveryAssignment(); assignment != nil {
-				if err := releases.submitAttachRecovery(assignment, c.availableWorkCapacity()); err != nil {
+				err := releases.submitAttachRecovery(assignment, c.availableWorkCapacity())
+				attachexecution.ClearRecoveryAssignment(assignment)
+				if err != nil {
 					return false, err
 				}
 				receiveNext(streamCtx, stream, received)

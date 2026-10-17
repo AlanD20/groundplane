@@ -21,6 +21,7 @@ type ConsumerHelperInput struct {
 	Consumer    *agentpb.AttachConsumerTransition
 	Progress    RemovalProgress
 	InspectOnly bool
+	Forward     *workexecution.Attempt
 }
 
 func EncodeConsumerHelperRequest(input RemovalInput, progress RemovalProgress, inspectOnly bool) (*agentpb.AttachConsumerHelperRequest, error) {
@@ -62,6 +63,9 @@ func EncodeConsumerHelperRequest(input RemovalInput, progress RemovalProgress, i
 // OpenConsumerHelperRequest verifies the start grant and exact acknowledged
 // command. It needs no adapter credentials or hook plaintext.
 func OpenConsumerHelperRequest(ctx context.Context, request *agentpb.AttachConsumerHelperRequest) (ConsumerHelperInput, error) {
+	if request != nil && len(request.Recovery) != 0 {
+		return openConsumerRecoveryHelper(ctx, request)
+	}
 	if request == nil || request.Attempt == nil || proto.Size(request) > executionplan.MaximumPlanBytes ||
 		executionplan.RejectUnknown(request) != nil || len(request.Authority) == 0 || len(request.Authority) > 4096 ||
 		request.Acknowledgement == nil {
@@ -94,19 +98,8 @@ func OpenConsumerHelperRequest(ctx context.Context, request *agentpb.AttachConsu
 	if err != nil || !bytes.Equal(canonical, request.Authority) {
 		return ConsumerHelperInput{}, invalid("consumer authority is not canonical")
 	}
-	if err := executionplan.ValidateAttachConsumerTransition(ctx, request.Consumer); err != nil {
+	if err := validateConsumerAuthority(ctx, authority, request.Consumer); err != nil {
 		return ConsumerHelperInput{}, err
-	}
-	raw, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request.Consumer)
-	if err != nil {
-		return ConsumerHelperInput{}, invalid("consumer input cannot be encoded")
-	}
-	digest := sha256.Sum256(raw)
-	clear(raw)
-	if authority.ConsumerSHA256 != hex.EncodeToString(digest[:]) ||
-		authority.ConsumerNetworkID != request.Consumer.NetworkId || authority.ConsumerServiceID != request.Consumer.ServiceId ||
-		authority.ConsumerCandidateSHA256 != hex.EncodeToString(request.Consumer.Candidate.YamlSha256) {
-		return ConsumerHelperInput{}, invalid("consumer input differs from captured command authority")
 	}
 	report, err := DecodeRemovalReportAuthority(attempt, authority, request.Report)
 	if err != nil {
@@ -122,6 +115,24 @@ func OpenConsumerHelperRequest(ctx context.Context, request *agentpb.AttachConsu
 	}
 	return ConsumerHelperInput{Attempt: attempt, Authority: authority, Consumer: proto.CloneOf(request.Consumer),
 		Progress: report.Progress, InspectOnly: request.InspectOnly}, nil
+}
+
+func validateConsumerAuthority(ctx context.Context, authority RemovalAuthority, consumer *agentpb.AttachConsumerTransition) error {
+	if err := executionplan.ValidateAttachConsumerTransition(ctx, consumer); err != nil {
+		return err
+	}
+	raw, err := (proto.MarshalOptions{Deterministic: true}).Marshal(consumer)
+	if err != nil {
+		return invalid("consumer input cannot be encoded")
+	}
+	digest := sha256.Sum256(raw)
+	clear(raw)
+	if !authority.HasConsumer || authority.ConsumerSHA256 != hex.EncodeToString(digest[:]) ||
+		authority.ConsumerNetworkID != consumer.NetworkId || authority.ConsumerServiceID != consumer.ServiceId ||
+		authority.ConsumerCandidateSHA256 != hex.EncodeToString(consumer.Candidate.YamlSha256) {
+		return invalid("consumer input differs from captured command authority")
+	}
+	return nil
 }
 
 func ValidateConsumerHelperResponse(input ConsumerHelperInput, response *agentpb.AttachConsumerHelperResponse) error {

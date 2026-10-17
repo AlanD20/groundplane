@@ -22,7 +22,7 @@ const (
 	CommandUnobservable   InspectionState = "unobservable"
 	CommandJournalLost    InspectionState = "journal_unavailable"
 	InspectionInterrupted InspectionState = "inspection_interrupted"
-	ConsumerUnobservable  InspectionState = "consumer_unobservable"
+	ConsumerInspected     InspectionState = "consumer_inspected"
 )
 
 // RemovalInspection accounts for execution, not rollback of command effects.
@@ -40,6 +40,18 @@ type RemovalInspection struct {
 	ExecID           string              `json:"exec_id,omitempty"`
 	ExitCode         *int                `json:"exit_code,omitempty"`
 	ObservedAt       time.Time           `json:"observed_at"`
+	Consumer         *ConsumerInspection `json:"consumer,omitempty"`
+}
+
+// ConsumerInspection reports endpoint state after the captured forward helper
+// has stopped. CandidateSHA256 identifies retained intent; Detached distinguishes
+// completed and incomplete network effects.
+type ConsumerInspection struct {
+	NetworkID       string `json:"network_id"`
+	ServiceID       string `json:"service_id"`
+	CandidateSHA256 string `json:"candidate_sha256"`
+	HelperStopped   bool   `json:"helper_stopped"`
+	Detached        bool   `json:"detached"`
 }
 
 func (report RemovalInspection) Validate(input RecoveryInput) error {
@@ -50,14 +62,22 @@ func (report RemovalInspection) Validate(input RecoveryInput) error {
 		input.Attempt.StartedAt != nil && report.ObservedAt.Before(*input.Attempt.StartedAt) {
 		return invalid("Attach inspection does not match its captured command")
 	}
+	if input.RequiresConsumer() && report.State != ConsumerInspected &&
+		report.State != InspectionInterrupted && report.State != CommandJournalLost {
+		return invalid("consumer recovery requires endpoint inspection, not backing exec evidence")
+	}
 	switch report.State {
-	case CommandNotCreated, CommandJournalLost, InspectionInterrupted, ConsumerUnobservable:
+	case ConsumerInspected:
+		authority := input.Source.Failure.Authority
+		if !input.RequiresConsumer() || report.Consumer == nil || !report.Consumer.HelperStopped ||
+			report.Consumer.NetworkID != authority.ConsumerNetworkID || report.Consumer.ServiceID != authority.ConsumerServiceID ||
+			report.Consumer.CandidateSHA256 != authority.ConsumerCandidateSHA256 ||
+			report.PreparedCommands != 0 || report.ContainerID != "" || report.ExecID != "" || report.ExitCode != nil {
+			return invalid("Detach consumer inspection does not prove its captured helper and endpoint state")
+		}
+	case CommandNotCreated, CommandJournalLost, InspectionInterrupted:
 		if report.PreparedCommands != 0 || report.ContainerID != "" || report.ExecID != "" || report.ExitCode != nil {
 			return invalid("Attach inspection claims a process without its journal")
-		}
-		if report.State == ConsumerUnobservable && (!input.Source.Failure.Authority.HasConsumer ||
-			input.Source.Failure.Authority.ConsumerOrdinal != report.CommandOrdinal) {
-			return invalid("consumer inspection does not identify the interrupted network transition")
 		}
 	case CommandNotPermitted, CommandExited, CommandRunning, CommandUnobservable:
 		if report.PreparedCommands == 0 || len(report.ContainerID) != 64 || len(report.ExecID) != 64 ||
@@ -68,11 +88,15 @@ func (report RemovalInspection) Validate(input RecoveryInput) error {
 	default:
 		return invalid("Attach inspection state is unsupported")
 	}
+	if report.State != ConsumerInspected && report.Consumer != nil {
+		return invalid("non-consumer inspection contains consumer evidence")
+	}
 	return nil
 }
 
 func (report RemovalInspection) ExecutionStopped() bool {
-	return report.State == CommandNotCreated || report.State == CommandNotPermitted || report.State == CommandExited
+	return report.State == CommandNotCreated || report.State == CommandNotPermitted || report.State == CommandExited ||
+		report.State == ConsumerInspected && report.Consumer != nil && report.Consumer.HelperStopped
 }
 
 func EncodeRemovalInspection(input RecoveryInput, report RemovalInspection) ([]byte, workexecution.Input, error) {

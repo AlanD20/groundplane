@@ -151,6 +151,7 @@ func (delivery *AgentDeliveries) Dispatch(ctx context.Context, authorization age
 		sent, err := send(message)
 		workexecution.ClearScriptAssignment(message.GetScriptWorkAssignment())
 		attachexecution.ClearRemoval(message.GetAttachRemovalAssignment().GetRemoval())
+		attachexecution.ClearRecoveryAssignment(message.GetAttachRecoveryAssignment())
 		if err != nil {
 			return issues, err
 		}

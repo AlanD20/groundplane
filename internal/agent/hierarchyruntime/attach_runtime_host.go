@@ -101,5 +101,41 @@ func (host *AttachRuntimeHost) ExecuteRemovalCommand(ctx context.Context, input 
 }
 
 func (host *AttachRuntimeHost) InspectRemoval(ctx context.Context, input attachexecution.RecoveryInput) (attachexecution.RemovalInspection, error) {
+	if input.RequiresConsumer() {
+		return host.inspectConsumerRecovery(ctx, input)
+	}
 	return host.backing.InspectRemoval(ctx, input)
+}
+
+func (host *AttachRuntimeHost) inspectConsumerRecovery(ctx context.Context, input attachexecution.RecoveryInput) (attachexecution.RemovalInspection, error) {
+	if err := input.Validate(); err != nil {
+		return attachexecution.RemovalInspection{}, err
+	}
+	if err := host.ownership.Check(); err != nil {
+		return attachexecution.RemovalInspection{}, err
+	}
+	request, err := attachexecution.EncodeConsumerRecoveryHelperRequest(input)
+	if err != nil {
+		return attachexecution.RemovalInspection{}, err
+	}
+	captured, err := attachexecution.OpenConsumerHelperRequest(ctx, request)
+	if err != nil {
+		return attachexecution.RemovalInspection{}, err
+	}
+	response, err := host.helper.ExecuteAttachConsumer(ctx, request)
+	if err != nil {
+		return attachexecution.RemovalInspection{}, err
+	}
+	if err := attachexecution.ValidateConsumerHelperResponse(captured, response); err != nil {
+		return attachexecution.RemovalInspection{}, err
+	}
+	if err := host.ownership.Check(); err != nil {
+		return attachexecution.RemovalInspection{}, err
+	}
+	report := attachexecution.RemovalInspection{AttemptID: input.Attempt.ID, ForwardID: input.Source.Forward.ID,
+		Failure: input.Source.Evidence, CommandOrdinal: input.Source.Failure.Authority.ConsumerOrdinal,
+		State: attachexecution.ConsumerInspected, ObservedAt: response.ObservedAt.AsTime(),
+		Consumer: &attachexecution.ConsumerInspection{NetworkID: response.NetworkId, ServiceID: response.ServiceId,
+			CandidateSHA256: input.Source.Failure.Authority.ConsumerCandidateSHA256, HelperStopped: true, Detached: response.Detached}}
+	return report, report.Validate(input)
 }

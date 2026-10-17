@@ -187,6 +187,9 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	if active.attachRecovery == nil && output.attachRecovery != nil {
 		return errs.New(errs.KindStateConflict, "Attach recovery result belongs to another operation")
 	}
+	if active.attachRecovery != nil {
+		defer attachexecution.ClearRecoveryAssignment(active.attachRecovery)
+	}
 	if active.attachRecovery != nil && output.err == nil {
 		if output.attachRecovery == nil || output.attachRecovery.FinishedAt == nil || output.attachRecovery.Result == nil ||
 			!workexecution.SameAssignment(*output.attachRecovery, output.attempt) || output.attach != nil || output.attachFailure != nil ||
@@ -279,5 +282,6 @@ func (workers *executionWorkers) close() {
 	defer workers.mu.Unlock()
 	for _, active := range workers.active {
 		attachexecution.ClearRemoval(active.attach.GetRemoval())
+		attachexecution.ClearRecoveryAssignment(active.attachRecovery)
 	}
 }
