@@ -14,6 +14,524 @@ option go_package = "github.com/AlanD20/groundplane/proto/agentpb";
 
 import "google/protobuf/timestamp.proto";
 
+// Native work identity is shared by typed operation delivery, checkpoint and
+// start/finish messages. Reconnection resends this identity; it never allocates
+// an attempt or extends its deadline. Agent identity is checked against the
+// authenticated connection, not trusted merely because it appears in a message.
+message WorkInputReference {
+  string input_id = 1;
+  bytes sha256 = 2;
+}
+
+// Sent once after initial configuration on the authenticated Agent stream.
+// Process generation binds this registration to this Agent process, while
+// host identity stays stable across process restarts.
+message WorkExecutorRegistration {
+  string host_id = 1;
+  string agent_id = 2;
+  uint64 executor_generation = 3;
+  bytes process_generation = 4;
+}
+
+enum WorkDirection {
+  WORK_DIRECTION_UNSPECIFIED = 0;
+  WORK_DIRECTION_FORWARD = 1;
+  WORK_DIRECTION_RECOVERY = 2;
+}
+
+message WorkAttemptIdentity {
+  string task_id = 1;
+  string work_item_id = 2;
+  string attempt_id = 3;
+  uint64 attempt_number = 4;
+  string host_id = 5;
+  string agent_id = 6;
+  uint64 executor_generation = 7;
+  WorkDirection direction = 8;
+  WorkInputReference input = 9;
+  google.protobuf.Timestamp assigned_at = 10;
+  google.protobuf.Timestamp deadline = 11;
+}
+
+message WorkStartRequest {
+  WorkAttemptIdentity attempt = 1;
+}
+
+message WorkStartAck {
+  WorkAttemptIdentity attempt = 1;
+  google.protobuf.Timestamp started_at = 2;
+  // A saved start receipt requires operation-specific reconciliation. It is
+  // never permission to repeat the first effect after a reconnect/lost ack.
+  bool reconcile = 3;
+  // Highest durable operation/hook checkpoint at this Start read. A saved
+  // Start without checkpoints cannot have granted a Release host effect.
+  uint64 checkpoint_sequence = 4;
+}
+
+// Captured Environment cleanup under one hierarchy-removal work item. No child
+// Task or generic step list is delivered. Start/checkpoints grant host effects.
+message EnvironmentRemovalAssignment {
+  WorkAttemptIdentity attempt = 1;
+  EnvironmentRemovalInput removal = 2;
+  bytes recovery = 3; // canonical captured forward failure; required only for Recovery
+}
+
+message EnvironmentRemovalInput {
+  WorkInputReference captured_source = 1;
+  string environment_id = 2;
+  string expected_volume_dir = 3;
+  ComposeArtifact compose = 4; // absent when no Compose runtime was captured
+}
+
+// Native Attach credential cleanup. Values are transient authenticated delivery;
+// operation storage retains encrypted facts and captured source references.
+message AttachRemovalAssignment {
+  WorkAttemptIdentity attempt = 1;
+  AttachRemovalInput removal = 2;
+}
+
+// Inspection only: no credential or hook input is delivered for recovery.
+message AttachRecoveryAssignment {
+  WorkAttemptIdentity attempt = 1;
+  bytes recovery = 2;
+}
+
+message AttachRecoveryCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+  WorkInputReference evidence = 3;
+}
+
+message AttachRecoveryCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  string outcome = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  google.protobuf.Timestamp started_at = 5;
+}
+
+message AttachRemovalInput {
+  WorkInputReference captured_source = 1;
+  string attach_id = 2;
+  string backing_service_id = 3;
+  string tenant_id = 4;
+  string project_id = 5;
+  string environment_id = 6;
+  string service_id = 7;
+  oneof cleanup {
+    AttachCredentialRemoval credential = 10;
+    BackingHookProcedure custom_detach = 11;
+  }
+}
+
+message AttachCredentialRemoval {
+  string adapter_key = 1;
+  BackingAuthentication authentication = 2;
+  string role = 3;
+  bytes password = 4; // only password-only authentication needs it for Detach
+  string database = 5;
+  repeated AttachGrantRemoval grants = 6;
+}
+
+message AttachGrantRemoval {
+  string attach_id = 1;
+  string database = 2;
+}
+
+message AttachRemovalCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message AttachRemovalCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message AttachRemovalCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+}
+
+message AttachRemovalCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
+message AttachRemovalFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message AttachRemovalFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+// Canonical bounded removal progress, validated against captured host input.
+// The acknowledgement echoes the exact report committed with its cursor.
+message EnvironmentRemovalCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message EnvironmentRemovalCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message EnvironmentRemovalCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+}
+
+message EnvironmentRemovalCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
+message EnvironmentRemovalFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message EnvironmentRemovalFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+// Local trusted-parent helper envelope. Agent channel authentication supplies
+// the assignment; matching Start/report/ack authorize the captured boundary.
+message EnvironmentRemovalHelperRequest {
+  EnvironmentRemovalAssignment assignment = 1;
+  WorkStartAck start = 2;
+  EnvironmentRemovalCheckpointRequest report = 3;
+  EnvironmentRemovalCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message EnvironmentRemovalHelperResponse {
+  string environment_id = 1;
+  WorkInputReference captured_source = 2;
+  bool runtime_absent = 3;
+  bool directory_absent = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  bool inspection = 6;
+}
+
+// Typed Release input. Delivery is not a grant to execute; WorkStartAck and
+// operation checkpoints govern effects. No generic plan or numbered steps.
+message ReleaseWorkAssignment {
+  WorkAttemptIdentity attempt = 1;
+  ReleaseWorkInput release = 2;
+}
+
+message ReleaseRecoveryAssignment {
+  ReleaseWorkAssignment work = 1;
+  bytes forward_attempt = 2;
+  bytes failure = 3;
+}
+
+// Canonical bounded Release cursor; its closed schema is owned by the Release
+// executor. The Controller checks the transition against captured input before
+// acknowledging it. It is not arbitrary diagnostic text or a generic plan.
+message ReleaseRecoveryCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message ReleaseRecoveryCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes checkpoint = 2;
+}
+
+message ReleaseWorkCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message ReleaseWorkCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  bytes checkpoint = 2;
+}
+
+// Requests settlement of the exact acknowledged Complete checkpoint. The
+// Controller verifies operation proof; this is not a worker-supplied outcome.
+message ReleaseWorkCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+}
+
+message ReleaseWorkCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+
+message ReleaseWorkFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message ReleaseWorkFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message ReleaseEffectEvidenceRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes record = 3;
+}
+
+message ReleaseEffectEvidenceAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+}
+
+// Standalone Script delivery carries only its captured input. Start and Script
+// checkpoints, not delivery, authorize effects. Plaintext is transient.
+message ScriptWorkAssignment {
+  WorkAttemptIdentity attempt = 1;
+  string operation_id = 2;
+  RunScript run = 3;
+  ResolvedRunnerSnapshot snapshot = 4;
+  ScriptRunnerProjection projection = 5;
+  ScriptBodyArtifact body = 6;
+  repeated ScriptEntryArtifact entries = 7;
+  ScriptExecutionCheckpoint checkpoint = 8;
+}
+
+message ScriptWorkCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  ScriptCheckpointRequest checkpoint = 2;
+}
+
+message ScriptWorkCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  ScriptCheckpointAck checkpoint = 2;
+}
+
+message ScriptWorkCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+}
+
+message ScriptWorkCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 checkpoint_sequence = 2;
+  WorkInputReference checkpoint_evidence = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+
+// Cleanup carries captured ownership only, never executable Script inputs.
+message ScriptRecoveryAssignment {
+  WorkAttemptIdentity attempt = 1;
+  bytes forward_attempt = 2;
+  string operation_id = 3;
+  string execution_id = 4;
+  ScriptRunnerProjection projection = 5;
+  ScriptCleanupArtifacts artifacts = 6;
+}
+
+message ScriptRecoveryCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes proof = 2;
+  WorkInputReference evidence = 3;
+}
+
+message ScriptRecoveryCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp finished_at = 3;
+}
+
+// Failure does not assert cleanup; the Controller derives that from its saved
+// execution evidence. No subprocess output or secrets are carried here.
+message ScriptWorkFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+}
+
+message ScriptWorkFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  string outcome = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
+// Captured file delivery is bounded to one 1 MiB file per request. Metadata
+// lists at most 512 files. Content remains transient and is never Task history.
+message ReleaseConfigurationRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+}
+
+message ReleaseConfigurationFile {
+  string destination = 1;
+  string service_id = 2;
+  string service_name = 3;
+  string output_kind = 4;
+  uint32 uid = 5;
+  uint32 gid = 6;
+  uint32 mode = 7;
+  uint64 length = 8;
+  bytes sha256 = 9;
+}
+
+message ReleaseConfigurationManifest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  repeated ReleaseConfigurationFile files = 4;
+}
+
+message ReleaseConfigurationFileRequest {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  string destination = 3;
+}
+
+message ReleaseConfigurationFileDelivery {
+  WorkAttemptIdentity attempt = 1;
+  string stage_id = 2;
+  WorkConfigurationReference configuration = 3;
+  ReleaseConfigurationFile file = 4;
+  bytes content = 5;
+}
+
+// Local helper-container contract for a native Release effect. It carries the
+// captured input and exact receipts, never a generic ExecutionPlan.
+message ReleaseHelperRequest {
+  ReleaseWorkAssignment assignment = 1;
+  WorkStartAck start = 2;
+  ReleaseWorkCheckpointRequest report = 3;
+  ReleaseWorkCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message ReleaseHelperResponse {
+  bool succeeded = 1;
+  bool mutation_attempted = 2;
+  int32 exit_code = 3;
+  bool absence_observed = 4;
+  ServiceProxyEvidence proxy_evidence = 5;
+  bool inspection = 6;
+}
+
+message ReleaseRecoveryHelperRequest {
+  ReleaseRecoveryAssignment assignment = 1;
+  WorkStartAck start = 2;
+  ReleaseRecoveryCheckpointRequest report = 3;
+  ReleaseRecoveryCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+}
+
+message ReleaseRecoveryHelperResponse {
+  bytes proof = 1;
+}
+
+enum WorkReleaseStrategy {
+  WORK_RELEASE_STRATEGY_UNSPECIFIED = 0;
+  WORK_RELEASE_STRATEGY_RECREATE = 1;
+  WORK_RELEASE_STRATEGY_BLUE_GREEN = 2;
+  WORK_RELEASE_STRATEGY_ROLLING = 3;
+}
+
+message ReleaseWorkInput {
+  string operation_id = 1;
+  string environment_id = 2;
+  string service_id = 3;
+  string release_id = 4;
+  WorkReleaseStrategy strategy = 5;
+  ComposeArtifact candidate = 6;
+  ReleaseWorkPredecessor predecessor = 7; // always present, including explicit absence
+  WorkConfigurationReference configuration = 8;
+  WorkConfigurationReference prior_configuration = 9; // absent means captured absence
+  repeated string configuration_destinations = 10;
+  repeated ReleaseWorkHook hooks = 11;
+  ReleaseWorkRolling rolling = 12;
+  uint64 render_generation = 13;
+  repeated bytes traffic_configurations = 14; // one complete routing manifest per cutover, in captured order
+}
+
+message ReleaseWorkPredecessor {
+  bool absent = 1;
+  string release_id = 2;
+  string target = 3;
+  bytes current_artifact = 4;
+  bytes retained_artifact = 5;
+}
+
+message WorkConfigurationReference {
+  string configuration_id = 1;
+  string environment_id = 2;
+  uint64 generation = 3;
+  bytes sha256 = 4;
+}
+
+message ReleaseWorkHook {
+  WorkInputReference input = 1;
+  string execution_id = 2;
+  string script_id = 3;
+  string phase = 4;
+  uint32 order = 5;
+}
+
+message ReleaseHookRequest {
+  WorkAttemptIdentity attempt = 1;
+  string execution_id = 2;
+}
+
+message ReleaseHookDelivery {
+  WorkAttemptIdentity attempt = 1;
+  string operation_id = 2;
+  WorkInputReference input = 3;
+  RunScript run = 4;
+  ResolvedRunnerSnapshot snapshot = 5;
+  ScriptRunnerProjection projection = 6;
+  ScriptBodyArtifact body = 7;
+  repeated ScriptEntryArtifact entries = 8;
+  ScriptExecutionCheckpoint checkpoint = 9;
+  ScriptCleanupArtifacts cleanup = 10;
+}
+
+// Recovery-only metadata. No body bytes, Entry values, or start grant.
+message ScriptCleanupArtifacts {
+  ScriptBodyArtifactMetadata body_metadata = 1;
+  ScriptBodyPreparedCheckpoint body_prepared = 2;
+  ScriptContainerCreatedCheckpoint container_created = 3;
+}
+
+message ReleaseWorkRolling {
+  uint32 replica_timeout_seconds = 1;
+  repeated RollingReplica prior = 2;
+  repeated RollingReplica candidate = 3;
+  repeated RollingReplica retained = 4;
+}
+
 // AgentChannel is the one authenticated bidirectional stream. The Agent
 // sends Authenticate as the first message and keeps the stream open for the
 // life of the process, reconnecting with exponential backoff on drop.
@@ -70,6 +588,30 @@ message AgentMessage {
     BackupVolumeManifestAckCredit backup_volume_manifest_ack_credit = 37;
     TaskTerminalReceiptApplied task_terminal_receipt_applied = 38;
     TaskTerminalAssignmentRetired task_terminal_assignment_retired = 39;
+    WorkStartRequest work_start_request = 40;
+    ReleaseWorkCheckpointRequest release_work_checkpoint_request = 41;
+    ReleaseHookRequest release_hook_request = 42;
+    ReleaseEffectEvidenceRequest release_effect_evidence_request = 43;
+    ScriptWorkCheckpointRequest script_work_checkpoint_request = 44;
+    ReleaseConfigurationRequest release_configuration_request = 45;
+    ReleaseConfigurationFileRequest release_configuration_file_request = 46;
+    ReleaseWorkCompletionRequest release_work_completion_request = 47;
+    ReleaseWorkFailureRequest release_work_failure_request = 48;
+    ReleaseRecoveryCheckpointRequest release_recovery_checkpoint_request = 49;
+    ScriptWorkCompletionRequest script_work_completion_request = 50;
+    ScriptRecoveryCompletionRequest script_recovery_completion_request = 51;
+    ScriptWorkFailureRequest script_work_failure_request = 52;
+    EnvironmentRemovalCheckpointRequest environment_removal_checkpoint_request = 53;
+    EnvironmentRemovalCompletionRequest environment_removal_completion_request = 54;
+    EnvironmentRemovalFailureRequest environment_removal_failure_request = 55;
+    AttachRemovalCheckpointRequest attach_removal_checkpoint_request = 56;
+    AttachRemovalCompletionRequest attach_removal_completion_request = 57;
+    AttachRemovalFailureRequest attach_removal_failure_request = 58;
+    AttachRecoveryCompletionRequest attach_recovery_completion_request = 59;
+    VolumeWorkCheckpointRequest volume_work_checkpoint_request = 60;
+    VolumeWorkCompletionRequest volume_work_completion_request = 61;
+    VolumeWorkFailureRequest volume_work_failure_request = 62;
+    VolumeWorkRecoveryReportRequest volume_work_recovery_report_request = 63;
   }
 }
 
@@ -565,6 +1107,39 @@ message ControllerMessage {
     TaskTerminalReceiptAppliedAck task_terminal_receipt_applied_ack = 38;
     BackupStagingRecoveryAckReceipt backup_staging_recovery_ack_receipt = 39;
     TaskTerminalAssignmentRetiredAck task_terminal_assignment_retired_ack = 40;
+    WorkStartAck work_start_ack = 41;
+    ReleaseWorkAssignment release_work_assignment = 42;
+    ReleaseWorkCheckpointAck release_work_checkpoint_ack = 43;
+    ReleaseHookDelivery release_hook_delivery = 44;
+    ReleaseEffectEvidenceAck release_effect_evidence_ack = 45;
+    ScriptWorkCheckpointAck script_work_checkpoint_ack = 46;
+    ReleaseConfigurationManifest release_configuration_manifest = 47;
+    ReleaseConfigurationFileDelivery release_configuration_file_delivery = 48;
+    WorkExecutorRegistration work_executor_registration = 49;
+    ReleaseWorkCompletionAck release_work_completion_ack = 50;
+    ReleaseWorkFailureAck release_work_failure_ack = 51;
+    ReleaseRecoveryCheckpointAck release_recovery_checkpoint_ack = 52;
+    ReleaseRecoveryAssignment release_recovery_assignment = 53;
+    ScriptWorkAssignment script_work_assignment = 54;
+    ScriptWorkCompletionAck script_work_completion_ack = 55;
+    ScriptRecoveryAssignment script_recovery_assignment = 56;
+    ScriptRecoveryCompletionAck script_recovery_completion_ack = 57;
+    ScriptWorkFailureAck script_work_failure_ack = 58;
+    EnvironmentRemovalAssignment environment_removal_assignment = 59;
+    EnvironmentRemovalCheckpointAck environment_removal_checkpoint_ack = 60;
+    EnvironmentRemovalCompletionAck environment_removal_completion_ack = 61;
+    EnvironmentRemovalFailureAck environment_removal_failure_ack = 62;
+    AttachRemovalAssignment attach_removal_assignment = 63;
+    AttachRemovalCheckpointAck attach_removal_checkpoint_ack = 64;
+    AttachRemovalCompletionAck attach_removal_completion_ack = 65;
+    AttachRemovalFailureAck attach_removal_failure_ack = 66;
+    AttachRecoveryAssignment attach_recovery_assignment = 67;
+    AttachRecoveryCompletionAck attach_recovery_completion_ack = 68;
+    VolumeWorkAssignment volume_work_assignment = 69;
+    VolumeWorkCheckpointAck volume_work_checkpoint_ack = 70;
+    VolumeWorkCompletionAck volume_work_completion_ack = 71;
+    VolumeWorkFailureAck volume_work_failure_ack = 72;
+    VolumeWorkRecoveryReportAck volume_work_recovery_report_ack = 73;
   }
 }
 
@@ -879,13 +1454,13 @@ message ScriptExecutionCheckpoint {
 message ScriptCheckpointRequest {
   string task_id = 1;
   string operation_id = 2;
-  string assignment_id = 3;
-  string step_id = 4;
+  string work_item_id = 3;
+  string attempt_id = 4;
   string script_execution_id = 5;
-  bytes plan_hash = 6;
+  bytes input_sha256 = 6;
   ScriptExecutionState expected_state = 7;
   ScriptExecutionState state = 8;
-  bytes control_payload_sha256 = 9;
+  string input_id = 9;
   oneof evidence {
     ScriptStartAuthorizedCheckpoint start_authorized = 10;
     ScriptBodyPreparedCheckpoint body_prepared = 11;
@@ -893,16 +1468,23 @@ message ScriptCheckpointRequest {
     ScriptOutcomeCheckpoint outcome = 13;
     ScriptCleanupCheckpoint cleanup = 14;
   }
+  uint64 sequence = 15;
+  string stage_id = 16;
+  google.protobuf.Timestamp recorded_at = 17;
 }
 
 message ScriptCheckpointAck {
   string task_id = 1;
   string operation_id = 2;
-  string assignment_id = 3;
-  string step_id = 4;
+  string work_item_id = 3;
+  string attempt_id = 4;
   string script_execution_id = 5;
   ScriptExecutionState state = 6;
-  bytes control_payload_sha256 = 7;
+  bytes evidence_sha256 = 7;
+  uint64 sequence = 8;
+  string stage_id = 9;
+  bytes request_sha256 = 10;
+  string evidence_id = 11;
 }
 
 enum BackingHookEvent {
@@ -1270,6 +1852,107 @@ enum PlanOperation {
   PLAN_OPERATION_SCRIPT = 14;
   PLAN_OPERATION_BLUEPRINT_APPLY = 15;
   PLAN_OPERATION_RESTORE = 16;
+}
+
+// Captured Volume work has a closed procedure, not a list of generic steps.
+// Removal retains both runtime configurations and the approved impact digest.
+message VolumeWorkInput {
+  VolumeWorkAction action = 1;
+  string environment_id = 2;
+  string volume_id = 3;
+  string compose_key = 4;
+  bytes intent_sha256 = 5;
+  ComposeArtifact candidate = 6;
+  ComposeArtifact baseline = 7;
+  repeated string consumer_ids = 8;
+  bytes removal_impact_sha256 = 9;
+}
+
+enum VolumeWorkAction {
+  VOLUME_WORK_ACTION_UNSPECIFIED = 0;
+  VOLUME_WORK_ACTION_CREATE = 1;
+  VOLUME_WORK_ACTION_VERIFY = 2;
+  VOLUME_WORK_ACTION_REMOVE = 3;
+}
+
+message VolumeWorkAssignment {
+  WorkAttemptIdentity attempt = 1;
+  VolumeWorkInput input = 2;
+  bytes recovery_source = 3;
+  bytes recovery_boundary = 4;
+}
+
+message VolumeWorkCheckpointRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes progress = 2;
+}
+
+message VolumeWorkCheckpointAck {
+  WorkAttemptIdentity attempt = 1;
+  uint64 sequence = 2;
+  string stage_id = 3;
+  WorkInputReference evidence = 4;
+  google.protobuf.Timestamp recorded_at = 5;
+}
+
+message VolumeWorkCompletionRequest {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+}
+
+message VolumeWorkCompletionAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
+message VolumeWorkFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message VolumeWorkFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message VolumeWorkRecoveryReportRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message VolumeWorkRecoveryReportAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bool boundary_completed = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
+message VolumeWorkHelperRequest {
+  VolumeWorkAssignment assignment = 1;
+  WorkStartAck start = 2;
+  VolumeWorkCheckpointRequest report = 3;
+  VolumeWorkCheckpointAck acknowledgement = 4;
+  bool inspect_only = 5;
+  bytes directory_batch = 6;
+}
+
+message VolumeWorkHelperResponse {
+  string volume_id = 1;
+  WorkInputReference input = 2;
+  bool directory_ready = 3;
+  bool volume_ready = 4;
+  bool consumers_detached = 5;
+  bool volume_absent = 6;
+  bool directory_absent = 7;
+  google.protobuf.Timestamp observed_at = 8;
+  bool inspection = 9;
+  bytes directory_result = 10;
 }
 
 message ComposeArtifact {
