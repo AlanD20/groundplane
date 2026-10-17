@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type NetworkWorkPreparation struct {
@@ -70,7 +71,7 @@ func (owner *NetworkWorkPreparation) Prepare(ctx context.Context, taskID, workID
 		unit = &graph.Record.Units[index]
 		break
 	}
-	if unit == nil || unit.Target.Kind != ids.KindNetwork || unit.Removal {
+	if unit == nil || unit.Target.Kind != ids.KindNetwork || len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
 		return errs.New(errs.KindStateConflict, "Blueprint graph has no managed Network for this work")
 	}
 	dependencies := make([]workqueue.ItemSnapshot, len(item.Dependencies))
@@ -84,7 +85,13 @@ func (owner *NetworkWorkPreparation) Prepare(ctx context.Context, taskID, workID
 	if _, err := workqueue.DependencyConditions(item, dependencies); err != nil {
 		return err
 	}
-	input, guards, err := owner.service.prepareAuthoredNetworkInput(ctx, work)
+	var input *agentpb.NetworkWorkInput
+	var guards []keyvalue.Condition
+	if unit.Removal {
+		input, guards, err = owner.inputs.CaptureRemovalInput(ctx, work)
+	} else {
+		input, guards, err = owner.service.prepareAuthoredNetworkInput(ctx, work)
+	}
 	if err != nil {
 		return err
 	}

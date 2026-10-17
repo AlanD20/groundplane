@@ -84,8 +84,7 @@ func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Conte
 		}
 		if captured.TaskID != item.TaskID || captured.Operation != item.Operation || captured.TargetID != item.TargetID ||
 			captured.Placement != item.Placement || !slices.Equal(captured.Dependencies, item.Dependencies) ||
-			!slices.Equal(captured.Claims, item.Claims) || !captured.CreatedAt.Equal(item.CreatedAt) ||
-			!captured.Deadline.Equal(item.Deadline) {
+			!slices.Equal(captured.Claims, item.Claims) || !captured.CreatedAt.Equal(item.CreatedAt) {
 			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt differs from its captured work")
 		}
 		unit = &graph.Record.Units[index]

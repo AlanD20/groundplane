@@ -33,7 +33,8 @@ func (repository *InputRepository) PrepareBlueprintInput(ctx context.Context, vi
 		at.IsZero() || !at.Before(task.Deadline) || !at.Before(item.Deadline) ||
 		input.EnvironmentId != task.Scope.EnvironmentID || input.NetworkId != item.TargetID ||
 		hex.EncodeToString(input.IntentSha256) != task.Intent.SHA256 ||
-		input.Action != agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_ENSURE {
+		(input.Action != agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_ENSURE &&
+			input.Action != agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE) {
 		return workqueue.Change{}, conflict("Blueprint Network input requires its waiting captured work")
 	}
 	dependencyGuards, err := workqueue.DependencyConditions(item, dependencies)
