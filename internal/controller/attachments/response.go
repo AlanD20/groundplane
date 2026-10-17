@@ -2,20 +2,21 @@ package attachments
 
 import (
 	"encoding/json"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
+	"time"
 )
 
 func newAttachMutationResponse(
 	locator idempotencyrecord.IdempotencyLocator,
 	intent idempotencyrecord.ProtectedIntentRecord,
-	task etcd.TaskRecord,
+	taskID string,
+	createdAt time.Time,
 	replayTarget *idempotencyrecord.IdempotencyReplayTarget,
 ) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
-	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
 			errs.KindInternal,
@@ -28,7 +29,7 @@ func newAttachMutationResponse(
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, ReplayTarget: replayTarget, Intent: intent, Response: response,
-		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
+		TaskID: taskID, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	return response, marker, nil
 }

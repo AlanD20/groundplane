@@ -193,7 +193,7 @@ func (service *MutationService) createAttachOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task.PlanHash, renderInput.RuntimePreparation = prepared.PlanHash, &prepared
-	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task, nil)
+	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task.ID, task.CreatedAt, nil)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

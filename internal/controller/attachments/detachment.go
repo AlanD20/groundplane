@@ -3,14 +3,15 @@ package attachments
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
+	"time"
 )
 
 func (service *MutationService) DetachAttach(
@@ -114,96 +115,64 @@ func (service *MutationService) detachAttachOnce(
 		}
 		return requestidempotency.CloneResponse(replay.Response), nil
 	}
-	consumer, err := service.repository.GetService(ctx, current.Record.ServiceID)
+	snapshot, err := service.repository.CaptureDetachSnapshot(ctx, current)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	credentialOwnerID := ""
-	if !current.Record.OwnsCredential() {
-		credentialOwnerID = current.Record.CredentialAttachID
-	}
-	scope, currentAttaches, adapter, err := service.resolveAttachScope(
-		ctx, consumer, current.Record.BackingServiceID, credentialOwnerID, current.Record.GrantAttachIDs,
-	)
+	defer snapshot.Clear()
+	placement, err := service.repository.ResolveDetachHost(ctx)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	runtime, err := service.runtime.CaptureEntryMutationRuntime(ctx, scope.ComposeProjection)
+	consumer, err := attachplan.ConsumerTransition(ctx, snapshot, ids.New(ids.KindConfig))
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	now := service.now().UTC()
-	taskID := ids.New(ids.KindTask)
-	detaching, err := attachrecord.BeginAttachDetaching(current.Record, taskID)
+	if consumer != nil {
+		defer func() {
+			clear(consumer.Baseline.CanonicalYaml)
+			clear(consumer.Candidate.CanonicalYaml)
+		}()
+	}
+	now, taskID := service.now().UTC(), ids.New(ids.KindTask)
+	workID := ids.DeriveAt(ids.KindWorkItem, now, taskID, "detach")
+	input, err := attachremoval.NewDetachInput(ctx, taskID, workID, &snapshot, consumer)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	detachHook := current.Record.HookBundle && scope.BackingService.Record.Desired.Hooks != nil &&
-		scope.BackingService.Record.Desired.Hooks.Detach != nil
-	task, artifactID, err := newAttachMutationTask(
-		scope.Project.Record, scope.Environment.Record,
-		taskID, current.Record.ID, current.Record.EnvironmentID, taskjournal.TaskDetach,
-		scope.ComposeProjection.Record.RenderGeneration,
-		attachTaskStepCount(
-			adapter, scope.BackingService.Record.Desired.Authentication,
-			len(current.Record.GrantAttachIDs), current.Record.OwnsCredential(), detachHook,
-		),
-		idempotencyKey, now,
-	)
+	defer input.Clear()
+	if !input.HasHostEffects() {
+		placement.Executor = workexecution.Controller
+	}
+	reference, err := input.Reference(ctx, ids.DeriveAt(ids.KindPlan, now, workID, "captured-input"))
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if detachHook {
-		task.TimeoutSeconds = max(
-			task.TimeoutSeconds,
-			int64(scope.BackingService.Record.Desired.Hooks.Detach.TimeoutSeconds)+15,
-		)
+	source := input.Snapshot.Source
+	timeout := time.Duration(attachMutationTimeout) * time.Second
+	if source.Attach.HookBundle && source.Backing.Desired.Hooks != nil && source.Backing.Desired.Hooks.Detach != nil {
+		timeout = max(timeout, time.Duration(source.Backing.Desired.Hooks.Detach.TimeoutSeconds+15)*time.Second)
 	}
-	var hookInputs *taskconfiguration.BackingHookEncryptedInputs
-	if detachHook {
-		hookInputs, err = service.facts.SealBackingHookTaskInputs(
-			ctx, task.OperationID, scope.BackingProject.Record.ID, *scope.BackingService.Record.Desired.Hooks,
-		)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-		if hookInputs != nil {
-			defer clear(hookInputs.Ciphertext)
-			task, err = etcd.BindBackingHookTaskInputs(task, scope.BackingProject.Record.ID, *hookInputs)
-			if err != nil {
-				return idempotencyrecord.IdempotencyResponse{}, err
-			}
-		}
-	}
+	actor := workexecution.OperatorActor
 	if initiation != nil {
-		task.Owner = initiation.Owner()
-		task.Actor = initiation.Actor()
+		actor = workexecution.Actor(initiation.Actor())
 	}
-	renderInput, err := buildAttachTaskRenderInput(scope, runtime, detaching, currentAttaches, task, artifactID)
+	task := workexecution.Task{ID: taskID, Actor: actor, Scope: workexecution.Scope{TenantID: source.TenantID,
+		ProjectID: source.ProjectID, EnvironmentID: source.Attach.EnvironmentID}, Action: workexecution.ActionDetach,
+		TargetID: source.Attach.ID, TargetName: source.Attach.Name,
+		Intent:        workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, now, taskID, "request-intent"), SHA256: evidence.durable.CiphertextDigest},
+		ExpectedItems: 1, CreatedAt: now, UpdatedAt: now, Deadline: now.Add(timeout)}
+	item := workexecution.Item{ID: workID, TaskID: taskID, Operation: workexecution.Detach, TargetID: task.TargetID,
+		Placement: placement, Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
+		Claims: input.Claims(placement.HostID), CreatedAt: now, UpdatedAt: now, Deadline: task.Deadline}
+	if err := workexecution.ValidateGraph(task, []workexecution.Item{item}); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task.ID, task.CreatedAt, &target)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	draft := current
-	draft.Record = detaching
-	task, prepared, err := service.plans.SealDraft(ctx, draft, renderInput, task, nil, nil, hookInputs)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task.PlanHash, renderInput.RuntimePreparation = prepared.PlanHash, &prepared
-	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task, &target)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	var result etcd.IdempotencyTransactionResult
-	var detachErr error
-	if initiation == nil {
-		result, detachErr = service.repository.BeginAttachDetachWithTaskHookInputs(
-			ctx, scope, current, hookInputs, renderInput, task, marker,
-		)
-	} else {
-		result, detachErr = service.repository.BeginAttachDetachWithTaskInitiationHookInputs(
-			ctx, scope, current, hookInputs, renderInput, task, marker, *initiation,
-		)
-	}
-	return service.resolveMutationResult(ctx, locator, evidence, result, detachErr, response)
+	result, publicationErr := service.repository.PublishDetachWork(ctx, etcd.DetachWorkPublication{
+		Task: task, Item: item, Input: input, Marker: marker, Initiation: initiation})
+	return service.resolveMutationResult(ctx, locator, evidence, result, publicationErr, response)
 }

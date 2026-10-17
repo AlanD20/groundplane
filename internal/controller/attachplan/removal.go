@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
@@ -16,9 +15,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type RemovalPlanner struct{ facts *attachments.FactService }
+// RemovalFacts is the Controller's encrypted-fact and exact Secret-capture
+// boundary. Planning has no dependency on the public Attach mutation service.
+type RemovalFacts interface {
+	SealBackingHookInputsAtRevision(context.Context, string, string, backinghook.Configuration, int64) (*taskconfiguration.BackingHookEncryptedInputs, error)
+	ResolveCapturedDetachHook(context.Context, attachremoval.Input, taskplanning.BackingHookInputConsumer) error
+	ResolveDeletionIdentity(context.Context, attachremoval.Input, taskplanning.AttachPlanIdentityConsumer) error
+}
 
-func NewRemovalPlanner(facts *attachments.FactService) (*RemovalPlanner, error) {
+type RemovalPlanner struct{ facts RemovalFacts }
+
+func NewRemovalPlanner(facts RemovalFacts) (*RemovalPlanner, error) {
 	if facts == nil {
 		return nil, errs.New(errs.KindInternal, "Attach removal requires the captured fact resolver")
 	}

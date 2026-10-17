@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -33,6 +35,35 @@ type DetachInput struct {
 // it must not consume Agent capacity for a fabricated no-op command.
 func (input DetachInput) HasHostEffects() bool {
 	return len(input.Consumer) != 0 || NeedsAgent(input.Snapshot.Source)
+}
+
+func (input DetachInput) Reference(ctx context.Context, inputID string) (workexecution.Input, error) {
+	raw, reference, err := captureDetachInput(ctx, inputID, input)
+	clear(raw)
+	return reference, err
+}
+
+// Claims serializes both credential work and the consumer's physical edge.
+// Host-scoped claims keep a later remote-host implementation from conflating
+// identically named Docker objects; control-plane claims protect stable IDs.
+func (input DetachInput) Claims(hostID string) []workexecution.Claim {
+	attach := input.Snapshot.Source.Attach
+	resources := []string{attach.ID, attach.EnvironmentID, attach.ServiceID, attach.BackingServiceID, attach.BackingEnvironmentID}
+	resources = append(resources, attach.GrantAttachIDs...)
+	if !attach.OwnsCredential() {
+		resources = append(resources, attach.CredentialAttachID)
+	}
+	claims := make([]workexecution.Claim, 0, len(resources)*2)
+	for _, id := range resources {
+		claims = append(claims, workexecution.Claim{ScopeID: id}, workexecution.Claim{HostID: hostID, ScopeID: id})
+	}
+	slices.SortFunc(claims, func(left, right workexecution.Claim) int {
+		if order := strings.Compare(left.HostID, right.HostID); order != 0 {
+			return order
+		}
+		return strings.Compare(left.ScopeID, right.ScopeID)
+	})
+	return slices.Compact(claims)
 }
 
 // NewDetachInput transfers snapshot ownership on success. On failure the caller
