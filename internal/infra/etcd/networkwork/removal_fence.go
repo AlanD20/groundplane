@@ -33,6 +33,12 @@ func (repository *InputRepository) prepareRemovalFenceRelease(ctx context.Contex
 	if !matchesRemovalFence(view, fence) {
 		return workqueue.Change{}, conflict("unassigned Zone removal does not own its deletion fence")
 	}
+	if view.Task.Task.Scope.TenantID == "" && view.Task.Task.ExpectedItems > 1 {
+		// This fence also owns consumer removals. Stopping the bridge says
+		// nothing about an earlier Detach's external effects; the cascade
+		// owner must account for the whole graph before releasing it.
+		return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}, nil
+	}
 	return workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}},
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: key}}}, nil
 }

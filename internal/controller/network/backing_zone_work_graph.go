@@ -9,13 +9,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // CascadeDetachPlan is prepared from an Attach's captured source and exact hook
-// inputs. A nil Input waits for those captured inputs; it never permits reading
-// an unrelated newer Attach configuration.
+// inputs. Every input is sealed before the graph can be published.
 type CascadeDetachPlan struct {
 	AttachID  string
 	Placement workexecution.Placement
@@ -65,7 +65,7 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 		if ids.Validate(ids.KindAttach, plan.AttachID) != nil || plan.Placement.Validate() != nil ||
 			(plan.Placement.Executor != workexecution.Agent && plan.Placement.Executor != workexecution.Controller) ||
 			plan.Placement.HostID != bridge.Placement.HostID ||
-			plan.Input != nil && plan.Input.Validate() != nil {
+			plan.Input == nil || plan.Input.Validate() != nil {
 			return BackingZoneWorkGraph{}, errs.New(errs.KindValidationFailed, "Backing Zone Detach requires captured input and the Backing host")
 		}
 		if _, duplicate := byAttach[plan.AttachID]; duplicate {
@@ -101,13 +101,9 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 			TaskID: task.ID, Operation: workexecution.Detach, TargetID: attach.ID,
 			Placement: plan.Placement, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
 			CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
-			Claims: cascadeDetachClaims(task, plan.Placement, attach)}
-		if plan.Input == nil {
-			item.Phase, item.Wait = workexecution.Waiting, &workexecution.Wait{Reason: workexecution.WaitInput}
-		} else {
-			input := *plan.Input
-			item.Input = &input
-		}
+			Claims: attachremoval.RemovalClaims(attach, plan.Placement.HostID)}
+		input := *plan.Input
+		item.Input = &input
 		if previous != "" {
 			item.Dependencies = []string{previous}
 		}
@@ -127,20 +123,4 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 		return BackingZoneWorkGraph{}, err
 	}
 	return BackingZoneWorkGraph{Task: task, Items: items, Sources: sources, SnapshotRevision: frozenRevision, ImpactSHA256: impactSHA256}, nil
-}
-
-func cascadeDetachClaims(task workexecution.Task, placement workexecution.Placement, attach attachments.Record) []workexecution.Claim {
-	claims := []workexecution.Claim{
-		{ScopeID: attach.ID}, {HostID: placement.HostID, ScopeID: attach.ID},
-		{ScopeID: attach.EnvironmentID}, {HostID: placement.HostID, ScopeID: attach.EnvironmentID},
-		{ScopeID: attach.BackingServiceID}, {HostID: placement.HostID, ScopeID: attach.BackingServiceID},
-		{ScopeID: task.Scope.EnvironmentID}, {HostID: placement.HostID, ScopeID: task.Scope.EnvironmentID},
-	}
-	slices.SortFunc(claims, func(left, right workexecution.Claim) int {
-		if order := strings.Compare(left.HostID, right.HostID); order != 0 {
-			return order
-		}
-		return strings.Compare(left.ScopeID, right.ScopeID)
-	})
-	return slices.Compact(claims)
 }

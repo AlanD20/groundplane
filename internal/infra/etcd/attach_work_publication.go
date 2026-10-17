@@ -177,7 +177,7 @@ func validateDetachWorkPublication(ctx context.Context, request DetachWorkPublic
 	if err := request.Input.Validate(ctx); err != nil {
 		return err
 	}
-	if task.Validate() != nil || item.Validate() != nil || item.Input == nil || item.Operation != workexecution.Detach ||
+	if task.Validate() != nil || item.Validate() != nil || item.Input == nil || item.Operation != workexecution.Detach || request.Input.Cascade != nil ||
 		task.Action != workexecution.ActionDetach || item.TargetID != source.Attach.ID || task.TargetID != source.Attach.ID ||
 		request.Input.TaskID != task.ID || request.Input.WorkItemID != item.ID ||
 		task.Scope != (workexecution.Scope{TenantID: source.TenantID, ProjectID: source.ProjectID, EnvironmentID: source.Attach.EnvironmentID}) ||

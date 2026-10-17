@@ -59,6 +59,13 @@ func (repository *InputRepository) DetachResourceAdmission(ctx context.Context, 
 	if current.Record.Status != "detaching" {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach must be explicitly retried before new forward execution")
 	}
+	if input.Cascade != nil {
+		_, progress, err := repository.cascadeStepAdmission(ctx, view, input)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		conditions = append(conditions, progress...)
+	}
 	return workqueue.Change{Conditions: append(conditions, owned...)}, nil
 }
 

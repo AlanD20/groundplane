@@ -151,13 +151,7 @@ func (snapshot DetachSnapshot) Validate() error {
 // owner until it actually settles. Planning two removals must not silently
 // disconnect an edge still owned by another binding.
 func (snapshot DetachSnapshot) KeepsConsumerNetwork() bool {
-	target := snapshot.Source.Attach
-	for _, member := range snapshot.Members {
-		if member.AttachID != target.ID && !member.Detached && member.ServiceID == target.ServiceID && member.NetworkID == target.BackingNetworkID {
-			return true
-		}
-	}
-	return false
+	return snapshot.KeepsConsumerNetworkAfter(nil)
 }
 
 func (snapshot DetachSnapshot) ConsumerConditions() []keyvalue.Condition {

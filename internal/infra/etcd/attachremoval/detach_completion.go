@@ -120,5 +120,12 @@ func (repository *InputRepository) prepareDetachRemoval(ctx context.Context, vie
 	change.Conditions = append(change.Conditions, ancestry.Conditions()...)
 	change.Mutations = append(change.Mutations, ancestry.Mutations()...)
 	change.Mutations = append(change.Mutations, epoch)
+	progress, err := repository.prepareCascadeAdvance(ctx, view, captured)
+	if err != nil {
+		keyvalue.ClearMutationValues(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, progress.Conditions...)
+	change.Mutations = append(change.Mutations, progress.Mutations...)
 	return change, nil
 }

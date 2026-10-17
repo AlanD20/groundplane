@@ -38,6 +38,11 @@ func (repository *InputRepository) PrepareNetworkWorkCheckpoint(ctx context.Cont
 			return workqueue.Change{}, conflict("Environment configuration changed; this Network action cannot start another stage")
 		}
 		guards = append(guards, desired...)
+		removal, err := repository.RemovalAdmission(ctx, view.Work)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		guards = append(guards, removal...)
 	}
 	change, err := PrepareCheckpoint(ctx, repository.store, view, captured, progress, at)
 	if err != nil {

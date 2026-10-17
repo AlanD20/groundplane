@@ -78,6 +78,10 @@ func (repository *InputRepository) prepareDirectRemovalFinalization(ctx context.
 		tombstone.Checkpoint != (deletions.DeletionCheckpoint{}) || !tombstone.CreatedAt.Equal(task.CreatedAt) {
 		return workqueue.Change{}, conflict("Zone deletion fence belongs to a different operation")
 	}
+	removal, err := repository.RemovalAdmission(ctx, view.Work)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
 	pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](read.Values[1].Value, "zone_pool_registry")
 	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
 		pool.Reservations[input.NetworkId] != input.RemovalSubnet {
@@ -119,6 +123,7 @@ func (repository *InputRepository) prepareDirectRemovalFinalization(ctx context.
 		{Type: keyvalue.MutationDelete, Key: tombstoneKey},
 		{Type: keyvalue.MutationDelete, Key: addressesKey},
 	}}
+	change.Conditions = append(change.Conditions, removal...)
 	if len(pool.Reservations) == 0 {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: poolKey})
 		return change, nil

@@ -50,6 +50,11 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Network configuration changed before execution could start")
 		}
 		guards = append(guards, desired...)
+		removal, err := owner.inputs.RemovalAdmission(ctx, view.Work)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		guards = append(guards, removal...)
 	}
 	guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(view.Work.Task.Task.ID), ModRevision: view.Work.Task.Revision},
 		keyvalue.Condition{Key: workqueue.ItemKey(view.Work.Item.Item.ID), ModRevision: view.Work.Item.Revision})

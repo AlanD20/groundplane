@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -28,6 +29,7 @@ type DetachInput struct {
 	WorkItemID string         `json:"work_item_id"`
 	Snapshot   DetachSnapshot `json:"snapshot"`
 	Consumer   []byte         `json:"consumer,omitempty"`
+	Cascade    *CascadeStep   `json:"cascade,omitempty"`
 }
 
 // HasHostEffects determines placement after capture. A plain binding without
@@ -47,7 +49,12 @@ func (input DetachInput) Reference(ctx context.Context, inputID string) (workexe
 // Host-scoped claims keep a later remote-host implementation from conflating
 // identically named Docker objects; control-plane claims protect stable IDs.
 func (input DetachInput) Claims(hostID string) []workexecution.Claim {
-	attach := input.Snapshot.Source.Attach
+	return RemovalClaims(input.Snapshot.Source.Attach, hostID)
+}
+
+// RemovalClaims protects the same resource identities for direct removal and
+// removal inside a Backing Zone graph, including credential and grant owners.
+func RemovalClaims(attach attachments.Record, hostID string) []workexecution.Claim {
 	resources := []string{attach.ID, attach.EnvironmentID, attach.ServiceID, attach.BackingServiceID, attach.BackingEnvironmentID}
 	resources = append(resources, attach.GrantAttachIDs...)
 	if !attach.OwnsCredential() {
@@ -68,13 +75,18 @@ func (input DetachInput) Claims(hostID string) []workexecution.Claim {
 
 // NewDetachInput transfers snapshot ownership on success. On failure the caller
 // retains it. The Agent descriptor is serialized into independent owned bytes.
-func NewDetachInput(ctx context.Context, taskID, workID string, snapshot *DetachSnapshot,
+func NewDetachInput(ctx context.Context, taskID, workID string, snapshot *DetachSnapshot, cascade *CascadeStep,
 	consumer *agentpb.AttachConsumerTransition,
 ) (DetachInput, error) {
 	if snapshot == nil {
 		return DetachInput{}, errs.New(errs.KindValidationFailed, "Detach snapshot is required")
 	}
 	input := DetachInput{TaskID: taskID, WorkItemID: workID, Snapshot: *snapshot}
+	if cascade != nil {
+		step := *cascade
+		step.RemovedBefore = slices.Clone(cascade.RemovedBefore)
+		input.Cascade = &step
+	}
 	if consumer != nil {
 		var err error
 		input.Consumer, err = proto.MarshalOptions{Deterministic: true}.Marshal(consumer)
@@ -97,11 +109,14 @@ func (input DetachInput) Validate(ctx context.Context) error {
 	if err := input.Snapshot.Validate(); err != nil {
 		return err
 	}
+	if err := input.Cascade.Validate(input.Snapshot); err != nil {
+		return err
+	}
 	source := input.Snapshot.Source
 	if source.HookInputSet != nil || source.HookInputs != nil || source.HookOperationID != "" {
 		return errs.New(errs.KindValidationFailed, "Detach admission input cannot contain unbound hook delivery inputs")
 	}
-	requiresConsumer := input.Snapshot.Runtime != nil && source.Attach.Status != "detached" && !input.Snapshot.KeepsConsumerNetwork()
+	requiresConsumer := input.Snapshot.Runtime != nil && source.Attach.Status != "detached" && !input.keepsConsumerNetwork()
 	if requiresConsumer != (len(input.Consumer) != 0) {
 		return errs.New(errs.KindValidationFailed, "Detach consumer work does not match its captured runtime and binding union")
 	}

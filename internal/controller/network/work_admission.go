@@ -51,6 +51,11 @@ func (owner *AgentWork) Admit(ctx context.Context, request workqueue.Assignment,
 		return workdispatch.Decision{Disposition: workdispatch.Advance, Change: change}, nil
 	}
 	deadline := item.Deadline
+	removal, err := owner.inputs.RemovalAdmission(ctx, view)
+	if err != nil {
+		return workdispatch.Decision{}, err
+	}
+	guards = append(guards, removal...)
 	budget, err := networkexecution.ExecutionBudget(input.Action)
 	if err != nil {
 		return workdispatch.Decision{}, err

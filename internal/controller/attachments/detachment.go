@@ -125,7 +125,7 @@ func (service *MutationService) detachAttachOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	consumer, err := attachplan.ConsumerTransition(ctx, snapshot, ids.New(ids.KindConfig))
+	consumer, err := attachplan.ConsumerTransition(ctx, snapshot, nil, ids.New(ids.KindConfig))
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -137,7 +137,7 @@ func (service *MutationService) detachAttachOnce(
 	}
 	now, taskID := service.now().UTC(), ids.New(ids.KindTask)
 	workID := ids.DeriveAt(ids.KindWorkItem, now, taskID, "detach")
-	input, err := attachremoval.NewDetachInput(ctx, taskID, workID, &snapshot, consumer)
+	input, err := attachremoval.NewDetachInput(ctx, taskID, workID, &snapshot, nil, consumer)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
