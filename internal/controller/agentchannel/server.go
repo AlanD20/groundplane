@@ -18,8 +18,15 @@ type Server struct {
 	secrets                BackupSecretSlotResolver
 	checkpoints            BackupCheckpointer
 	scriptCheckpoints      ScriptCheckpointer
+	workIdentities         WorkIdentityResolver
+	workStarts             WorkStarter
+	workDispatch           WorkDispatcher
+	releaseCheckpoints     ReleaseWorkCheckpointer
+	hierarchyReports       HierarchyReporter
+	networkReports         NetworkReporter
+	volumeReports          VolumeReporter
+	scriptCompletion       ScriptWorkCompleter
 	backingHookCheckpoints BackingHookCheckpointer
-	volumeCheckpoints      VolumeRemovalCheckpointer
 	scriptArtifacts        ScriptArtifactResolver
 	now                    func() time.Time
 }
@@ -133,14 +140,12 @@ func NewWithScriptRuntimeServices(
 	managed ManagedConfigResolver,
 	scripts ScriptArtifactResolver,
 	scriptCheckpoints ScriptCheckpointer,
-	volumeCheckpoints VolumeRemovalCheckpointer,
 ) *Server {
 	server := NewWithManagedRuntimeServices(
 		auth, sessions, tasks, plans, materials, secrets, checkpoints, managed,
 	)
 	server.scriptArtifacts = scripts
 	server.scriptCheckpoints = scriptCheckpoints
-	server.volumeCheckpoints = volumeCheckpoints
 	return server
 }
 

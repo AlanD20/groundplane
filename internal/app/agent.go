@@ -7,13 +7,20 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
+	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
+	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
 	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
+	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
+	"github.com/AlanD20/groundplane/internal/infra/agentownership"
+	"github.com/AlanD20/groundplane/internal/infra/agentworkjournal"
 
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/agent/componentaction"
@@ -21,6 +28,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
+	commonrunner "github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/infra/docker/backingcommand"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composeobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/containerlogs"
@@ -46,12 +55,16 @@ type Agent struct {
 }
 
 type ownedComposeHelper interface {
+	hierarchyruntime.EnvironmentHelper
 	composeruntime.Helper
+	releaseruntime.MutationHelper
+	releaseruntime.RecoveryHostHelper
 	io.Closer
 }
 
 type ownedComposeObserver interface {
 	composeruntime.Observer
+	releaseruntime.Observer
 	io.Closer
 }
 
@@ -75,6 +88,8 @@ type agentRuntimeResources struct {
 	logs                   *containerlogs.Reader
 	scripts                *scriptruntime.Runtime
 	dockerReads            *mobyclient.Client
+	workJournal            *agentworkjournal.Journal
+	ownership              *agentownership.Lease
 }
 
 type agentComposeResources struct {
@@ -82,7 +97,7 @@ type agentComposeResources struct {
 	observer ownedComposeObserver
 }
 
-func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
+func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr error) {
 	adaptercompiler.Register()
 	cfg := config.DefaultAgentConfig()
 	if err := config.Load(ctx, configPath, &cfg); err != nil {
@@ -91,6 +106,15 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	ownership, err := agentownership.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if result == nil {
+			resultErr = preferAgentComposeCleanup(resultErr, ownership.Close())
+		}
+	}()
 
 	level, err := logging.ResolveLevel(false, false, os.Getenv("GROUNDPLANE_LOG_LEVEL"), cfg.Log.Level)
 	if err != nil {
@@ -243,7 +267,8 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 		)
 	}
 	runtimeResources := &agentRuntimeResources{
-		compose: resources, environmentDirectories: directoryHelper, materializer: materializerHelper,
+		ownership: ownership,
+		compose:   resources, environmentDirectories: directoryHelper, materializer: materializerHelper,
 		managedConfigs: managedConfigs, dnsResolverObserver: dnsObserver,
 		hostResolution: hostResolution, logs: logReader, scripts: scripts,
 	}
@@ -264,6 +289,87 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err := client.SetComponentActionRuntime(componentActions); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
+	if err := client.SetProcessOwnership(ownership); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	workJournal, err := agentworkjournal.Open(agentprotocol.StatePath + "/work")
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	runtimeResources.workJournal = workJournal
+	scriptExecutor, err := scriptruntime.NewExecutor(scripts, workJournal)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetScriptExecutor(scriptExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	releaseExecutor, err := releaseruntime.NewExecutor(cfg.Storage.VolumeRoot, workJournal, materializer, scripts, resources.helper, resources.observer)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetReleaseExecutor(releaseExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	hierarchyHost, err := hierarchyruntime.NewHost(cfg.Storage.VolumeRoot, workJournal, resources.helper, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	hierarchyExecutor, err := hierarchyruntime.NewExecutor(cfg.Storage.VolumeRoot, workJournal, hierarchyHost)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetHierarchyExecutor(hierarchyExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	processes := commonrunner.New(logger)
+	networkHost, err := networkruntime.NewHost(workJournal, resources.helper, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	networkExecutor, err := networkruntime.NewExecutor(workJournal, networkHost)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetNetworkExecutor(networkExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	volumeHost, err := volumeruntime.NewHost(cfg.Storage.VolumeRoot, workJournal, resources.helper, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	volumeExecutor, err := volumeruntime.NewExecutor(cfg.Storage.VolumeRoot, workJournal, volumeHost)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetVolumeExecutor(volumeExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := configureAgentDockerReads(ctx, client, runtimeResources, componentActions); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	backingCommands, err := backingcommand.New(runtimeResources.dockerReads)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	attachHost, err := hierarchyruntime.NewBackingHost(workJournal, backingadapter.New(processes, adaptercompiler.Compile), ownership, backingCommands)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	attachExecutor, err := hierarchyruntime.NewAttachExecutor(workJournal, attachHost)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetAttachRemovalExecutor(attachExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	recoveryExecutor, err := releaseruntime.NewRecoveryExecutor(cfg.Storage.VolumeRoot, workJournal, materializer, scripts, resources.helper, ownership)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetReleaseRecoveryExecutor(recoveryExecutor); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
 	if err := client.SetDNSConnectionChecker(componentActions); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
@@ -276,18 +382,17 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err := client.SetAdapterCompiler(adaptercompiler.Compile); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	if err := configureAgentDockerReads(ctx, client, runtimeResources, componentActions); err != nil {
-		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
-	}
-
 	return &Agent{Config: cfg, Logger: logger, Client: client, resources: runtimeResources}, nil
 }
 
 func (a *Agent) Run(ctx context.Context) error {
-	runErr := a.Client.Run(ctx)
 	if a.resources == nil {
-		return runErr
+		return errs.New(errs.KindStateConflict, "Agent runtime ownership is unavailable")
 	}
+	if err := a.resources.ownership.Check(); err != nil {
+		return preferAgentComposeCleanup(err, a.resources.Close())
+	}
+	runErr := a.Client.Run(ctx)
 	return preferAgentComposeCleanup(runErr, a.resources.Close())
 }
 
@@ -296,7 +401,10 @@ func (resources *agentRuntimeResources) Close() error {
 		return nil
 	}
 	var logErr, scriptErr, hostResolutionErr, managedConfigErr, dnsObserverErr, materializerErr, directoryErr, composeErr error
-	var imageErr error
+	var imageErr, workJournalErr error
+	if resources.workJournal != nil {
+		workJournalErr = resources.workJournal.Close()
+	}
 	if resources.dockerReads != nil {
 		imageErr = resources.dockerReads.Close()
 	}
@@ -324,7 +432,11 @@ func (resources *agentRuntimeResources) Close() error {
 	if resources.compose != nil {
 		composeErr = resources.compose.Close()
 	}
+	// The process lock outlives every execution resource and worker.
+	ownershipErr := resources.ownership.Close()
 	if joined := errors.Join(
+		ownershipErr,
+		workJournalErr,
 		imageErr,
 		logErr,
 		scriptErr,

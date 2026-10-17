@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/codes"
@@ -58,7 +59,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	if err := session.RecordProcessAuthentication(authenticate); err != nil {
 		return status.Error(codes.FailedPrecondition, "agent session authentication is not current")
 	}
+	registration, err := s.registerWorkProcess(session.ctx, session, authorization.Generation, authorization.Config.MaxConcurrentTasks)
+	if err != nil {
+		return taskStoreStatus(err)
+	}
 	delivered := make(map[string]string, authorization.Config.MaxConcurrentTasks)
+	workDelivered := make(map[string]string, authorization.Config.MaxConcurrentTasks)
 	quarantined := make(map[string]string, authorization.Config.MaxConcurrentTasks)
 
 	config := proto.Clone(authorization.Config).(*agentpb.AgentConfig)
@@ -70,6 +76,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		return err
 	}
 
+	if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_WorkExecutorRegistration{WorkExecutorRegistration: registration}}); err != nil {
+		return err
+	}
 	payloads := newAssignmentPayloadDelivery(session.ctx, authorization.Config.MaxConcurrentTasks)
 	defer payloads.close()
 	received := make(chan agentReceiveResult, 1)
@@ -191,19 +200,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			if !ready || capacity == 0 {
 				continue
 			}
-			if s.tasks == nil {
-				return status.Error(codes.Internal, "agent task store is not configured")
-			}
-			if err := s.dispatchReady(
-				stream,
-				session,
-				authenticate.AgentId,
-				authorization,
-				capacity,
-				delivered,
-				quarantined,
-				payloads,
-			); err != nil {
+			if err := s.dispatchWork(stream, session, authorization.Generation, capacity, authorization.Config.MaxConcurrentTasks, workDelivered); err != nil {
 				return taskStoreStatus(err)
 			}
 		case connectReceived:
@@ -400,19 +397,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					authorization.Config = nextConfig
 					continue
 				}
-				if s.tasks == nil {
-					return status.Error(codes.Internal, "agent task store is not configured")
-				}
-				if err := s.dispatchReady(
-					stream,
-					session,
-					authenticate.AgentId,
-					authorization,
-					ready.Capacity,
-					delivered,
-					quarantined,
-					payloads,
-				); err != nil {
+				if err := s.dispatchWork(stream, session, authorization.Generation, ready.Capacity, authorization.Config.MaxConcurrentTasks, workDelivered); err != nil {
 					return taskStoreStatus(err)
 				}
 				continue
@@ -522,12 +507,302 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
+			if request := result.message.GetWorkStartRequest(); request != nil {
+				ack, err := s.startWork(session.ctx, session, authorization.Generation, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(ack); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetScriptWorkFailureRequest(); request != nil {
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.scriptCompletion.FailScript(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptWorkFailureAck{ScriptWorkFailureAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetScriptRecoveryCompletionRequest(); request != nil {
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.scriptCompletion.CompleteScriptRecovery(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptRecoveryCompletionAck{ScriptRecoveryCompletionAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetScriptWorkCompletionRequest(); request != nil {
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.scriptCompletion.CompleteScript(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptWorkCompletionAck{ScriptWorkCompletionAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetReleaseWorkCompletionRequest(); request != nil {
+				if s.releaseCheckpoints == nil {
+					return status.Error(codes.Internal, "Release completion service is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.releaseCheckpoints.CompleteRelease(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseWorkCompletionAck{ReleaseWorkCompletionAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetReleaseWorkFailureRequest(); request != nil {
+				if s.releaseCheckpoints == nil {
+					return status.Error(codes.Internal, "Release failure service is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.releaseCheckpoints.FailRelease(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseWorkFailureAck{ReleaseWorkFailureAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetReleaseRecoveryCheckpointRequest(); request != nil {
+				if s.releaseCheckpoints == nil {
+					return status.Error(codes.Internal, "Release recovery checkpoint service is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.releaseCheckpoints.CheckpointRecovery(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseRecoveryCheckpointAck{ReleaseRecoveryCheckpointAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if handled, reply, err := s.networkReport(session, authorization.Generation, result.message); handled {
+				if err != nil {
+					return err
+				}
+				if err := stream.Send(reply); err != nil {
+					return err
+				}
+				continue
+			}
+			if handled, reply, err := s.volumeReport(session, authorization.Generation, result.message); handled {
+				if err != nil {
+					return err
+				}
+				if err := stream.Send(reply); err != nil {
+					return err
+				}
+				continue
+			}
+			if handled, reply, err := s.attachReport(session, authorization.Generation, result.message); handled {
+				if err != nil {
+					return err
+				}
+				if err := stream.Send(reply); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetEnvironmentRemovalCheckpointRequest(); request != nil {
+				if s.hierarchyReports == nil {
+					return status.Error(codes.Internal, "Environment removal reporting is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.hierarchyReports.CheckpointEnvironmentRemoval(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EnvironmentRemovalCheckpointAck{EnvironmentRemovalCheckpointAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetEnvironmentRemovalFailureRequest(); request != nil {
+				if s.hierarchyReports == nil {
+					return status.Error(codes.Internal, "Environment removal reporting is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.hierarchyReports.FailEnvironmentRemoval(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EnvironmentRemovalFailureAck{EnvironmentRemovalFailureAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetEnvironmentRemovalCompletionRequest(); request != nil {
+				if s.hierarchyReports == nil {
+					return status.Error(codes.Internal, "Environment removal reporting is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.hierarchyReports.CompleteEnvironmentRemoval(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_EnvironmentRemovalCompletionAck{EnvironmentRemovalCompletionAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetReleaseWorkCheckpointRequest(); request != nil {
+				if s.releaseCheckpoints == nil {
+					return status.Error(codes.Internal, "Release checkpoint service is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.releaseCheckpoints.CheckpointRelease(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseWorkCheckpointAck{ReleaseWorkCheckpointAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetReleaseEffectEvidenceRequest(); request != nil {
+				if s.releaseCheckpoints == nil {
+					return status.Error(codes.Internal, "Release evidence service is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.releaseCheckpoints.PublishReleaseEffect(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseEffectEvidenceAck{ReleaseEffectEvidenceAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetReleaseConfigurationRequest(); request != nil {
+				if s.releaseCheckpoints == nil {
+					return status.Error(codes.Internal, "Release configuration service is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				manifest, err := s.releaseCheckpoints.LoadReleaseConfiguration(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseConfigurationManifest{ReleaseConfigurationManifest: manifest}}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetReleaseConfigurationFileRequest(); request != nil {
+				if s.releaseCheckpoints == nil {
+					return status.Error(codes.Internal, "Release configuration service is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				delivery, err := s.releaseCheckpoints.LoadReleaseConfigurationFile(session.ctx, identity, request)
+				if err != nil {
+					releaseexecution.ClearConfigurationDelivery(delivery)
+					return taskStoreStatus(err)
+				}
+				err = stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseConfigurationFileDelivery{ReleaseConfigurationFileDelivery: delivery}})
+				releaseexecution.ClearConfigurationDelivery(delivery)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetReleaseHookRequest(); request != nil {
+				if s.releaseCheckpoints == nil {
+					return status.Error(codes.Internal, "Release hook service is not configured")
+				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				delivery, err := s.releaseCheckpoints.LoadReleaseHook(session.ctx, identity, request)
+				if err != nil {
+					releaseexecution.ClearHookDelivery(delivery)
+					return taskStoreStatus(err)
+				}
+				err = stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ReleaseHookDelivery{ReleaseHookDelivery: delivery}})
+				releaseexecution.ClearHookDelivery(delivery)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetScriptWorkCheckpointRequest(); request != nil {
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				ack, err := s.checkpointScriptWork(session.ctx, identity, request)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ScriptWorkCheckpointAck{ScriptWorkCheckpointAck: ack}}); err != nil {
+					return err
+				}
+				continue
+			}
 			if request := result.message.GetScriptCheckpointRequest(); request != nil {
 				if s.scriptCheckpoints == nil {
 					return status.Error(codes.Internal, "Script checkpoint service is not configured")
 				}
+				identity, err := s.authenticatedWorkIdentity(session.ctx, session, authorization.Generation)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
 				acknowledgement, err := s.scriptCheckpoints.CheckpointScript(
-					stream.Context(), authenticate.AgentId, authorization.Generation, request,
+					session.ctx, identity, request,
 				)
 				if err != nil {
 					return taskStoreStatus(err)
@@ -554,21 +829,6 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 						BackingHookCheckpointAck: acknowledgement,
 					},
 				}); err != nil {
-					return err
-				}
-				continue
-			}
-			if request := result.message.GetVolumeRemovalCheckpointRequest(); request != nil {
-				ack, err := s.checkpointVolumeRemoval(
-					stream.Context(),
-					authenticate.AgentId,
-					authorization.Generation,
-					request,
-				)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(ack); err != nil {
 					return err
 				}
 				continue

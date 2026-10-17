@@ -18,9 +18,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
 	logstream "github.com/AlanD20/groundplane/internal/agent/logstream"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
+	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
+	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
+	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/agent/volumeruntime"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/backupconfigtransfer"
@@ -28,6 +33,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/infra/agentownership"
 	"github.com/AlanD20/groundplane/internal/infra/agentstagingjournal"
 	"github.com/AlanD20/groundplane/internal/infra/agentterminaljournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -71,26 +77,35 @@ type Client struct {
 	connect            streamConnector
 	reconnect          reconnectWaiter
 
-	mu                     sync.Mutex
-	started                bool
-	pool                   *WorkerPool
-	workersDone            <-chan struct{}
-	compose                *composeruntime.Runtime
-	environmentDirectories *directoryruntime.Runtime
-	materializer           *filematerialization.Runtime
-	adapterCompiler        backingadapter.Compiler
-	componentActions       ComponentActionRuntime
-	hostResolution         HostResolutionRuntime
-	scriptRuntime          ScriptRuntime
-	images                 WorkloadImageResolver
-	observer               ServiceObserver
-	backingAccess          BackingAccessChecker
-	dnsChecks              DNSConnectionChecker
-	edgeChecks             EdgeConnectionChecker
-	logs                   *logstream.Subscriptions
-	terminalJournal        *agentterminaljournal.Journal
-	stagingJournal         *agentstagingjournal.Journal
-	staging                *backupStagingState
+	mu                      sync.Mutex
+	started                 bool
+	pool                    *WorkerPool
+	releaseExecutor         *releaseruntime.Executor
+	hierarchyExecutor       *hierarchyruntime.Executor
+	networkExecutor         *networkruntime.Executor
+	volumeExecutor          *volumeruntime.Executor
+	attachRemovalExecutor   *hierarchyruntime.AttachExecutor
+	scriptExecutor          *scriptruntime.Executor
+	releaseRecoveryExecutor *releaseruntime.RecoveryExecutor
+	processOwnership        *agentownership.Lease
+	executionWorkers        *executionWorkers
+	workersDone             <-chan struct{}
+	compose                 *composeruntime.Runtime
+	environmentDirectories  *directoryruntime.Runtime
+	materializer            *filematerialization.Runtime
+	adapterCompiler         backingadapter.Compiler
+	componentActions        ComponentActionRuntime
+	hostResolution          HostResolutionRuntime
+	scriptRuntime           ScriptRuntime
+	images                  WorkloadImageResolver
+	observer                ServiceObserver
+	backingAccess           BackingAccessChecker
+	dnsChecks               DNSConnectionChecker
+	edgeChecks              EdgeConnectionChecker
+	logs                    *logstream.Subscriptions
+	terminalJournal         *agentterminaljournal.Journal
+	stagingJournal          *agentstagingjournal.Journal
+	staging                 *backupStagingState
 }
 
 func NewClient(
@@ -393,6 +408,9 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 		return false, c.logs.Grant(credit)
 	}
 	if assignment := message.GetTaskAssignment(); assignment != nil {
+		if c.executionWorkers != nil && c.availableWorkCapacity() == 0 {
+			return false, errs.New(errs.KindStateConflict, "Agent execution capacity is exhausted")
+		}
 		if c.staging == nil || !c.staging.ready {
 			return false, invalidAgentStaging()
 		}

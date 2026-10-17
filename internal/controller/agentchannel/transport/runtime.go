@@ -20,11 +20,18 @@ const (
 )
 
 type Runtime struct {
-	Registry          *agentchannel.Registry
-	listen            func(context.Context) (net.Listener, error)
-	newServer         func(*agentchannel.Registry) agentChannelGRPCServer
-	VolumeCheckpoints agentchannel.VolumeRemovalCheckpointer
-	OnReady           func()
+	Registry         *agentchannel.Registry
+	listen           func(context.Context) (net.Listener, error)
+	newServer        func(*agentchannel.Registry) (agentChannelGRPCServer, error)
+	workIdentities   agentchannel.WorkIdentityResolver
+	workStarts       agentchannel.WorkStarter
+	workCheckpoints  agentchannel.ReleaseWorkCheckpointer
+	scriptCompletion agentchannel.ScriptWorkCompleter
+	hierarchyReports agentchannel.HierarchyReporter
+	networkReports   agentchannel.NetworkReporter
+	volumeReports    agentchannel.VolumeReporter
+	workDispatch     agentchannel.WorkDispatcher
+	OnReady          func()
 }
 
 type agentChannelGRPCServer interface {
@@ -45,22 +52,70 @@ func New(
 	backingHookCheckpoints agentchannel.BackingHookCheckpointer,
 ) *Runtime {
 	runtime := &Runtime{Registry: agentchannel.NewRegistry(), listen: agentlistener.Listen}
-	runtime.newServer = func(registry *agentchannel.Registry) agentChannelGRPCServer {
+	runtime.newServer = func(registry *agentchannel.Registry) (agentChannelGRPCServer, error) {
 		server := grpc.NewServer(
 			grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
 			grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
 		)
 		channel := agentchannel.NewWithScriptRuntimeServices(
 			authenticator, registry, tasks, plans, materials, secrets, checkpoints, managed,
-			scripts, scriptCheckpoints, runtime.VolumeCheckpoints,
+			scripts, scriptCheckpoints,
 		)
 		if backingHookCheckpoints != nil {
-			_ = channel.EnableBackingHookCheckpoints(backingHookCheckpoints)
+			if err := channel.EnableBackingHookCheckpoints(backingHookCheckpoints); err != nil {
+				server.Stop()
+				return nil, err
+			}
 		}
+		if err := channel.ConfigureWorkExecution(runtime.workIdentities, runtime.workStarts, runtime.workCheckpoints, runtime.scriptCompletion, runtime.hierarchyReports, runtime.workDispatch); err != nil {
+			server.Stop()
+			return nil, err
+		}
+		if runtime.volumeReports == nil {
+			server.Stop()
+			return nil, errs.New(errs.KindInternal, "native Volume reporting is not configured")
+		}
+		channel.ConfigureVolumeWork(runtime.volumeReports)
+		if runtime.networkReports == nil {
+			server.Stop()
+			return nil, errs.New(errs.KindInternal, "native Network reporting is not configured")
+		}
+		channel.ConfigureNetworkWork(runtime.networkReports)
 		agentpb.RegisterAgentChannelServer(server, channel)
-		return server
+		return server, nil
 	}
 	return runtime
+}
+
+// ConfigureWorkExecution is composition-only and must precede Run. Native work
+// is mandatory; there is no fallback to the superseded assignment engine.
+func (runtime *Runtime) ConfigureWorkExecution(identities agentchannel.WorkIdentityResolver, starts agentchannel.WorkStarter,
+	checkpoints agentchannel.ReleaseWorkCheckpointer, scripts agentchannel.ScriptWorkCompleter, removals agentchannel.HierarchyReporter, dispatch agentchannel.WorkDispatcher,
+) error {
+	if runtime == nil || identities == nil || starts == nil || checkpoints == nil || scripts == nil || removals == nil || dispatch == nil || runtime.workIdentities != nil {
+		return errs.New(errs.KindInternal, "Agent work transport dependencies are missing or already configured")
+	}
+	runtime.workIdentities, runtime.workStarts = identities, starts
+	runtime.workCheckpoints, runtime.workDispatch = checkpoints, dispatch
+	runtime.scriptCompletion = scripts
+	runtime.hierarchyReports = removals
+	return nil
+}
+
+func (runtime *Runtime) ConfigureVolumeWork(reports agentchannel.VolumeReporter) error {
+	if runtime == nil || reports == nil || runtime.volumeReports != nil {
+		return errs.New(errs.KindInternal, "Volume reporting dependencies are missing or already configured")
+	}
+	runtime.volumeReports = reports
+	return nil
+}
+
+func (runtime *Runtime) ConfigureNetworkWork(reports agentchannel.NetworkReporter) error {
+	if runtime == nil || reports == nil || runtime.networkReports != nil {
+		return errs.New(errs.KindInternal, "Network reporting dependencies are missing or already configured")
+	}
+	runtime.networkReports = reports
+	return nil
 }
 
 func (runtime *Runtime) Run(ctx context.Context) (resultErr error) {
@@ -85,7 +140,10 @@ func (runtime *Runtime) Run(ctx context.Context) (resultErr error) {
 		}
 	}()
 
-	server := runtime.newServer(runtime.Registry)
+	server, err := runtime.newServer(runtime.Registry)
+	if err != nil {
+		return err
+	}
 	if server == nil {
 		return errs.New(errs.KindInternal, "agent channel gRPC server is not configured")
 	}

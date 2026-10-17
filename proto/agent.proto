@@ -612,6 +612,10 @@ message AgentMessage {
     VolumeWorkCompletionRequest volume_work_completion_request = 61;
     VolumeWorkFailureRequest volume_work_failure_request = 62;
     VolumeWorkRecoveryReportRequest volume_work_recovery_report_request = 63;
+    NetworkWorkCheckpointRequest network_work_checkpoint_request = 64;
+    NetworkWorkCompletionRequest network_work_completion_request = 65;
+    NetworkWorkFailureRequest network_work_failure_request = 66;
+    NetworkWorkRecoveryReportRequest network_work_recovery_report_request = 67;
   }
 }
 
@@ -1140,6 +1144,11 @@ message ControllerMessage {
     VolumeWorkCompletionAck volume_work_completion_ack = 71;
     VolumeWorkFailureAck volume_work_failure_ack = 72;
     VolumeWorkRecoveryReportAck volume_work_recovery_report_ack = 73;
+    NetworkWorkAssignment network_work_assignment = 74;
+    NetworkWorkCheckpointAck network_work_checkpoint_ack = 75;
+    NetworkWorkCompletionAck network_work_completion_ack = 76;
+    NetworkWorkFailureAck network_work_failure_ack = 77;
+    NetworkWorkRecoveryReportAck network_work_recovery_report_ack = 78;
   }
 }
 

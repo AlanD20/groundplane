@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,9 +20,17 @@ func (c *Client) runSession(
 	if err := ctx.Err(); err != nil {
 		return false, nil
 	}
+	if c.releaseExecutor == nil || c.releaseRecoveryExecutor == nil || c.scriptExecutor == nil || c.hierarchyExecutor == nil || c.attachRemovalExecutor == nil || c.volumeExecutor == nil || c.networkExecutor == nil {
+		return false, errs.New(errs.KindInternal, "native Release executor is not configured")
+	}
+	if err := c.processOwnership.Check(); err != nil {
+		return false, err
+	}
 
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	native := newNativeExchange()
+	defer native.close()
 	stream, connection, err := c.connect(streamCtx, c.socketPath)
 	if err != nil {
 		return agentChannelTransportResult(ctx, err, "agent: connect to Controller", false)
@@ -60,6 +69,13 @@ func (c *Client) runSession(
 	if !validRuntimeConfig(config) {
 		return false, errs.New(errs.KindInternal, "agent: Controller sent invalid initial configuration")
 	}
+	registered, err := stream.Recv()
+	if err != nil {
+		return agentChannelTransportResult(ctx, err, "agent: receive executor registration", false)
+	}
+	if err := native.bindExecutor(registered.GetWorkExecutorRegistration(), c.agentID, c.processGeneration); err != nil {
+		return false, err
+	}
 
 	pullInterval := time.Duration(config.PullIntervalSeconds) * time.Second
 	config = proto.Clone(config).(*agentpb.AgentConfig)
@@ -80,6 +96,17 @@ func (c *Client) runSession(
 	defer func() {
 		poolCancel()
 		<-workersDone
+	}()
+	releases, err := newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, native, c.processOwnership)
+	if err != nil {
+		return false, err
+	}
+	c.executionWorkers = releases
+	defer func() {
+		if releases != nil {
+			releases.close()
+		}
+		c.executionWorkers = nil
 	}()
 	if err := c.replayTerminalDelivery(streamCtx, stream); err != nil {
 		return agentChannelTransportResult(ctx, err, "agent: replay terminal delivery", false)
@@ -110,7 +137,7 @@ func (c *Client) runSession(
 		// PostgreSQL execution markers outlive source-file cleanup. Drain
 		// existing work and finish terminal delivery before
 		// reopening the normal startup handshake; do not advertise Ready first.
-		if staging.reinspect.Load() && c.pool.Capacity() == int(config.MaxConcurrentTasks) {
+		if staging.reinspect.Load() && c.availableWorkCapacity() == int(config.MaxConcurrentTasks) {
 			clean, err := c.terminalDeliveryClean()
 			if err != nil {
 				return false, err
@@ -131,9 +158,25 @@ func (c *Client) runSession(
 			c.logs.Outputs(),
 			ticker.C,
 			controlBurst,
+			native.outgoing,
+			releases.outputs,
 		)
 		controlBurst = min(controlBurst+1, maximumControlBurst)
 		switch event.kind {
+		case sessionNativeResult:
+			if err := releases.consume(event.nativeResult); err != nil {
+				return false, err
+			}
+			if event.nativeResult.err != nil {
+				return false, event.nativeResult.err
+			}
+			if err := c.sendReady(stream); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send readiness after Release completion", false)
+			}
+		case sessionNative:
+			if err := stream.Send(event.native); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send native work request", false)
+			}
 		case sessionEnded:
 			return false, nil
 		case sessionBulk:
@@ -185,6 +228,81 @@ func (c *Client) runSession(
 			result := event.received
 			if result.err != nil {
 				return agentChannelTransportResult(ctx, result.err, "agent: receive Controller message", true)
+			}
+			if err := c.processOwnership.Check(); err != nil {
+				return false, err
+			}
+			if handled, err := native.accept(result.message); handled {
+				if err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetAttachRecoveryAssignment(); assignment != nil {
+				if err := releases.submitAttachRecovery(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetAttachRemovalAssignment(); assignment != nil {
+				err := releases.submitAttachRemoval(assignment, c.availableWorkCapacity())
+				attachexecution.ClearRemoval(assignment.Removal)
+				if err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetNetworkWorkAssignment(); assignment != nil {
+				if err := releases.submitNetwork(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetVolumeWorkAssignment(); assignment != nil {
+				if err := releases.submitVolume(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetEnvironmentRemovalAssignment(); assignment != nil {
+				if err := releases.submitEnvironmentRemoval(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetScriptWorkAssignment(); assignment != nil {
+				if err := releases.submitScript(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetScriptRecoveryAssignment(); assignment != nil {
+				if err := releases.submitScriptRecovery(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetReleaseWorkAssignment(); assignment != nil {
+				if err := releases.submit(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetReleaseRecoveryAssignment(); assignment != nil {
+				if err := releases.submitRecovery(assignment, c.availableWorkCapacity()); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
 			}
 			if handled, err := c.handleBackupStagingDelivery(streamCtx, stream, result.message); handled {
 				if err != nil {
@@ -244,7 +362,7 @@ func (c *Client) runSession(
 				if !validRuntimeConfig(next) {
 					return false, errs.New(errs.KindInternal, "agent: Controller sent invalid live configuration")
 				}
-				if c.pool.Capacity() != int(config.MaxConcurrentTasks) {
+				if c.availableWorkCapacity() != int(config.MaxConcurrentTasks) {
 					return false, errs.New(
 						errs.KindStateConflict,
 						"agent: live configuration arrived before the worker pool drained",
@@ -252,8 +370,14 @@ func (c *Client) runSession(
 				}
 				poolCancel()
 				<-workersDone
+				releases.close()
 				config = proto.Clone(next).(*agentpb.AgentConfig)
 				poolCancel, workersDone = c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
+				releases, err = newExecutionWorkers(streamCtx, int(config.MaxConcurrentTasks), native.identity, c.releaseExecutor, c.releaseRecoveryExecutor, c.scriptExecutor, c.hierarchyExecutor, c.attachRemovalExecutor, c.volumeExecutor, c.networkExecutor, native, c.processOwnership)
+				if err != nil {
+					return false, err
+				}
+				c.executionWorkers = releases
 				pullInterval = time.Duration(config.PullIntervalSeconds) * time.Second
 				ticker.Reset(pullInterval)
 				receiveNext(streamCtx, stream, received)
@@ -288,13 +412,6 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
-			if acknowledgement := result.message.GetVolumeRemovalCheckpointAck(); acknowledgement != nil {
-				if err := c.pool.AcceptVolumeRemovalCheckpointAck(acknowledgement); err != nil {
-					return false, err
-				}
-				receiveNext(streamCtx, stream, received)
-				continue
-			}
 			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
 				return false, err
@@ -314,14 +431,6 @@ func (c *Client) runSession(
 			if output.BackingHookCheckpoint != nil {
 				if err := c.sendBackingHookCheckpoint(stream, output.BackingHookCheckpoint); err != nil {
 					return agentChannelTransportResult(ctx, err, "agent: send backing hook checkpoint", false)
-				}
-				continue
-			}
-			if output.VolumeCheckpoint != nil {
-				if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_VolumeRemovalCheckpointRequest{
-					VolumeRemovalCheckpointRequest: output.VolumeCheckpoint,
-				}}); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send Volume removal checkpoint", false)
 				}
 				continue
 			}
