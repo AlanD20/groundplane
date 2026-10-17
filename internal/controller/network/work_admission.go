@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/networkexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -50,6 +51,13 @@ func (owner *AgentWork) Admit(ctx context.Context, request workqueue.Assignment,
 		return workdispatch.Decision{Disposition: workdispatch.Advance, Change: change}, nil
 	}
 	deadline := item.Deadline
+	budget, err := networkexecution.ExecutionBudget(input.Action)
+	if err != nil {
+		return workdispatch.Decision{}, err
+	}
+	if bound := at.Add(budget); bound.Before(deadline) {
+		deadline = bound
+	}
 	if task.Deadline.Before(deadline) {
 		deadline = task.Deadline
 	}

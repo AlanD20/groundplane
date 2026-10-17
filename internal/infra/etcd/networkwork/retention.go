@@ -51,6 +51,7 @@ func (repository *InputRepository) PrepareRetention(ctx context.Context, view wo
 			{Type: keyvalue.MutationDelete, Key: InputPrefix(item.ID), Prefix: true},
 			{Type: keyvalue.MutationDelete, Key: UnstartedKey(item.ID)},
 			{Type: keyvalue.MutationDelete, Key: RecoveryKey(item.ID)},
+			{Type: keyvalue.MutationDelete, Key: unstartedEvidencePrefix(item.ID), Prefix: true},
 		}
 	}
 	return true, change, nil
