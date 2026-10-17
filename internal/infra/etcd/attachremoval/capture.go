@@ -1,12 +1,12 @@
-package hierarchydeletionattach
+package attachremoval
 
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -15,7 +15,7 @@ func ReadCaptured(
 	ctx context.Context,
 	store Reader,
 	snapshotRevision int64,
-	parentOperationID, attachID string,
+	attachID string,
 ) (Input, error) {
 	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{
 		Keys: []string{
@@ -30,15 +30,15 @@ func ReadCaptured(
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
-		return Input{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Input{}, recordcodec.CorruptRecord()
 	}
 	defer keyvalue.ClearValues(read.Values)
 	attach, err := attachrecord.DecodeAttachRecord(read.Values[0].Value)
 	if err != nil || attach.ID != attachID {
-		return Input{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Input{}, recordcodec.CorruptRecord()
 	}
-	input := Input{Schema: 1, ParentOperationID: parentOperationID, SnapshotRevision: snapshotRevision,
-		ActionOrdinal: -1, Attach: attach, AttachRevision: read.Values[0].ModRevision}
+	input := Input{Schema: 1, SnapshotRevision: snapshotRevision,
+		Attach: attach, AttachRevision: read.Values[0].ModRevision}
 	if read.Values[1] != nil {
 		facts, err := attachrecord.DecodeAttachEncryptedFacts(read.Values[1].Value)
 		if err != nil {
@@ -57,7 +57,7 @@ func ReadCaptured(
 		if err != nil {
 			return Input{}, err
 		}
-		return Input{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Input{}, recordcodec.CorruptRecord()
 	}
 	backing, err := servicerecord.ReadJoined(ctx, store, servicerecord.DesiredSelection{
 		Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: snapshotRevision,
@@ -84,13 +84,13 @@ func ReadCaptured(
 		if owners != nil {
 			keyvalue.ClearValues(owners.Values)
 		}
-		return Input{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Input{}, recordcodec.CorruptRecord()
 	}
 	environment, err := hierarchy.DecodeEnvironment(owners.Values[0].Value)
 	keyvalue.ClearValues(owners.Values)
 	if err != nil || environment.ID != attach.EnvironmentID {
 		Clear(&input)
-		return Input{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Input{}, recordcodec.CorruptRecord()
 	}
 	projects, err := store.GetMany(
 		ctx,
@@ -109,13 +109,13 @@ func ReadCaptured(
 		if projects != nil {
 			keyvalue.ClearValues(projects.Values)
 		}
-		return Input{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Input{}, recordcodec.CorruptRecord()
 	}
 	project, err := hierarchy.DecodeProject(projects.Values[0].Value)
 	keyvalue.ClearValues(projects.Values)
 	if err != nil || project.ID != environment.ProjectID {
 		Clear(&input)
-		return Input{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Input{}, recordcodec.CorruptRecord()
 	}
 	input.ProjectID, input.TenantID = project.ID, project.TenantID
 	if err := Validate(input); err != nil {
@@ -130,7 +130,7 @@ func NeedsAgent(input Input) bool {
 		return false
 	}
 	if input.Backing.Desired.Adapter == "custom" {
-		return input.Backing.Desired.Hooks != nil && input.Backing.Desired.Hooks.Detach != nil
+		return input.Attach.HookBundle && input.Backing.Desired.Hooks != nil && input.Backing.Desired.Hooks.Detach != nil
 	}
 	return input.Backing.Desired.Authentication != "none"
 }

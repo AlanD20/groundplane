@@ -3,13 +3,13 @@ package hostplatform
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	"github.com/AlanD20/groundplane/internal/controller/backingchecks"
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/connectors"
 	"github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/controller/edgechecks"
-	"github.com/AlanD20/groundplane/internal/controller/hierarchyattachplan"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/operationretention"
@@ -133,7 +133,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	attachRemovals, err := hierarchyattachplan.NewRemovalPlanner(dependencies.AttachFacts)
+	attachRemovals, err := attachplan.NewRemovalPlanner(dependencies.AttachFacts)
 	if err != nil {
 		return nil, err
 	}

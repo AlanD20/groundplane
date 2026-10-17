@@ -3,6 +3,7 @@ package executionplan
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"maps"
 	"slices"
 	"strings"
@@ -25,8 +26,7 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 		ids.Validate(ids.KindService, input.ServiceId) != nil {
 		return invalidAttachConsumer()
 	}
-	dockerName, err := networkname.New(input.NetworkId)
-	if err != nil {
+	if _, err := networkname.New(input.NetworkId); err != nil {
 		return invalidAttachConsumer()
 	}
 	for _, artifact := range []*agentpb.ComposeArtifact{input.Baseline, input.Candidate} {
@@ -44,40 +44,13 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 	if !proto.Equal(baselineMetadata, candidateMetadata) {
 		return invalidAttachConsumer()
 	}
-	expected, err := loadAttachConsumerProject(ctx, input.Baseline)
+	expected, err := detachedConsumerProject(ctx, input)
 	if err != nil {
 		return err
 	}
 	actual, err := loadAttachConsumerProject(ctx, input.Candidate)
 	if err != nil {
 		return err
-	}
-	key := "gp_attach_" + strings.ToLower(input.NetworkId)
-	if network, found := expected.Networks[key]; found && (!bool(network.External) || network.Name != dockerName) {
-		return invalidAttachConsumer()
-	}
-	names, err := AttachConsumerNames(input)
-	if err != nil {
-		return err
-	}
-	for _, name := range names {
-		service, found := expected.Services[name]
-		if !found {
-			return invalidAttachConsumer()
-		}
-		service.Networks = maps.Clone(service.Networks)
-		delete(service.Networks, key)
-		expected.Services[name] = service
-	}
-	used := false
-	for _, service := range expected.Services {
-		if _, found := service.Networks[key]; found {
-			used = true
-			break
-		}
-	}
-	if !used {
-		delete(expected.Networks, key)
 	}
 	want, err := expected.MarshalYAML()
 	if err != nil {
@@ -93,6 +66,78 @@ func ValidateAttachConsumerTransition(ctx context.Context, input *agentpb.Attach
 		return errs.New(errs.KindValidationFailed, "Detach consumer update changes more than the captured backing-network membership")
 	}
 	return nil
+}
+
+// PrepareAttachConsumerTransition derives only the selected network-edge
+// removal from an acknowledged native artifact. It never renders desired state.
+func PrepareAttachConsumerTransition(ctx context.Context, baseline *agentpb.ComposeArtifact,
+	environmentID, backingEnvironmentID, serviceID, networkID, artifactID string,
+) (*agentpb.AttachConsumerTransition, error) {
+	if ctx == nil || baseline == nil || validateArtifactContent(baseline) != nil ||
+		baseline.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT || baseline.OwnerId != environmentID ||
+		ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindEnvironment, backingEnvironmentID) != nil ||
+		ids.Validate(ids.KindService, serviceID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil ||
+		artifactID == baseline.ArtifactId {
+		return nil, invalidAttachConsumer()
+	}
+	input := &agentpb.AttachConsumerTransition{EnvironmentId: environmentID, BackingEnvironmentId: backingEnvironmentID,
+		ServiceId: serviceID, NetworkId: networkID, Baseline: proto.CloneOf(baseline)}
+	project, err := detachedConsumerProject(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	canonical, err := project.MarshalYAML()
+	if err != nil {
+		return nil, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	input.Candidate = proto.CloneOf(baseline)
+	input.Candidate.ArtifactId, input.Candidate.CanonicalYaml = artifactID, canonical
+	digest := sha256.Sum256(canonical)
+	input.Candidate.YamlSha256 = digest[:]
+	if err := ValidateAttachConsumerTransition(ctx, input); err != nil {
+		clear(input.Candidate.CanonicalYaml)
+		return nil, err
+	}
+	return input, nil
+}
+
+func detachedConsumerProject(ctx context.Context, input *agentpb.AttachConsumerTransition) (*composetypes.Project, error) {
+	dockerName, err := networkname.New(input.NetworkId)
+	if err != nil {
+		return nil, invalidAttachConsumer()
+	}
+	expected, err := loadAttachConsumerProject(ctx, input.Baseline)
+	if err != nil {
+		return nil, err
+	}
+	key := "gp_attach_" + strings.ToLower(input.NetworkId)
+	if network, found := expected.Networks[key]; found && (!bool(network.External) || network.Name != dockerName) {
+		return nil, invalidAttachConsumer()
+	}
+	names, err := AttachConsumerNames(input)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range names {
+		service, found := expected.Services[name]
+		if !found {
+			return nil, invalidAttachConsumer()
+		}
+		service.Networks = maps.Clone(service.Networks)
+		delete(service.Networks, key)
+		expected.Services[name] = service
+	}
+	used := false
+	for _, service := range expected.Services {
+		if _, found := service.Networks[key]; found {
+			used = true
+			break
+		}
+	}
+	if !used {
+		delete(expected.Networks, key)
+	}
+	return expected, nil
 }
 
 // AttachConsumerNames includes the captured workload slots and replicas of one

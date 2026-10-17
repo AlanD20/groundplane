@@ -4,8 +4,8 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionattach"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -21,33 +21,32 @@ func (repository *Planner) freezeEnvironmentAttachMembership(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	inputs := make(map[string]hierarchydeletionattach.Input, len(targets))
+	inputs := make(map[string]attachremoval.Input, len(targets))
 	defer func() {
 		for _, input := range inputs {
-			hierarchydeletionattach.Clear(&input)
+			attachremoval.Clear(&input)
 		}
 	}()
 	for _, target := range targets {
-		input, err := hierarchydeletionattach.ReadCaptured(
+		input, err := attachremoval.ReadCaptured(
 			ctx,
 			repository.store,
 			operation.SnapshotRevision,
-			operation.OperationID,
 			target.id,
 		)
 		if err != nil {
 			return nil, err
 		}
 		if input.AttachRevision != target.revision {
-			hierarchydeletionattach.Clear(&input)
+			attachremoval.Clear(&input)
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
-		if err := hierarchydeletionattach.RequireTerminal(input); err != nil {
-			hierarchydeletionattach.Clear(&input)
+		if err := attachremoval.RequireTerminal(input); err != nil {
+			attachremoval.Clear(&input)
 			return nil, err
 		}
 		if _, err := attachrecord.RequireAttachBackupSourceExclusionAbsent(ctx, repository.store, target.id, operation.SnapshotRevision); err != nil {
-			hierarchydeletionattach.Clear(&input)
+			attachremoval.Clear(&input)
 			return nil, err
 		}
 		inputs[target.id] = input
@@ -103,15 +102,15 @@ func (repository *Planner) freezeEnvironmentAttachMembership(ctx context.Context
 		required := append(append([]string(nil), prerequisites...), dependencies[target.id]...)
 		slices.Sort(required)
 		required = slices.Compact(required)
-		if hierarchydeletionattach.NeedsAgent(input) {
+		if attachremoval.NeedsAgent(input) {
 			node := hierarchyDeletionAgentNode("attach:"+target.id+":deprovision", "attach", target.id,
 				hierarchydeletion.HierarchyDeletionAttachDeprovision, target.revision, required, operation.OperationID)
-			digest, err := hierarchydeletionattach.Digest(input)
+			digest, err := attachremoval.Digest(input)
 			if err != nil {
 				return nil, err
 			}
 			node.fixedInputDigest = digest
-			node.ProcedureInput.AgentChild.InputDigest = digest
+			node.ProcedureInput.AgentWork.InputDigest = digest
 			nodes = append(nodes, node)
 			required = []string{node.NodeID}
 		}
@@ -178,7 +177,7 @@ func (repository *Planner) requireAttachOutgoingIndexes(
 }
 
 func (repository *Planner) readAttachIncoming(ctx context.Context, revision int64, prefix string,
-	inputs map[string]hierarchydeletionattach.Input,
+	inputs map[string]attachremoval.Input,
 ) ([]string, error) {
 	var result []string
 	start := ""
@@ -220,9 +219,9 @@ func (repository *Planner) readAttachIncoming(ctx context.Context, revision int6
 func (repository *Planner) persistAttachInput(
 	ctx context.Context,
 	operation hierarchydeletion.HierarchyDeletionTombstone,
-	input hierarchydeletionattach.Input,
+	input attachremoval.Input,
 ) error {
-	key := hierarchydeletionattach.FrozenKey(operation.OperationID, input.Attach.ID)
+	key := attachremoval.FrozenKey(operation.OperationID, input.Attach.ID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key,
 		hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.TargetKind), operation.TargetID)}})
 	if err != nil {
@@ -235,7 +234,7 @@ func (repository *Planner) persistAttachInput(
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer keyvalue.ClearValues(read.Values)
-	value, err := hierarchydeletionattach.Encode(input)
+	value, err := attachremoval.Encode(input)
 	if err != nil {
 		return err
 	}

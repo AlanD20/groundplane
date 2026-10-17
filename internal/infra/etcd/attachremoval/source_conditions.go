@@ -1,4 +1,4 @@
-package hierarchydeletionattach
+package attachremoval
 
 import (
 	"context"
@@ -27,7 +27,7 @@ func SourceConditions(
 		if read != nil {
 			keyvalue.ClearValues(read.Values)
 		}
-		return nil, errs.New(errs.KindStateConflict, "hierarchy Attach cleanup source changed")
+		return nil, errs.New(errs.KindStateConflict, "Attach cleanup source changed")
 	}
 	defer keyvalue.ClearValues(read.Values)
 	exclusion, err := attachrecord.RequireAttachBackupSourceExclusionAbsent(
@@ -49,7 +49,7 @@ func SourceConditions(
 		return nil, err
 	}
 	if !found {
-		return nil, errs.New(errs.KindStateConflict, "hierarchy Attach backing desired state is absent")
+		return nil, errs.New(errs.KindStateConflict, "Attach backing desired state is absent")
 	}
 	backing, err := servicerecord.ReadJoined(ctx, store, servicerecord.DesiredSelection{
 		Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: read.ReadRevision,
@@ -59,7 +59,7 @@ func SourceConditions(
 	}
 	if !SameBackingDesired(input.Backing, backing.Record) ||
 		backing.Record.Runtime.RuntimeIntent != "running" {
-		return nil, errs.New(errs.KindStateConflict, "hierarchy Attach backing Service changed or is not runnable")
+		return nil, errs.New(errs.KindStateConflict, "Attach backing Service changed or is not runnable")
 	}
 	return []keyvalue.Condition{
 		{Key: keys[0], ModRevision: input.AttachRevision},

@@ -63,7 +63,8 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 	byAttach := make(map[string]CascadeDetachPlan, len(plans))
 	for _, plan := range plans {
 		if ids.Validate(ids.KindAttach, plan.AttachID) != nil || plan.Placement.Validate() != nil ||
-			plan.Placement.Executor != workexecution.Agent || plan.Placement.HostID != bridge.Placement.HostID ||
+			(plan.Placement.Executor != workexecution.Agent && plan.Placement.Executor != workexecution.Controller) ||
+			plan.Placement.HostID != bridge.Placement.HostID ||
 			plan.Input != nil && plan.Input.Validate() != nil {
 			return BackingZoneWorkGraph{}, errs.New(errs.KindValidationFailed, "Backing Zone Detach requires captured input and the Backing host")
 		}

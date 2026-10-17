@@ -6,7 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	hierarchyattach "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionattach"
+	hierarchyattach "github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 

@@ -3,9 +3,9 @@ package hierarchydeletionfinalization
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionattach"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -21,12 +21,12 @@ func (repository *Preparer) prepareHierarchyDeletionAttachFinalizer(ctx context.
 	if err != nil || record.ID != action.TargetID {
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	inputKey := hierarchydeletionattach.FrozenKey(operation.Tombstone.OperationID, record.ID)
-	input, inputRevision, err := hierarchydeletionattach.Read(ctx, repository.store, inputKey)
+	inputKey := attachremoval.FrozenKey(operation.Tombstone.OperationID, record.ID)
+	input, inputRevision, err := attachremoval.ReadFrozen(ctx, repository.store, operation.Tombstone.OperationID, record.ID)
 	if err != nil {
 		return Effects{}, err
 	}
-	defer hierarchydeletionattach.Clear(&input)
+	defer attachremoval.Clear(&input)
 	if input.AttachRevision != action.TargetRevision || input.Attach.ID != record.ID ||
 		input.Attach.EnvironmentID != record.EnvironmentID {
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
