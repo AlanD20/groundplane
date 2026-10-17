@@ -110,22 +110,37 @@ func (repository *InputRepository) PrepareInterruptedDetachInspection(ctx contex
 }
 
 func (repository *InputRepository) LoadDetachInspection(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {
-	attempt := view.Attempt.Attempt
-	if attempt.Direction != workexecution.Recovery || attempt.FinishedAt == nil || attempt.Result == nil ||
-		view.Work.Item.Item.Operation != workexecution.Detach {
-		return nil, errs.New(errs.KindStateConflict, "Detach inspection has no retained terminal attempt")
+	if view.Work.Item.Item.Operation != workexecution.Detach {
+		return nil, recordcodec.CorruptRecord()
 	}
-	input, _, err := repository.DetachRecoveryInput(ctx, view.Work, attempt)
+	input, _, err := repository.DetachRecoveryInput(ctx, view.Work, view.Attempt.Attempt)
 	if err != nil {
 		return nil, err
 	}
 	defer attachexecution.ClearRecoveryInput(&input)
-	read, err := repository.read(ctx, []string{WorkInspectionKey(attempt.ID)}, view.Work.ReadRevision)
+	return LoadRemovalInspection(ctx, repository.store, view, input)
+}
+
+// LoadRemovalInspection verifies retained cleanup evidence independently of its
+// diagnostic history. The operation owner supplies the captured recovery input.
+func LoadRemovalInspection(ctx context.Context, reader Reader, view workqueue.ResumeView,
+	input attachexecution.RecoveryInput,
+) ([]byte, error) {
+	attempt := view.Attempt.Attempt
+	if !removalOperation(view.Work.Item.Item.Operation) || attempt.Direction != workexecution.Recovery ||
+		attempt.FinishedAt == nil || attempt.Result == nil || !workexecution.SameAssignment(input.Attempt, attempt) {
+		return nil, errs.New(errs.KindStateConflict, "Attach inspection has no retained terminal attempt")
+	}
+	key := WorkInspectionKey(attempt.ID)
+	read, err := reader.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: view.Work.ReadRevision})
+	if read != nil {
+		defer keyvalue.ClearValues(read.Values)
+	}
 	if err != nil {
 		return nil, err
 	}
-	defer keyvalue.ClearValues(read.Values)
-	if read.Values[0] == nil {
+	if read == nil || read.ReadRevision != view.Work.ReadRevision || len(read.Values) != 1 ||
+		read.Values[0] == nil || read.Values[0].Key != key || read.Values[0].ModRevision <= 0 {
 		return nil, recordcodec.CorruptRecord()
 	}
 	if _, err := attachexecution.DecodeRemovalInspection(input, read.Values[0].Value, *attempt.Result); err != nil {

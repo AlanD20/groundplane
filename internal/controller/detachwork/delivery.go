@@ -129,10 +129,5 @@ func (owner *Owner) forwardInput(ctx context.Context, view workqueue.ResumeView)
 	if capture.Revision <= 0 {
 		return attachexecution.RemovalInput{}, errs.New(errs.KindStateConflict, "Detach command inputs have not been captured")
 	}
-	message, err := owner.planner.DetachAssignment(ctx, capture.Input, capture.Capture, view.Attempt.Attempt)
-	if err != nil {
-		return attachexecution.RemovalInput{}, err
-	}
-	defer attachexecution.ClearRemoval(message.Removal)
-	return attachexecution.DecodeRemovalAssignment(message, view.Attempt.Attempt.Executor)
+	return owner.planner.ResolveDetachInput(ctx, capture.Input, capture.Capture, view.Attempt.Attempt)
 }

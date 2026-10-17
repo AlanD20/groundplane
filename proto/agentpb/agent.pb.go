@@ -4497,6 +4497,7 @@ type AttachRemovalCompletionAck struct {
 	CheckpointSequence uint64                 `protobuf:"varint,2,opt,name=checkpoint_sequence,json=checkpointSequence,proto3" json:"checkpoint_sequence,omitempty"`
 	CheckpointEvidence *WorkInputReference    `protobuf:"bytes,3,opt,name=checkpoint_evidence,json=checkpointEvidence,proto3" json:"checkpoint_evidence,omitempty"`
 	FinishedAt         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	Outcome            string                 `protobuf:"bytes,5,opt,name=outcome,proto3" json:"outcome,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -4557,6 +4558,13 @@ func (x *AttachRemovalCompletionAck) GetFinishedAt() *timestamppb.Timestamp {
 		return x.FinishedAt
 	}
 	return nil
+}
+
+func (x *AttachRemovalCompletionAck) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
 }
 
 type AttachRemovalFailureRequest struct {
@@ -42260,13 +42268,14 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x1eAttachRemovalCompletionRequest\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12/\n" +
 	"\x13checkpoint_sequence\x18\x02 \x01(\x04R\x12checkpointSequence\x12Y\n" +
-	"\x13checkpoint_evidence\x18\x03 \x01(\v2(.groundplane.agent.v1.WorkInputReferenceR\x12checkpointEvidence\"\xaa\x02\n" +
+	"\x13checkpoint_evidence\x18\x03 \x01(\v2(.groundplane.agent.v1.WorkInputReferenceR\x12checkpointEvidence\"\xc4\x02\n" +
 	"\x1aAttachRemovalCompletionAck\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12/\n" +
 	"\x13checkpoint_sequence\x18\x02 \x01(\x04R\x12checkpointSequence\x12Y\n" +
 	"\x13checkpoint_evidence\x18\x03 \x01(\v2(.groundplane.agent.v1.WorkInputReferenceR\x12checkpointEvidence\x12;\n" +
 	"\vfinished_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"z\n" +
+	"finishedAt\x12\x18\n" +
+	"\aoutcome\x18\x05 \x01(\tR\aoutcome\"z\n" +
 	"\x1bAttachRemovalFailureRequest\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xd0\x02\n" +

@@ -38,9 +38,15 @@ func LoadRecovery(ctx context.Context, reader Reader, view workqueue.View) (Reco
 	}
 	if source.Forward.TaskID != view.Task.Task.ID || source.Forward.WorkItemID != item.ID ||
 		source.Forward.Input != *item.Input || source.Forward.Executor.HostID != item.Placement.HostID ||
-		source.Forward.Number > item.AttemptNumber ||
-		source.Forward.Number == item.AttemptNumber && item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting {
+		source.Forward.Number > item.AttemptNumber {
 		return RecoverySnapshot{}, recordcodec.CorruptRecord()
+	}
+	if source.Forward.Number == item.AttemptNumber {
+		if item.ActiveAttemptID != "" || item.Result == nil || *item.Result != source.Evidence ||
+			(item.Cleanup != workexecution.CleanupRequired && item.Cleanup != workexecution.CleanupStopped) ||
+			(item.Phase != workexecution.Ready && item.Phase != workexecution.Waiting && item.Phase != workexecution.Attention) {
+			return RecoverySnapshot{}, recordcodec.CorruptRecord()
+		}
 	}
 	return RecoverySnapshot{Source: source, Revision: read.Values[0].ModRevision}, nil
 }

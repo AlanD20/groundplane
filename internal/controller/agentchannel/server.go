@@ -23,6 +23,7 @@ type Server struct {
 	workDispatch           WorkDispatcher
 	releaseCheckpoints     ReleaseWorkCheckpointer
 	hierarchyReports       HierarchyReporter
+	attachReports          AttachReporter
 	networkReports         NetworkReporter
 	volumeReports          VolumeReporter
 	scriptCompletion       ScriptWorkCompleter

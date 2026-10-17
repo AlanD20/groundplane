@@ -11,10 +11,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-// DetachRecoveryBudget bounds observation and helper termination, not arbitrary
-// hook execution. Each failed inspection stops; only explicit Retry can repeat it.
-const DetachRecoveryBudget = 2 * time.Minute
-
 // prepareRemovalRecoverySource joins original failure and its inspection authority
 // before the shared queue may release the forward slot and dispatch recovery.
 func prepareRemovalRecoverySource(ctx context.Context, reader Reader, view workqueue.ResumeView,

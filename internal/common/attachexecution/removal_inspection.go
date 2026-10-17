@@ -14,6 +14,10 @@ import (
 
 type InspectionState string
 
+// InspectionBudget bounds one helper-termination and observation attempt.
+// Failed inspection requires explicit Retry, never another automatic loop.
+const InspectionBudget = 2 * time.Minute
+
 const (
 	CommandNotCreated     InspectionState = "not_created"
 	CommandNotPermitted   InspectionState = "not_permitted"

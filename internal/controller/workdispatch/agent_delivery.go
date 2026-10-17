@@ -35,6 +35,11 @@ type HierarchyDeliveryOwner interface {
 	HierarchyAssignment(context.Context, workqueue.ResumeView) (*agentpb.ControllerMessage, error)
 }
 
+type DetachDeliveryOwner interface {
+	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
+	DetachAssignment(context.Context, workqueue.ResumeView) (*agentpb.ControllerMessage, error)
+}
+
 type NetworkDeliveryOwner interface {
 	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.NetworkWorkAssignment, error)
 	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
@@ -53,15 +58,16 @@ type AgentDeliveries struct {
 	releases  ReleaseDeliveryOwner
 	scripts   ScriptDeliveryOwner
 	hierarchy HierarchyDeliveryOwner
+	detaches  DetachDeliveryOwner
 	networks  NetworkDeliveryOwner
 	volumes   VolumeDeliveryOwner
 }
 
-func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, releases ReleaseDeliveryOwner, scripts ScriptDeliveryOwner, hierarchy HierarchyDeliveryOwner, volumes VolumeDeliveryOwner, networks NetworkDeliveryOwner) (*AgentDeliveries, error) {
-	if queue == nil || scheduler == nil || scheduler.queue != queue || releases == nil || scripts == nil || hierarchy == nil || volumes == nil || networks == nil {
+func NewAgentDeliveries(queue *workqueue.Repository, scheduler *Scheduler, releases ReleaseDeliveryOwner, scripts ScriptDeliveryOwner, hierarchy HierarchyDeliveryOwner, volumes VolumeDeliveryOwner, networks NetworkDeliveryOwner, detaches DetachDeliveryOwner) (*AgentDeliveries, error) {
+	if queue == nil || scheduler == nil || scheduler.queue != queue || releases == nil || scripts == nil || hierarchy == nil || volumes == nil || networks == nil || detaches == nil {
 		return nil, errs.New(errs.KindInternal, "Agent delivery requires one queue, scheduler and Release owner")
 	}
-	return &AgentDeliveries{queue: queue, scheduler: scheduler, releases: releases, scripts: scripts, hierarchy: hierarchy, volumes: volumes, networks: networks}, nil
+	return &AgentDeliveries{queue: queue, scheduler: scheduler, releases: releases, scripts: scripts, hierarchy: hierarchy, volumes: volumes, networks: networks, detaches: detaches}, nil
 }
 
 // Dispatch keeps delivered identity only for currently reserved slots. A new
@@ -186,8 +192,14 @@ func (delivery *AgentDeliveries) message(ctx context.Context, view workqueue.Res
 			return nil, errs.New(errs.KindStateConflict, "Volume delivery differs from its durable assignment")
 		}
 		return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_VolumeWorkAssignment{VolumeWorkAssignment: assignment}}, nil
-	case workexecution.Hierarchy:
-		message, err := delivery.hierarchy.HierarchyAssignment(ctx, view)
+	case workexecution.Hierarchy, workexecution.Detach:
+		var message *agentpb.ControllerMessage
+		var err error
+		if view.Work.Item.Item.Operation == workexecution.Detach {
+			message, err = delivery.detaches.DetachAssignment(ctx, view)
+		} else {
+			message, err = delivery.hierarchy.HierarchyAssignment(ctx, view)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -197,6 +209,9 @@ func (delivery *AgentDeliveries) message(ctx context.Context, view workqueue.Res
 		var attempt workexecution.Attempt
 		switch payload := message.Payload.(type) {
 		case *agentpb.ControllerMessage_EnvironmentRemovalAssignment:
+			if view.Work.Item.Item.Operation != workexecution.Hierarchy {
+				return nil, errs.New(errs.KindStateConflict, "Detach cannot deliver Environment removal authority")
+			}
 			input, decodeErr := hierarchyexecution.DecodeEnvironmentAssignment(payload.EnvironmentRemovalAssignment, view.Attempt.Attempt.Executor)
 			attempt, err = input.Attempt, decodeErr
 		case *agentpb.ControllerMessage_AttachRemovalAssignment:
@@ -206,11 +221,13 @@ func (delivery *AgentDeliveries) message(ctx context.Context, view workqueue.Res
 		case *agentpb.ControllerMessage_AttachRecoveryAssignment:
 			input, decodeErr := attachexecution.DecodeRecoveryAssignment(payload.AttachRecoveryAssignment, view.Attempt.Attempt.Executor)
 			attempt, err = input.Attempt, decodeErr
+			attachexecution.ClearRecoveryInput(&input)
 		default:
 			err = errs.New(errs.KindStateConflict, "removal delivery uses an unsupported assignment")
 		}
 		if err != nil || !workexecution.SameAssignment(attempt, view.Attempt.Attempt) {
 			attachexecution.ClearRemoval(message.GetAttachRemovalAssignment().GetRemoval())
+			attachexecution.ClearRecoveryAssignment(message.GetAttachRecoveryAssignment())
 			return nil, errs.New(errs.KindStateConflict, "removal delivery differs from its durable assignment")
 		}
 		return message, nil

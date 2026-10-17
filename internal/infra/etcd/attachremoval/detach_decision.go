@@ -15,6 +15,7 @@ import (
 )
 
 type detachDecision struct {
+	ID         string                `json:"id"`
 	TaskID     string                `json:"task_id"`
 	WorkItemID string                `json:"work_item_id"`
 	AttachID   string                `json:"attach_id"`
@@ -23,7 +24,9 @@ type detachDecision struct {
 	At         time.Time             `json:"at"`
 }
 
-func DetachDecisionKey(workID string) string { return DetachInputPrefix(workID) + "decision" }
+func DetachDecisionKey(workID, evidenceID string) string {
+	return DetachInputPrefix(workID) + "decisions/" + evidenceID
+}
 
 // PrepareDetachDecision handles a captured no-host-effect binding or a stopped
 // never-assigned action. A successful metadata-only removal must additionally
@@ -62,7 +65,8 @@ func (repository *InputRepository) PrepareDetachDecision(ctx context.Context, vi
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	raw, err := recordcodec.Encode("detach-decision", detachDecision{TaskID: task.ID, WorkItemID: item.ID,
+	evidenceID := ids.New(ids.KindPlan)
+	raw, err := recordcodec.Encode("detach-decision", detachDecision{ID: evidenceID, TaskID: task.ID, WorkItemID: item.ID,
 		AttachID: input.Snapshot.Source.Attach.ID, Input: *item.Input, Outcome: outcome, At: at})
 	if err != nil {
 		keyvalue.ClearMutationValues(resource.Mutations)
@@ -70,7 +74,7 @@ func (repository *InputRepository) PrepareDetachDecision(ctx context.Context, vi
 	}
 	digest := sha256.Sum256(raw)
 	change, err := workqueue.PrepareUnstartedSettlement(view.Task, view.Item, workexecution.Completion{Outcome: outcome,
-		EffectsSettled: true, Evidence: workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "detach-decision"),
+		EffectsSettled: true, Evidence: workexecution.Input{ID: evidenceID,
 			SHA256: hex.EncodeToString(digest[:])}}, at)
 	if err != nil {
 		clear(raw)
@@ -79,8 +83,8 @@ func (repository *InputRepository) PrepareDetachDecision(ctx context.Context, vi
 	}
 	change.Conditions = append(change.Conditions, guards...)
 	change.Conditions = append(change.Conditions, resource.Conditions...)
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DetachDecisionKey(item.ID)})
+	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DetachDecisionKey(item.ID, evidenceID)})
 	change.Mutations = append(change.Mutations, resource.Mutations...)
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DetachDecisionKey(item.ID), Value: raw})
+	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DetachDecisionKey(item.ID, evidenceID), Value: raw})
 	return change, nil
 }

@@ -2,6 +2,7 @@ package attachments
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/attachplan"
@@ -11,7 +12,6 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
-	"time"
 )
 
 func (service *MutationService) DetachAttach(
@@ -149,9 +149,9 @@ func (service *MutationService) detachAttachOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	source := input.Snapshot.Source
-	timeout := time.Duration(attachMutationTimeout) * time.Second
+	timeout := attachexecution.RemovalBudget(0)
 	if source.Attach.HookBundle && source.Backing.Desired.Hooks != nil && source.Backing.Desired.Hooks.Detach != nil {
-		timeout = max(timeout, time.Duration(source.Backing.Desired.Hooks.Detach.TimeoutSeconds+15)*time.Second)
+		timeout = attachexecution.RemovalBudget(int64(source.Backing.Desired.Hooks.Detach.TimeoutSeconds))
 	}
 	actor := workexecution.OperatorActor
 	if initiation != nil {

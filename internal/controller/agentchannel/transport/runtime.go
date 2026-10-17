@@ -28,6 +28,7 @@ type Runtime struct {
 	workCheckpoints  agentchannel.ReleaseWorkCheckpointer
 	scriptCompletion agentchannel.ScriptWorkCompleter
 	hierarchyReports agentchannel.HierarchyReporter
+	attachReports    agentchannel.AttachReporter
 	networkReports   agentchannel.NetworkReporter
 	volumeReports    agentchannel.VolumeReporter
 	workDispatch     agentchannel.WorkDispatcher
@@ -81,6 +82,11 @@ func New(
 			return nil, errs.New(errs.KindInternal, "native Network reporting is not configured")
 		}
 		channel.ConfigureNetworkWork(runtime.networkReports)
+		if runtime.attachReports == nil {
+			server.Stop()
+			return nil, errs.New(errs.KindInternal, "native Attach reporting is not configured")
+		}
+		channel.ConfigureAttachWork(runtime.attachReports)
 		agentpb.RegisterAgentChannelServer(server, channel)
 		return server, nil
 	}
@@ -115,6 +121,14 @@ func (runtime *Runtime) ConfigureNetworkWork(reports agentchannel.NetworkReporte
 		return errs.New(errs.KindInternal, "Network reporting dependencies are missing or already configured")
 	}
 	runtime.networkReports = reports
+	return nil
+}
+
+func (runtime *Runtime) ConfigureAttachWork(reports agentchannel.AttachReporter) error {
+	if runtime == nil || reports == nil || runtime.attachReports != nil {
+		return errs.New(errs.KindInternal, "Attach reporting dependencies are missing or already configured")
+	}
+	runtime.attachReports = reports
 	return nil
 }
 

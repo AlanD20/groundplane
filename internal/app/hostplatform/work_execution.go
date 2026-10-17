@@ -4,10 +4,12 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/attachplan"
+	"github.com/AlanD20/groundplane/internal/controller/attachreports"
 	"github.com/AlanD20/groundplane/internal/controller/backingchecks"
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/connectors"
+	"github.com/AlanD20/groundplane/internal/controller/detachwork"
 	"github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/controller/edgechecks"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
@@ -18,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/volume"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	backingrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backingchecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorchecks"
@@ -141,6 +144,14 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	detachRecords, err := attachremoval.NewInputRepository(platform.dependencies.Store)
+	if err != nil {
+		return nil, err
+	}
+	detaches, err := detachwork.New(queue, detachRecords, attachRemovals)
+	if err != nil {
+		return nil, err
+	}
 	volumeRecords, err := volumework.NewInputRepository(platform.dependencies.Store)
 	if err != nil {
 		return nil, err
@@ -166,6 +177,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	scheduler, err := workdispatch.NewScheduler(queue, []workdispatch.Registration{
+		{Operation: workexecution.Detach, Executor: workexecution.Agent, Owner: detaches},
+		{Operation: workexecution.Detach, Executor: workexecution.Controller, Owner: detaches, DecisionOnly: true},
 		{Operation: workexecution.Network, Executor: workexecution.Agent, Owner: networkAgent},
 		{Operation: workexecution.Volume, Executor: workexecution.Agent, Owner: volumeAgent},
 		{Operation: workexecution.RemovalBackupObject, Executor: workexecution.Controller, Owner: backupRemoval},
@@ -198,6 +211,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	retries, err := workdispatch.NewRetries(queue, []workdispatch.RetryRegistration{
+		{Operation: workexecution.Detach, Owner: detaches},
 		{Operation: workexecution.Network, Owner: networkAgent},
 		{Operation: workexecution.Volume, Owner: volumeAgent},
 		{Operation: workexecution.RemovalBackupObject, Owner: backupRemoval},
@@ -244,6 +258,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionDetach, Owner: detaches},
 		{Action: workexecution.ActionCreate, Owner: volumeAgent},
 		{Action: workexecution.ActionUpdate, Owner: volumeAgent},
 		{Action: workexecution.ActionScript, Owner: scripts},
@@ -295,6 +310,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	starts, err := workdispatch.NewAgentStarts(queue, []workdispatch.AgentStartRegistration{
+		{Operation: workexecution.Detach, Owner: detaches},
 		{Operation: workexecution.Network, Owner: networkAgent},
 		{Operation: workexecution.Volume, Owner: volumeAgent},
 		{Operation: workexecution.Hierarchy, Owner: hierarchyAgent},
@@ -309,11 +325,18 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	deliveries, err := workdispatch.NewAgentDeliveries(queue, scheduler, dependencies.Releases, scripts, hierarchyAgent, volumeAgent, networkAgent)
+	deliveries, err := workdispatch.NewAgentDeliveries(queue, scheduler, dependencies.Releases, scripts, hierarchyAgent, volumeAgent, networkAgent, detaches)
 	if err != nil {
 		return nil, err
 	}
 	removalReports, err := hierarchydeletion.NewReports(queue, hierarchyAgent)
+	if err != nil {
+		return nil, err
+	}
+	attachReports, err := attachreports.New(queue, []attachreports.Registration{
+		{Operation: workexecution.Hierarchy, Owner: hierarchyAgent},
+		{Operation: workexecution.Detach, Owner: detaches},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -324,6 +347,9 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		return nil, err
 	}
 	if err := platform.dependencies.Channel.ConfigureNetworkWork(networkReports); err != nil {
+		return nil, err
+	}
+	if err := platform.dependencies.Channel.ConfigureAttachWork(attachReports); err != nil {
 		return nil, err
 	}
 	return &WorkExecution{Runtime: runtime, Queue: queue, scheduler: scheduler, controller: controller,
