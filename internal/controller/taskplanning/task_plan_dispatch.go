@@ -38,8 +38,6 @@ type TaskPlanResolver struct {
 	materializations      componentMaterializationContentRepository
 	configurationRecovery *configurationrecovery.Sources
 	scriptPlans           ScriptExecutionPlanReader
-	volumeRemovalPlans    volumeRemovalPlanReader
-	hierarchyAttachPlans  HierarchyAttachPlanResolver
 }
 
 type blueprintPlanStateReader interface {
@@ -94,9 +92,6 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != "" {
 		return resolver.resolveBlueprintNetworkUnitPlan(ctx, task)
 	}
-	if taskjournal.IsBlueprintChild(task.Params) && task.Params[taskjournal.TaskBlueprintVolumeUnitParam] != "" {
-		return resolver.resolveBlueprintVolumeUnitPlan(ctx, task)
-	}
 	if taskjournal.IsBlueprintChild(task.Params) && task.Params[attachinputs.TaskAttachIDParam] != "" {
 		return resolver.resolveBlueprintAttachUnitPlan(ctx, task)
 	}
@@ -112,12 +107,6 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune ||
 		task.Type == taskjournal.TaskRestore {
 		return resolver.resolveBackupRunPlan(ctx, task)
-	}
-	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {
-		return resolver.resolveHierarchyDeletionPlan(ctx, task)
-	}
-	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
-		return resolver.resolveVolumePlan(ctx, task)
 	}
 	if task.Type == taskjournal.TaskAttach || task.Type == taskjournal.TaskDetach {
 		return resolver.resolveAttachPlan(ctx, task)
