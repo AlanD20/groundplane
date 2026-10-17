@@ -7,7 +7,8 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -43,7 +44,7 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	evidence, err := repository.store.GetMany(
 		ctx,
 		etcdstore.GetManyRequest{
-			Keys: []string{descriptorKey, locatorKey, markerKey, taskjournal.TaskStorageKey(claim.TaskID)},
+			Keys: []string{descriptorKey, locatorKey, markerKey, workqueue.TaskKey(claim.TaskID)},
 		},
 	)
 	if err != nil {
@@ -80,12 +81,13 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 		{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision},
 		{Key: locatorKey, ModRevision: evidence.Values[1].ModRevision},
 		{Key: markerKey},
+		{Key: workqueue.TaskKey(claim.TaskID)},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value},
 		{Type: etcdstore.MutationDelete, Key: locatorKey},
 	}
-	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 5, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
+	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 6, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -221,7 +223,7 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 			descriptorKey,
 			locatorKey,
 			markerKey,
-			taskjournal.TaskStorageKey(descriptor.Claim.TaskID),
+			workqueue.TaskKey(descriptor.Claim.TaskID),
 		}, Revision: revision,
 	})
 	if err != nil {
@@ -256,12 +258,13 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 		{Key: descriptorKey, ModRevision: descriptorRevision},
 		{Key: locatorKey, ModRevision: evidence.Values[1].ModRevision},
 		{Key: markerKey},
+		{Key: workqueue.TaskKey(descriptor.Claim.TaskID)},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value},
 		{Type: etcdstore.MutationDelete, Key: locatorKey},
 	}
-	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 5, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
+	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 6, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -347,6 +350,19 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		etcdstore.Condition{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision},
 	)
 	if final {
+		// Direct Volume input chunks are staged under the same descriptor before
+		// publication. Retire them with their abandoned owner, never through
+		// diagnostic retention. The descriptor CAS fences late chunk writers;
+		// native Task/item/root absence protects any published execution.
+		workID := ids.DeriveAt(ids.KindWorkItem, stored.Claim.CreatedAt, stored.Claim.TaskID, "volume")
+		conditions = append(conditions,
+			etcdstore.Condition{Key: workqueue.TaskKey(stored.Claim.TaskID)},
+			etcdstore.Condition{Key: workqueue.ItemKey(workID)},
+			etcdstore.Condition{Key: volumework.InputKey(workID)},
+		)
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: volumework.InputPrefix(workID), Prefix: true,
+		})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: descriptorKey})
 	} else {
 		stored.UpdatedAt = now
@@ -360,7 +376,7 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		defer clear(value)
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value})
 	}
-	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 66, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
+	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 70, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -384,7 +400,7 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 		return false, err
 	}
 	rootKey := blueprints.EnvironmentBlueprintRootKey(descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID)
-	taskPrimaryKey := taskjournal.TaskStorageKey(descriptor.Claim.TaskID)
+	taskPrimaryKey := workqueue.TaskKey(descriptor.Claim.TaskID)
 	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{descriptorKey, locatorKey, markerKey, rootKey, taskPrimaryKey},
 	})
@@ -441,9 +457,11 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	if err != nil || root != blueprints.EnvironmentBlueprintSealFromDescriptor(stored) {
 		return false, blueprints.CorruptEnvironmentBlueprintStage()
 	}
-	task, err := etcd.DecodeTaskRecord(evidence.Values[4].Value)
+	task, err := workqueue.DecodeTask(evidence.Values[4].Value)
 	if err != nil || task.ID != stored.Claim.TaskID ||
-		task.Params[blueprints.EnvironmentDesiredRevisionParam] != stored.Claim.RevisionID {
+		task.Scope.EnvironmentID != stored.Claim.EnvironmentID ||
+		task.Intent.SHA256 != stored.Claim.Intent.CiphertextDigest ||
+		!task.CreatedAt.Equal(stored.Claim.CreatedAt) {
 		return false, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	conditions := []etcdstore.Condition{{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision}}

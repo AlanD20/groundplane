@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -46,7 +46,7 @@ func (repository *Repository) cleanupPublishedMetadataRevision(
 		return false, err
 	}
 	rootKey := blueprints.EnvironmentBlueprintRootKey(descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID)
-	taskKey := taskjournal.TaskStorageKey(descriptor.Claim.TaskID)
+	taskKey := workqueue.TaskKey(descriptor.Claim.TaskID)
 	keys := []string{descriptorKey, markerKey, rootKey, taskKey}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: page.ReadRevision})
 	if err != nil {
