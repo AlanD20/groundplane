@@ -1904,6 +1904,20 @@ message NetworkWorkCompletionAck {
   google.protobuf.Timestamp finished_at = 4;
 }
 
+message NetworkWorkFailureRequest {
+  WorkAttemptIdentity attempt = 1;
+  string reason = 2;
+}
+
+message NetworkWorkFailureAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bytes failure = 3;
+  string outcome = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
 message NetworkWorkHelperRequest {
   NetworkWorkAssignment assignment = 1;
   WorkStartAck start = 2;

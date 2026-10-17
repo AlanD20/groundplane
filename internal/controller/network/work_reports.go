@@ -23,6 +23,8 @@ type WorkRecords interface {
 	LoadNetworkWorkInput(context.Context, workqueue.View) (*agentpb.NetworkWorkInput, error)
 	PrepareNetworkWorkCheckpoint(context.Context, workqueue.ResumeView, *agentpb.NetworkWorkInput, networkexecution.Progress, time.Time) (workqueue.Change, error)
 	PrepareNetworkWorkCompletion(context.Context, workqueue.ResumeView, *agentpb.NetworkWorkInput, time.Time) (workqueue.Change, error)
+	PrepareFailure(context.Context, workqueue.ResumeView, networkexecution.FailureReason, time.Time, bool) (workqueue.Change, workexecution.Completion, error)
+	LoadFailure(context.Context, workqueue.ResumeView) ([]byte, error)
 }
 
 type WorkReports struct {
