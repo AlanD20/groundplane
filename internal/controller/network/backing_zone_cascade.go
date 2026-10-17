@@ -14,7 +14,6 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -379,54 +378,6 @@ func (service *backingZoneCascadeService) waitForTask(
 			)
 		}
 	}
-}
-
-func orderBackingZoneCascadeAttaches(
-	attaches []etcdstore.Versioned[attachrecord.Record],
-) ([]etcdstore.Versioned[attachrecord.Record], error) {
-	byID := make(map[string]etcdstore.Versioned[attachrecord.Record], len(attaches))
-	indegree := make(map[string]int, len(attaches))
-	edges := make(map[string][]string, len(attaches))
-	for _, attach := range attaches {
-		if _, exists := byID[attach.Record.ID]; exists {
-			return nil, errs.New(errs.KindInternal, "backing Zone cascade contains duplicate Attach identity")
-		}
-		byID[attach.Record.ID] = attach
-		indegree[attach.Record.ID] = 0
-	}
-	for _, attach := range attaches {
-		for _, grantID := range attach.Record.GrantAttachIDs {
-			if _, exists := byID[grantID]; !exists {
-				return nil, errs.New(errs.KindInternal, "backing Zone cascade grant target is missing")
-			}
-			edges[attach.Record.ID] = append(edges[attach.Record.ID], grantID)
-			indegree[grantID]++
-		}
-	}
-	ready := make([]string, 0, len(attaches))
-	for id, degree := range indegree {
-		if degree == 0 {
-			ready = append(ready, id)
-		}
-	}
-	slices.Sort(ready)
-	result := make([]etcdstore.Versioned[attachrecord.Record], 0, len(attaches))
-	for len(ready) != 0 {
-		id := ready[0]
-		ready = ready[1:]
-		result = append(result, byID[id])
-		for _, target := range edges[id] {
-			indegree[target]--
-			if indegree[target] == 0 {
-				ready = append(ready, target)
-				slices.Sort(ready)
-			}
-		}
-	}
-	if len(result) != len(attaches) {
-		return nil, errs.New(errs.KindInternal, "backing Zone cascade Attach grants contain a cycle")
-	}
-	return result, nil
 }
 
 func cascadeIdempotencyKey(kind string, parentID string, targetID string) string {
