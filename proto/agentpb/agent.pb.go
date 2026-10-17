@@ -18740,11 +18740,13 @@ func (x *NetworkWorkInput) GetCandidate() *ComposeArtifact {
 }
 
 type NetworkWorkAssignment struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       *WorkAttemptIdentity   `protobuf:"bytes,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	Input         *NetworkWorkInput      `protobuf:"bytes,2,opt,name=input,proto3" json:"input,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Attempt          *WorkAttemptIdentity   `protobuf:"bytes,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	Input            *NetworkWorkInput      `protobuf:"bytes,2,opt,name=input,proto3" json:"input,omitempty"`
+	RecoverySource   []byte                 `protobuf:"bytes,3,opt,name=recovery_source,json=recoverySource,proto3" json:"recovery_source,omitempty"`
+	RecoveryBoundary []byte                 `protobuf:"bytes,4,opt,name=recovery_boundary,json=recoveryBoundary,proto3" json:"recovery_boundary,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *NetworkWorkAssignment) Reset() {
@@ -18787,6 +18789,20 @@ func (x *NetworkWorkAssignment) GetAttempt() *WorkAttemptIdentity {
 func (x *NetworkWorkAssignment) GetInput() *NetworkWorkInput {
 	if x != nil {
 		return x.Input
+	}
+	return nil
+}
+
+func (x *NetworkWorkAssignment) GetRecoverySource() []byte {
+	if x != nil {
+		return x.RecoverySource
+	}
+	return nil
+}
+
+func (x *NetworkWorkAssignment) GetRecoveryBoundary() []byte {
+	if x != nil {
+		return x.RecoveryBoundary
 	}
 	return nil
 }
@@ -42649,10 +42665,12 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\vdocker_name\x18\x04 \x01(\tR\n" +
 	"dockerName\x12#\n" +
 	"\rintent_sha256\x18\x05 \x01(\fR\fintentSha256\x12C\n" +
-	"\tcandidate\x18\x06 \x01(\v2%.groundplane.agent.v1.ComposeArtifactR\tcandidate\"\x9a\x01\n" +
+	"\tcandidate\x18\x06 \x01(\v2%.groundplane.agent.v1.ComposeArtifactR\tcandidate\"\xf0\x01\n" +
 	"\x15NetworkWorkAssignment\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12<\n" +
-	"\x05input\x18\x02 \x01(\v2&.groundplane.agent.v1.NetworkWorkInputR\x05input\"\x7f\n" +
+	"\x05input\x18\x02 \x01(\v2&.groundplane.agent.v1.NetworkWorkInputR\x05input\x12'\n" +
+	"\x0frecovery_source\x18\x03 \x01(\fR\x0erecoverySource\x12+\n" +
+	"\x11recovery_boundary\x18\x04 \x01(\fR\x10recoveryBoundary\"\x7f\n" +
 	"\x1cNetworkWorkCheckpointRequest\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12\x1a\n" +
 	"\bprogress\x18\x02 \x01(\fR\bprogress\"\x99\x02\n" +

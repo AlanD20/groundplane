@@ -17,11 +17,16 @@ type NetworkHelperInput struct {
 	Procedure   *agentpb.NetworkWorkInput
 	Progress    networkexecution.Progress
 	InspectOnly bool
+	Recovery    *networkexecution.Recovery
 }
 
 func OpenNetworkHelperRequest(request *agentpb.NetworkWorkHelperRequest) (NetworkHelperInput, error) {
+	if request != nil && request.Assignment != nil && len(request.Assignment.RecoverySource) != 0 {
+		return openNetworkRecoveryHelper(request)
+	}
 	if request == nil || proto.Size(request) > MaximumPlanBytes || RejectUnknown(request) != nil ||
-		request.Assignment == nil || request.Assignment.Attempt == nil || request.Report == nil || request.Acknowledgement == nil {
+		request.Assignment == nil || request.Assignment.Attempt == nil || request.Report == nil || request.Acknowledgement == nil ||
+		len(request.Assignment.RecoveryBoundary) != 0 {
 		return NetworkHelperInput{}, invalidNetworkWork()
 	}
 	claimed := request.Assignment.Attempt
@@ -79,6 +84,14 @@ func ReadNetworkHelperObservation(input NetworkHelperInput, response *agentpb.Ne
 		NetworkID: response.NetworkId,
 		Input:     workexecution.Input{ID: response.Input.InputId, SHA256: hex.EncodeToString(response.Input.Sha256)},
 		Ready:     response.Ready, Absent: response.Absent, At: response.ObservedAt.AsTime().UTC(),
+	}
+	if input.Recovery != nil {
+		report := networkexecution.RecoveryReport{AttemptID: input.Attempt.ID, ForwardID: input.Recovery.Forward.ID,
+			Failure: input.Recovery.Evidence, HelperStopped: true, Observation: observation}
+		if err := report.Validate(input.Attempt, *input.Recovery, input.Procedure.Action, input.Procedure.NetworkId, input.Progress); err != nil {
+			return networkexecution.Observation{}, err
+		}
+		return observation, nil
 	}
 	if input.InspectOnly {
 		if input.Progress.Validate(input.Attempt, input.Procedure.Action, input.Procedure.NetworkId) != nil ||

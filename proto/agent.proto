@@ -1875,6 +1875,8 @@ enum NetworkWorkAction {
 message NetworkWorkAssignment {
   WorkAttemptIdentity attempt = 1;
   NetworkWorkInput input = 2;
+  bytes recovery_source = 3;
+  bytes recovery_boundary = 4;
 }
 
 message NetworkWorkCheckpointRequest {

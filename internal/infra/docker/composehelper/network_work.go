@@ -28,6 +28,10 @@ func ExecuteNetworkWork(ctx context.Context, taskRunner runner.Runner, request *
 		return nil, errs.New(errs.KindInternal, "Network helper is not configured")
 	}
 	bounded, cancel := context.WithDeadline(ctx, input.Attempt.Deadline)
+	if input.InspectOnly {
+		cancel()
+		bounded, cancel = context.WithTimeout(ctx, 30*time.Second)
+	}
 	defer cancel()
 	observation, dockerID, err := observeNetworkWork(bounded, taskRunner, input)
 	if err != nil {
