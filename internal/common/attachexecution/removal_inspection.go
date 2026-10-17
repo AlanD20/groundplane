@@ -134,3 +134,23 @@ func DecodeRemovalInspection(input RecoveryInput, raw []byte, reference workexec
 	}
 	return report, nil
 }
+
+// Checkpoint identifies the inspection that actually observed the external
+// effect. It is distinct from the interrupted forward command's checkpoint.
+func (report RemovalInspection) Checkpoint(input RecoveryInput) (workexecution.Checkpoint, error) {
+	raw, evidence, err := EncodeRemovalInspection(input, report)
+	clear(raw)
+	if err != nil {
+		return workexecution.Checkpoint{}, err
+	}
+	if input.Attempt.StartedAt == nil {
+		return workexecution.Checkpoint{}, invalid("an unstarted inspection cannot acknowledge observed runtime")
+	}
+	timestamp, err := ids.Timestamp(ids.KindWorkItem, input.Attempt.WorkItemID)
+	if err != nil {
+		return workexecution.Checkpoint{}, err
+	}
+	return workexecution.Checkpoint{AttemptID: input.Attempt.ID, Sequence: 1,
+		StageID:  ids.DeriveAt(ids.KindStep, timestamp, input.Attempt.WorkItemID, "attach-removal/inspection"),
+		Evidence: evidence, RecordedAt: report.ObservedAt}, nil
+}

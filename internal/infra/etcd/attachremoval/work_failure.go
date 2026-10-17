@@ -73,7 +73,17 @@ func PrepareRemovalFailure(ctx context.Context, reader Reader, view workqueue.Re
 		outcome = workexecution.Superseded
 	}
 	change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: WorkFailureKey(input.Attempt.ID), Value: raw}}
-	return change, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}, nil
+	completion := workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}
+	if !settled {
+		recovery, err := prepareRemovalRecoverySource(ctx, reader, view, input, reason, completion, at)
+		if err != nil {
+			keyvalue.ClearMutationValues(change.Mutations)
+			return workqueue.Change{}, workexecution.Completion{}, err
+		}
+		change.Conditions = append(change.Conditions, recovery.Conditions...)
+		change.Mutations = append(change.Mutations, recovery.Mutations...)
+	}
+	return change, completion, nil
 }
 
 func LoadRemovalFailure(ctx context.Context, reader Reader, view workqueue.ResumeView) ([]byte, error) {

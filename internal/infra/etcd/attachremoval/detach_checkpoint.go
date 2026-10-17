@@ -14,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -105,36 +106,57 @@ func (repository *InputRepository) prepareConsumerSettlement(ctx context.Context
 		report.Progress.InFlight || report.Progress.Completed != ordinal+1 || captured.Snapshot.Runtime == nil {
 		return workqueue.Change{}, recordcodec.CorruptRecord()
 	}
+	source := serviceruntimerecord.Acknowledgement{TaskID: input.Attempt.TaskID, WorkItemID: input.Attempt.WorkItemID,
+		AttemptID: input.Attempt.ID, Executor: input.Attempt.Executor, Input: input.Attempt.Input, Checkpoint: checkpoint,
+		RenderGeneration: captured.Snapshot.Runtime.Source.RenderGeneration, AcknowledgedAt: report.Progress.UpdatedAt}
+	return repository.prepareConsumerAcknowledgement(ctx, view, captured, source, input.Removal.Consumer.Candidate)
+}
+
+// prepareConsumerAcknowledgement accepts an actual forward command checkpoint
+// or an actual recovery inspection checkpoint. It never manufactures a forward
+// result from a cleanup observation.
+func (repository *InputRepository) prepareConsumerAcknowledgement(ctx context.Context, view workqueue.ResumeView,
+	captured DetachInput, source serviceruntimerecord.Acknowledgement, candidate *agentpb.ComposeArtifact,
+) (workqueue.Change, error) {
+	if captured.Snapshot.Runtime == nil || candidate == nil || source.TaskID != captured.TaskID ||
+		source.WorkItemID != captured.WorkItemID || view.Work.Item.Item.Input == nil || source.Input != *view.Work.Item.Item.Input {
+		return workqueue.Change{}, recordcodec.CorruptRecord()
+	}
+	expected, err := captured.ConsumerTransition(ctx)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	defer clearConsumer(expected)
+	if expected == nil || !proto.Equal(expected.Candidate, candidate) {
+		return workqueue.Change{}, recordcodec.CorruptRecord()
+	}
 	previous := *captured.Snapshot.Runtime
 	updatedRuntime := previous.Runtime
-	updatedRuntime.CurrentArtifact, err = proto.MarshalOptions{Deterministic: true}.Marshal(input.Removal.Consumer.Candidate)
+	updatedRuntime.CurrentArtifact, err = proto.MarshalOptions{Deterministic: true}.Marshal(candidate)
 	if err != nil {
 		return workqueue.Change{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(updatedRuntime.CurrentArtifact)
-	source := serviceruntimerecord.Acknowledgement{TaskID: input.Attempt.TaskID, WorkItemID: input.Attempt.WorkItemID,
-		AttemptID: input.Attempt.ID, Executor: input.Attempt.Executor, Input: input.Attempt.Input, Checkpoint: checkpoint,
-		RenderGeneration: previous.Source.RenderGeneration, AcknowledgedAt: report.Progress.UpdatedAt}
 	next, err := serviceruntimerecord.AcknowledgeAttach(previous, serviceruntimerecord.AttachPreparation{
-		EnvironmentID: previous.EnvironmentID, WorkItemID: input.Attempt.WorkItemID, Input: input.Attempt.Input,
-		StageID: checkpoint.StageID, RenderGeneration: source.RenderGeneration,
+		EnvironmentID: previous.EnvironmentID, WorkItemID: source.WorkItemID, Input: source.Input,
+		StageID: source.Checkpoint.StageID, RenderGeneration: source.RenderGeneration,
 		Updates: []serviceruntimerecord.AttachUpdate{{PreviousRevision: captured.Snapshot.RuntimeRevision, Runtime: updatedRuntime}},
 	}, source)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	key, runtimeKey := ConsumerSettlementKey(input.Attempt.WorkItemID), serviceruntimerecord.Key(previous.Runtime.ServiceID)
+	key, runtimeKey := ConsumerSettlementKey(source.WorkItemID), serviceruntimerecord.Key(previous.Runtime.ServiceID)
 	read, err := repository.read(ctx, []string{key, runtimeKey}, view.Work.ReadRevision)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	defer keyvalue.ClearValues(read.Values)
-	digest := hex.EncodeToString(input.Removal.Consumer.Candidate.YamlSha256)
+	digest := hex.EncodeToString(candidate.YamlSha256)
 	if receipt := read.Values[0]; receipt != nil {
 		saved, err := recordcodec.Decode[consumerSettlement](receipt.Value, "detach-consumer-settlement")
-		if err != nil || saved.CandidateSHA256 != digest || saved.Source.TaskID != input.Attempt.TaskID ||
-			saved.Source.WorkItemID != input.Attempt.WorkItemID || saved.Source.Input != input.Attempt.Input ||
-			saved.Source.Executor.HostID != input.Attempt.Executor.HostID {
+		if err != nil || saved.CandidateSHA256 != digest || saved.Source.TaskID != source.TaskID ||
+			saved.Source.WorkItemID != source.WorkItemID || saved.Source.Input != source.Input ||
+			saved.Source.Executor.HostID != source.Executor.HostID {
 			return workqueue.Change{}, recordcodec.CorruptRecord()
 		}
 		next.Source = saved.Source
@@ -142,8 +164,8 @@ func (repository *InputRepository) prepareConsumerSettlement(ctx context.Context
 			return workqueue.Change{}, recordcodec.CorruptRecord()
 		}
 		change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: receipt.ModRevision}}}
-		if saved.Source.AttemptID == input.Attempt.ID {
-			if !sameCheckpoint(saved.Source.Checkpoint, checkpoint) {
+		if saved.Source.AttemptID == source.AttemptID {
+			if !sameCheckpoint(saved.Source.Checkpoint, source.Checkpoint) {
 				return workqueue.Change{}, recordcodec.CorruptRecord()
 			}
 			return change, nil
