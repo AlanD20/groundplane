@@ -1918,6 +1918,18 @@ message NetworkWorkFailureAck {
   google.protobuf.Timestamp started_at = 6;
 }
 
+message NetworkWorkRecoveryReportRequest {
+  WorkAttemptIdentity attempt = 1;
+  bytes report = 2;
+}
+
+message NetworkWorkRecoveryReportAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  bool boundary_completed = 3;
+  google.protobuf.Timestamp finished_at = 4;
+}
+
 message NetworkWorkHelperRequest {
   NetworkWorkAssignment assignment = 1;
   WorkStartAck start = 2;
@@ -1933,6 +1945,7 @@ message NetworkWorkHelperResponse {
   bool absent = 4;
   google.protobuf.Timestamp observed_at = 5;
   bool inspection = 6;
+  bool present = 7;
 }
 
 // Captured Volume work has a closed procedure, not a list of generic steps.

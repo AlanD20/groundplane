@@ -23,6 +23,7 @@ type Observation struct {
 	NetworkID string              `json:"network_id"`
 	Input     workexecution.Input `json:"input"`
 	Ready     bool                `json:"ready"`
+	Present   bool                `json:"present"`
 	Absent    bool                `json:"absent"`
 	At        time.Time           `json:"at"`
 }
@@ -118,7 +119,7 @@ func (progress Progress) Confirm(attempt workexecution.Attempt, action agentpb.N
 }
 
 func (observation Observation) proves(stage Stage) bool {
-	if observation.Ready && observation.Absent {
+	if observation.Present == observation.Absent || observation.Ready && !observation.Present {
 		return false
 	}
 	switch stage {

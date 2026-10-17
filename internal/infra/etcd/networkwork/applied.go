@@ -62,6 +62,13 @@ func (repository *InputRepository) PrepareNetworkWorkCompletion(ctx context.Cont
 }
 
 func (repository *InputRepository) prepareApplied(ctx context.Context, view workqueue.ResumeView, input *agentpb.NetworkWorkInput) (workqueue.Change, error) {
+	return repository.prepareObservedApplied(ctx, view, input,
+		input.Action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE, false, view.Checkpoint.Record.RecordedAt)
+}
+
+func (repository *InputRepository) prepareObservedApplied(ctx context.Context, view workqueue.ResumeView,
+	input *agentpb.NetworkWorkInput, absent, preserve bool, observedAt time.Time,
+) (workqueue.Change, error) {
 	key := AppliedKey(input.NetworkId)
 	read, err := repository.read(ctx, []string{key}, view.Work.ReadRevision)
 	if err != nil {
@@ -76,20 +83,26 @@ func (repository *InputRepository) prepareApplied(ctx context.Context, view work
 		}
 		if saved.NetworkID != input.NetworkId || saved.EnvironmentID != input.EnvironmentId ||
 			saved.HostID != view.Attempt.Attempt.Executor.HostID || saved.DockerName != input.DockerName ||
-			saved.ObservedAt.After(view.Checkpoint.Record.RecordedAt) {
+			saved.ObservedAt.After(observedAt) {
 			return workqueue.Change{}, conflict("Network completion would replace differently owned storage")
 		}
 		revision = value.ModRevision
 	}
 	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: revision}}}
-	if input.Action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE {
+	if preserve {
+		if revision == 0 || absent {
+			return workqueue.Change{}, conflict("Present Network has no retained applied configuration")
+		}
+		return change, nil
+	}
+	if absent {
 		change.Mutations = []keyvalue.Mutation{{Type: keyvalue.MutationDelete, Key: key}}
 		return change, nil
 	}
 	state := AppliedNetwork{NetworkID: input.NetworkId, EnvironmentID: input.EnvironmentId,
 		HostID: view.Attempt.Attempt.Executor.HostID, DockerName: input.DockerName,
 		IntentSHA256: hex.EncodeToString(input.IntentSha256), Input: view.Attempt.Attempt.Input,
-		ObservedAt: view.Checkpoint.Record.RecordedAt}
+		ObservedAt: observedAt}
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return workqueue.Change{}, err

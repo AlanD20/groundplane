@@ -67,7 +67,7 @@ func ExecuteNetworkWork(ctx context.Context, taskRunner runner.Runner, request *
 	}
 	response := &agentpb.NetworkWorkHelperResponse{NetworkId: observation.NetworkID,
 		Input: &agentpb.WorkInputReference{InputId: observation.Input.ID, Sha256: digest},
-		Ready: observation.Ready, Absent: observation.Absent, ObservedAt: timestamppb.New(observation.At), Inspection: input.InspectOnly}
+		Ready: observation.Ready, Present: observation.Present, Absent: observation.Absent, ObservedAt: timestamppb.New(observation.At), Inspection: input.InspectOnly}
 	if _, err := executionplan.ReadNetworkHelperObservation(input, response); err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func observeNetworkWork(ctx context.Context, taskRunner runner.Runner, input exe
 		}
 		observation.Ready = true
 	}
-	observation.At = time.Now().UTC()
+	observation.Present, observation.At = true, time.Now().UTC()
 	return observation, actual.ID, nil
 }
 

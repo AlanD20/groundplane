@@ -83,7 +83,7 @@ func ReadNetworkHelperObservation(input NetworkHelperInput, response *agentpb.Ne
 	observation := networkexecution.Observation{
 		NetworkID: response.NetworkId,
 		Input:     workexecution.Input{ID: response.Input.InputId, SHA256: hex.EncodeToString(response.Input.Sha256)},
-		Ready:     response.Ready, Absent: response.Absent, At: response.ObservedAt.AsTime().UTC(),
+		Ready:     response.Ready, Present: response.Present, Absent: response.Absent, At: response.ObservedAt.AsTime().UTC(),
 	}
 	if input.Recovery != nil {
 		report := networkexecution.RecoveryReport{AttemptID: input.Attempt.ID, ForwardID: input.Recovery.Forward.ID,
@@ -96,7 +96,7 @@ func ReadNetworkHelperObservation(input NetworkHelperInput, response *agentpb.Ne
 	if input.InspectOnly {
 		if input.Progress.Validate(input.Attempt, input.Procedure.Action, input.Procedure.NetworkId) != nil ||
 			!input.Progress.InFlight || observation.NetworkID != input.Procedure.NetworkId || observation.Input != input.Attempt.Input ||
-			observation.At.Before(*input.Progress.BeganAt) || observation.Ready && observation.Absent {
+			observation.At.Before(*input.Progress.BeganAt) || observation.Present == observation.Absent || observation.Ready && !observation.Present {
 			return networkexecution.Observation{}, invalidNetworkWork()
 		}
 		return observation, nil

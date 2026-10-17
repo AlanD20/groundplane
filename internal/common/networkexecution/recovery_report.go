@@ -36,7 +36,8 @@ func (report RecoveryReport) Validate(attempt workexecution.Attempt, source Reco
 	observed := report.Observation
 	if observed.NetworkID != networkID || observed.Input != attempt.Input || observed.At.IsZero() ||
 		observed.At.Before(*attempt.StartedAt) || observed.At.Before(source.Failure.RecordedAt) ||
-		observed.Ready && observed.Absent {
+		observed.Present == observed.Absent || observed.Ready && !observed.Present ||
+		action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_ENSURE && observed.Present && !observed.Ready {
 		return invalidProgress()
 	}
 	return nil

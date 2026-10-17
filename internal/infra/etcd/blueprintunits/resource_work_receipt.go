@@ -5,10 +5,12 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/networkexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // PrepareVolumeCompletionReceipt records the effect of the exact native
@@ -16,25 +18,59 @@ import (
 // storage record and work completion in the same transaction. This method
 // grants no host effects and creates no parallel execution record.
 func (repository *Repository) PrepareVolumeCompletionReceipt(ctx context.Context, view workqueue.ResumeView) (workqueue.Change, error) {
-	return repository.prepareResourceCompletionReceipt(ctx, view, ids.KindVolume, workexecution.Volume, false)
+	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindVolume, workexecution.Volume, false)
 }
 
 func (repository *Repository) PrepareNetworkCompletionReceipt(ctx context.Context, view workqueue.ResumeView, removed bool) (workqueue.Change, error) {
-	return repository.prepareResourceCompletionReceipt(ctx, view, ids.KindNetwork, workexecution.Network, removed)
+	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindNetwork, workexecution.Network, removed)
+}
+
+func (repository *Repository) prepareForwardResourceReceipt(ctx context.Context, view workqueue.ResumeView,
+	kind ids.Kind, operation workexecution.Operation, removed bool,
+) (workqueue.Change, error) {
+	checkpoint := view.Checkpoint.Record
+	if checkpoint == nil || checkpoint.AttemptID != view.Attempt.Attempt.ID {
+		return workqueue.Change{}, invalidRecord()
+	}
+	return repository.prepareResourceCompletionReceipt(ctx, view, kind, operation, resourceReceiptEvidence{
+		direction: workexecution.Forward, result: checkpoint.Evidence, removal: removed, absent: removed,
+	})
+}
+
+func (repository *Repository) PrepareNetworkRecoveryReceipt(ctx context.Context, view workqueue.ResumeView,
+	source networkexecution.Recovery, boundary networkexecution.Progress, action agentpb.NetworkWorkAction,
+	report networkexecution.RecoveryReport,
+) (workqueue.Change, error) {
+	_, evidence, err := networkexecution.EncodeRecoveryReport(view.Attempt.Attempt, source, action, view.Work.Item.Item.TargetID, boundary, report)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	removed := action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE
+	return repository.prepareResourceCompletionReceipt(ctx, view, ids.KindNetwork, workexecution.Network, resourceReceiptEvidence{
+		direction: workexecution.Recovery, result: evidence, removal: removed, absent: report.Observation.Absent,
+		preserve: removed && report.Observation.Present,
+	})
+}
+
+type resourceReceiptEvidence struct {
+	direction workexecution.Direction
+	result    workexecution.Input
+	removal   bool
+	absent    bool
+	preserve  bool
 }
 
 func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Context, view workqueue.ResumeView,
-	kind ids.Kind, operation workexecution.Operation, removed bool,
+	kind ids.Kind, operation workexecution.Operation, proof resourceReceiptEvidence,
 ) (workqueue.Change, error) {
 	task, item, attempt := view.Work.Task.Task, view.Work.Item.Item, view.Attempt.Attempt
-	checkpoint := view.Checkpoint.Record
 	if task.Validate() != nil || item.Validate() != nil || attempt.Validate() != nil ||
 		task.Action != workexecution.ActionApply || task.Scope.EnvironmentID == "" ||
 		item.Operation != operation || item.TaskID != task.ID || item.Input == nil ||
-		!view.ActiveAttempt || attempt.FinishedAt != nil || attempt.Direction != workexecution.Forward ||
+		!view.ActiveAttempt || attempt.FinishedAt != nil || attempt.Direction != proof.direction ||
 		attempt.TaskID != task.ID || attempt.WorkItemID != item.ID || attempt.Input != *item.Input ||
 		attempt.Executor.Executor != workexecution.Agent || attempt.Executor.HostID != item.Placement.HostID ||
-		checkpoint == nil || checkpoint.AttemptID != attempt.ID || checkpoint.Evidence.Validate() != nil {
+		proof.result.Validate() != nil {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt requires its active proven attempt")
 	}
 	graph, err := repository.LoadCapturedGraph(ctx, task, view.Work.ReadRevision)
@@ -55,7 +91,7 @@ func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Conte
 		unit = &graph.Record.Units[index]
 		break
 	}
-	if unit == nil || unit.Target.Kind != kind || unit.Removal != removed ||
+	if unit == nil || unit.Target.Kind != kind || unit.Removal != proof.removal ||
 		len(unit.Writes) != 1 || unit.Writes[0] != unit.Target {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt has no captured storage effect")
 	}
@@ -67,6 +103,7 @@ func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Conte
 		return workqueue.Change{}, invalidRecord()
 	}
 	var appliedRevision int64
+	var prior AppliedRecord
 	found := false
 	for _, applied := range snapshot.Applied {
 		if applied.Record.Target == unit.Target {
@@ -74,20 +111,27 @@ func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Conte
 				return workqueue.Change{}, corruptRecord()
 			}
 			found, appliedRevision = true, applied.Revision
+			prior = applied.Record
 		}
 	}
 	if !found {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint resource receipt has no prior resource state")
 	}
 	state := Applied
-	if removed {
+	if proof.absent {
 		state = Absent
 	}
 	receipt := AppliedRecord{EnvironmentID: task.Scope.EnvironmentID, Target: unit.Target,
 		State: state, Fingerprint: unit.Fingerprint, ParentTaskID: task.ID,
 		Execution: &AppliedExecution{TaskID: task.ID, WorkItemID: item.ID, AttemptID: attempt.ID,
-			Executor: attempt.Executor, Input: attempt.Input, Result: checkpoint.Evidence}}
-	if removed {
+			Executor: attempt.Executor, Input: attempt.Input, Result: proof.result}}
+	if proof.preserve {
+		if prior.State != Applied {
+			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Present Network has no proven prior configuration")
+		}
+		receipt.Fingerprint = prior.Fingerprint
+	}
+	if proof.absent {
 		receipt.Fingerprint = ""
 	}
 	value, err := EncodeApplied(receipt)

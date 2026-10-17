@@ -25,7 +25,7 @@ func EqualProgress(left, right Progress) bool {
 	}
 	if left.Observation != nil {
 		a, b := *left.Observation, *right.Observation
-		return a.NetworkID == b.NetworkID && a.Input == b.Input && a.Ready == b.Ready && a.Absent == b.Absent && a.At.Equal(b.At)
+		return a.NetworkID == b.NetworkID && a.Input == b.Input && a.Ready == b.Ready && a.Present == b.Present && a.Absent == b.Absent && a.At.Equal(b.At)
 	}
 	return true
 }

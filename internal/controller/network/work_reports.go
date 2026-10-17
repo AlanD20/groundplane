@@ -25,6 +25,8 @@ type WorkRecords interface {
 	PrepareNetworkWorkCompletion(context.Context, workqueue.ResumeView, *agentpb.NetworkWorkInput, time.Time) (workqueue.Change, error)
 	PrepareFailure(context.Context, workqueue.ResumeView, networkexecution.FailureReason, time.Time, bool) (workqueue.Change, workexecution.Completion, error)
 	LoadFailure(context.Context, workqueue.ResumeView) ([]byte, error)
+	PrepareRecoveryResult(context.Context, workqueue.ResumeView, []byte, time.Time) (workqueue.Change, workexecution.Completion, error)
+	LoadRecoveryResult(context.Context, workqueue.ResumeView) ([]byte, bool, error)
 }
 
 type WorkReports struct {
