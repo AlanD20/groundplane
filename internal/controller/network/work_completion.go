@@ -78,7 +78,7 @@ func (service *WorkReports) CompleteNetwork(ctx context.Context, authorization a
 		return nil, errs.New(errs.KindStateConflict, "saved Network result does not acknowledge successful completion")
 	}
 	return &agentpb.NetworkWorkCompletionAck{Attempt: proto.CloneOf(request.Attempt), Evidence: proto.CloneOf(request.Evidence),
-		StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
+		StartedAt: timestamppb.New(*attempt.StartedAt), FinishedAt: timestamppb.New(*attempt.FinishedAt), Outcome: string(attempt.Outcome)}, nil
 }
 
 // A proven host effect remains applied, but cannot turn cancelled or superseded

@@ -1902,6 +1902,7 @@ message NetworkWorkCompletionAck {
   WorkInputReference evidence = 2;
   google.protobuf.Timestamp started_at = 3;
   google.protobuf.Timestamp finished_at = 4;
+  string outcome = 5;
 }
 
 message NetworkWorkFailureRequest {

@@ -18993,6 +18993,7 @@ type NetworkWorkCompletionAck struct {
 	Evidence      *WorkInputReference    `protobuf:"bytes,2,opt,name=evidence,proto3" json:"evidence,omitempty"`
 	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	FinishedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	Outcome       string                 `protobuf:"bytes,5,opt,name=outcome,proto3" json:"outcome,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -19053,6 +19054,13 @@ func (x *NetworkWorkCompletionAck) GetFinishedAt() *timestamppb.Timestamp {
 		return x.FinishedAt
 	}
 	return nil
+}
+
+func (x *NetworkWorkCompletionAck) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
 }
 
 type NetworkWorkFailureRequest struct {
@@ -43067,14 +43075,15 @@ const file_proto_agent_proto_rawDesc = "" +
 	"recordedAt\"\xa9\x01\n" +
 	"\x1cNetworkWorkCompletionRequest\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12D\n" +
-	"\bevidence\x18\x02 \x01(\v2(.groundplane.agent.v1.WorkInputReferenceR\bevidence\"\x9d\x02\n" +
+	"\bevidence\x18\x02 \x01(\v2(.groundplane.agent.v1.WorkInputReferenceR\bevidence\"\xb7\x02\n" +
 	"\x18NetworkWorkCompletionAck\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12D\n" +
 	"\bevidence\x18\x02 \x01(\v2(.groundplane.agent.v1.WorkInputReferenceR\bevidence\x129\n" +
 	"\n" +
 	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12;\n" +
 	"\vfinished_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"x\n" +
+	"finishedAt\x12\x18\n" +
+	"\aoutcome\x18\x05 \x01(\tR\aoutcome\"x\n" +
 	"\x19NetworkWorkFailureRequest\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xce\x02\n" +
