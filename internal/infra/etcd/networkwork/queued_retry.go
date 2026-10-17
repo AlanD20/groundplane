@@ -46,6 +46,13 @@ func (repository *InputRepository) PrepareQueuedRetryStop(ctx context.Context, v
 	if err != nil {
 		return workqueue.Change{}, err
 	}
+	fence, err := repository.prepareRemovalFenceRelease(ctx, view)
+	if err != nil {
+		keyvalue.ZeroMutationBytes(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, fence.Conditions...)
+	change.Mutations = append(change.Mutations, fence.Mutations...)
 	change.Conditions = append(change.Conditions, guards...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: workqueue.AttemptKey(attempt.ID), ModRevision: previous.Revision})
 	return change, nil

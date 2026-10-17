@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
@@ -23,6 +24,18 @@ func (repository *InputRepository) PrepareRetention(ctx context.Context, view wo
 		return false, workqueue.Change{}, conflict("Network history requires expired, fully settled execution")
 	}
 	var guards []keyvalue.Condition
+	if task.Action == workexecution.ActionRemove {
+		key := deletions.TombstoneKey(string(deletions.DeletionTargetZone), item.TargetID)
+		read, err := repository.read(ctx, []string{key}, view.ReadRevision)
+		if err != nil {
+			return false, workqueue.Change{}, err
+		}
+		defer keyvalue.ClearValues(read.Values)
+		if read.Values[0] != nil {
+			return false, workqueue.Change{}, conflict("Zone deletion still holds captured removal authority")
+		}
+		guards = append(guards, keyvalue.Condition{Key: key})
+	}
 	if item.Input == nil {
 		// A stopped Apply may have staged chunks without ever making this
 		// item executable. Task/item CAS fences the staging writer; there can
@@ -39,7 +52,7 @@ func (repository *InputRepository) PrepareRetention(ctx context.Context, view wo
 		if input.NetworkId != item.TargetID || input.EnvironmentId != task.Scope.EnvironmentID {
 			return false, workqueue.Change{}, conflict("Network history input belongs to different resources")
 		}
-		guards = captured
+		guards = append(guards, captured...)
 	}
 	guards = append(guards,
 		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},

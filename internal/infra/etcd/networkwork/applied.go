@@ -44,6 +44,15 @@ func (repository *InputRepository) PrepareNetworkWorkCompletion(ctx context.Cont
 	}
 	proof.Conditions = append(proof.Conditions, change.Conditions...)
 	proof.Mutations = append(proof.Mutations, change.Mutations...)
+	if view.Work.Task.Task.Action == workexecution.ActionRemove {
+		finalization, err := repository.prepareDirectRemovalFinalization(ctx, view, input)
+		if err != nil {
+			keyvalue.ZeroMutationBytes(proof.Mutations)
+			return workqueue.Change{}, err
+		}
+		proof.Conditions = append(proof.Conditions, finalization.Conditions...)
+		proof.Mutations = append(proof.Mutations, finalization.Mutations...)
+	}
 	if view.Work.Task.Task.Action == workexecution.ActionApply {
 		ledger, err := blueprintunits.NewRepository(repository.store)
 		if err != nil {
@@ -90,9 +99,13 @@ func (repository *InputRepository) prepareObservedApplied(ctx context.Context, v
 	}
 	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: revision}}}
 	if preserve {
-		if revision == 0 || absent {
-			return workqueue.Change{}, conflict("Present Network has no retained applied configuration")
+		if absent {
+			return workqueue.Change{}, conflict("absent Network cannot preserve a present configuration")
 		}
+		// A directly created Zone can have been materialized by a Service
+		// deployment without a standalone Network receipt. Inspection proves
+		// presence and ownership, not its prior configuration. Keep that
+		// configuration unrecorded instead of inventing it from removal input.
 		return change, nil
 	}
 	if absent {

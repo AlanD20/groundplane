@@ -239,11 +239,13 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	removalCompletion, err := hierarchydeletion.NewRemovalCompletion(hierarchyRecords)
+	removalCompletion, err := hierarchydeletion.NewRemovalCompletion(hierarchyRecords, volumeAgent, networkAgent)
 	if err != nil {
 		return nil, err
 	}
 	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+		{Action: workexecution.ActionCreate, Owner: volumeAgent},
+		{Action: workexecution.ActionUpdate, Owner: volumeAgent},
 		{Action: workexecution.ActionScript, Owner: scripts},
 		{Action: workexecution.ActionApply, Owner: blueprintCompletion},
 		{Action: workexecution.ActionCheck, Owner: workdispatch.CheckImageCompletion{}},

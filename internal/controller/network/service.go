@@ -68,7 +68,7 @@ func NewEtcdService(
 	if err != nil {
 		return nil, err
 	}
-	zoneDeletions, err := newZoneDeletionService(repository, plans, zoneDeletionIdempotency)
+	zoneDeletions, err := newZoneDeletionService(repository, zoneDeletionIdempotency)
 	if err != nil {
 		return nil, err
 	}

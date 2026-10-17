@@ -82,9 +82,19 @@ func (repository *InputRepository) PrepareFailure(ctx context.Context, view work
 	} else if item.ForwardRevoked {
 		outcome = workexecution.Superseded
 	}
-	return workqueue.Change{Conditions: guards, Mutations: []keyvalue.Mutation{
+	change := workqueue.Change{Conditions: guards, Mutations: []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: FailureKey(attempt.ID), Value: raw},
-	}}, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}, nil
+	}}
+	if settled && (task.Stop != nil || item.ForwardRevoked) {
+		fence, err := repository.prepareRemovalFenceRelease(ctx, view.Work)
+		if err != nil {
+			keyvalue.ZeroMutationBytes(change.Mutations)
+			return workqueue.Change{}, workexecution.Completion{}, err
+		}
+		change.Conditions = append(change.Conditions, fence.Conditions...)
+		change.Mutations = append(change.Mutations, fence.Mutations...)
+	}
+	return change, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: settled}, nil
 }
 
 func (repository *InputRepository) LoadFailure(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {

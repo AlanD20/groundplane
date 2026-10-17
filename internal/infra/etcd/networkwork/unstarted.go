@@ -60,6 +60,13 @@ func (repository *InputRepository) PrepareUnstarted(ctx context.Context, view wo
 		clear(value)
 		return workqueue.Change{}, err
 	}
+	fence, err := repository.prepareRemovalFenceRelease(ctx, view)
+	if err != nil {
+		keyvalue.ZeroMutationBytes(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, fence.Conditions...)
+	change.Mutations = append(change.Mutations, fence.Mutations...)
 	change.Conditions = append(change.Conditions, guards...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: UnstartedKey(item.ID)})
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: UnstartedKey(item.ID), Value: value})

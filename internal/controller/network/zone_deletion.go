@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -34,6 +35,8 @@ const (
 )
 
 type zoneDeletionRepository interface {
+	ResolveResourceHost(context.Context) (workexecution.Placement, error)
+	PublishNetworkWork(context.Context, etcd.NetworkWorkPublication) (etcd.IdempotencyTransactionResult, error)
 	GetEnvironmentDesiredInput(
 		context.Context,
 		string,
@@ -206,7 +209,6 @@ type zoneDeletionPlanResolver interface {
 
 type zoneDeletionService struct {
 	repository  zoneDeletionRepository
-	plans       zoneDeletionPlanResolver
 	idempotency zoneDeletionIdempotency
 	impacts     zoneDeletionImpactResolver
 	now         func() time.Time
@@ -218,13 +220,12 @@ type zoneDeletionImpactResolver interface {
 
 func newZoneDeletionService(
 	repository zoneDeletionRepository,
-	plans zoneDeletionPlanResolver,
 	idempotency zoneDeletionIdempotency,
 ) (*zoneDeletionService, error) {
-	if repository == nil || plans == nil || idempotency == nil {
+	if repository == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "Zone deletion service is not configured")
 	}
-	return &zoneDeletionService{repository: repository, plans: plans, idempotency: idempotency, now: time.Now}, nil
+	return &zoneDeletionService{repository: repository, idempotency: idempotency, now: time.Now}, nil
 }
 
 func (service *zoneCreationService) RemoveZone(
@@ -345,10 +346,6 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	ordinaryOwnership := project.Record.Kind == hierarchyrecord.ProjectKindTenant &&
 		zone.Record.Desired.OwnerKind == core.ZoneOwnerEnvironment && zone.Record.Desired.OwnerID == environment.Record.ID
 	backingOwnership := project.Record.Kind == hierarchyrecord.ProjectKindBacking &&
@@ -450,6 +447,16 @@ func (service *zoneDeletionService) removeZoneOnce(
 		claim.ProjectionSchema != blueprints.EnvironmentDesiredInputSchema {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone staged baseline changed")
 	}
+	if !backing {
+		return service.publishZoneRemovalWork(ctx, etcd.NetworkWorkPublication{
+			Project: project, Environment: environment, Zone: zone, Authorities: authorities,
+			Claim: claim, Projection: candidate,
+		}, projectionEvidence, affected, evidence)
+	}
+	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	task := etcd.TaskRecord{
 		ID: claim.RevisionID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
@@ -477,11 +484,6 @@ func (service *zoneDeletionService) removeZoneOnce(
 		task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 		task.TimeoutSeconds = backingZoneCascadeTimeoutSeconds
 		task.PlanHash, err = backingZoneCascadePlanHash(intent, impactToken)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	} else {
-		task, err = service.plans.PrepareZoneRemovalTask(ctx, task, intent, ids.New(ids.KindStep))
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}

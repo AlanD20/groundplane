@@ -63,6 +63,13 @@ func (repository *InputRepository) PrepareUnstartedRetry(ctx context.Context, vi
 		return workqueue.Change{}, err
 	}
 	evidenceKey := unstartedEvidencePrefix(item.ID) + item.Result.SHA256
+	fence, err := repository.prepareRemovalRetryFence(ctx, view)
+	if err != nil {
+		keyvalue.ZeroMutationBytes(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, fence.Conditions...)
+	change.Mutations = append(change.Mutations, fence.Mutations...)
 	change.Conditions = append(change.Conditions, guards...)
 	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, keyvalue.Condition{Key: evidenceKey})
 	change.Mutations = append(change.Mutations,

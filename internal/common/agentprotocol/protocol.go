@@ -3,7 +3,7 @@
 package agentprotocol
 
 const (
-	SchemaVersion     = 41
+	SchemaVersion     = 42
 	SocketPath        = "/run/groundplane/controller/agent.sock"
 	RuntimeConfigPath = "/run/groundplane/agent.yaml"
 	TokenPath         = "/run/groundplane/agent.token"

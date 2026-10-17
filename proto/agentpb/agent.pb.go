@@ -18809,6 +18809,7 @@ type NetworkWorkInput struct {
 	IntentSha256         []byte                 `protobuf:"bytes,5,opt,name=intent_sha256,json=intentSha256,proto3" json:"intent_sha256,omitempty"`
 	Candidate            *ComposeArtifact       `protobuf:"bytes,6,opt,name=candidate,proto3" json:"candidate,omitempty"`
 	DisconnectServiceIds []string               `protobuf:"bytes,7,rep,name=disconnect_service_ids,json=disconnectServiceIds,proto3" json:"disconnect_service_ids,omitempty"`
+	RemovalSubnet        string                 `protobuf:"bytes,8,opt,name=removal_subnet,json=removalSubnet,proto3" json:"removal_subnet,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -18890,6 +18891,13 @@ func (x *NetworkWorkInput) GetDisconnectServiceIds() []string {
 		return x.DisconnectServiceIds
 	}
 	return nil
+}
+
+func (x *NetworkWorkInput) GetRemovalSubnet() string {
+	if x != nil {
+		return x.RemovalSubnet
+	}
+	return ""
 }
 
 type NetworkWorkAssignment struct {
@@ -43210,7 +43218,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x15candidate_artifact_id\x18\x02 \x01(\tR\x13candidateArtifactId\"w\n" +
 	"\x1eComponentRestorationCompensate\x12!\n" +
 	"\fcomponent_id\x18\x01 \x01(\tR\vcomponentId\x122\n" +
-	"\x15candidate_artifact_id\x18\x02 \x01(\tR\x13candidateArtifactId\"\xda\x02\n" +
+	"\x15candidate_artifact_id\x18\x02 \x01(\tR\x13candidateArtifactId\"\x81\x03\n" +
 	"\x10NetworkWorkInput\x12?\n" +
 	"\x06action\x18\x01 \x01(\x0e2'.groundplane.agent.v1.NetworkWorkActionR\x06action\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1d\n" +
@@ -43220,7 +43228,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"dockerName\x12#\n" +
 	"\rintent_sha256\x18\x05 \x01(\fR\fintentSha256\x12C\n" +
 	"\tcandidate\x18\x06 \x01(\v2%.groundplane.agent.v1.ComposeArtifactR\tcandidate\x124\n" +
-	"\x16disconnect_service_ids\x18\a \x03(\tR\x14disconnectServiceIds\"\xf0\x01\n" +
+	"\x16disconnect_service_ids\x18\a \x03(\tR\x14disconnectServiceIds\x12%\n" +
+	"\x0eremoval_subnet\x18\b \x01(\tR\rremovalSubnet\"\xf0\x01\n" +
 	"\x15NetworkWorkAssignment\x12C\n" +
 	"\aattempt\x18\x01 \x01(\v2).groundplane.agent.v1.WorkAttemptIdentityR\aattempt\x12<\n" +
 	"\x05input\x18\x02 \x01(\v2&.groundplane.agent.v1.NetworkWorkInputR\x05input\x12'\n" +

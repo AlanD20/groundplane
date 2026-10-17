@@ -43,6 +43,7 @@ type Repository struct {
 	tasks       *etcd.TaskRepository
 	idempotency *etcd.IdempotencyRepository
 	desired     *desiredrevisionstore.Repository
+	publication *etcd.EnvironmentBlueprintRepository
 	facts       RemovalDatabaseResolver
 }
 
@@ -119,15 +120,16 @@ func NewRepository(
 	attaches *etcd.AttachRepository,
 	tasks *etcd.TaskRepository,
 	idempotency *etcd.IdempotencyRepository,
+	publication *etcd.EnvironmentBlueprintRepository,
 	facts RemovalDatabaseResolver,
 ) (*Repository, error) {
 	if hierarchy == nil || services == nil || zones == nil || routes == nil || attaches == nil || tasks == nil ||
-		idempotency == nil || facts == nil {
+		idempotency == nil || publication == nil || facts == nil {
 		return nil, errs.New(errs.KindInternal, "Network persistence dependencies are not configured")
 	}
 	return &Repository{
 		hierarchy: hierarchy, services: services, zones: zones, routes: routes,
-		attaches: attaches, tasks: tasks, idempotency: idempotency, facts: facts,
+		attaches: attaches, tasks: tasks, idempotency: idempotency, publication: publication, facts: facts,
 	}, nil
 }
 

@@ -2,24 +2,22 @@ package volume
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
-	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
 	"math"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type ReadRepository interface {
+	ReadAppliedVolumes(context.Context, []string, int64) (map[string]volumework.AppliedVolume, error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEnvironmentOwnedIdentities(
 		context.Context,
@@ -65,22 +63,12 @@ type ReadRepository interface {
 
 type MutationRepository interface {
 	ReadRepository
+	ResolveResourceHost(context.Context) (workexecution.Placement, error)
 	GetEnvironmentDesiredInput(
 		context.Context,
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
-	PublishEnvironmentVolumeRemovalWithTask(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		int64,
-		blueprints.EnvironmentBlueprintStageClaim,
-		projectionrecord.EnvironmentComposeProjection,
-		etcd.VolumeRemovalBackupPolicyPreparation,
-		removal.InitialPublication,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	PublishVolumeWork(context.Context, etcd.VolumeWorkPublication) (etcd.IdempotencyTransactionResult, error)
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentBlueprintHead(
@@ -95,23 +83,6 @@ type MutationRepository interface {
 		context.Context,
 		blueprints.EnvironmentBlueprintStageRequest,
 	) (blueprints.EnvironmentBlueprintSeal, error)
-	PublishEnvironmentDesiredRevisionWithTask(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		int64,
-		blueprints.EnvironmentBlueprintStageClaim,
-		blueprints.EnvironmentDesiredRevisionIdentity,
-		projectionrecord.EnvironmentComposeProjection,
-		[]blueprints.EnvironmentBlueprintZoneChange,
-		[]blueprints.EnvironmentBlueprintServiceChange,
-		[]blueprints.EnvironmentBlueprintRouteChange,
-		groupstore.ReleaseGroupBlueprintPreparedMutation,
-		componentplanning.ComponentTaskPreparation,
-		blueprintplanning.BlueprintAttachTaskPreparation,
-		etcd.TaskRecord,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
 }
 
 func desiredState(

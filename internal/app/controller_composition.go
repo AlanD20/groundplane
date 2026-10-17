@@ -171,7 +171,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		return nil, err
 	}
-	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, authority, execution, backups.cleanup, cfg)
+	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, authority)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)
@@ -184,6 +184,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		execution.attachRecords,
 		authority.tasks,
 		authority.idempotency,
+		authority.environmentBlueprintRecords,
 		execution.attachFactValues,
 	)
 	if err != nil {
@@ -431,6 +432,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Release Group Blueprint planner: %w", err)
 	}
+	blueprintAdmission, err := newBlueprintWorkAdmission(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Blueprint work admission: %w", err)
+	}
 	environmentBlueprints, err := blueprint.NewService(
 		cfg.Storage.VolumeRoot, cfg.EnvironmentPool,
 		environmentBlueprintRepository, environmentBlueprintIdempotency, execution.materializationResolver,
@@ -439,6 +445,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		entryGeneration,
 		execution.attachFactValues,
 		bootstrap.componentCatalog, execution.planResolver,
+		blueprintAdmission,
 		environmentBlueprintRepository, backups.policyKeys, releaseExecutionTimeout,
 	)
 	if err != nil {
@@ -500,12 +507,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing-service mutations: %w", err)
 	}
-	volumeMutations, err := configureVolumeMutationPlans(
-		cfg.Storage.VolumeRoot,
+	volumeMutations, err := configureVolumeMutations(
 		environmentBlueprintRepository,
 		authority.intentCoordinator,
 		authority.idempotency,
-		dataServices.volumeReads, dataServices.backupPolicyRecords, store, execution.planResolver, agentRuntime,
+		dataServices.volumeReads, dataServices.backupPolicyRecords,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -530,12 +536,19 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform runtime: %w", err)
 	}
+	imageDiagnostics, err := newExecutionDiagnostics(store)
+	if err != nil {
+		_ = platform.Close()
+		_ = store.Close()
+		return nil, err
+	}
 	imageDelivery, err := imagedelivery.New(
 		registryimages.Local{},
 		store,
 		authority.tasks,
 		authority.idempotency,
 		authority.intentCoordinator,
+		imageDiagnostics,
 	)
 	if err != nil {
 		_ = platform.Close()
@@ -562,6 +575,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		software:                software,
 		images:                  imageDelivery,
 		agentRuntime:            agentRuntime,
+		blueprintReleases:       blueprintReleases,
 		runner:                  runnerComposition,
 		backup:                  backups,
 		hierarchy:               hierarchyMutations,
@@ -581,7 +595,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		environmentBlueprints:   environmentBlueprints,
 		hierarchyDeletions:      hierarchyDeletions,
 		attachMutations:         attachMutations,
-		taskMutations:           taskMutations,
 		controllerTasks:         controllerTaskRunner,
 		staleTasks:              staleTasks,
 	})

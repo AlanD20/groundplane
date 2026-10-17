@@ -38,6 +38,24 @@ func (repository *InputRepository) PrepareRecoveryResult(ctx context.Context, vi
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err
 	}
+	if view.Work.Task.Task.Action == workexecution.ActionRemove && report.Observation.Absent {
+		finalization, err := repository.prepareDirectRemovalFinalization(ctx, view, captured.Input)
+		if err != nil {
+			keyvalue.ZeroMutationBytes(resource.Mutations)
+			return workqueue.Change{}, workexecution.Completion{}, err
+		}
+		resource.Conditions = append(resource.Conditions, finalization.Conditions...)
+		resource.Mutations = append(resource.Mutations, finalization.Mutations...)
+	}
+	if report.Observation.Present && (view.Work.Task.Task.Stop != nil || view.Work.Item.Item.ForwardRevoked) {
+		fence, err := repository.prepareRemovalFenceRelease(ctx, view.Work)
+		if err != nil {
+			keyvalue.ZeroMutationBytes(resource.Mutations)
+			return workqueue.Change{}, workexecution.Completion{}, err
+		}
+		resource.Conditions = append(resource.Conditions, fence.Conditions...)
+		resource.Mutations = append(resource.Mutations, fence.Mutations...)
+	}
 	if view.Work.Task.Task.Action == workexecution.ActionApply {
 		ledger, err := blueprintunits.NewRepository(repository.store)
 		if err != nil {

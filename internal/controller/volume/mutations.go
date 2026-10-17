@@ -4,14 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"net/http"
 	"time"
@@ -19,12 +15,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -32,36 +27,28 @@ import (
 const (
 	volumeCreationRoute           = "/volumes"
 	volumeIdentityRoute           = "/volumes/{id}"
-	volumeMutationTimeoutSeconds  = int64(120)
 	maximumVolumeMutationAttempts = 3
-	volumeActionParam             = "volume_action"
-	volumeComposeKeyParam         = "volume_compose_key"
-	volumeBaselineRevisionParam   = "volume_baseline_revision_id"
 	volumeMutationActionAdd       = "add"
 	volumeMutationActionEdit      = "edit"
 	volumeMutationActionRemove    = "remove"
 )
 
 type MutationService struct {
-	volumeRoot      string
-	repository      MutationRepository
-	idempotency     *mutationIdempotency
-	reads           *ReadService
-	policies        *etcd.BackupPolicyRepository
-	removalEvidence *volumeremoval.EvidenceRepository
-	now             func() time.Time
+	repository  MutationRepository
+	idempotency *mutationIdempotency
+	reads       *ReadService
+	policies    *etcd.BackupPolicyRepository
+	now         func() time.Time
 }
 
 func NewMutationService(
-	volumeRoot string,
 	repository MutationRepository,
 	coordinator *requestidempotency.Coordinator,
 	idempotencyRepository *etcd.IdempotencyRepository,
 	reads *ReadService,
 	policies *etcd.BackupPolicyRepository,
-	removalEvidence *volumeremoval.EvidenceRepository,
 ) (*MutationService, error) {
-	if volumeRoot == "" || repository == nil || reads == nil || policies == nil || removalEvidence == nil {
+	if repository == nil || reads == nil || policies == nil {
 		return nil, errs.New(errs.KindInternal, "Volume mutation service is not configured")
 	}
 	idempotency, err := newMutationIdempotency(coordinator, idempotencyRepository)
@@ -69,8 +56,8 @@ func NewMutationService(
 		return nil, err
 	}
 	return &MutationService{
-		volumeRoot: volumeRoot, repository: repository, idempotency: idempotency, reads: reads, now: time.Now,
-		policies: policies, removalEvidence: removalEvidence,
+		repository: repository, idempotency: idempotency, reads: reads, now: time.Now,
+		policies: policies,
 	}, nil
 }
 
@@ -297,6 +284,10 @@ func (service *MutationService) mutateOnce(
 	if existing {
 		return replayResponse(resolution)
 	}
+	placement, err := service.repository.ResolveResourceHost(ctx)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	environment, err := service.repository.GetEnvironment(ctx, request.environmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -419,15 +410,6 @@ func (service *MutationService) mutateOnce(
 	if request.action == volumeMutationActionRemove {
 		candidate.Backup = removalPolicy.Projection()
 	}
-	planID := stableIDFromTask(ids.KindPlan, taskID)
-	artifactID := stableIDFromTask(ids.KindConfig, taskID)
-	plan, steps, err := buildVolumeMutationPlan(
-		service.volumeRoot, planID, generation, request, oldArtifact, newArtifact, intentDigest,
-		volumeMutationConsumerIDs(current.Record, request.volumeID),
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
 	projectionEvidence, err := desiredrevision.PreflightProjection(candidate)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -469,28 +451,12 @@ func (service *MutationService) mutateOnce(
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
+	task, item, captured, err := buildVolumeWork(workexecution.Scope{
+		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
+	}, placement, claim, request, oldArtifact, newArtifact, intentDigest,
+		volumeMutationConsumerIDs(current.Record, request.volumeID))
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	params := map[string]string{
-		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceVolume,
-		taskjournal.TaskMaterializationEnvironmentParam: request.environmentID,
-		blueprints.EnvironmentDesiredRevisionParam:      claim.RevisionID,
-		taskjournal.TaskComposeArtifactParam:            artifactID,
-		volumeActionParam:                               request.action, volumeComposeKeyParam: request.key,
-		taskplanning.VolumeTaskIntentSHA256Param: hex.EncodeToString(intentDigest),
-	}
-	if request.action == volumeMutationActionRemove && hasCurrent {
-		params[volumeBaselineRevisionParam] = current.Record.RevisionID
-	}
-	task := etcd.TaskRecord{
-		ID: taskID, OperationID: stableIDFromTask(ids.KindOperation, taskID),
-		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: taskjournal.TaskActorOperator,
-		Executor: taskjournal.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
-		RenderGeneration: int32(generation), Type: volumeMutationTaskType(request.action), Target: request.volumeID,
-		Params: params, Steps: taskjournal.CaptureStepDescriptions(steps, plan), TimeoutSeconds: volumeMutationTimeoutSeconds,
-		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	response, err := volumeMutationResponse(request, environment.Record, taskID)
 	if err != nil {
@@ -508,35 +474,11 @@ func (service *MutationService) mutateOnce(
 		}
 		marker.ReplayTarget = &target
 	}
-	var result etcd.IdempotencyTransactionResult
-	var mutationErr error
-	if request.action == volumeMutationActionRemove {
-		initial, preparationErr := service.prepareRemoval(ctx, current, request, &task, marker)
-		if preparationErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, preparationErr
-		}
-		result, mutationErr = service.repository.PublishEnvironmentVolumeRemovalWithTask(
-			ctx, project, environment, expectedHeadRevision, claim, candidate, removalPolicy, initial, task, marker,
-		)
-	} else {
-		result, mutationErr = service.repository.PublishEnvironmentDesiredRevisionWithTask(
-			ctx,
-			project,
-			environment,
-			expectedHeadRevision,
-			claim,
-			blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
-			candidate,
-			nil,
-			nil,
-			nil,
-			groupstore.ReleaseGroupBlueprintPreparedMutation{},
-			componentplanning.ComponentTaskPreparation{},
-			blueprintplanning.BlueprintAttachTaskPreparation{},
-			task,
-			marker,
-		)
-	}
+	result, mutationErr := service.repository.PublishVolumeWork(ctx, etcd.VolumeWorkPublication{
+		Project: project, Environment: environment, ExpectedHeadRevision: expectedHeadRevision,
+		Claim: claim, Projection: candidate, Policy: removalPolicy,
+		Task: task, Item: item, Input: captured, Marker: marker,
+	})
 	if mutationErr != nil {
 		if !isUnknownPublicationOutcome(mutationErr) {
 			return idempotencyrecord.IdempotencyResponse{}, mutationErr

@@ -55,6 +55,7 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 		task.Actor != workexecution.OperatorActor || task.Action != workexecution.ActionRemove ||
 		item.ID != ids.DeriveAt(ids.KindWorkItem, request.Claim.CreatedAt, request.Claim.TaskID, "network") ||
 		request.Input == nil || request.Input.NetworkId != request.Zone.Record.Desired.ID ||
+		request.Input.RemovalSubnet != request.Zone.Record.Desired.Subnet ||
 		request.Zone.Record.Desired.OwnerKind != core.ZoneOwnerEnvironment ||
 		request.Zone.Record.Desired.OwnerID != request.Environment.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Zone removal requires its ready owning Environment")
@@ -159,6 +160,9 @@ func (repository *EnvironmentBlueprintRepository) PublishNetworkWork(ctx context
 		return IdempotencyTransactionResult{}, err
 	}
 	defer keyvalue.ZeroMutationBytes(work.Mutations)
+	work.Conditions = append(work.Conditions, keyvalue.Condition{Key: networkwork.RemovalAuthorityKey(item.ID)})
+	work.Mutations = append(work.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
+		Key: networkwork.RemovalAuthorityKey(item.ID), Value: append([]byte(nil), tombstone...)})
 	ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, fence.ReadRevision(),
 		hierarchydeletion.MutationScope{TenantID: task.Scope.TenantID, ProjectID: task.Scope.ProjectID}, nil, nil)
 	if err != nil {

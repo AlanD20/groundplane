@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -30,7 +31,7 @@ func ValidateNetworkWorkInput(input *agentpb.NetworkWorkInput) error {
 	}
 	switch input.Action {
 	case agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_ENSURE:
-		if len(input.DisconnectServiceIds) != 0 {
+		if len(input.DisconnectServiceIds) != 0 || input.RemovalSubnet != "" {
 			return invalidNetworkWork()
 		}
 		artifact := input.Candidate
@@ -52,6 +53,12 @@ func ValidateNetworkWorkInput(input *agentpb.NetworkWorkInput) error {
 		for index, serviceID := range input.DisconnectServiceIds {
 			if ids.Validate(ids.KindService, serviceID) != nil ||
 				index > 0 && input.DisconnectServiceIds[index-1] == serviceID {
+				return invalidNetworkWork()
+			}
+		}
+		if input.RemovalSubnet != "" {
+			subnet, err := ipam.ParseIPv4Prefix(input.RemovalSubnet)
+			if err != nil || subnet.String() != input.RemovalSubnet || ipam.ValidateBridgeSubnet(subnet) != nil {
 				return invalidNetworkWork()
 			}
 		}

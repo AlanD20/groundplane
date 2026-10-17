@@ -1875,6 +1875,7 @@ message NetworkWorkInput {
   bytes intent_sha256 = 5;
   ComposeArtifact candidate = 6;
   repeated string disconnect_service_ids = 7;
+  string removal_subnet = 8;
 }
 
 enum NetworkWorkAction {

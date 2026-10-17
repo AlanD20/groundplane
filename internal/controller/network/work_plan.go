@@ -18,7 +18,7 @@ import (
 // lose only this network connection; pending Service edits are never deployed
 // as an incidental part of removing a Zone.
 func buildZoneRemovalWork(scope workexecution.Scope, placement workexecution.Placement,
-	claim blueprints.EnvironmentBlueprintStageClaim, zoneID, name string, consumers []string,
+	claim blueprints.EnvironmentBlueprintStageClaim, zoneID, name, subnet string, consumers []string,
 ) (workexecution.Task, workexecution.Item, *agentpb.NetworkWorkInput, error) {
 	if scope.EnvironmentID != claim.EnvironmentID || claim.TaskID != claim.RevisionID ||
 		placement.Executor != workexecution.Agent {
@@ -36,7 +36,7 @@ func buildZoneRemovalWork(scope workexecution.Scope, placement workexecution.Pla
 	slices.Sort(consumerIDs)
 	input := &agentpb.NetworkWorkInput{Action: agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE,
 		EnvironmentId: scope.EnvironmentID, NetworkId: zoneID, DockerName: dockerName,
-		IntentSha256: intent, DisconnectServiceIds: consumerIDs}
+		IntentSha256: intent, DisconnectServiceIds: consumerIDs, RemovalSubnet: subnet}
 	workID := ids.DeriveAt(ids.KindWorkItem, claim.CreatedAt, claim.TaskID, "network")
 	inputID := ids.DeriveAt(ids.KindPlan, claim.CreatedAt, workID, "captured-input")
 	owned, raw, reference, err := executionplan.CaptureNetworkWorkInput(inputID, input)

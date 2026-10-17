@@ -28,7 +28,7 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, task 
 		item.Placement.Executor != workexecution.Agent || item.TargetID != input.NetworkId ||
 		task.TargetID != input.NetworkId || task.Scope.EnvironmentID != input.EnvironmentId ||
 		task.Intent.SHA256 != hex.EncodeToString(input.IntentSha256) ||
-		marker.Intent.CiphertextDigest != task.Intent.SHA256 || len(item.Dependencies) != 0 {
+		marker.Intent.CiphertextDigest != task.Intent.SHA256 || len(item.Dependencies) != 0 || input.RemovalSubnet == "" {
 		return workqueue.Change{}, conflict("Zone publication differs from its captured removal")
 	}
 	want := []workexecution.Claim{{ScopeID: input.EnvironmentId},

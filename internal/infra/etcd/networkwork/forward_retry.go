@@ -82,6 +82,13 @@ func (repository *InputRepository) PrepareForwardRetry(ctx context.Context, view
 	if err != nil {
 		return workqueue.Change{}, err
 	}
+	fence, err := repository.prepareRemovalRetryFence(ctx, view)
+	if err != nil {
+		keyvalue.ZeroMutationBytes(change.Mutations)
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, fence.Conditions...)
+	change.Mutations = append(change.Mutations, fence.Mutations...)
 	change.Conditions = append(change.Conditions, guards...)
 	return change, nil
 }
