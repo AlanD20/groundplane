@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -43,6 +44,20 @@ func (repository *InputRepository) PrepareVolumeWorkCompletion(ctx context.Conte
 	}
 	proof.Conditions = append(proof.Conditions, change.Conditions...)
 	proof.Mutations = append(proof.Mutations, change.Mutations...)
+	if view.Work.Task.Task.Action == workexecution.ActionApply {
+		ledger, err := blueprintunits.NewRepository(repository.store)
+		if err != nil {
+			keyvalue.ZeroMutationBytes(proof.Mutations)
+			return workqueue.Change{}, err
+		}
+		receipt, err := ledger.PrepareVolumeCompletionReceipt(ctx, view)
+		if err != nil {
+			keyvalue.ZeroMutationBytes(proof.Mutations)
+			return workqueue.Change{}, err
+		}
+		proof.Conditions = append(proof.Conditions, receipt.Conditions...)
+		proof.Mutations = append(proof.Mutations, receipt.Mutations...)
+	}
 	return proof, nil
 }
 
