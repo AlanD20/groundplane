@@ -458,9 +458,11 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 		return false, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	task, err := workqueue.DecodeTask(evidence.Values[4].Value)
+	// The descriptor and replay marker bind admission; the native Task's
+	// Intent hashes executable desired input, not the encrypted request marker.
+	// They are deliberately different digests for Blueprint Apply.
 	if err != nil || task.ID != stored.Claim.TaskID ||
 		task.Scope.EnvironmentID != stored.Claim.EnvironmentID ||
-		task.Intent.SHA256 != stored.Claim.Intent.CiphertextDigest ||
 		!task.CreatedAt.Equal(stored.Claim.CreatedAt) {
 		return false, blueprints.CorruptEnvironmentBlueprintStage()
 	}
