@@ -21,8 +21,8 @@ const maximumDetachBytes = 4 * executionplan.MaximumPlanBytes
 // DetachInput owns the complete admission snapshot, not a saved old Task or
 // ExecutionPlan. Consumer contains deterministic protobuf bytes so the stored
 // record cannot accept a second JSON representation of the Agent contract.
-// Exact hook input ciphertext and Secret pins are published separately through
-// WorkCapture, bound to this input's digest before execution becomes eligible.
+// Exact hook input ciphertext and Secret pins live in WorkCapture, bound to
+// this input's digest and atomically published with the Task and binding.
 type DetachInput struct {
 	TaskID     string         `json:"task_id"`
 	WorkItemID string         `json:"work_item_id"`

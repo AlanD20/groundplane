@@ -29,7 +29,7 @@ func (repository *InputRepository) PrepareDetachRetention(ctx context.Context, v
 		return false, workqueue.Change{}, err
 	}
 	defer capture.Clear()
-	if item.AttemptNumber != 0 && capture.Revision <= 0 {
+	if capture.Revision <= 0 {
 		return false, workqueue.Change{}, errs.New(errs.KindStateConflict, "executed Detach has lost its captured inputs")
 	}
 	change, err := repository.prepareRetiredDetach(ctx, view, capture.Input, at)
@@ -58,24 +58,12 @@ func (repository *InputRepository) PrepareDetachRetention(ctx context.Context, v
 }
 
 func (repository *InputRepository) retireDetachPins(ctx context.Context, view workqueue.View, capture DetachCapture, guards []keyvalue.Condition) (bool, workqueue.Change, error) {
-	if capture.Revision > 0 && capture.Capture.Pins != nil {
+	if capture.Capture.Pins != nil {
 		return RetireCapturePins(ctx, repository.store, view.ReadRevision, capture.Capture, guards)
 	}
 	operationID := DetachOperation(view)
-	// A crash may have left an unpublished preparation. Collection fences the
-	// work, and the preparation writer compares that same Task/item revision.
-	pins, err := tasksecretpins.NewEtcdRepository(repository.store, capture.Input.Snapshot.Source.Attach.BackingProjectID)
-	if err != nil {
-		return false, workqueue.Change{}, err
-	}
-	owned := make([]tasksecretpins.Condition, len(guards))
-	for index, guard := range guards {
-		owned[index] = tasksecretpins.Condition{Key: guard.Key, ModRevision: guard.ModRevision, Prefix: guard.Prefix}
-	}
-	done, err := pins.AbandonOwned(ctx, operationID, view.Task.Task.ID, view.Item.Item.ID, owned)
-	if err != nil || !done {
-		return false, workqueue.Change{}, err
-	}
+	// Capture and pin activation joined initial publication. A capture without
+	// Secret sources must not have either a root or an unpublished preparation.
 	return true, workqueue.Change{Conditions: []keyvalue.Condition{
 		{Key: tasksecretpins.RootKey(operationID)}, {Key: tasksecretpins.PreparationKey(operationID)},
 		{Key: tasksecretpins.ReversePrefix(operationID), Prefix: true},

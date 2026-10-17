@@ -45,8 +45,8 @@ func (repository *InputRepository) LoadDetachCapture(ctx context.Context, view w
 	defer keyvalue.ClearValues(read.Values)
 	value := read.Values[0]
 	if value == nil {
-		result.Conditions = append(result.Conditions, keyvalue.Condition{Key: key})
-		return result, nil
+		result.Clear()
+		return DetachCapture{}, errs.New(errs.KindStateConflict, "Detach publication has lost its captured hook input authority")
 	}
 	capture, err := DecodeWorkCapture(value.Value)
 	if err != nil {
@@ -78,87 +78,6 @@ func matchesDetachHookCapture(source Input, capture WorkCapture) bool {
 		}
 	}
 	return requiresHook == (capture.Hook != nil)
-}
-
-func unstartedDetachCapture(view workqueue.View) bool {
-	task, item := view.Task.Task, view.Item.Item
-	return item.Operation == workexecution.Detach && item.Phase == workexecution.Ready && item.AttemptNumber == 0 &&
-		item.ActiveAttemptID == "" && !item.ForwardRevoked && task.Stop == nil && task.FinishedAt == nil &&
-		task.CollectionStartedAt == nil && task.PublicationComplete
-}
-
-// PrepareDetachPins retains only the exact Secret versions sealed for this
-// work. Until PrepareDetachCapture publishes their active root, they cannot
-// authorize dispatch or Start.
-func (repository *InputRepository) PrepareDetachPins(ctx context.Context, view workqueue.View,
-	capture WorkCapture,
-) (tasksecretpins.Prepared, error) {
-	if !unstartedDetachCapture(view) || capture.Hook == nil || len(capture.Sources) == 0 || capture.Pins != nil {
-		return tasksecretpins.Prepared{}, errs.New(errs.KindStateConflict, "Detach Secret capture is not eligible for preparation")
-	}
-	current, err := repository.LoadDetachCapture(ctx, view)
-	if err != nil {
-		return tasksecretpins.Prepared{}, err
-	}
-	defer current.Clear()
-	if current.Revision != 0 || !matchesDetachCaptureSource(view, current.Input, capture) ||
-		!matchesDetachHookCapture(current.Input.Snapshot.Source, capture) {
-		return tasksecretpins.Prepared{}, errs.New(errs.KindStateConflict, "Detach Secret source changed or was already captured")
-	}
-	pins, err := tasksecretpins.NewEtcdRepository(repository.store, capture.BackingProjectID)
-	if err != nil {
-		return tasksecretpins.Prepared{}, err
-	}
-	return pins.PrepareOwned(ctx, capture.OperationID, capture.TaskID, capture.WorkItemID, capture.Sources, []tasksecretpins.Condition{
-		{Key: workqueue.TaskKey(view.Task.Task.ID), ModRevision: view.Task.Revision},
-		{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision},
-		{Key: WorkCaptureKey(view.Item.Item.ID)},
-	})
-}
-
-func (repository *InputRepository) PrepareDetachCapture(ctx context.Context, view workqueue.View,
-	capture WorkCapture, prepared tasksecretpins.Prepared,
-) (workqueue.Change, error) {
-	if !unstartedDetachCapture(view) || capture.Validate() != nil || (capture.Pins == nil) != prepared.IsZero() {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach input capture is not eligible for publication")
-	}
-	current, err := repository.LoadDetachCapture(ctx, view)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
-	defer current.Clear()
-	if current.Revision != 0 || !matchesDetachCaptureSource(view, current.Input, capture) ||
-		!matchesDetachHookCapture(current.Input.Snapshot.Source, capture) {
-		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Detach inputs changed or were already captured")
-	}
-	change := workqueue.Change{Conditions: current.Conditions}
-	change.Conditions = append(change.Conditions,
-		keyvalue.Condition{Key: workqueue.TaskKey(view.Task.Task.ID), ModRevision: view.Task.Revision},
-		keyvalue.Condition{Key: workqueue.ItemKey(view.Item.Item.ID), ModRevision: view.Item.Revision})
-	if capture.Pins != nil {
-		binding, err := prepared.Binding()
-		if err != nil || binding != *capture.Pins {
-			return workqueue.Change{}, recordcodec.CorruptRecord()
-		}
-		fragment, err := tasksecretpins.Activation(prepared)
-		if err != nil {
-			return workqueue.Change{}, err
-		}
-		conditions, mutations, err := tasksecretpins.EtcdFragment(fragment)
-		if err != nil {
-			fragment.Clear()
-			return workqueue.Change{}, err
-		}
-		change.Conditions = append(change.Conditions, conditions...)
-		change.Mutations = mutations
-	}
-	raw, err := EncodeWorkCapture(capture)
-	if err != nil {
-		keyvalue.ClearMutationValues(change.Mutations)
-		return workqueue.Change{}, err
-	}
-	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: WorkCaptureKey(capture.WorkItemID), Value: raw})
-	return change, nil
 }
 
 // DetachCaptureAdmission joins immutable source ownership and active Secret

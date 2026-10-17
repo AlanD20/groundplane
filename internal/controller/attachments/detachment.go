@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
@@ -168,11 +169,26 @@ func (service *MutationService) detachAttachOnce(
 	if err := workexecution.ValidateGraph(task, []workexecution.Item{item}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	capture, err := attachremoval.NewDetachCapture(task, item, input)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	defer capture.Clear()
+	if attachremoval.NeedsAgent(source) && source.Backing.Desired.Adapter == "custom" {
+		capture.Hook, err = service.facts.SealBackingHookInputsAtRevision(ctx, capture.OperationID,
+			source.Attach.BackingProjectID, *source.Backing.Desired.Hooks, source.SnapshotRevision)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		if capture.Hook != nil {
+			capture.Sources = append([]tasksecretpinrecord.Record(nil), capture.Hook.SecretSources...)
+		}
+	}
 	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task.ID, task.CreatedAt, &target)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	result, publicationErr := service.repository.PublishDetachWork(ctx, etcd.DetachWorkPublication{
-		Task: task, Item: item, Input: input, Marker: marker, Initiation: initiation})
+		Task: task, Item: item, Input: input, Capture: capture, Marker: marker, Initiation: initiation})
 	return service.resolveMutationResult(ctx, locator, evidence, result, publicationErr, response)
 }

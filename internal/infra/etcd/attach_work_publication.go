@@ -21,6 +21,7 @@ type DetachWorkPublication struct {
 	Task       workexecution.Task
 	Item       workexecution.Item
 	Input      attachremoval.DetachInput
+	Capture    attachremoval.WorkCapture
 	Marker     idempotency.IdempotencyMarker
 	Initiation *TaskInitiation
 }
@@ -113,6 +114,15 @@ func (repository *AttachRepository) PublishDetachWork(ctx context.Context, reque
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	captured, err := inputs.PrepareDetachPublicationCapture(ctx, task, item, request.Input, request.Capture, admission)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(captured.Mutations)
+	admission, err = resourcePublicationConditions(admission, captured.Conditions)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	reference, staged, err := inputs.StageDetach(ctx, item.Input.ID, request.Input, admission)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -142,6 +152,7 @@ func (repository *AttachRepository) PublishDetachWork(ctx context.Context, reque
 	}
 	mutations := append([]keyvalue.Mutation(nil), publication.Mutations...)
 	mutations = append(mutations, ownership.Mutations...)
+	mutations = append(mutations, captured.Mutations...)
 	mutations = append(mutations, staged.Mutations...)
 	mutations = append(mutations, desired.mutations...)
 	mutations = append(mutations, ancestry.Mutations()...)

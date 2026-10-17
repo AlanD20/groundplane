@@ -12,8 +12,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
-	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
-	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -65,58 +63,13 @@ func (owner *Owner) Admit(ctx context.Context, request workqueue.Assignment, at 
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}
-	capture, err := owner.prepareCapture(ctx, view)
+	capture, err := owner.inputs.DetachCaptureAdmission(ctx, view)
 	if err != nil {
 		return workdispatch.Decision{}, err
 	}
 	capture.Conditions = append(capture.Conditions, resource.Conditions...)
 	capture.Conditions = append(capture.Conditions, consumer.Conditions...)
-	if len(capture.Mutations) != 0 {
-		return workdispatch.Decision{Disposition: workdispatch.Advance, Change: capture}, nil
-	}
 	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: item.Deadline, Change: capture}, nil
-}
-
-func (owner *Owner) prepareCapture(ctx context.Context, view workqueue.View) (workqueue.Change, error) {
-	current, err := owner.inputs.LoadDetachCapture(ctx, view)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
-	defer current.Clear()
-	if current.Revision != 0 {
-		return owner.inputs.DetachCaptureAdmission(ctx, view)
-	}
-	digest, err := attachremoval.Digest(current.Input.Snapshot.Source)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
-	capture := attachremoval.WorkCapture{Schema: 1, TaskID: view.Task.Task.ID, WorkItemID: view.Item.Item.ID,
-		OperationID: attachremoval.DetachOperation(view), Action: *view.Item.Item.Input, FrozenSHA256: digest,
-		BackingProjectID: current.Input.Snapshot.Source.Attach.BackingProjectID}
-	defer capture.Clear()
-	source := current.Input.Snapshot.Source
-	if attachremoval.NeedsAgent(source) && source.Backing.Desired.Adapter == "custom" {
-		capture.Hook, err = owner.planner.CaptureHookInputs(ctx, capture.OperationID, source)
-		if err != nil {
-			return workqueue.Change{}, err
-		}
-		if capture.Hook != nil {
-			capture.Sources = append([]tasksecretpinrecord.Record(nil), capture.Hook.SecretSources...)
-		}
-	}
-	prepared := tasksecretpins.Prepared{}
-	if len(capture.Sources) != 0 {
-		prepared, err = owner.inputs.PrepareDetachPins(ctx, view, capture)
-		if err != nil {
-			return workqueue.Change{}, err
-		}
-		binding, err := prepared.Binding()
-		if err != nil {
-			return workqueue.Change{}, err
-		}
-		capture.Pins = &binding
-	}
-	return owner.inputs.PrepareDetachCapture(ctx, view, capture, prepared)
 }
 
 func (owner *Owner) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
