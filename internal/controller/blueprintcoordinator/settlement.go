@@ -67,16 +67,6 @@ func (runner *Runner) tryControllerSettlement(
 			return settlementComplete, settler.SettleRouteOmission(ctx, parent, unit)
 		}
 		return settlementComplete, settler.SettleRoute(ctx, parent, unit)
-	case ids.KindDNSRecord:
-		settler, ok := runner.planner.(DNSSettler)
-		if !ok {
-			return settlementWaiting, errs.New(errs.KindInternal, "Blueprint DNS settler is not configured")
-		}
-		settled, err := settler.TrySettleDNS(ctx, parent, unit)
-		if settled {
-			return settlementComplete, err
-		}
-		return settlementWaiting, err
 	case ids.KindService:
 		if unit.Removal {
 			settler, ok := runner.planner.(ServiceOmissionSettler)

@@ -2,29 +2,33 @@ package blueprint
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type authoredDNSSettlementRepository interface {
-	TrySettleBlueprintDNS(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
+	PrepareBlueprintDNS(context.Context, workqueue.View, blueprintunits.Unit, blueprintunits.Snapshot, time.Time) (etcd.BlueprintDNSPreparation, error)
 }
 
-// DNS uses the platform resolver's real Agent Task, not a separate unit child.
-// False means its acknowledgement is pending, never permission for a no-op.
-func (service *Service) TrySettleDNS(
+// DNS settlement joins the scheduler transaction only after the shared resolver
+// acknowledges the captured record. Waiting never creates an Agent no-op.
+func (service *Service) PrepareDNSSettlement(
 	ctx context.Context,
-	parent etcd.TaskRecord,
+	work workqueue.View,
 	unit blueprintunits.Unit,
-) (bool, error) {
+	snapshot blueprintunits.Snapshot,
+	at time.Time,
+) (etcd.BlueprintDNSPreparation, error) {
 	if service == nil || ctx == nil {
-		return false, errs.New(errs.KindInternal, "Blueprint DNS settler is not configured")
+		return etcd.BlueprintDNSPreparation{}, errs.New(errs.KindInternal, "Blueprint DNS settler is not configured")
 	}
 	settler, ok := service.repository.(authoredDNSSettlementRepository)
 	if !ok {
-		return false, errs.New(errs.KindInternal, "Blueprint DNS settlement repository is not configured")
+		return etcd.BlueprintDNSPreparation{}, errs.New(errs.KindInternal, "Blueprint DNS settlement repository is not configured")
 	}
-	return settler.TrySettleBlueprintDNS(ctx, parent, unit)
+	return settler.PrepareBlueprintDNS(ctx, work, unit, snapshot, at)
 }

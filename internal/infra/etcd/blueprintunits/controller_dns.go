@@ -36,8 +36,8 @@ func validDNSReceipt(record AppliedRecord) bool {
 		proof.Binding.Record.ID == record.Target.ID && proof.Binding.Record.EnvironmentID == record.EnvironmentID
 }
 
-// The caller must join this receipt with the immutable authored input, parent
-// claim, exact resolver observation/Task/input, selected runtime and claim changes.
+// The caller joins this receipt with the immutable authored input, native work
+// decision fence, exact resolver observation/input, runtime and claim changes.
 func PrepareControllerDNSSettlement(snapshot Snapshot, unit Unit, operationID string,
 	authoredRevision int64, proof DNSReceipt,
 ) (MutationPlan, error) {

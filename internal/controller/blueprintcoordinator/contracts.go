@@ -49,12 +49,6 @@ type RouteSettler interface {
 	SettleRouteOmission(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
 }
 
-// DNSSettler settles from the shared resolver's exact acknowledgement. False
-// means waiting for that real Task, never dispatching an extra Agent child.
-type DNSSettler interface {
-	TrySettleDNS(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
-}
-
 // ServiceConfigurationSettler acknowledges configuration without a host Release
 // for stopped/absent Services, disabled profiles and explicit Release Group members.
 type ServiceConfigurationSettler interface {
