@@ -26,7 +26,7 @@ type WorkEvidence struct {
 func (reader *Reader) ResolveWorkSecretEvidence(ctx context.Context, queue *workqueue.Repository,
 	authorization agentregistration.WorkAuthorization, claimed *agentpb.WorkAttemptIdentity, ordinal uint32,
 ) (WorkEvidence, error) {
-	if reader == nil || queue == nil || reader.now == nil {
+	if reader == nil || queue == nil || reader.now == nil || reader.inputs == nil {
 		return WorkEvidence{}, errs.New(errs.KindInternal, "native Backup credential reader is not configured")
 	}
 	guards, err := authorization.Conditions()
@@ -45,11 +45,9 @@ func (reader *Reader) ResolveWorkSecretEvidence(ctx context.Context, queue *work
 		return WorkEvidence{}, errs.New(errs.KindStateConflict, "Backup credential attempt changed")
 	}
 	tracked := &credentialReadGuards{store: reader.store, revision: view.Work.ReadRevision, conditions: make(map[string]keyvalue.Condition)}
-	inputs, err := backupwork.NewInputRepository(tracked)
-	if err != nil {
-		return WorkEvidence{}, err
-	}
-	source, err := inputs.LoadSecretSource(ctx, view, ordinal, reader.now())
+	// Captured input owns its range evidence. Credential lookups remain tracked
+	// point reads; both sets of guards join the same plaintext-delivery grant.
+	source, err := reader.inputs.LoadSecretSource(ctx, view, ordinal, reader.now())
 	if err != nil {
 		return WorkEvidence{}, err
 	}

@@ -24,7 +24,7 @@ func (record Record) Graph() (workexecution.Task, []workexecution.Item, error) {
 	}
 	task := workexecution.Task{ID: record.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionActivate, TargetID: TargetID(),
 		TargetName: "Groundplane software", Intent: reference, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt,
-		Deadline: record.CreatedAt.Add(TaskTimeoutSeconds * time.Second), ExpectedItems: 1}
+		Deadline: record.CreatedAt.Add(time.Duration(TaskTimeoutSeconds) * time.Second), ExpectedItems: 1}
 	stage := workexecution.Item{ID: record.WorkItemID, TaskID: task.ID, Operation: workexecution.SoftwareStaging, TargetID: TargetID(),
 		Placement: workexecution.Placement{Executor: workexecution.Controller}, Claims: []workexecution.Claim{{ScopeID: TargetID()}},
 		Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}

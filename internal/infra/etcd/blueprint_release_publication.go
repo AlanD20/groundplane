@@ -139,7 +139,6 @@ type ReleaseWorkPublication struct {
 	sources       scriptsourcepublication.ScriptSourcePublicationFragment
 	authority     *scriptsourcepublication.Authority
 	members       []scriptsourceevidence.ScriptSourcePreparationMember
-	retained      *blueprintRuntimeRetention
 	requirements  *BlueprintRequirementGate
 }
 
@@ -187,7 +186,7 @@ func newReleaseWorkPublication(input releaseWorkPublicationInput) (ReleaseWorkPu
 func (publication ReleaseWorkPublication) IsZero() bool {
 	return publication.taskID == "" && publication.workItemID == "" && publication.input == (workexecution.Input{}) &&
 		publication.environmentID == "" && publication.operationID == "" &&
-		len(publication.conditions) == 0 && len(publication.mutations) == 0 && publication.retained == nil &&
+		len(publication.conditions) == 0 && len(publication.mutations) == 0 &&
 		publication.requirements == nil
 }
 
@@ -202,7 +201,7 @@ func (publication ReleaseWorkPublication) Change(work workqueue.View, dependenci
 		task.Scope.EnvironmentID != publication.environmentID || publication.input.Validate() != nil ||
 		work.Task.Revision != publication.taskRevision || work.Item.Revision != publication.itemRevision ||
 		work.ReadRevision < work.Task.Revision || work.ReadRevision < work.Item.Revision ||
-		publication.retained != nil || publication.requirements != nil ||
+		publication.requirements != nil ||
 		task.Stop != nil || task.FinishedAt != nil || item.AttemptNumber != 0 || item.ForwardRevoked ||
 		len(publication.conditions) == 0 || len(publication.mutations) == 0 {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Release publication no longer matches its waiting work")

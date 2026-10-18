@@ -165,11 +165,7 @@ func (repository *AttachRepository) PublishDetachWork(ctx context.Context, reque
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	transactions, err := workqueue.NewRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return replay.applyEnvironmentBlueprint(ctx, request.Marker, plan, transactions)
+	return replay.applyEnvironmentBlueprint(ctx, request.Marker, plan, repository.store)
 }
 
 func validateDetachWorkPublication(ctx context.Context, request DetachWorkPublication) error {

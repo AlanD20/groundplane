@@ -30,12 +30,17 @@ func detachChunkKey(workID string, ordinal int) string {
 	return DetachInputPrefix(workID) + "chunks/" + strconv.Itoa(ordinal)
 }
 
+type Store interface {
+	workqueue.Store
+	Get(context.Context, string) (*keyvalue.GetResult, error)
+}
+
 type InputRepository struct {
-	store        workqueue.Store
+	store        Store
 	transactions *workqueue.Repository
 }
 
-func NewInputRepository(store workqueue.Store) (*InputRepository, error) {
+func NewInputRepository(store Store) (*InputRepository, error) {
 	transactions, err := workqueue.NewRepository(store)
 	if err != nil {
 		return nil, err

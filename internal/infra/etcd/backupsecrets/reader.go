@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -75,17 +76,22 @@ func (e *Evidence) Clear() {
 // the runtime repositories so channel composition can depend on one read
 // contract without acquiring lifecycle authority.
 type Reader struct {
-	store backupSecretResolutionStore
-	now   func() time.Time
+	store  backupSecretResolutionStore
+	inputs *backupwork.InputRepository
+	now    func() time.Time
 }
 
 type backupSecretResolutionStore interface {
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
-func NewReader(store backupSecretResolutionStore) (*Reader, error) {
+func NewReader(store backupwork.InputReader) (*Reader, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "backup secret resolution store is required")
 	}
-	return &Reader{store: store, now: time.Now}, nil
+	inputs, err := backupwork.NewInputRepository(store)
+	if err != nil {
+		return nil, err
+	}
+	return &Reader{store: store, inputs: inputs, now: time.Now}, nil
 }

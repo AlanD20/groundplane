@@ -42,7 +42,7 @@ func (progress Progress) StageID(attempt workexecution.Attempt) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	return ids.DeriveAt(ids.KindStep, at, attempt.Input.ID, "service-removal/recovery", string(phase)), nil
+	return ids.DeriveAt(ids.KindStep, at, attempt.Input.ID, "service-removal/recovery/"+string(phase)), nil
 }
 
 func (progress Progress) Checkpoint(attempt workexecution.Attempt, input *agentpb.ServiceLifecycleWorkInput, capture RecoveryCapture) (workexecution.Checkpoint, error) {

@@ -88,7 +88,7 @@ func (input Input) Validate() error {
 }
 
 func (input Input) ConfigurationOperationID() string {
-	return ids.DeriveAt(ids.KindOperation, input.CreatedAt, input.TaskID, input.WorkItemID, "removal-configuration")
+	return ids.DeriveAt(ids.KindOperation, input.CreatedAt, input.TaskID, "removal-configuration/"+input.WorkItemID)
 }
 
 func Encode(input Input) ([]byte, error) {

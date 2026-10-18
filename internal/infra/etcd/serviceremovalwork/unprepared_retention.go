@@ -32,7 +32,7 @@ func (repository *Repository) retireUnprepared(ctx context.Context, view workque
 		return false, workqueue.Change{}, err
 	}
 	change.Conditions = append(change.Conditions, collection.Conditions...)
-	operationID := ids.DeriveAt(ids.KindOperation, task.CreatedAt, task.ID, item.ID, "removal-configuration")
+	operationID := ids.DeriveAt(ids.KindOperation, task.CreatedAt, task.ID, "removal-configuration/"+item.ID)
 	pins, err := tasksecretpins.NewEtcdRepository(repository.store, task.Scope.ProjectID)
 	if err != nil {
 		return false, workqueue.Change{}, err

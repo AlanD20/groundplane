@@ -56,14 +56,14 @@ func (adapter runtimeConfigurationStore) Transact(
 		}
 	}
 	result, err := adapter.store.Transact(ctx, compares, writes)
-	clearKeyValues(result.FailureReads)
+	etcdstore.ClearValues(result.FailureReads)
 	return TxnResult{
 		Succeeded: result.Succeeded,
 		Revision:  result.Revision,
 	}, err
 }
 
-func clearKeyValues(values []*etcdstore.KeyValue) {
+func clearKeyValues(values []*KeyValue) {
 	for _, value := range values {
 		if value != nil {
 			clear(value.Value)

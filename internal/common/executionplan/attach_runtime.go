@@ -1,7 +1,6 @@
 package executionplan
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"slices"
 	"strings"

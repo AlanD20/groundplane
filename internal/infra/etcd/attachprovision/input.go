@@ -16,6 +16,7 @@ import (
 type Store interface {
 	GetMany(context.Context, keyvalue.GetManyRequest) (*keyvalue.GetManyResult, error)
 	Range(context.Context, keyvalue.RangeRequest) (*keyvalue.RangeResult, error)
+	MeasureTransaction(context.Context, []keyvalue.Condition, []keyvalue.Mutation) (keyvalue.TransactionBudget, error)
 	Transact(context.Context, []keyvalue.Condition, []keyvalue.Mutation) (keyvalue.TransactionResult, error)
 }
 

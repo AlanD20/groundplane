@@ -178,9 +178,5 @@ func (repository *AttachRepository) PublishAttachWork(ctx context.Context, reque
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	queue, err := workqueue.NewRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return replay.applyEnvironmentBlueprint(ctx, request.Marker, plan, queue)
+	return replay.applyEnvironmentBlueprint(ctx, request.Marker, plan, repository.store)
 }

@@ -11,3 +11,7 @@ type store interface {
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
 }
+
+type batchStore interface {
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+}

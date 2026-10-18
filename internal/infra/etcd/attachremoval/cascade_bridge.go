@@ -13,7 +13,7 @@ import (
 // CascadeBridgeAdmission proves every consumer removal settled before the final
 // bridge operation. The cursor is updated in the same transaction that removes
 // each binding; dependency scheduling alone is not resource-removal evidence.
-func CascadeBridgeAdmission(ctx context.Context, store workqueue.Store, view workqueue.View) ([]keyvalue.Condition, error) {
+func CascadeBridgeAdmission(ctx context.Context, store Store, view workqueue.View) ([]keyvalue.Condition, error) {
 	task, item := view.Task.Task, view.Item.Item
 	if task.Action != workexecution.ActionRemove || task.Scope.TenantID != "" || task.ExpectedItems <= 1 {
 		return nil, nil

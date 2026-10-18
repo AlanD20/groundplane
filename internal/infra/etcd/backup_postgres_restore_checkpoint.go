@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -50,7 +51,7 @@ func (repository *BackupRuntimeRepository) PrepareDatabaseRestoreProgress(ctx co
 		string(read.Values[1].Value) != view.Work.Task.Task.ID || read.Values[1].ModRevision > current.Revision {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "database Restore native cursor changed")
 	}
-	captured, err := backupwork.DecodeBackupWorkInput(read.Values[2].Value)
+	captured, err := executionplan.DecodeBackupWorkInput(read.Values[2].Value)
 	if err != nil || read.Values[2].Version != 1 || !proto.Equal(captured, admitted.Input()) ||
 		read.Values[3].ModRevision != view.Work.Task.Revision ||
 		backupruntime.ValidateRestoreWorkInput(stored, captured) != nil {

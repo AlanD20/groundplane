@@ -27,10 +27,10 @@ type AttachCreateScope struct {
 type AttachRepository struct {
 	*attachrecord.Lifecycle
 	*attachrecord.Reader
-	store etcdstore.Store
+	store EnvironmentBlueprintStore
 }
 
-func NewAttachRepository(store etcdstore.Store) (*AttachRepository, error) {
+func NewAttachRepository(store EnvironmentBlueprintStore) (*AttachRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
 	}

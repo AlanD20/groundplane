@@ -25,41 +25,6 @@ func decodeAcknowledgedServiceRuntime(
 	return record, nil
 }
 
-func validateAttachRuntimePreparation(input attachrender.AttachTaskRenderInput, task TaskRecord) error {
-	prepared := input.RuntimePreparation
-	if prepared == nil || prepared.EnvironmentID != input.EnvironmentID || prepared.PlanID != task.PlanID ||
-		prepared.PlanHash != task.PlanHash || prepared.RenderGeneration != input.RenderGeneration {
-		return errs.New(errs.KindValidationFailed, "Attach runtime preparation does not match its Task")
-	}
-	if err := serviceruntimerecord.ValidateAttachPreparation(*prepared); err != nil {
-		return err
-	}
-	stepFound := false
-	for _, step := range task.Steps {
-		if step.ID == prepared.StepID {
-			stepFound = true
-		}
-	}
-	if !stepFound {
-		return errs.New(errs.KindValidationFailed, "Attach runtime preparation step is absent")
-	}
-	var selected []string
-	for _, serviceID := range input.ConsumerServiceIDs {
-		if slices.Contains(input.RunningServiceIDs, serviceID) {
-			selected = append(selected, serviceID)
-		}
-	}
-	if len(selected) != len(prepared.Updates) {
-		return errs.New(errs.KindValidationFailed, "Attach runtime preparation selection differs")
-	}
-	for index, update := range prepared.Updates {
-		if update.Runtime.ServiceID != selected[index] {
-			return errs.New(errs.KindValidationFailed, "Attach runtime preparation consumer differs")
-		}
-	}
-	return nil
-}
-
 func attachRuntimeSourceConditions(input attachrender.AttachTaskRenderInput) []etcdstore.Condition {
 	conditions := make([]etcdstore.Condition, len(input.RuntimePreparation.Updates))
 	for index, update := range input.RuntimePreparation.Updates {

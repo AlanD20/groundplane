@@ -60,10 +60,10 @@ func (repository *Repository) ScanInput(ctx context.Context, after string) (Queu
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) > 64 || read.More && len(read.Values) == 0 {
 		return QueuePage{}, corrupt()
 	}
-	defer keyvalue.ClearValues(read.Values)
+	defer keyvalue.ClearRangeValues(read.Values)
 	page := QueuePage{More: read.More}
 	for _, value := range read.Values {
-		if value == nil || !strings.HasPrefix(value.Key, inputQueuePrefix) || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
+		if !strings.HasPrefix(value.Key, inputQueuePrefix) || value.ModRevision <= 0 || value.ModRevision > read.ReadRevision {
 			return QueuePage{}, corrupt()
 		}
 		id := strings.TrimPrefix(value.Key, inputQueuePrefix)

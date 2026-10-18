@@ -134,7 +134,7 @@ func (repository *InputRepository) restoreTerminalGuards(ctx context.Context,
 		if completed || record.ConfigProgress.PublishedHeadRevision > 0 {
 			expectedID, expectedRevision = record.TaskID, record.ConfigProgress.PublishedHeadRevision
 		}
-		if !completed && record.MutationStarted && record.Point.ConfigArchive != nil && id == record.TaskID && record.ConfigProgress.PublishedHeadRevision == 0 &&
+		if !completed && record.MutationStarted && id == record.TaskID && record.ConfigProgress.PublishedHeadRevision == 0 &&
 			record.ConfigProgress.DeleteEntryOrdinal == record.ConfigProgress.DeleteEntryCount &&
 			record.ConfigProgress.UpsertEntryOrdinal == record.Point.ConfigArchive.EntryCount {
 			// Publication and the source record share one transaction. An absent

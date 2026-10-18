@@ -11,6 +11,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// entryArtifactRuntimeEqual permits different file-capture envelopes, not a
+// different workload, network or Volume definition.
+func entryArtifactRuntimeEqual(baseline, candidate *agentpb.ComposeArtifact) bool {
+	compared := proto.CloneOf(baseline)
+	compared.ArtifactId, compared.CanonicalYaml, compared.YamlSha256 = candidate.ArtifactId, candidate.CanonicalYaml, candidate.YamlSha256
+	return proto.Equal(compared, candidate)
+}
+
 // ValidateEntryConfigurationWorkInput binds files and optional runtime effects
 // to the Controller's captured Environment. It accepts no step program, image
 // selection, dependency startup or whole-project reconciliation authority.

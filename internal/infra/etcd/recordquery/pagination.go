@@ -316,7 +316,7 @@ func ListIndexAtRevision[T any](
 
 func GetManyBatchedAtRevision(
 	ctx context.Context,
-	store store,
+	store batchStore,
 	keys []string,
 	revision int64,
 ) (*etcdstore.GetManyResult, error) {

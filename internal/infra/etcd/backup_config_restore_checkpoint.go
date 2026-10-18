@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
@@ -75,7 +76,7 @@ func (repository *BackupRuntimeRepository) PrepareConfigRestoreProgress(ctx cont
 		string(read.Values[1].Value) != taskID || read.Values[1].ModRevision > current.Revision {
 		return workqueue.Change{}, configTransferAuthorityConflict()
 	}
-	sealed, err := backupwork.DecodeBackupWorkInput(read.Values[2].Value)
+	sealed, err := executionplan.DecodeBackupWorkInput(read.Values[2].Value)
 	if err != nil || read.Values[2].Version != 1 || !proto.Equal(sealed, admitted.Input()) ||
 		read.Values[3].ModRevision != view.Work.Task.Revision ||
 		backupruntime.ValidateRestoreWorkInput(stored, sealed) != nil {

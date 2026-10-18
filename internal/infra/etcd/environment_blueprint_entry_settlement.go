@@ -249,12 +249,12 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 	}
 	// Prepared values outlive this call; all temporary secret buffers are cleared
 	// by the existing defers. The transaction owner clears these owned copies.
-	owned := make([]keyvalue.Mutation, len(mutations))
+	ownedMutations := make([]keyvalue.Mutation, len(mutations))
 	for index, mutation := range mutations {
-		owned[index] = mutation
-		owned[index].Value = bytes.Clone(mutation.Value)
+		ownedMutations[index] = mutation
+		ownedMutations[index].Value = bytes.Clone(mutation.Value)
 	}
-	return workqueue.Change{Conditions: conditions, Mutations: owned}, nil
+	return workqueue.Change{Conditions: conditions, Mutations: ownedMutations}, nil
 }
 
 func revisionOf(value *keyvalue.KeyValue) int64 {

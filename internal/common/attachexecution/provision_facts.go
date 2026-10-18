@@ -41,7 +41,7 @@ func EncodeProvisionFacts(input ProvisionInput, output backinghook.Output) (*age
 
 func DecodeProvisionFacts(input ProvisionInput, request *agentpb.AttachProvisionFactsRequest) (backinghook.Output, []byte, error) {
 	if input.Validate() != nil || input.Provision.GetCustomAttach() == nil || request == nil ||
-		executionplan.RejectUnknown(request) != nil || proto.Size(request) > MaximumPlanBytes {
+		executionplan.RejectUnknown(request) != nil || proto.Size(request) > executionplan.MaximumPlanBytes {
 		return backinghook.Output{}, nil, invalid("Attach facts request is malformed or oversized")
 	}
 	claimed, err := workexecution.DecodeAgentAttempt(request.Attempt, input.Attempt.Executor)

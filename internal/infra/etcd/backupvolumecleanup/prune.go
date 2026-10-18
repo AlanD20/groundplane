@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupvolumemanifest"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -55,7 +55,7 @@ func PruneBatch(ctx context.Context, store pruneStore,
 	keys := []string{
 		backupruntime.BackupRecoveryPointKey(intent.PointID),
 		backupruntime.BackupOrphanKey(intent.PointID),
-		taskjournal.TaskStorageKey(intent.Owner.Binding.TaskID),
+		workqueue.TaskKey(intent.Owner.Binding.Attempt.TaskID),
 	}
 	read, err := runtime.ReadFixedKeys(ctx, keys, queue.ReadRevision)
 	if err != nil {

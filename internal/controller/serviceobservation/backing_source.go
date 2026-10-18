@@ -93,14 +93,26 @@ func capturePostgres(ctx context.Context, releases Releases,
 	if err != nil {
 		return source{}, false
 	}
-	member := &agentpb.ServiceWorkloadObservation{ComposeName: workload.ComposeName}
+	planID := ""
+	for _, label := range workload.ExpectedLabels {
+		if label != nil && label.Key == "com.groundplane.plan-id" {
+			if planID != "" {
+				return source{}, false
+			}
+			planID = label.Value
+		}
+	}
+	if ids.Validate(ids.KindPlan, planID) != nil {
+		return source{}, false
+	}
+	member := &agentpb.ServiceWorkloadObservation{ComposeName: workload.ComposeName, PlanId: planID}
 	target := &agentpb.ServiceObservationTarget{EnvironmentId: applied.Record.EnvironmentID,
 		ServiceId: applied.Record.ServiceID, Workloads: []*agentpb.ServiceWorkloadObservation{member}}
 	if receipt := applied.Record.Provisioning; receipt != nil {
-		member.PlanId, member.RenderGeneration, target.RuntimeRole = receipt.PlanID, receipt.RenderGeneration, "backing"
+		member.RenderGeneration, target.RuntimeRole = receipt.RenderGeneration, "backing"
 	} else {
 		receipt := applied.Record.Deployment
-		member.PlanId, member.RenderGeneration, target.RuntimeRole = receipt.PlanID, receipt.RenderGeneration, "singleton"
+		member.RenderGeneration, target.RuntimeRole = receipt.RenderGeneration, "singleton"
 		target.ReleaseId = applied.Record.DeploymentReleaseID
 	}
 	return source{target: target, expected: workload.ExpectedReplicas,
