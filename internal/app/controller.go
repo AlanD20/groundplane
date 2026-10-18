@@ -43,7 +43,6 @@ type Controller struct {
 	agent                 controllerAgentChannel
 	scheduler             controllerScheduler
 	workExecution         *hostplatform.WorkExecution
-	software              controllerScheduler
 	runners               controllerScheduler
 	resolverConfiguration controllerScheduler
 	localAgent            controllerScheduler

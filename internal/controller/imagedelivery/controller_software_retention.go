@@ -21,6 +21,9 @@ func (service *Service) retainControllerWorkImages(ctx context.Context, retentio
 	if item.Operation != workexecution.ControllerSoftware || item.Phase == workexecution.Settled {
 		return nil
 	}
+	if item.Input == nil {
+		return service.retainActivationInputImages(ctx, retention, item, revision)
+	}
 	inputs, err := controllersoftware.New(service.store)
 	if err != nil {
 		return err

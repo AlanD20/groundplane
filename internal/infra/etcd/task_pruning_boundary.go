@@ -27,9 +27,6 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	if held, _, err := repository.resolverTaskPruneAuthority(ctx, task, readRevision); held || err != nil {
 		return held, err
 	}
-	if held, _, err := repository.softwareChildPruneAuthority(ctx, task, readRevision); held || err != nil {
-		return held, err
-	}
 	if held, err := repository.backupHierarchyDeletionTaskPruneHeld(ctx, task, readRevision); held || err != nil {
 		return held, err
 	}

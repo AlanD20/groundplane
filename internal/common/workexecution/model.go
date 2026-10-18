@@ -29,6 +29,7 @@ const (
 	ControllerSoftware  Operation = "controller_software"
 	AgentSoftware       Operation = "agent_software"
 	SoftwarePreparation Operation = "software_preparation"
+	SoftwareStaging     Operation = "software_staging"
 	ConnectorCheck      Operation = "connector_check"
 	ConnectorRemoval    Operation = "connector_removal"
 	SecretRemoval       Operation = "secret_removal"

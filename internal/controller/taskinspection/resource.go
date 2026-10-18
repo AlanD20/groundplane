@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 )
 
@@ -29,6 +30,8 @@ func resourceKind(id string) string {
 	case etcdconfiguration.TargetID():
 		return "etcd"
 	case softwarepreparation.TargetID():
+		return "software"
+	case softwareactivation.TargetID():
 		return "software"
 	}
 	if workloadimage.LocalIDValid(id) {

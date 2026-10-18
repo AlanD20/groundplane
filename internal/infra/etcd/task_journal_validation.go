@@ -13,9 +13,6 @@ import (
 )
 
 func ValidateTaskRecord(record TaskRecord) error {
-	if err := validateSoftwareActivationTask(record); err != nil {
-		return err
-	}
 	if _, _, err := taskConfigurationCondition(record); err != nil {
 		return err
 	}

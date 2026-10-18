@@ -16,12 +16,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
+	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type Service struct {
+	activations        *activationrecord.Repository
 	agentLifecycle     *agentoperations.Repository
 	controllerSoftware *controllersoftware.Repository
 	preparations       *preparationrecord.Repository
@@ -35,11 +37,11 @@ type Service struct {
 	hierarchy          *etcd.HierarchyDeletionRepository
 }
 
-func New(queue *workqueue.Repository, images *imageoperations.Repository, diagnostics *executiondiagnostics.Repository, retries *workdispatch.Retries, hierarchy *etcd.HierarchyDeletionRepository, components *componentwork.InputRepository, runners *runnerwork.Repository, etcdConfig *etcdconfiguration.Repository, preparations *preparationrecord.Repository, controllerSoftware *controllersoftware.Repository, agentLifecycle *agentoperations.Repository) (*Service, error) {
-	if queue == nil || images == nil || diagnostics == nil || retries == nil || hierarchy == nil || components == nil || runners == nil || etcdConfig == nil || preparations == nil || controllerSoftware == nil || agentLifecycle == nil {
+func New(queue *workqueue.Repository, images *imageoperations.Repository, diagnostics *executiondiagnostics.Repository, retries *workdispatch.Retries, hierarchy *etcd.HierarchyDeletionRepository, components *componentwork.InputRepository, runners *runnerwork.Repository, etcdConfig *etcdconfiguration.Repository, preparations *preparationrecord.Repository, controllerSoftware *controllersoftware.Repository, agentLifecycle *agentoperations.Repository, activations *activationrecord.Repository) (*Service, error) {
+	if queue == nil || images == nil || diagnostics == nil || retries == nil || hierarchy == nil || components == nil || runners == nil || etcdConfig == nil || preparations == nil || controllerSoftware == nil || agentLifecycle == nil || activations == nil {
 		return nil, errs.New(errs.KindInternal, "Task inspection requires execution storage")
 	}
-	return &Service{queue: queue, images: images, diagnostics: diagnostics, retries: retries, hierarchy: hierarchy, components: components, runners: runners, etcd: etcdConfig, preparations: preparations, controllerSoftware: controllerSoftware, agentLifecycle: agentLifecycle}, nil
+	return &Service{queue: queue, images: images, diagnostics: diagnostics, retries: retries, hierarchy: hierarchy, components: components, runners: runners, etcd: etcdConfig, preparations: preparations, controllerSoftware: controllerSoftware, agentLifecycle: agentLifecycle, activations: activations}, nil
 }
 
 type Summary struct {

@@ -176,17 +176,29 @@ func (owner *Work) ControllerRecovery(ctx context.Context, taskID string) (upgra
 	if err != nil {
 		return upgrade.Journal{}, err
 	}
-	if task.Task.ExpectedItems != 1 || task.Task.CollectionStartedAt != nil || task.Task.FinishedAt != nil {
+	if task.Task.ExpectedItems < 1 || task.Task.ExpectedItems > 3 || task.Task.CollectionStartedAt != nil || task.Task.FinishedAt != nil {
 		return upgrade.Journal{}, errs.New(errs.KindStateConflict, "native handoff has no unfinished Controller work")
 	}
-	page, err := owner.queue.ListWork(ctx, taskID, "", 2, revision)
+	page, err := owner.queue.ListWork(ctx, taskID, "", 3, revision)
 	if err != nil {
 		return upgrade.Journal{}, err
 	}
-	if len(page.Items) != 1 || page.More || page.Items[0].Item.Operation != workexecution.ControllerSoftware || page.Items[0].Item.Phase == workexecution.Settled {
+	if len(page.Items) != int(task.Task.ExpectedItems) || page.More {
 		return upgrade.Journal{}, errs.New(errs.KindStateConflict, "native handoff work membership is invalid")
 	}
-	item := page.Items[0].Item
+	var item workexecution.Item
+	for _, candidate := range page.Items {
+		if candidate.Item.Operation != workexecution.ControllerSoftware {
+			continue
+		}
+		if item.ID != "" || candidate.Item.Phase == workexecution.Settled {
+			return upgrade.Journal{}, errs.New(errs.KindStateConflict, "native handoff Controller membership is ambiguous or settled")
+		}
+		item = candidate.Item
+	}
+	if item.ID == "" {
+		return upgrade.Journal{}, errs.New(errs.KindStateConflict, "native handoff has no Controller activation work")
+	}
 	_, first, err := owner.queue.ReadAttempt(ctx, taskID, item.ID, 1, revision)
 	if err != nil {
 		return upgrade.Journal{}, err

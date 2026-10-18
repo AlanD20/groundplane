@@ -17,7 +17,7 @@ func ValidOperation(operation Operation) bool {
 	switch operation {
 	case Release, ServiceLifecycle, ServiceRemoval, BackingProvision, Attach, Detach, Script, Network, Volume,
 		Component, Environment, Hierarchy, RemovalBackupObject, Backup, BackupPrune, Restore, Image,
-		Runner, ControllerSoftware, AgentSoftware, SoftwarePreparation,
+		Runner, ControllerSoftware, AgentSoftware, SoftwarePreparation, SoftwareStaging,
 		ConnectorCheck, ConnectorRemoval, SecretRemoval, ScriptRemoval, BackingCheck, DNSCheck, EdgeCheck, RunnerCheck,
 		SecretRotation, EntrySettlement, EntryConfiguration, ResourceDefinition,
 		ReleaseGroup, AgentLifecycle, EtcdConfiguration:

@@ -21,6 +21,9 @@ func (service *Service) retainAgentWorkImages(ctx context.Context, retention *im
 	if item.Operation != workexecution.AgentLifecycle && item.Operation != workexecution.AgentSoftware || item.Phase == workexecution.Settled {
 		return nil
 	}
+	if item.Input == nil {
+		return service.retainActivationInputImages(ctx, retention, item, revision)
+	}
 	inputs, err := agentoperations.New(service.store)
 	if err != nil {
 		return err

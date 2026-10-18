@@ -39,7 +39,7 @@ type Task struct {
 	OperationID            string               `json:"operation_id"`
 	RetryOf                string               `json:"retry_of,omitempty"`
 	PlanHash               string               `json:"plan_hash,omitempty"`
-	Type                   string               `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate,fetch,prepare,apply,check"`
+	Type                   string               `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate,fetch,prepare,apply,activate,check"`
 	Target                 string               `json:"target"`
 	TargetName             string               `json:"target_name,omitempty"`
 	ResourceKind           string               `json:"resource_kind,omitempty"`

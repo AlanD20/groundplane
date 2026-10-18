@@ -42,7 +42,13 @@ func (collector *Collector) collectGraph(ctx context.Context, task workqueue.Tas
 		return false, err
 	}
 	if len(page.Items) == 0 {
-		change, err := blueprintunits.PrepareGraphCollection(task)
+		var change workqueue.Change
+		var err error
+		if task.Task.Action == workexecution.ActionActivate {
+			change, err = workqueue.PrepareTaskCollection(task)
+		} else {
+			change, err = blueprintunits.PrepareGraphCollection(task)
+		}
 		if err != nil {
 			return false, err
 		}
@@ -61,9 +67,24 @@ func (collector *Collector) collectOwnedWork(ctx context.Context, taskID, workID
 		return false, err
 	}
 	item := view.Item
+	if item.Item.Input == nil && len(attempts.Attempts) == 0 {
+		settlement, err := collector.queue.ReadInputSettlement(ctx, view)
+		if err != nil {
+			return false, err
+		}
+		if settlement == nil {
+			return false, errs.New(errs.KindStateConflict, "unprepared work has no authentic settlement to collect")
+		}
+		change, err := workqueue.PrepareWorkCollection(view.Task, view.Item)
+		if err != nil {
+			return false, err
+		}
+		_, err = collector.queue.Commit(ctx, change)
+		return false, err
+	}
 	owner := collector.workOwners[item.Item.Operation]
 	if owner == nil {
-		return false, errs.New(errs.KindStateConflict, "Blueprint work operation has no retention owner")
+		return false, errs.New(errs.KindStateConflict, "work operation has no registered retention owner")
 	}
 	retired, authority, err := owner.RetireWork(ctx, view, at, len(attempts.Attempts) == 0)
 	defer keyvalue.ClearMutationValues(authority.Mutations)

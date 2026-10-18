@@ -14,7 +14,7 @@ import (
 // Startup may restore an admission hold only for the exact work retaining the
 // native release claim. Reading this proof never grants a forward effect.
 func (repository *Repository) VerifyRecoveryClaim(ctx context.Context, item workexecution.Item, revision int64) error {
-	if item.Operation != workexecution.ControllerSoftware || !slices.Equal(item.Claims, (Capture{}).claims()) || revision <= 0 {
+	if item.Operation != workexecution.ControllerSoftware || !slices.Equal(item.Claims, Claims()) || revision <= 0 {
 		return errs.New(errs.KindStateConflict, "native handoff protection is invalid")
 	}
 	keys := make([]string, len(item.Claims))

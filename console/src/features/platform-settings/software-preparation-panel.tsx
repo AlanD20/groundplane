@@ -208,14 +208,14 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
             {work.activation.phase.replaceAll("_", " ")}
           </p>
           <div className="mt-3 flex flex-wrap gap-4 text-sm">
-            {work.activation.controller_task_id && (
-              <TaskLink taskId={work.activation.controller_task_id}>
+            {work.activation.controller_work_item_id && (
+              <TaskLink taskId={work.activation.task_id}>
                 Controller{" "}
                 {work.activation.controller_applied ? "applied" : "update"}
               </TaskLink>
             )}
-            {work.activation.agent_task_id && (
-              <TaskLink taskId={work.activation.agent_task_id}>
+            {work.activation.agent_work_item_id && (
+              <TaskLink taskId={work.activation.task_id}>
                 Agent {work.activation.agent_applied ? "applied" : "update"}
               </TaskLink>
             )}

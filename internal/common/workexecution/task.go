@@ -30,6 +30,7 @@ const (
 	ActionFetch       Action = "fetch"
 	ActionPrepare     Action = "prepare"
 	ActionApply       Action = "apply"
+	ActionActivate    Action = "activate"
 	ActionCheck       Action = "check"
 )
 
@@ -109,7 +110,7 @@ func ValidAction(action Action) bool {
 	case ActionDeploy, ActionRollback, ActionBackup, ActionBackupPrune, ActionRestore,
 		ActionAttach, ActionDetach, ActionRun, ActionScript, ActionProvision,
 		ActionCreate, ActionUpdate, ActionRemove, ActionStart, ActionStop,
-		ActionDestroy, ActionRotate, ActionFetch, ActionPrepare, ActionApply, ActionCheck:
+		ActionDestroy, ActionRotate, ActionFetch, ActionPrepare, ActionApply, ActionActivate, ActionCheck:
 		return true
 	default:
 		return false

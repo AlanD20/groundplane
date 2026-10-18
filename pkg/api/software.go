@@ -70,14 +70,14 @@ type SoftwarePreparationPage struct {
 // SoftwareActivation reports component outcomes separately. Controller success
 // is not rolled back merely because the subsequent Agent update failed.
 type SoftwareActivation struct {
-	TaskID            string            `json:"task_id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
-	PreparationTaskID string            `json:"preparation_task_id"`
-	Selection         SoftwareSelection `json:"selection" enum:"controller,agent,both"`
-	Phase             string            `json:"phase"`
-	ControllerTaskID  string            `json:"controller_task_id,omitempty"`
-	AgentTaskID       string            `json:"agent_task_id,omitempty"`
-	ControllerApplied bool              `json:"controller_applied"`
-	AgentApplied      bool              `json:"agent_applied"`
-	ErrorCode         string            `json:"error_code,omitempty"`
-	ErrorDetail       string            `json:"error_detail,omitempty"`
+	TaskID               string            `json:"task_id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
+	PreparationTaskID    string            `json:"preparation_task_id"`
+	Selection            SoftwareSelection `json:"selection" enum:"controller,agent,both"`
+	Phase                string            `json:"phase"`
+	ControllerWorkItemID string            `json:"controller_work_item_id,omitempty"`
+	AgentWorkItemID      string            `json:"agent_work_item_id,omitempty"`
+	ControllerApplied    bool              `json:"controller_applied"`
+	AgentApplied         bool              `json:"agent_applied"`
+	ErrorCode            string            `json:"error_code,omitempty"`
+	ErrorDetail          string            `json:"error_detail,omitempty"`
 }

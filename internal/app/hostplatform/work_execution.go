@@ -64,6 +64,7 @@ func (execution *WorkExecution) Run(ctx context.Context) error {
 }
 
 func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (*WorkExecution, error) {
+	softwareWork := platform.softwareWork()
 	maintenance, err := platform.dependencies.Config.Maintenance.Policy()
 	if err != nil {
 		return nil, err
@@ -272,7 +273,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	scheduler, err := workdispatch.NewScheduler(queue, []workdispatch.Registration{
+	scheduler, err := workdispatch.NewScheduler(queue, append(softwareWork.admission, []workdispatch.Registration{
 		{Operation: workexecution.AgentLifecycle, Executor: workexecution.Controller, Owner: agentWork},
 		{Operation: workexecution.AgentSoftware, Executor: workexecution.Controller, Owner: agentWork},
 		{Operation: workexecution.ControllerSoftware, Executor: workexecution.Controller, Owner: platform.controllerWork},
@@ -312,11 +313,11 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		{Operation: workexecution.DNSCheck, Executor: workexecution.Controller, Owner: connections.dns},
 		{Operation: workexecution.EdgeCheck, Executor: workexecution.Controller, Owner: connections.edges},
 		{Operation: workexecution.RunnerCheck, Executor: workexecution.Controller, Owner: dependencies.RunnerChecks},
-	})
+	}...))
 	if err != nil {
 		return nil, err
 	}
-	controller, err := workdispatch.NewControllerExecutor(queue, []workdispatch.ControllerRegistration{
+	controller, err := workdispatch.NewControllerExecutor(queue, append(softwareWork.controller, []workdispatch.ControllerRegistration{
 		{Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Operation: workexecution.AgentSoftware, Owner: agentWork},
 		{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
@@ -330,11 +331,11 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		{Operation: workexecution.DNSCheck, Owner: connections.dns},
 		{Operation: workexecution.EdgeCheck, Owner: connections.edges},
 		{Operation: workexecution.RunnerCheck, Owner: dependencies.RunnerChecks},
-	})
+	}...))
 	if err != nil {
 		return nil, err
 	}
-	retries, err := workdispatch.NewRetries(queue, []workdispatch.RetryRegistration{
+	retries, err := workdispatch.NewRetries(queue, append(softwareWork.retry, []workdispatch.RetryRegistration{
 		{Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Operation: workexecution.AgentSoftware, Owner: agentWork},
 		{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
@@ -359,7 +360,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		{Operation: workexecution.ConnectorCheck, Owner: connections.connectors},
 		{Operation: workexecution.BackingCheck, Owner: connections.backings},
 		{Operation: workexecution.EdgeCheck, Owner: connections.edges},
-	})
+	}...))
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +380,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	retention, err := operationretention.New(queue, connections.connectorRecords, connections.backingRecords, connections.dnsRecords, connections.edgeRecords, runnerRecords, imageRecords, hierarchyRecords, networkRecords,
+	retentionOwners := append(softwareWork.retention, []operationretention.WorkRegistration{
 		operationretention.WorkRegistration{Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		operationretention.WorkRegistration{Operation: workexecution.AgentSoftware, Owner: agentWork},
 		operationretention.WorkRegistration{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
@@ -406,7 +407,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		operationretention.WorkRegistration{Operation: workexecution.EntrySettlement, Owner: entryWork},
 		operationretention.WorkRegistration{Operation: workexecution.EntryConfiguration, Owner: entryAgent},
 		operationretention.WorkRegistration{Operation: workexecution.Component, Owner: componentRetention},
-		operationretention.WorkRegistration{Operation: workexecution.ResourceDefinition, Owner: definitionWork})
+		operationretention.WorkRegistration{Operation: workexecution.ResourceDefinition, Owner: definitionWork}}...)
+	retention, err := operationretention.New(queue, connections.connectorRecords, connections.backingRecords, connections.dnsRecords, connections.edgeRecords, runnerRecords, imageRecords, hierarchyRecords, networkRecords, retentionOwners...)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +420,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	completions, err := workdispatch.NewCompletions(queue, []workdispatch.CompletionRegistration{
+	completions, err := workdispatch.NewCompletions(queue, append(softwareWork.completion, []workdispatch.CompletionRegistration{
 		{Action: workexecution.ActionCreate, Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Action: workexecution.ActionRemove, Operation: workexecution.AgentLifecycle, Owner: agentWork},
 		{Action: workexecution.ActionUpdate, Operation: workexecution.AgentSoftware, Owner: agentWork},
@@ -446,7 +448,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 		{Action: workexecution.ActionCheck, Owner: workdispatch.CheckImageCompletion{}},
 		{Action: workexecution.ActionFetch, Owner: workdispatch.CheckImageCompletion{}},
 		{Action: workexecution.ActionRemove, Owner: removalCompletion},
-	})
+	}...))
 	if err != nil {
 		return nil, err
 	}
@@ -502,14 +504,14 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err := platform.dependencies.Channel.ConfigureEntryConfigurationWork(entryReports); err != nil {
 		return nil, err
 	}
-	inputs, err := workdispatch.NewInputs(queue, []workdispatch.InputRegistration{
+	inputs, err := workdispatch.NewInputs(queue, append(softwareWork.input, []workdispatch.InputRegistration{
 		{Action: workexecution.ActionApply, Operation: workexecution.ServiceRemoval, Owner: serviceRemovalPreparation},
 		{Action: workexecution.ActionApply, Operation: workexecution.Component, Owner: componentInputs},
 		{Action: workexecution.ActionApply, Operation: workexecution.Release, Owner: serviceInputs},
 		{Action: workexecution.ActionApply, Operation: workexecution.Volume, Owner: volumeInputs},
 		{Action: workexecution.ActionApply, Operation: workexecution.Network, Owner: networkInputs},
 		{Action: workexecution.ActionApply, Operation: workexecution.Attach, Owner: attachPreparation},
-	})
+	}...))
 	if err != nil {
 		return nil, err
 	}

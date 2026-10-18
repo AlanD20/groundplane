@@ -24,6 +24,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/softwareactivation"
 	"github.com/AlanD20/groundplane/internal/controller/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
@@ -65,6 +66,7 @@ type Platform struct {
 	Upgrades       *controllerupgrade.Service
 	EtcdConfig     *etcdconfig.Service
 	preparations   *softwarepreparation.Service
+	activations    *softwareactivation.Service
 	controllerWork *controllerupgrade.Work
 	Readiness      *controllerupgrade.Readiness
 	container      *agentcontainer.Manager

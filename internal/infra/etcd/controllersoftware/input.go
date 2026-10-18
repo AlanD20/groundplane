@@ -70,7 +70,7 @@ func (capture Capture) Match(item workexecution.Item) error {
 	if item.Operation != workexecution.ControllerSoftware || item.ID != capture.WorkItemID || item.TaskID != capture.TaskID ||
 		item.TargetID != TargetID() || item.Input == nil || *item.Input != reference ||
 		item.Placement != (workexecution.Placement{Executor: workexecution.Controller}) ||
-		!slices.Equal(item.Claims, capture.claims()) || !item.CreatedAt.Equal(capture.CreatedAt) {
+		!slices.Equal(item.Claims, Claims()) || !item.CreatedAt.Equal(capture.CreatedAt) {
 		return errs.New(errs.KindStateConflict, "controller activation differs from its captured work")
 	}
 	return nil
@@ -88,12 +88,12 @@ func (capture Capture) Work() (workexecution.Task, workexecution.Item, error) {
 		TargetID: TargetID(), TargetName: "Controller", Intent: reference, ExpectedItems: 1, CreatedAt: capture.CreatedAt,
 		UpdatedAt: capture.CreatedAt, Deadline: capture.CreatedAt.Add(upgrade.TaskTimeoutSeconds * time.Second)}
 	item := workexecution.Item{ID: capture.WorkItemID, TaskID: task.ID, Operation: workexecution.ControllerSoftware, TargetID: task.TargetID,
-		Placement: workexecution.Placement{Executor: workexecution.Controller}, Claims: capture.claims(),
+		Placement: workexecution.Placement{Executor: workexecution.Controller}, Claims: Claims(),
 		Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
 	return task, item, workexecution.ValidateGraph(task, []workexecution.Item{item})
 }
 
-func (capture Capture) claims() []workexecution.Claim {
+func Claims() []workexecution.Claim {
 	claims := []workexecution.Claim{{ScopeID: TargetID()}, {ScopeID: agentoperations.ClaimID()}}
 	// Even a Controller-only release must not race Agent enrollment/removal:
 	// the selected presence or absence of its Agent is captured authority.

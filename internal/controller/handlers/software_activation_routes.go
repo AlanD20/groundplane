@@ -58,7 +58,7 @@ func (s *Server) showSoftwareActivation(
 	return &softwareActivationOutput{Body: apiTypes.SoftwareActivation{
 		TaskID: record.TaskID, PreparationTaskID: record.Input.Preparation.TaskID,
 		Selection: apiTypes.SoftwareSelection(record.Input.Preparation.Source.Selection), Phase: string(progress.Phase),
-		ControllerTaskID: progress.ControllerTaskID, AgentTaskID: progress.AgentTaskID,
+		ControllerWorkItemID: record.ControllerWorkItemID, AgentWorkItemID: record.AgentWorkItemID,
 		ControllerApplied: progress.ControllerApplied, AgentApplied: progress.AgentApplied,
 		ErrorCode: progress.ErrorCode, ErrorDetail: progress.ErrorDetail,
 	}}, nil

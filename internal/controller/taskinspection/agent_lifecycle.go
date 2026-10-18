@@ -51,7 +51,7 @@ func (service *Service) agentOutcome(ctx context.Context, attempt workexecution.
 	case agentoperations.ReadyPrevious:
 		stage.Observed = "The previous Agent image is preserved or restored; authenticated readiness was verified at generation " + strconv.FormatUint(value.Generation, 10) + "."
 	case agentoperations.Unresolved:
-		stage.State = workexecution.StageUnknown
+		stage.State = workexecution.StageFailed
 		stage.Observed = "Readiness or cleanup could not be proved. Lifecycle protection is retained; Retry reconciles the same captured operation without starting another replacement."
 	}
 	if value.Outcome == workexecution.Succeeded {

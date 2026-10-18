@@ -30,7 +30,11 @@ func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at t
 		change, err := owner.settleUnstarted(ctx, request.Task, request.Item, capture, workexecution.Failed, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
-	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: request.Item.Item.Deadline, Change: captureGuard(capture)}, nil
+	deadline := request.Item.Item.Deadline
+	if request.Direction == workexecution.Forward && at.Add(upgrade.TaskTimeoutSeconds*time.Second).Before(deadline) {
+		deadline = at.Add(upgrade.TaskTimeoutSeconds * time.Second)
+	}
+	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: deadline, Change: captureGuard(capture)}, nil
 }
 
 func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {

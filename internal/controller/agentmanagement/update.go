@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -143,25 +142,7 @@ func NewUpdateService(
 	}, nil
 }
 
-func (service *agentUpdateService) UpdateAgent(
-	ctx context.Context,
-	agentID string,
-	image string,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.updateAgent(ctx, agentID, image, idempotencyKey, nil)
-}
-
-// UpdateAgentFromPredecessor rejects a changed generation before publishing;
-// native execution still verifies the same predecessor before replacement.
-func (service *agentUpdateService) UpdateAgentFromPredecessor(ctx context.Context, predecessor upgrade.AgentPredecessor,
-	image, key string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.updateAgent(ctx, predecessor.ID, image, key, &predecessor)
-}
-
-func (service *agentUpdateService) updateAgent(ctx context.Context, agentID, image, idempotencyKey string,
-	predecessor *upgrade.AgentPredecessor,
+func (service *agentUpdateService) UpdateAgent(ctx context.Context, agentID, image, idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update context is required")
@@ -205,13 +186,6 @@ func (service *agentUpdateService) updateAgent(ctx context.Context, agentID, ima
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Agent update target lookup returned another Agent",
-		)
-	}
-	if predecessor != nil &&
-		(health.Agent.Image != predecessor.Image || health.Agent.Generation != predecessor.Generation) {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"software activation Agent predecessor changed",
 		)
 	}
 	if health.Agent.Phase != localagent.PhaseReady {

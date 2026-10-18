@@ -27,7 +27,15 @@ func (owner *Work) Admit(ctx context.Context, request workqueue.Assignment, at t
 		change, err := owner.settleUnstarted(request.Task, request.Item, input, workexecution.Failed, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
-	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: request.Item.Item.Deadline, Change: inputGuard(input)}, nil
+	deadline := request.Item.Item.Deadline
+	limit := 120 * time.Second
+	if input.Record.Action == workexecution.ActionUpdate {
+		limit = 300 * time.Second
+	}
+	if request.Direction == workexecution.Forward && at.Add(limit).Before(deadline) {
+		deadline = at.Add(limit)
+	}
+	return workdispatch.Decision{Disposition: workdispatch.Dispatch, Deadline: deadline, Change: inputGuard(input)}, nil
 }
 
 func (owner *Work) Stop(ctx context.Context, task workqueue.TaskSnapshot, item workqueue.ItemSnapshot, at time.Time) (workqueue.Change, error) {
